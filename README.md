@@ -1,80 +1,85 @@
 # ShortCut
 
-ShortCut is a Windows desktop quick panel for launching applications, folders, files, and URLs from one focused workspace. It is built with Electron, React, TypeScript, Vite, Zustand, Framer Motion, and Tailwind CSS.
+ShortCut 是一个面向 Windows 的桌面快捷面板应用，用来集中管理并快速启动常用应用、文件夹、文件和网页链接。项目基于 Electron、React、TypeScript、Vite、Zustand、Framer Motion 和 Tailwind CSS 构建。
 
-## Features
+## 功能特性
 
-- Global hotkey panel toggle, defaulting to `Alt+Space`
-- Shortcut management for apps, folders, files, and web URLs
-- Tabs and groups for organizing shortcuts
-- Search across shortcut names, paths, and notes
-- Drag-and-drop sorting and grouping
-- Tray resident mode
-- Dark, light, and system theme modes
-- Import and export of local JSON configuration
-- Installed software import helper on Windows
+- 全局快捷键唤出/隐藏面板，默认快捷键为 `Alt+Space`
+- 支持添加应用、文件夹、普通文件和 URL 网页快捷方式
+- 支持页签与分组管理
+- 支持按名称、路径、备注搜索快捷方式
+- 支持拖拽排序和跨分组移动
+- 支持系统托盘常驻
+- 支持暗色、浅色和跟随系统主题
+- 支持导入/导出本地 JSON 配置
+- 支持扫描并导入 Windows 已安装软件
+- 支持文件图标提取与快捷方式图标展示
 
-## Requirements
+## 环境要求
 
 - Windows
 - Node.js
 - npm
 
-## Development
-
-Install dependencies:
+## 安装依赖
 
 ```bash
 npm install
 ```
 
-Run the renderer in Vite:
+## 开发运行
+
+仅启动 Vite 渲染进程：
 
 ```bash
 npm run dev
 ```
 
-Run the Electron app in development mode:
+启动 Electron 开发环境：
 
 ```bash
 npm run electron:dev
 ```
 
-## Build
+## 构建
 
-Build the renderer:
+构建前端产物：
 
 ```bash
 npm run build
 ```
 
-Build the Windows Electron package:
+构建 Windows 安装/发布包：
 
 ```bash
 npm run electron:build
 ```
 
-Build an unpacked Windows directory:
+构建 Windows 解包目录：
 
 ```bash
 npm run electron:build:dir
 ```
 
-## Project Structure
+## 项目结构
 
 ```text
-electron/        Electron main process and preload bridge
-src/             React renderer source
-src/components/  UI components
-src/store/       Zustand application state
-src/i18n/        Localized text
-resources/       App icons and static resources
+electron/        Electron 主进程与 preload 桥接代码
+src/             React 渲染进程源码
+src/components/  前端 UI 组件
+src/store/       Zustand 应用状态
+src/i18n/        多语言文本
+resources/       应用图标和静态资源
 ```
 
-## Configuration
+## 配置存储
 
-At runtime, ShortCut stores user configuration under Electron's `userData` directory. The main configuration file is written atomically as JSON.
+ShortCut 运行时会把用户配置写入 Electron 的 `userData` 目录。主配置文件使用 JSON 格式，并通过临时文件写入后重命名的方式降低配置损坏风险。
 
-## License
+## 需求文档
 
-MIT
+更完整的产品目标、功能边界和设计标准见 [requirements.md](./requirements.md)。
+
+## 许可证
+
+本项目基于 MIT License 开源。
