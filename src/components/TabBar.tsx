@@ -34,6 +34,12 @@ export default function TabBar() {
     addTab(name);
   };
 
+  const handleDeleteTab = (tabId: string, name: string) => {
+    if (window.confirm(t('tab.deleteMessage', { name }))) {
+      deleteTab(tabId);
+    }
+  };
+
   return (
     <div
       className="flex items-center gap-2 px-4 py-2 shrink-0 overflow-x-auto"
@@ -130,7 +136,7 @@ export default function TabBar() {
                   </button>
                   {config.tabs.length > 1 && (
                     <button
-                      onClick={() => deleteTab(tab.id)}
+                      onClick={() => handleDeleteTab(tab.id, tab.name)}
                       className="p-1 rounded-md hover:opacity-80 transition-opacity"
                       style={{ color: isActive ? 'rgba(255,255,255,0.7)' : 'var(--color-danger)' }}
                     >

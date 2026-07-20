@@ -20,6 +20,7 @@ interface AppState {
   setTheme: (theme: 'dark' | 'light' | 'system') => void;
   setLocale: (locale: Locale) => void;
   setPanelAnimation: (animation: PanelAnimation) => void;
+  setOpenOnStartup: (enabled: boolean) => Promise<void>;
   setActiveTab: (tabId: string) => void;
   setSearchQuery: (q: string) => void;
 
@@ -82,6 +83,8 @@ declare global {
       writeFile: (path: string, data: string) => Promise<{ success: boolean; error?: string }>;
       fileExists: (path: string) => Promise<boolean>;
       getPath: (name: string) => Promise<string>;
+      getOpenAtLogin: () => Promise<boolean>;
+      setOpenAtLogin: (enabled: boolean) => Promise<boolean>;
       getInstalledSoftware: () => Promise<Array<{ name: string; path: string; icon: string }>>;
       getFileInfo: (filePath: string) => Promise<{ name: string; path: string; type: 'app' | 'folder' | 'file' } | null>;
       getFileIcon: (filePath: string) => Promise<string | null>;
@@ -138,6 +141,14 @@ export const useStore = create<AppState>((set, get) => ({
         console.error('Failed to parse config');
       }
     }
+    if (isElectron && window.electronAPI?.getOpenAtLogin) {
+      try {
+        const openOnStartup = await window.electronAPI.getOpenAtLogin();
+        set((s) => ({ config: { ...s.config, openOnStartup } }));
+      } catch {
+        // Keep stored preference if the system setting cannot be read.
+      }
+    }
   },
 
   saveConfig: async () => {
@@ -172,6 +183,19 @@ export const useStore = create<AppState>((set, get) => ({
       return { config: newConfig };
     });
     get().saveConfig();
+  },
+
+  setOpenOnStartup: async (enabled) => {
+    let finalValue = enabled;
+    if (isElectron && window.electronAPI?.setOpenAtLogin) {
+      finalValue = await window.electronAPI.setOpenAtLogin(enabled);
+    }
+    set((s) => {
+      const newConfig = { ...s.config, openOnStartup: finalValue };
+      return { config: newConfig };
+    });
+    await get().saveConfig();
+    get().addToast(finalValue ? t('settings.startupEnabled', undefined, get().config.locale) : t('settings.startupDisabled', undefined, get().config.locale), 'success');
   },
 
   setActiveTab: (tabId) => {

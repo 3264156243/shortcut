@@ -3,7 +3,7 @@ import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
 import { Locale, PanelAnimation } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Moon, Sun, Monitor, Download, Upload, Keyboard, Globe, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Maximize } from 'lucide-react';
+import { X, Moon, Sun, Monitor, Download, Upload, Keyboard, Globe, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Maximize, Power } from 'lucide-react';
 
 export default function SettingsPanel() {
   const closeSettings = useStore((s) => s.closeSettings);
@@ -11,6 +11,7 @@ export default function SettingsPanel() {
   const setTheme = useStore((s) => s.setTheme);
   const setLocale = useStore((s) => s.setLocale);
   const setPanelAnimation = useStore((s) => s.setPanelAnimation);
+  const setOpenOnStartup = useStore((s) => s.setOpenOnStartup);
   const exportConfig = useStore((s) => s.exportConfig);
   const importConfig = useStore((s) => s.importConfig);
   const { t } = useTranslation();
@@ -162,6 +163,18 @@ export default function SettingsPanel() {
                     useStore.setState((s) => ({ config: { ...s.config, rememberWindowSize: e.target.checked } }));
                     useStore.getState().saveConfig();
                   }} className="w-4 h-4 accent-indigo-500" />
+                </label>
+                <label className="flex items-center justify-between cursor-pointer">
+                  <span className="flex items-center gap-2 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                    <Power size={15} style={{ color: 'var(--color-text-muted)' }} />
+                    {t('settings.openOnStartup')}
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={config.openOnStartup}
+                    onChange={(e) => setOpenOnStartup(e.target.checked)}
+                    className="w-4 h-4 accent-indigo-500"
+                  />
                 </label>
               </div>
             </div>

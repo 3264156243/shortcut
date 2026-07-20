@@ -278,6 +278,18 @@ ipcMain.handle('app:getTheme', () => {
   return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
 });
 
+ipcMain.handle('app:getOpenAtLogin', () => {
+  return app.getLoginItemSettings().openAtLogin;
+});
+
+ipcMain.handle('app:setOpenAtLogin', (_e: any, enabled: boolean) => {
+  app.setLoginItemSettings({
+    openAtLogin: enabled,
+    openAsHidden: true,
+  });
+  return app.getLoginItemSettings().openAtLogin;
+});
+
 // Read installed software from registry
 ipcMain.handle('system:getInstalledSoftware', async () => {
   const { exec } = require('child_process');
@@ -527,4 +539,3 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   globalShortcut.unregisterAll();
 });
-

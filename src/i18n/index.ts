@@ -24,6 +24,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     // TabBar
     'tab.add': '添加页签',
     'tab.default': '通用',
+    'tab.deleteMessage': '确定要删除页签 "{name}" 吗？页签内的分组和快捷方式也会被删除。',
 
     // PanelBody
     'panel.empty.title': '还没有快捷方式',
@@ -34,6 +35,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     'group.add': '添加到分组',
     'group.rename': '重命名分组',
     'group.delete': '删除分组',
+    'group.deleteMessage': '确定要删除分组 "{name}" 吗？分组内的快捷方式也会被删除。',
     'group.default': '收藏',
 
     // ShortcutCard
@@ -85,6 +87,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     'settings.behavior': '行为',
     'settings.closeOnBlur': '失焦时关闭',
     'settings.rememberSize': '记住窗口大小',
+    'settings.openOnStartup': '开机自动启动',
+    'settings.startupEnabled': '已开启开机自动启动',
+    'settings.startupDisabled': '已关闭开机自动启动',
     'settings.language': '语言',
     'settings.language.zhCN': '简体中文',
     'settings.language.en': 'English',
@@ -139,6 +144,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     // TabBar
     'tab.add': 'Add Tab',
     'tab.default': 'General',
+    'tab.deleteMessage': 'Delete tab "{name}"? Groups and shortcuts in this tab will also be deleted.',
 
     // PanelBody
     'panel.empty.title': 'No shortcuts yet',
@@ -149,6 +155,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     'group.add': 'Add to group',
     'group.rename': 'Rename group',
     'group.delete': 'Delete group',
+    'group.deleteMessage': 'Delete group "{name}"? Shortcuts in this group will also be deleted.',
     'group.default': 'Favorites',
 
     // ShortcutCard
@@ -200,6 +207,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     'settings.behavior': 'Behavior',
     'settings.closeOnBlur': 'Close on blur',
     'settings.rememberSize': 'Remember window size',
+    'settings.openOnStartup': 'Open on startup',
+    'settings.startupEnabled': 'Open on startup enabled',
+    'settings.startupDisabled': 'Open on startup disabled',
     'settings.language': 'Language',
     'settings.language.zhCN': '简体中文',
     'settings.language.en': 'English',

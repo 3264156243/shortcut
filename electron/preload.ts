@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   writeFile: (path: string, data: string) => ipcRenderer.invoke('fs:writeFile', path, data),
   fileExists: (path: string) => ipcRenderer.invoke('fs:exists', path),
   getPath: (name: string) => ipcRenderer.invoke('app:getPath', name),
+  getOpenAtLogin: () => ipcRenderer.invoke('app:getOpenAtLogin'),
+  setOpenAtLogin: (enabled: boolean) => ipcRenderer.invoke('app:setOpenAtLogin', enabled),
 
   // System
   getInstalledSoftware: () => ipcRenderer.invoke('system:getInstalledSoftware'),

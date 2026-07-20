@@ -43,6 +43,12 @@ export default function GroupSection({ group, tabId, isSearchResult = false }: P
     setIsRenaming(false);
   };
 
+  const handleDeleteGroup = () => {
+    if (window.confirm(t('group.deleteMessage', { name: group.name }))) {
+      deleteGroup(tabId, group.id);
+    }
+  };
+
   // Auto-expand when searching
   const isCollapsed = searchQuery ? false : group.collapsed;
 
@@ -113,7 +119,7 @@ export default function GroupSection({ group, tabId, isSearchResult = false }: P
             <Pencil size={13} />
           </button>
           <button
-            onClick={() => deleteGroup(tabId, group.id)}
+            onClick={handleDeleteGroup}
             className="p-1 rounded hover:opacity-80 transition-opacity"
             style={{ color: 'var(--color-danger)' }}
             title={t('group.delete')}
