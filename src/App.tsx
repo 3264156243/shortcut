@@ -1,0 +1,194 @@
+import { useEffect, useMemo, useState } from 'react';
+import { useStore } from './store';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Minus, Square, X, Maximize2, Minimize2 } from 'lucide-react';
+import TopBar from './components/TopBar';
+import TabBar from './components/TabBar';
+import PanelBody from './components/PanelBody';
+import AddShortcutModal from './components/AddShortcutModal';
+import SettingsPanel from './components/SettingsPanel';
+import ImportSoftwareModal from './components/ImportSoftwareModal';
+import ToastContainer from './components/Toast';
+import { PanelAnimation } from './types';
+
+// Animation variants based on direction
+const getAnimationVariants = (direction: PanelAnimation) => {
+  const variants = {
+    bottom: {
+      initial: { opacity: 0, y: 60, scale: 0.98 },
+      animate: { opacity: 1, y: 0, scale: 1 },
+    },
+    top: {
+      initial: { opacity: 0, y: -60, scale: 0.98 },
+      animate: { opacity: 1, y: 0, scale: 1 },
+    },
+    left: {
+      initial: { opacity: 0, x: -60, scale: 0.98 },
+      animate: { opacity: 1, x: 0, scale: 1 },
+    },
+    right: {
+      initial: { opacity: 0, x: 60, scale: 0.98 },
+      animate: { opacity: 1, x: 0, scale: 1 },
+    },
+    center: {
+      initial: { opacity: 0, scale: 0.85 },
+      animate: { opacity: 1, scale: 1 },
+    },
+  };
+  return variants[direction] || variants.bottom;
+};
+
+export default function App() {
+  const config = useStore((s) => s.config);
+  const loadConfig = useStore((s) => s.loadConfig);
+  const showAddModal = useStore((s) => s.showAddModal);
+  const showSettings = useStore((s) => s.showSettings);
+  const showImportSoftware = useStore((s) => s.showImportSoftware);
+  const [animKey, setAnimKey] = useState(0);
+  const [isMaximized, setIsMaximized] = useState(false);
+
+  const animationDirection = config.panelAnimation || 'bottom';
+  const variants = useMemo(() => getAnimationVariants(animationDirection), [animationDirection]);
+
+  const api = window.electronAPI;
+
+  const handleClose = () => {
+    api?.closeWindow();
+  };
+
+  const handleMinimize = () => {
+    api?.minimizeWindow();
+  };
+
+  const handleMaximize = async () => {
+    if (api?.maximizeWindow) {
+      const maximized = await api.maximizeWindow();
+      setIsMaximized(maximized);
+    }
+  };
+
+  useEffect(() => {
+    loadConfig();
+  }, [loadConfig]);
+
+  // Check initial maximized state
+  useEffect(() => {
+    if (api?.isMaximized) {
+      api.isMaximized().then(setIsMaximized);
+    }
+  }, [api]);
+
+  // Apply theme
+  useEffect(() => {
+    const theme = config.theme === 'system'
+      ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : config.theme;
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [config.theme]);
+
+  // Listen for system theme changes
+  useEffect(() => {
+    if (config.theme !== 'system') return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = () => {
+      document.documentElement.setAttribute('data-theme', mq.matches ? 'dark' : 'light');
+    };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, [config.theme]);
+
+  // Replay animation when window will show (for show/hide via hotkey)
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (api?.onWindowWillShow) {
+      const unsubscribe = api.onWindowWillShow(() => {
+        setAnimKey((prev) => prev + 1);
+      });
+      return unsubscribe;
+    }
+  }, []);
+
+  // Also replay on focus (fallback)
+  useEffect(() => {
+    const handleFocus = () => {
+      setAnimKey((prev) => prev + 1);
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
+  return (
+    <div className="flex flex-col h-screen w-screen overflow-hidden" style={{ background: 'var(--color-bg)' }}>
+      <motion.div
+        key={animKey}
+        className="flex flex-col h-full w-full"
+        initial={variants.initial}
+        animate={variants.animate}
+        transition={{
+          type: 'spring',
+          damping: 25,
+          stiffness: 350,
+          mass: 0.8,
+        }}
+      >
+        {/* Title bar drag region */}
+        <div className="titlebar-drag flex items-center justify-between px-3 pt-2 shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-md flex items-center justify-center" style={{ background: 'var(--color-accent)' }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+              </svg>
+            </div>
+            <span className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>ShortCut</span>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <TopBar />
+
+            {/* Window controls */}
+            <div className="flex items-center ml-2 no-drag">
+              <button
+                onClick={handleMinimize}
+                className="p-1.5 rounded-lg transition-all duration-150 hover:opacity-80"
+                style={{ color: 'var(--color-text-muted)' }}
+                title="最小化"
+              >
+                <Minus size={14} />
+              </button>
+              <button
+                onClick={handleMaximize}
+                className="p-1.5 rounded-lg transition-all duration-150 hover:opacity-80"
+                style={{ color: 'var(--color-text-muted)' }}
+                title={isMaximized ? '还原' : '最大化'}
+              >
+                {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              </button>
+              <button
+                onClick={handleClose}
+                className="p-1.5 rounded-lg transition-all duration-150 hover:bg-red-500 hover:text-white"
+                style={{ color: 'var(--color-text-muted)' }}
+                title="关闭"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <TabBar />
+
+        {/* Main content */}
+        <PanelBody />
+      </motion.div>
+
+      {/* Modals */}
+      {showAddModal && <AddShortcutModal />}
+      {showSettings && <SettingsPanel />}
+      {showImportSoftware && <ImportSoftwareModal />}
+
+      {/* Toasts */}
+      <ToastContainer />
+    </div>
+  );
+}

@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-electron/
+release/
+out/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Runtime and cache
+.vite/
+.cache/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Editor and OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local assistant/tooling state
+.claude/
+CODEX_PLUSPLUS_DREAM_SKIN.md
+rebuild-codexplusplus-dream-skin.js
+
+# Electron builder
+builder-debug.yml
+builder-effective-config.yaml

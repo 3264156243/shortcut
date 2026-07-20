@@ -1,0 +1,94 @@
+﻿@import "tailwindcss";
+
+:root {
+  --color-bg: #111114;
+  --color-bg-secondary: #19191e;
+  --color-bg-tertiary: #1f1f26;
+  --color-bg-card: rgba(255, 255, 255, 0.035);
+  --color-bg-card-hover: rgba(255, 255, 255, 0.065);
+  --color-bg-glass: rgba(255, 255, 255, 0.025);
+  --color-border: rgba(255, 255, 255, 0.06);
+  --color-border-hover: rgba(255, 255, 255, 0.12);
+  --color-text: #d4d4d8;
+  --color-text-secondary: #8b8b94;
+  --color-text-muted: #5a5a63;
+  --color-accent: #e85d04;
+  --color-accent-hover: #f17424;
+  --color-accent-glow: rgba(232, 93, 4, 0.25);
+  --color-accent-soft: rgba(232, 93, 4, 0.08);
+  --color-danger: #e53e3e;
+  --color-success: #38a169;
+  --color-warning: #d69e2e;
+  --color-shadow: rgba(0, 0, 0, 0.5);
+  --color-overlay: rgba(0, 0, 0, 0.65);
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+}
+
+[data-theme="light"] {
+  --color-bg: #f7f7f8;
+  --color-bg-secondary: #ffffff;
+  --color-bg-tertiary: #f0f0f2;
+  --color-bg-card: rgba(0, 0, 0, 0.025);
+  --color-bg-card-hover: rgba(0, 0, 0, 0.045);
+  --color-bg-glass: rgba(255, 255, 255, 0.8);
+  --color-border: rgba(0, 0, 0, 0.07);
+  --color-border-hover: rgba(0, 0, 0, 0.13);
+  --color-text: #1a1a1e;
+  --color-text-secondary: #5a5a63;
+  --color-text-muted: #9a9aa3;
+  --color-accent: #d35400;
+  --color-accent-hover: #e85d04;
+  --color-accent-glow: rgba(211, 84, 0, 0.18);
+  --color-accent-soft: rgba(211, 84, 0, 0.06);
+  --color-shadow: rgba(0, 0, 0, 0.08);
+  --color-overlay: rgba(0, 0, 0, 0.25);
+}
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-border-hover); }
+
+::selection { background: var(--color-accent); color: white; }
+
+*:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.dragging * { cursor: grabbing !important; }
+
+.titlebar-drag { -webkit-app-region: drag; }
+.titlebar-drag button,
+.titlebar-drag input { -webkit-app-region: no-drag; }
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}

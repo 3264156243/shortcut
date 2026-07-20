@@ -1,0 +1,39 @@
+{
+  "appId": "com.wanan.shortcut",
+  "productName": "ShortCut",
+  "directories": {
+    "output": "release",
+    "buildResources": "resources"
+  },
+  "files": [
+    "dist/**/*",
+    "dist-electron/**/*"
+  ],
+  "extraResources": [
+    {
+      "from": "resources/icon.png",
+      "to": "icon.png"
+    },
+    {
+      "from": "resources/icon.ico",
+      "to": "icon.ico"
+    }
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "resources/icon.ico",
+    "artifactName": "${productName}-${version}-Setup.${ext}"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "ShortCut"
+  }
+}
