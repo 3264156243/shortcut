@@ -3,11 +3,12 @@ import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
 import { Shortcut, ShortcutType } from '../types';
 import { motion } from 'framer-motion';
+import { createPortal } from 'react-dom';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
   AppWindow, Folder, File, Globe, Pencil, Trash2,
-  ExternalLink, Copy, MoreVertical, AlertTriangle, GripVertical,
+  Copy, MoreVertical, AlertTriangle, GripVertical,
   FolderOpen
 } from 'lucide-react';
 
@@ -36,6 +37,16 @@ const TYPE_COLORS: Record<ShortcutType, string> = {
 
 // Cache for file icons
 const iconCache: Map<string, string> = new Map();
+const MENU_WIDTH = 152;
+
+function clampMenuPosition(left: number, top: number) {
+  const maxLeft = Math.max(8, window.innerWidth - MENU_WIDTH - 8);
+  const maxTop = Math.max(8, window.innerHeight - 180);
+  return {
+    left: Math.min(Math.max(8, left), maxLeft),
+    top: Math.min(Math.max(8, top), maxTop),
+  };
+}
 
 export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = true, isSelected = false, onSelect }: Props) {
   const openAddModal = useStore((s) => s.openAddModal);
@@ -46,6 +57,7 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
   const [fileIcon, setFileIcon] = useState<string | null>(shortcut.icon || null);
 
   const [showMenu, setShowMenu] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<{ left: number; top: number } | null>(null);
   const [isPressed, setIsPressed] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -166,8 +178,16 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    setMenuPosition(clampMenuPosition(e.clientX, e.clientY));
     setShowMenu(true);
   }, []);
+
+  const handleOpenMenu = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    setMenuPosition(clampMenuPosition(rect.right - MENU_WIDTH, rect.bottom + 6));
+    setShowMenu((visible) => !visible);
+  };
 
   // Highlight matching text
   const highlightText = (text: string) => {
@@ -194,7 +214,7 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
       whileTap={{ scale: 0.97 }}
       onMouseDown={() => { setIsPressed(true); onSelect?.(); }}
       onMouseUp={() => setIsPressed(false)}
-      onMouseLeave={() => { setIsPressed(false); setShowMenu(false); }}
+      onMouseLeave={() => setIsPressed(false)}
       onContextMenu={handleContextMenu}
       className="relative flex flex-col items-center gap-2 p-4 rounded-xl cursor-pointer transition-all duration-200 group"
       data-shortcut-card="true"
@@ -207,7 +227,7 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
       {/* Drag handle indicator */}
       {isDraggable && (
         <div
-          className="absolute top-1 right-1 p-0.5 rounded opacity-0 group-hover:opacity-50 transition-opacity"
+          className="absolute top-1 left-1 p-0.5 rounded opacity-0 group-hover:opacity-50 transition-opacity"
           style={{ color: 'var(--color-text-muted)' }}
         >
           <GripVertical size={10} />
@@ -254,61 +274,73 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
 
       {/* Context menu button */}
       <button
-        onClick={(e) => {
-          e.stopPropagation();
-          setShowMenu(!showMenu);
-        }}
+        onClick={handleOpenMenu}
         onMouseDown={(e) => e.stopPropagation()}
-        className="absolute top-2 left-2 p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
+        className="absolute top-2 right-2 p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
         style={{ color: 'var(--color-text-muted)', background: 'var(--color-bg-card-hover)' }}
       >
         <MoreVertical size={12} />
       </button>
 
       {/* Context menu */}
-      {showMenu && (
-        <div
-          className="absolute top-8 left-2 z-50 py-1 rounded-lg min-w-[120px] shadow-lg"
-          style={{
-            background: 'var(--color-bg-secondary)',
-            border: '1px solid var(--color-border)',
-            boxShadow: '0 8px 24px var(--color-shadow)',
-          }}
-          onClick={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
+      {showMenu && menuPosition && createPortal(
+        <>
           <button
-            onClick={() => { openAddModal(groupId, shortcut); setShowMenu(false); }}
-            className="flex items-center gap-2 w-full px-3 py-1.5 text-xs hover:opacity-80 transition-opacity"
-            style={{ color: 'var(--color-text)' }}
+            className="fixed inset-0 z-[170] cursor-default"
+            style={{ background: 'transparent' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowMenu(false);
+            }}
+            aria-label={t('shortcut.deleteCancel')}
+          />
+          <div
+            className="fixed z-[180] py-1 rounded-lg shadow-lg"
+            style={{
+              left: menuPosition.left,
+              top: menuPosition.top,
+              width: MENU_WIDTH,
+              background: 'var(--color-bg-secondary)',
+              border: '1px solid var(--color-border)',
+              boxShadow: '0 8px 24px var(--color-shadow)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
           >
-            <Pencil size={12} /> {t('shortcut.edit')}
-          </button>
-          <button
-            onClick={handleCopyPath}
-            className="flex items-center gap-2 w-full px-3 py-1.5 text-xs hover:opacity-80 transition-opacity"
-            style={{ color: 'var(--color-text)' }}
-          >
-            <Copy size={12} /> {t('shortcut.copyPath')}
-          </button>
-          {shortcut.type !== 'url' && (
             <button
-              onClick={handleShowInFolder}
+              onClick={() => { openAddModal(groupId, shortcut); setShowMenu(false); }}
               className="flex items-center gap-2 w-full px-3 py-1.5 text-xs hover:opacity-80 transition-opacity"
               style={{ color: 'var(--color-text)' }}
             >
-              <FolderOpen size={12} /> {t('shortcut.showInFolder')}
+              <Pencil size={12} /> {t('shortcut.edit')}
             </button>
-          )}
-          <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
-          <button
-            onClick={handleDelete}
-            className="flex items-center gap-2 w-full px-3 py-1.5 text-xs hover:opacity-80 transition-opacity"
-            style={{ color: 'var(--color-danger)' }}
-          >
-            <Trash2 size={12} /> {t('shortcut.delete')}
-          </button>
-        </div>
+            <button
+              onClick={handleCopyPath}
+              className="flex items-center gap-2 w-full px-3 py-1.5 text-xs hover:opacity-80 transition-opacity"
+              style={{ color: 'var(--color-text)' }}
+            >
+              <Copy size={12} /> {t('shortcut.copyPath')}
+            </button>
+            {shortcut.type !== 'url' && (
+              <button
+                onClick={handleShowInFolder}
+                className="flex items-center gap-2 w-full px-3 py-1.5 text-xs hover:opacity-80 transition-opacity"
+                style={{ color: 'var(--color-text)' }}
+              >
+                <FolderOpen size={12} /> {t('shortcut.showInFolder')}
+              </button>
+            )}
+            <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
+            <button
+              onClick={handleDelete}
+              className="flex items-center gap-2 w-full px-3 py-1.5 text-xs hover:opacity-80 transition-opacity"
+              style={{ color: 'var(--color-danger)' }}
+            >
+              <Trash2 size={12} /> {t('shortcut.delete')}
+            </button>
+          </div>
+        </>,
+        document.body
       )}
 
       {/* Delete confirmation dialog */}
