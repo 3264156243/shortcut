@@ -19,6 +19,7 @@ pnpm-debug.log*
 .vite/
 .cache/
 .asar-work/
+.asar-refresh/
 *.tsbuildinfo
 
 # Environment

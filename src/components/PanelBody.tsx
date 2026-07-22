@@ -304,6 +304,17 @@ export default function PanelBody() {
       setSelectedShortcut(visibleShortcuts[0]?.id || null);
     });
   }, [setSelectedShortcut, visibleShortcuts]);
+
+  useEffect(() => {
+    const handler = () => {
+      window.requestAnimationFrame(() => {
+        setSelectedShortcut(visibleShortcuts[0]?.id || null);
+      });
+    };
+    window.addEventListener('shortcut:select-first-visible', handler);
+    return () => window.removeEventListener('shortcut:select-first-visible', handler);
+  }, [setSelectedShortcut, visibleShortcuts]);
+
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (showAddModal || showSettings || showImportSoftware) return;

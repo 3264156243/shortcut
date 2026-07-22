@@ -96,8 +96,11 @@ export default function TopBar() {
     }
 
     if (e.key === 'Enter') {
+      e.preventDefault();
       addSearchHistory(searchQuery);
       setShowHistory(false);
+      inputRef.current?.blur();
+      window.dispatchEvent(new Event('shortcut:select-first-visible'));
     }
   };
 
