@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
 import { Group } from '../types';
@@ -20,6 +20,8 @@ export default function GroupSection({ group, tabId, isSearchResult = false }: P
   const deleteGroup = useStore((s) => s.deleteGroup);
   const openAddModal = useStore((s) => s.openAddModal);
   const searchQuery = useStore((s) => s.searchQuery);
+  const selectedShortcutId = useStore((s) => s.selectedShortcutId);
+  const setSelectedShortcut = useStore((s) => s.setSelectedShortcut);
   const { t } = useTranslation();
 
   // Make group a droppable area
@@ -153,7 +155,14 @@ export default function GroupSection({ group, tabId, isSearchResult = false }: P
                 strategy={verticalListSortingStrategy}
               >
                 {group.shortcuts.map((shortcut) => (
-                  <ShortcutCard key={shortcut.id} shortcut={shortcut} groupId={group.id} tabId={tabId} />
+                  <ShortcutCard
+                    key={shortcut.id}
+                    shortcut={shortcut}
+                    groupId={group.id}
+                    tabId={tabId}
+                    isSelected={selectedShortcutId === shortcut.id}
+                    onSelect={() => setSelectedShortcut(shortcut.id)}
+                  />
                 ))}
               </SortableContext>
               {group.shortcuts.length === 0 && (
@@ -168,3 +177,4 @@ export default function GroupSection({ group, tabId, isSearchResult = false }: P
     </motion.div>
   );
 }
+

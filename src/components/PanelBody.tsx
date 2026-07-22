@@ -1,4 +1,4 @@
-import { useCallback, useState, useMemo } from 'react';
+﻿import { useCallback, useEffect, useState, useMemo } from 'react';
 import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
 import { Shortcut, Tab, Group } from '../types';
@@ -47,6 +47,11 @@ export default function PanelBody() {
   const config = useStore((s) => s.config);
   const activeTabId = useStore((s) => s.activeTabId);
   const searchQuery = useStore((s) => s.searchQuery);
+  const selectedShortcutId = useStore((s) => s.selectedShortcutId);
+  const setSelectedShortcut = useStore((s) => s.setSelectedShortcut);
+  const showAddModal = useStore((s) => s.showAddModal);
+  const showSettings = useStore((s) => s.showSettings);
+  const showImportSoftware = useStore((s) => s.showImportSoftware);
   const setActiveTab = useStore((s) => s.setActiveTab);
   const addGroup = useStore((s) => s.addGroup);
   const reorderShortcuts = useStore((s) => s.reorderShortcuts);
@@ -193,6 +198,137 @@ export default function PanelBody() {
     return results;
   }, [config.tabs, searchQuery]);
 
+  const visibleShortcuts = useMemo(() => {
+    if (searchQuery) {
+      return searchResults.flatMap((result) => result.groups.flatMap((group) => group.shortcuts));
+    }
+
+    return activeTab?.groups
+      .filter((group) => !group.collapsed)
+      .flatMap((group) => group.shortcuts) || [];
+  }, [activeTab, searchQuery, searchResults]);
+
+  const openShortcut = useCallback(async (shortcut: Shortcut) => {
+    if (shortcut.missing) {
+      addToast(`${t('shortcut.missing')}: ${shortcut.targetPath}`, 'error');
+      return;
+    }
+
+    const api = window.electronAPI;
+    if (!api) {
+      if (shortcut.type === 'url') {
+        window.open(shortcut.targetPath, '_blank');
+      }
+      return;
+    }
+
+    try {
+      const result = shortcut.type === 'url'
+        ? await api.openExternal(shortcut.targetPath)
+        : await api.openTarget(shortcut.targetPath);
+
+      if (result.success) {
+        addToast(t('shortcut.opened', { name: shortcut.name }), 'success');
+      } else {
+        addToast(t('shortcut.openFailed', { error: result.error || '' }), 'error');
+      }
+    } catch (err: any) {
+      addToast(t('shortcut.openFailed', { error: err.message }), 'error');
+    }
+  }, [addToast, t]);
+
+  const moveSelection = useCallback((direction: 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight') => {
+    const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-card="true"]'));
+    if (cards.length === 0) return;
+
+    const current = selectedShortcutId
+      ? cards.find((card) => card.dataset.shortcutId === selectedShortcutId)
+      : null;
+
+    if (!current) {
+      setSelectedShortcut(cards[0].dataset.shortcutId || null);
+      return;
+    }
+
+    const currentRect = current.getBoundingClientRect();
+    const currentCenter = {
+      x: currentRect.left + currentRect.width / 2,
+      y: currentRect.top + currentRect.height / 2,
+    };
+
+    let best: { id: string; score: number } | null = null;
+    for (const card of cards) {
+      if (card === current || !card.dataset.shortcutId) continue;
+      const rect = card.getBoundingClientRect();
+      const center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      const dx = center.x - currentCenter.x;
+      const dy = center.y - currentCenter.y;
+      const inDirection =
+        (direction === 'ArrowLeft' && dx < -8) ||
+        (direction === 'ArrowRight' && dx > 8) ||
+        (direction === 'ArrowUp' && dy < -8) ||
+        (direction === 'ArrowDown' && dy > 8);
+      if (!inDirection) continue;
+
+      const primary = direction === 'ArrowLeft' || direction === 'ArrowRight' ? Math.abs(dx) : Math.abs(dy);
+      const secondary = direction === 'ArrowLeft' || direction === 'ArrowRight' ? Math.abs(dy) : Math.abs(dx);
+      const score = primary * 2 + secondary;
+      if (!best || score < best.score) {
+        best = { id: card.dataset.shortcutId, score };
+      }
+    }
+
+    if (best) {
+      setSelectedShortcut(best.id);
+    }
+  }, [selectedShortcutId, setSelectedShortcut]);
+
+  useEffect(() => {
+    if (visibleShortcuts.length === 0) {
+      setSelectedShortcut(null);
+      return;
+    }
+    if (!selectedShortcutId || !visibleShortcuts.some((shortcut) => shortcut.id === selectedShortcutId)) {
+      setSelectedShortcut(visibleShortcuts[0].id);
+    }
+  }, [selectedShortcutId, setSelectedShortcut, visibleShortcuts]);
+
+  useEffect(() => {
+    const selectedCard = document.querySelector<HTMLElement>(`[data-shortcut-id="${selectedShortcutId}"]`);
+    selectedCard?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [selectedShortcutId]);
+
+  useEffect(() => {
+    if (!window.electronAPI?.onWindowWillShow) return;
+    return window.electronAPI.onWindowWillShow(() => {
+      setSelectedShortcut(visibleShortcuts[0]?.id || null);
+    });
+  }, [setSelectedShortcut, visibleShortcuts]);
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (showAddModal || showSettings || showImportSoftware) return;
+      const target = event.target as HTMLElement | null;
+      const isTyping = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+      if (isTyping) return;
+
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+        event.preventDefault();
+        moveSelection(event.key as 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight');
+        return;
+      }
+
+      if (event.key === 'Enter' && selectedShortcutId) {
+        const selected = visibleShortcuts.find((shortcut) => shortcut.id === selectedShortcutId);
+        if (selected) {
+          event.preventDefault();
+          openShortcut(selected);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [moveSelection, openShortcut, selectedShortcutId, showAddModal, showImportSoftware, showSettings, visibleShortcuts]);
   if (!activeTab) {
     return (
       <div className="flex-1 flex items-center justify-center" style={{ color: 'var(--color-text-muted)' }}>
@@ -364,3 +500,5 @@ export default function PanelBody() {
     </DndContext>
   );
 }
+
+

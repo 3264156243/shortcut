@@ -39,6 +39,7 @@ export interface AppConfig {
   openOnStartup: boolean;
   rememberWindowSize: boolean;
   closeOnBlur: boolean;
+  searchHistory: string[];
   tabs: Tab[];
   activeTabId?: string;
 }
@@ -52,6 +53,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   openOnStartup: false,
   rememberWindowSize: true,
   closeOnBlur: true,
+  searchHistory: [],
   tabs: [
     {
       id: 'default',

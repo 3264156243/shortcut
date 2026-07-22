@@ -1,4 +1,4 @@
-export type Locale = 'zh-CN' | 'en';
+﻿export type Locale = 'zh-CN' | 'en';
 
 export interface I18nConfig {
   locale: Locale;
@@ -6,39 +6,34 @@ export interface I18nConfig {
 
 export const DEFAULT_LOCALE: Locale = 'zh-CN';
 
-// Translation strings
 export const translations: Record<Locale, Record<string, string>> = {
   'zh-CN': {
-    // App
     'app.title': 'ShortCut',
     'app.subtitle': '快捷面板',
 
-    // TopBar
     'search.placeholder': '搜索快捷方式...',
     'search.noResults': '未找到结果',
-    'search.noResultsDesc': '没有匹配 "{query}" 的快捷方式',
+    'search.noResultsDesc': '没有快捷方式匹配 "{query}"',
     'search.switchTab': '切换',
+    'search.clear': '清空搜索',
+    'search.historyDelete': '删除记录',
     'add.button': '添加快捷方式',
     'settings.button': '设置',
 
-    // TabBar
     'tab.add': '添加页签',
     'tab.default': '通用',
     'tab.deleteMessage': '确定要删除页签 "{name}" 吗？页签内的分组和快捷方式也会被删除。',
 
-    // PanelBody
     'panel.empty.title': '还没有快捷方式',
     'panel.empty.desc': '点击 + 按钮添加你的第一个快捷方式',
     'panel.addGroup': '添加分组',
 
-    // GroupSection
     'group.add': '添加到分组',
     'group.rename': '重命名分组',
     'group.delete': '删除分组',
     'group.deleteMessage': '确定要删除分组 "{name}" 吗？分组内的快捷方式也会被删除。',
     'group.default': '收藏',
 
-    // ShortcutCard
     'shortcut.open': '打开',
     'shortcut.edit': '编辑',
     'shortcut.delete': '删除',
@@ -48,12 +43,11 @@ export const translations: Record<Locale, Record<string, string>> = {
     'shortcut.deleteConfirm': '确认删除',
     'shortcut.copyPath': '复制路径',
     'shortcut.pathCopied': '路径已复制',
-    'shortcut.showInFolder': '在文件管理器打开',
+    'shortcut.showInFolder': '在文件资源管理器中显示',
     'shortcut.missing': '目标丢失',
     'shortcut.opened': '已打开 {name}',
-    'shortcut.openFailed': '打开失败: {error}',
+    'shortcut.openFailed': '打开失败：{error}',
 
-    // AddShortcutModal
     'modal.add.title': '添加快捷方式',
     'modal.edit.title': '编辑快捷方式',
     'modal.type.app': '应用',
@@ -77,7 +71,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     'modal.error.nameRequired': '名称和目标为必填项',
     'modal.error.noGroup': '未选择分组',
 
-    // SettingsPanel
     'settings.title': '设置',
     'settings.theme': '主题',
     'settings.theme.dark': '深色',
@@ -108,16 +101,13 @@ export const translations: Record<Locale, Record<string, string>> = {
     'settings.importFailed': '导入失败：配置文件格式无效',
     'settings.version': 'ShortCut v1.0.0',
 
-    // Tray
     'tray.showHide': '显示/隐藏',
     'tray.quit': '退出',
 
-    // Common
     'common.success': '成功',
     'common.error': '错误',
     'common.info': '信息',
 
-    // Import Software
     'import.title': '从已安装软件导入',
     'import.search': '搜索软件...',
     'import.loading': '正在加载已安装软件...',
@@ -129,36 +119,32 @@ export const translations: Record<Locale, Record<string, string>> = {
     'import.toGroup': '导入到分组',
   },
   'en': {
-    // App
     'app.title': 'ShortCut',
     'app.subtitle': 'Quick Panel',
 
-    // TopBar
     'search.placeholder': 'Search shortcuts...',
     'search.noResults': 'No results found',
     'search.noResultsDesc': 'No shortcuts match "{query}"',
     'search.switchTab': 'Switch',
+    'search.clear': 'Clear search',
+    'search.historyDelete': 'Delete history item',
     'add.button': 'Add Shortcut',
     'settings.button': 'Settings',
 
-    // TabBar
     'tab.add': 'Add Tab',
     'tab.default': 'General',
     'tab.deleteMessage': 'Delete tab "{name}"? Groups and shortcuts in this tab will also be deleted.',
 
-    // PanelBody
     'panel.empty.title': 'No shortcuts yet',
     'panel.empty.desc': 'Click the + button to add your first shortcut',
     'panel.addGroup': 'Add Group',
 
-    // GroupSection
     'group.add': 'Add to group',
     'group.rename': 'Rename group',
     'group.delete': 'Delete group',
     'group.deleteMessage': 'Delete group "{name}"? Shortcuts in this group will also be deleted.',
     'group.default': 'Favorites',
 
-    // ShortcutCard
     'shortcut.open': 'Open',
     'shortcut.edit': 'Edit',
     'shortcut.delete': 'Delete',
@@ -173,7 +159,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     'shortcut.opened': 'Opened {name}',
     'shortcut.openFailed': 'Failed: {error}',
 
-    // AddShortcutModal
     'modal.add.title': 'Add Shortcut',
     'modal.edit.title': 'Edit Shortcut',
     'modal.type.app': 'Application',
@@ -197,7 +182,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     'modal.error.nameRequired': 'Name and target are required',
     'modal.error.noGroup': 'No group selected',
 
-    // SettingsPanel
     'settings.title': 'Settings',
     'settings.theme': 'Theme',
     'settings.theme.dark': 'Dark',
@@ -228,16 +212,13 @@ export const translations: Record<Locale, Record<string, string>> = {
     'settings.importFailed': 'Import failed: invalid config file',
     'settings.version': 'ShortCut v1.0.0',
 
-    // Tray
     'tray.showHide': 'Show/Hide',
     'tray.quit': 'Quit',
 
-    // Common
     'common.success': 'Success',
     'common.error': 'Error',
     'common.info': 'Info',
 
-    // Import Software
     'import.title': 'Import from Installed Software',
     'import.search': 'Search software...',
     'import.loading': 'Loading installed software...',
@@ -250,9 +231,8 @@ export const translations: Record<Locale, Record<string, string>> = {
   },
 };
 
-// Get translation with optional interpolation
 export function t(key: string, params?: Record<string, string>, locale: Locale = DEFAULT_LOCALE): string {
-  let text = translations[locale]?.[key] || translations['en']?.[key] || key;
+  let text = translations[locale]?.[key] || translations.en?.[key] || key;
   if (params) {
     Object.entries(params).forEach(([k, v]) => {
       text = text.replace(`{${k}}`, v);

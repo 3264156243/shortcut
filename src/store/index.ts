@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+﻿import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { AppConfig, DEFAULT_CONFIG, Tab, Group, Shortcut, Locale, PanelAnimation } from '../types';
 import { t } from '../i18n';
@@ -7,6 +7,7 @@ interface AppState {
   config: AppConfig;
   activeTabId: string;
   searchQuery: string;
+  selectedShortcutId: string | null;
   editingShortcut: Shortcut | null;
   editingGroupId: string | null;
   showAddModal: boolean;
@@ -23,6 +24,9 @@ interface AppState {
   setOpenOnStartup: (enabled: boolean) => Promise<void>;
   setActiveTab: (tabId: string) => void;
   setSearchQuery: (q: string) => void;
+  setSelectedShortcut: (shortcutId: string | null) => void;
+  addSearchHistory: (query: string) => void;
+  deleteSearchHistory: (query: string) => void;
 
   // Tab actions
   addTab: (name: string) => void;
@@ -118,6 +122,7 @@ export const useStore = create<AppState>((set, get) => ({
   config: { ...DEFAULT_CONFIG },
   activeTabId: DEFAULT_CONFIG.activeTabId || 'default',
   searchQuery: '',
+  selectedShortcutId: null,
   editingShortcut: null,
   editingGroupId: null,
   showAddModal: false,
@@ -136,7 +141,10 @@ export const useStore = create<AppState>((set, get) => ({
     if (raw) {
       try {
         const parsed = JSON.parse(raw) as AppConfig;
-        set({ config: parsed, activeTabId: parsed.activeTabId || parsed.tabs[0]?.id || 'default' });
+        set({
+          config: { ...DEFAULT_CONFIG, ...parsed, searchHistory: parsed.searchHistory || [] },
+          activeTabId: parsed.activeTabId || parsed.tabs[0]?.id || 'default',
+        });
       } catch {
         console.error('Failed to parse config');
       }
@@ -199,11 +207,33 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setActiveTab: (tabId) => {
-    set({ activeTabId: tabId, searchQuery: '' });
+    set({ activeTabId: tabId, searchQuery: '', selectedShortcutId: null });
     get().saveConfig();
   },
 
   setSearchQuery: (q) => set({ searchQuery: q }),
+
+  setSelectedShortcut: (shortcutId) => set({ selectedShortcutId: shortcutId }),
+
+  addSearchHistory: (query) => {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    set((state) => {
+      const searchHistory = [trimmed, ...(state.config.searchHistory || []).filter((item) => item !== trimmed)].slice(0, 5);
+      return { config: { ...state.config, searchHistory } };
+    });
+    get().saveConfig();
+  },
+
+  deleteSearchHistory: (query) => {
+    set((state) => ({
+      config: {
+        ...state.config,
+        searchHistory: (state.config.searchHistory || []).filter((item) => item !== query),
+      },
+    }));
+    get().saveConfig();
+  },
 
   addTab: (name) => {
     const id = uuidv4();
@@ -543,3 +573,4 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 }));
+

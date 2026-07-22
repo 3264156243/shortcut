@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
 import { Shortcut, ShortcutType } from '../types';
@@ -16,6 +16,8 @@ interface Props {
   groupId: string;
   tabId: string;
   isDraggable?: boolean;
+  isSelected?: boolean;
+  onSelect?: () => void;
 }
 
 const TYPE_ICONS: Record<ShortcutType, typeof AppWindow> = {
@@ -35,7 +37,7 @@ const TYPE_COLORS: Record<ShortcutType, string> = {
 // Cache for file icons
 const iconCache: Map<string, string> = new Map();
 
-export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = true }: Props) {
+export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = true, isSelected = false, onSelect }: Props) {
   const openAddModal = useStore((s) => s.openAddModal);
   const deleteShortcut = useStore((s) => s.deleteShortcut);
   const addToast = useStore((s) => s.addToast);
@@ -94,6 +96,9 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
+    background: isSelected ? 'var(--color-accent-soft)' : 'var(--color-bg-card)',
+    border: `1px solid ${isSelected ? 'var(--color-accent)' : 'var(--color-border)'}`,
+    boxShadow: isSelected ? '0 0 0 3px var(--color-accent-glow)' : 'none',
   };
 
   const Icon = TYPE_ICONS[shortcut.type];
@@ -187,15 +192,17 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
       layout
       whileHover={{ y: -2, scale: 1.02 }}
       whileTap={{ scale: 0.97 }}
-      onMouseDown={() => setIsPressed(true)}
+      onMouseDown={() => { setIsPressed(true); onSelect?.(); }}
       onMouseUp={() => setIsPressed(false)}
       onMouseLeave={() => { setIsPressed(false); setShowMenu(false); }}
       onContextMenu={handleContextMenu}
       className="relative flex flex-col items-center gap-2 p-4 rounded-xl cursor-pointer transition-all duration-200 group"
+      data-shortcut-card="true"
+      data-shortcut-id={shortcut.id}
       data-dragging={isDragging}
       {...attributes}
       {...listeners}
-      onClick={handleOpen}
+      onClick={() => { onSelect?.(); handleOpen(); }}
     >
       {/* Drag handle indicator */}
       {isDraggable && (
@@ -355,3 +362,6 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
     </motion.div>
   );
 }
+
+
+
