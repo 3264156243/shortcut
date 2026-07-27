@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from './store';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Minus, Square, X, Maximize2, Minimize2 } from 'lucide-react';
@@ -49,6 +49,10 @@ export default function App() {
   const activeModule = useStore((s) => s.activeModule);
   const [animKey, setAnimKey] = useState(0);
   const [isMaximized, setIsMaximized] = useState(false);
+  const spaceDownAt = useRef<number | null>(null);
+  const longSpaceTimer = useRef<number | null>(null);
+  const shortSpaceTimer = useRef<number | null>(null);
+  const longSpaceTriggered = useRef(false);
 
   const animationDirection = config.panelAnimation || 'bottom';
   const variants = useMemo(() => getAnimationVariants(animationDirection), [animationDirection]);
@@ -73,6 +77,85 @@ export default function App() {
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);
+  useEffect(() => {
+    const isEditableTarget = (target: EventTarget | null) => {
+      const element = target as HTMLElement | null;
+      return !!element && (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.isContentEditable);
+    };
+
+    const clearLongPress = () => {
+      if (longSpaceTimer.current) {
+        window.clearTimeout(longSpaceTimer.current);
+        longSpaceTimer.current = null;
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.code === 'Space' || event.key === ' ') || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      const state = useStore.getState();
+      const isModalOpen = state.showAddModal || state.showSettings || state.showImportSoftware;
+      if (isEditableTarget(event.target) || isModalOpen) return;
+
+      event.preventDefault();
+      if (spaceDownAt.current !== null) return;
+      spaceDownAt.current = performance.now();
+      longSpaceTriggered.current = false;
+      clearLongPress();
+      longSpaceTimer.current = window.setTimeout(() => {
+        const latest = useStore.getState();
+        latest.setActiveModule(latest.activeModule === 'shortcuts' ? 'tasks' : 'shortcuts');
+        longSpaceTriggered.current = true;
+        shortSpaceTimer.current && window.clearTimeout(shortSpaceTimer.current);
+        shortSpaceTimer.current = null;
+      }, 1000);
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (!(event.code === 'Space' || event.key === ' ')) return;
+      if (spaceDownAt.current === null) return;
+      const pressedFor = performance.now() - spaceDownAt.current;
+      spaceDownAt.current = null;
+      clearLongPress();
+      event.preventDefault();
+
+      if (longSpaceTriggered.current || pressedFor >= 1000) {
+        longSpaceTriggered.current = false;
+        return;
+      }
+
+      if (shortSpaceTimer.current) {
+        window.clearTimeout(shortSpaceTimer.current);
+        shortSpaceTimer.current = null;
+        if (useStore.getState().activeModule === 'shortcuts') {
+          window.dispatchEvent(new Event('shortcut:focus-search'));
+        }
+        return;
+      }
+
+      shortSpaceTimer.current = window.setTimeout(() => {
+        const latest = useStore.getState();
+        if (latest.activeModule === 'shortcuts') {
+          const tabs = latest.config.tabs;
+          if (tabs.length > 1) {
+            const currentIndex = Math.max(0, tabs.findIndex((tab) => tab.id === latest.activeTabId));
+            latest.setActiveTab(tabs[(currentIndex + 1) % tabs.length].id);
+          }
+        }
+        shortSpaceTimer.current = null;
+      }, 320);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      clearLongPress();
+      if (shortSpaceTimer.current) {
+        window.clearTimeout(shortSpaceTimer.current);
+      }
+    };
+  }, []);
 
   // Check initial maximized state
   useEffect(() => {
@@ -203,3 +286,5 @@ export default function App() {
     </div>
   );
 }
+
+

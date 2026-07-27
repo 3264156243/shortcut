@@ -1,4 +1,4 @@
-﻿import { useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Plus, Trash2 } from 'lucide-react';
 import { useStore } from '../store';
@@ -7,21 +7,60 @@ import { TaskNote } from '../types';
 const tapePositions = ['left', 'right', 'center'];
 
 export default function TaskBoard() {
-  const tasks = useStore((state) => state.config.tasks || []);
+  const config = useStore((state) => state.config);
+  const addTaskBoard = useStore((state) => state.addTaskBoard);
+  const renameTaskBoard = useStore((state) => state.renameTaskBoard);
+  const deleteTaskBoard = useStore((state) => state.deleteTaskBoard);
+  const setActiveTaskBoard = useStore((state) => state.setActiveTaskBoard);
   const addTask = useStore((state) => state.addTask);
   const toggleTask = useStore((state) => state.toggleTask);
   const deleteTask = useStore((state) => state.deleteTask);
   const moveTask = useStore((state) => state.moveTask);
   const wallRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState('');
+  const [nameDraft, setNameDraft] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+
+  const taskBoards = config.taskBoards?.length ? config.taskBoards : [];
+  const activeBoard = taskBoards.find((board) => board.id === config.activeTaskBoardId) || taskBoards[0];
+  const tasks = activeBoard?.notes || [];
+
+  useEffect(() => {
+    setNameDraft(activeBoard?.name || '');
+    setConfirmDeleteId(null);
+  }, [activeBoard?.id, activeBoard?.name]);
 
   const submit = () => {
     const text = draft.trim();
     if (!text) return;
     addTask(text);
     setDraft('');
+  };
+
+  const commitBoardName = () => {
+    if (!activeBoard) return;
+    const nextName = nameDraft.trim();
+    if (!nextName) {
+      setNameDraft(activeBoard.name);
+      return;
+    }
+    if (nextName !== activeBoard.name) {
+      renameTaskBoard(activeBoard.id, nextName);
+    }
+  };
+
+  const createBoard = () => {
+    addTaskBoard(`任务墙 ${taskBoards.length + 1}`);
+  };
+
+  const removeBoard = () => {
+    if (!activeBoard || taskBoards.length <= 1) return;
+    const ok = window.confirm(`确定删除“${activeBoard.name}”及其中所有任务吗？`);
+    if (ok) {
+      deleteTaskBoard(activeBoard.id);
+    }
   };
 
   const startDrag = (task: TaskNote, event: React.PointerEvent<HTMLDivElement>) => {
@@ -41,6 +80,7 @@ export default function TaskBoard() {
     let latestY = task.y;
     let moved = false;
 
+    setConfirmDeleteId(null);
     setDraggingId(task.id);
 
     const onMove = (moveEvent: PointerEvent) => {
@@ -72,6 +112,7 @@ export default function TaskBoard() {
 
   const removeTask = (taskId: string) => {
     setDeletingId(taskId);
+    setConfirmDeleteId(null);
     window.setTimeout(() => {
       deleteTask(taskId);
       setDeletingId((current) => current === taskId ? null : current);
@@ -123,6 +164,68 @@ export default function TaskBoard() {
         .task-note.done .task-note-text::after { transform: translateY(-50%) scaleX(1); }
       `}</style>
 
+      <div className="flex shrink-0 items-center gap-2 px-3 py-2" style={{ background: '#171210', borderBottom: '1px solid rgba(245,240,232,.08)' }}>
+        <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
+          {taskBoards.map((board) => {
+            const active = board.id === activeBoard?.id;
+            return (
+              <button
+                key={board.id}
+                onClick={() => setActiveTaskBoard(board.id)}
+                className="shrink-0 rounded px-3 py-1.5 text-xs transition-all duration-150"
+                style={{
+                  background: active ? '#9b2335' : 'rgba(245,240,232,.08)',
+                  border: `1px solid ${active ? '#9b2335' : 'rgba(245,240,232,.12)'}`,
+                  color: active ? '#f5f0e8' : 'rgba(245,240,232,.72)',
+                  fontFamily: "'Special Elite', 'Noto Serif SC', 'SimSun', serif",
+                }}
+                title={board.name}
+              >
+                {board.name}
+              </button>
+            );
+          })}
+          <button
+            onClick={createBoard}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded transition-all duration-150 hover:opacity-85"
+            style={{ background: 'rgba(245,240,232,.1)', border: '1px solid rgba(245,240,232,.14)', color: '#f5f0e8' }}
+            title="新增任务墙"
+          >
+            <Plus size={14} />
+          </button>
+        </div>
+        {activeBoard && (
+          <div className="flex shrink-0 items-center gap-2">
+            <input
+              value={nameDraft}
+              onChange={(event) => setNameDraft(event.target.value)}
+              onBlur={commitBoardName}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.currentTarget.blur();
+                }
+                if (event.key === 'Escape') {
+                  setNameDraft(activeBoard.name);
+                  event.currentTarget.blur();
+                }
+              }}
+              className="w-32 rounded border-none px-2 py-1 text-right text-sm outline-none"
+              style={{ background: 'rgba(245,240,232,.08)', color: '#f5f0e8', fontFamily: "'Special Elite', 'Noto Serif SC', 'SimSun', serif" }}
+              title="任务墙名称"
+            />
+            <button
+              onClick={removeBoard}
+              disabled={taskBoards.length <= 1}
+              className="flex h-8 w-8 items-center justify-center rounded transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-25 hover:opacity-85"
+              style={{ background: 'rgba(155,35,53,.18)', border: '1px solid rgba(155,35,53,.35)', color: '#eaa2ad' }}
+              title="删除当前任务墙"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        )}
+      </div>
+
       <div ref={wallRef} className="task-wall relative min-h-0 flex-1 overflow-hidden">
         {tasks.length === 0 && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center" style={{ color: 'rgba(245,240,232,.16)' }}>
@@ -134,6 +237,7 @@ export default function TaskBoard() {
         <AnimatePresence>
           {tasks.map((task, index) => {
             const tapePosition = tapePositions[index % tapePositions.length];
+            const confirming = confirmDeleteId === task.id;
             return (
               <motion.div
                 key={task.id}
@@ -149,7 +253,7 @@ export default function TaskBoard() {
                   top: `${task.y}%`,
                   transform: `rotate(${task.rotation}deg)`,
                   ['--r' as string]: `${task.rotation}deg`,
-                  zIndex: draggingId === task.id ? 1000 : 20 + index,
+                  zIndex: draggingId === task.id ? 10000 : (task.zIndex || 1),
                 }}
               >
                 <div
@@ -163,6 +267,7 @@ export default function TaskBoard() {
                     onClick={() => toggleTask(task.id)}
                     className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-all duration-150 hover:scale-110"
                     style={{ border: `2px solid ${task.done ? '#27694a' : '#8a7e6c'}`, background: task.done ? '#27694a' : 'transparent', color: '#fff' }}
+                    title="完成"
                   >
                     {task.done && <Check size={12} strokeWidth={3} />}
                   </button>
@@ -171,13 +276,33 @@ export default function TaskBoard() {
                   </div>
                   <button
                     data-task-action="delete"
-                    onClick={() => removeTask(task.id)}
+                    onClick={() => setConfirmDeleteId((current) => current === task.id ? null : task.id)}
                     className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full opacity-30 transition-all duration-150 hover:rotate-90 hover:scale-125 hover:opacity-100"
                     style={{ color: '#9b2335' }}
+                    title="删除"
                   >
                     <Trash2 size={13} />
                   </button>
                 </div>
+
+                {confirming && (
+                  <div data-task-action="confirm-delete" className="mt-3 flex justify-end gap-2 text-xs">
+                    <button
+                      onClick={() => setConfirmDeleteId(null)}
+                      className="rounded px-2 py-1 transition-opacity hover:opacity-80"
+                      style={{ background: '#e7dfd2', color: '#6b5c48' }}
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={() => removeTask(task.id)}
+                      className="rounded px-2 py-1 transition-opacity hover:opacity-80"
+                      style={{ background: '#9b2335', color: '#f5f0e8' }}
+                    >
+                      删除
+                    </button>
+                  </div>
+                )}
               </motion.div>
             );
           })}

@@ -12,6 +12,18 @@ const SHORTCUT_TYPES: { type: ShortcutType; labelKey: string; icon: typeof AppWi
   { type: 'url', labelKey: 'modal.type.url', icon: Globe },
 ];
 
+const hasUrlScheme = (value: string) => /^https?:\/\//i.test(value.trim());
+
+const looksLikeWebUrl = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed || /\s/.test(trimmed) || /^[a-zA-Z]:[\\/]/.test(trimmed)) return false;
+  return hasUrlScheme(trimmed) || /^(localhost|[\w-]+(\.[\w-]+)+)(:\d+)?([/?#].*)?$/i.test(trimmed);
+};
+
+const normalizeUrl = (value: string) => {
+  const trimmed = value.trim();
+  return hasUrlScheme(trimmed) ? trimmed : `https://${trimmed}`;
+};
 export default function AddShortcutModal() {
   const closeAddModal = useStore((s) => s.closeAddModal);
   const addShortcut = useStore((s) => s.addShortcut);
@@ -33,11 +45,12 @@ export default function AddShortcutModal() {
 
   useEffect(() => {
     // Auto-detect type from pasted URL
-    if (targetPath.startsWith('http://') || targetPath.startsWith('https://')) {
+    if (looksLikeWebUrl(targetPath)) {
+      const normalizedTarget = normalizeUrl(targetPath);
       setType('url');
       if (!name) {
         try {
-          setName(new URL(targetPath).hostname);
+          setName(new URL(normalizedTarget).hostname);
         } catch {}
       }
     }
@@ -47,7 +60,7 @@ export default function AddShortcutModal() {
 
     if (type === 'url') {
       try {
-        const url = new URL(targetPath.trim());
+        const url = new URL(normalizeUrl(targetPath));
         setIcon(`https://www.google.com/s2/favicons?domain=${url.hostname}&sz=64`);
       } catch {}
       return;
@@ -104,11 +117,15 @@ export default function AddShortcutModal() {
       return;
     }
 
+    const trimmedTarget = targetPath.trim();
+    const finalType: ShortcutType = type === 'url' || looksLikeWebUrl(trimmedTarget) ? 'url' : type;
+    const finalTarget = finalType === 'url' ? normalizeUrl(trimmedTarget) : trimmedTarget;
+
     if (isEditing && editingShortcut) {
       updateShortcut(activeTabId, groupId, editingShortcut.id, {
         name: name.trim(),
-        type,
-        targetPath: targetPath.trim(),
+        type: finalType,
+        targetPath: finalTarget,
         remark: remark.trim() || undefined,
         icon: icon || undefined,
       });
@@ -116,8 +133,8 @@ export default function AddShortcutModal() {
     } else {
       addShortcut(activeTabId, groupId, {
         name: name.trim(),
-        type,
-        targetPath: targetPath.trim(),
+        type: finalType,
+        targetPath: finalTarget,
         remark: remark.trim() || undefined,
         icon: icon || undefined,
       });
@@ -305,3 +322,4 @@ export default function AddShortcutModal() {
     </AnimatePresence>
   );
 }
+

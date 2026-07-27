@@ -15,7 +15,6 @@ export default function TopBar() {
   const openImportSoftware = useStore((s) => s.openImportSoftware);
   const addGroup = useStore((s) => s.addGroup);
   const inputRef = useRef<HTMLInputElement>(null);
-  const spaceTimer = useRef<number | null>(null);
   const [focused, setFocused] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const { t } = useTranslation();
@@ -46,43 +45,21 @@ export default function TopBar() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      const isTyping = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
       const state = useStore.getState();
       const isModalOpen = state.showAddModal || state.showSettings || state.showImportSoftware;
+      if (isModalOpen) return;
 
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         focusSearch();
-        return;
-      }
-
-      if (!isTyping && !isModalOpen && e.key === ' ') {
-        e.preventDefault();
-        if (spaceTimer.current) {
-          window.clearTimeout(spaceTimer.current);
-          spaceTimer.current = null;
-          e.preventDefault();
-          focusSearch();
-        } else {
-          spaceTimer.current = window.setTimeout(() => {
-            const latest = useStore.getState();
-            const tabs = latest.config.tabs;
-            if (tabs.length > 1) {
-              const currentIndex = Math.max(0, tabs.findIndex((tab) => tab.id === latest.activeTabId));
-              latest.setActiveTab(tabs[(currentIndex + 1) % tabs.length].id);
-            }
-            spaceTimer.current = null;
-          }, 280);
-        }
       }
     };
+    const focusHandler = () => focusSearch();
     window.addEventListener('keydown', handler);
+    window.addEventListener('shortcut:focus-search', focusHandler);
     return () => {
       window.removeEventListener('keydown', handler);
-      if (spaceTimer.current) {
-        window.clearTimeout(spaceTimer.current);
-      }
+      window.removeEventListener('shortcut:focus-search', focusHandler);
     };
   }, []);
 
@@ -226,3 +203,5 @@ export default function TopBar() {
     </div>
   );
 }
+
+

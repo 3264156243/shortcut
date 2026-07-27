@@ -1,6 +1,6 @@
 ﻿import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import { AppConfig, DEFAULT_CONFIG, Tab, Group, Shortcut, Locale, PanelAnimation, ModuleId, TaskNote } from '../types';
+import { AppConfig, DEFAULT_CONFIG, Tab, Group, Shortcut, Locale, PanelAnimation, ModuleId, TaskNote, TaskBoardConfig } from '../types';
 import { t } from '../i18n';
 
 interface AppState {
@@ -31,6 +31,10 @@ interface AppState {
   deleteSearchHistory: (query: string) => void;
 
   // Task actions
+  addTaskBoard: (name?: string) => void;
+  renameTaskBoard: (boardId: string, name: string) => void;
+  deleteTaskBoard: (boardId: string) => void;
+  setActiveTaskBoard: (boardId: string) => void;
   addTask: (text: string) => void;
   toggleTask: (taskId: string) => void;
   deleteTask: (taskId: string) => void;
@@ -127,6 +131,48 @@ const localStore = {
   },
 };
 
+const normalizeTaskBoards = (config: Partial<AppConfig>): Pick<AppConfig, 'taskBoards' | 'activeTaskBoardId' | 'tasks'> => {
+  const now = new Date().toISOString();
+  const legacyTasks = Array.isArray(config.tasks) ? config.tasks : [];
+  const rawBoards = Array.isArray(config.taskBoards) && config.taskBoards.length > 0
+    ? config.taskBoards
+    : [{ ...DEFAULT_CONFIG.taskBoards[0], notes: legacyTasks }];
+
+  const taskBoards = rawBoards.map((board, boardIndex) => {
+    const notes = (Array.isArray(board.notes) ? board.notes : []).map((note, noteIndex) => ({
+      ...note,
+      zIndex: typeof note.zIndex === 'number' ? note.zIndex : (noteIndex + 1),
+    }));
+    return {
+      id: board.id || (boardIndex === 0 ? DEFAULT_CONFIG.taskBoards[0].id : uuidv4()),
+      name: (board.name || `任务墙 ${boardIndex + 1}`).trim(),
+      notes,
+      createdAt: board.createdAt || now,
+      updatedAt: board.updatedAt || now,
+    };
+  });
+
+  const fallbackBoard = taskBoards[0] || { ...DEFAULT_CONFIG.taskBoards[0], notes: [] };
+  const activeTaskBoardId = taskBoards.some((board) => board.id === config.activeTaskBoardId)
+    ? config.activeTaskBoardId
+    : fallbackBoard.id;
+
+  return { taskBoards: taskBoards.length > 0 ? taskBoards : [fallbackBoard], activeTaskBoardId, tasks: [] };
+};
+
+const getActiveBoardId = (config: AppConfig) => config.activeTaskBoardId || config.taskBoards[0]?.id || DEFAULT_CONFIG.taskBoards[0].id;
+
+const nextTaskZIndex = (notes: TaskNote[]) => notes.reduce((max, note) => Math.max(max, note.zIndex || 0), 0) + 1;
+
+const updateActiveTaskBoard = (config: AppConfig, update: (board: TaskBoardConfig) => TaskBoardConfig): AppConfig => {
+  const activeBoardId = getActiveBoardId(config);
+  return {
+    ...config,
+    taskBoards: config.taskBoards.map((board) => board.id === activeBoardId ? update(board) : board),
+    activeTaskBoardId: activeBoardId,
+    tasks: [],
+  };
+};
 export const useStore = create<AppState>((set, get) => ({
   config: { ...DEFAULT_CONFIG },
   activeTabId: DEFAULT_CONFIG.activeTabId || 'default',
@@ -152,7 +198,7 @@ export const useStore = create<AppState>((set, get) => ({
       try {
         const parsed = JSON.parse(raw) as AppConfig;
         set({
-          config: { ...DEFAULT_CONFIG, ...parsed, searchHistory: parsed.searchHistory || [], tasks: parsed.tasks || [], activeModule: parsed.activeModule || 'shortcuts' },
+          config: { ...DEFAULT_CONFIG, ...parsed, searchHistory: parsed.searchHistory || [], activeModule: parsed.activeModule || 'shortcuts', ...normalizeTaskBoards(parsed) },
           activeTabId: parsed.activeTabId || parsed.tabs[0]?.id || 'default',
           activeModule: parsed.activeModule || 'shortcuts',
         });
@@ -256,43 +302,103 @@ export const useStore = create<AppState>((set, get) => ({
     get().saveConfig();
   },
 
+  addTaskBoard: (name) => {
+    const now = new Date().toISOString();
+    set((state) => {
+      const board: TaskBoardConfig = {
+        id: uuidv4(),
+        name: (name || `任务墙 ${state.config.taskBoards.length + 1}`).trim(),
+        notes: [],
+        createdAt: now,
+        updatedAt: now,
+      };
+      return {
+        config: {
+          ...state.config,
+          taskBoards: [...state.config.taskBoards, board],
+          activeTaskBoardId: board.id,
+          activeModule: 'tasks',
+          tasks: [],
+        },
+        activeModule: 'tasks',
+      };
+    });
+    get().saveConfig();
+  },
+
+  renameTaskBoard: (boardId, name) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const now = new Date().toISOString();
+    set((state) => ({
+      config: {
+        ...state.config,
+        taskBoards: state.config.taskBoards.map((board) => board.id === boardId ? { ...board, name: trimmed, updatedAt: now } : board),
+      },
+    }));
+    get().saveConfig();
+  },
+
+  deleteTaskBoard: (boardId) => {
+    set((state) => {
+      if (state.config.taskBoards.length <= 1) return state;
+      const taskBoards = state.config.taskBoards.filter((board) => board.id !== boardId);
+      const activeTaskBoardId = state.config.activeTaskBoardId === boardId ? taskBoards[0]?.id : state.config.activeTaskBoardId;
+      return { config: { ...state.config, taskBoards, activeTaskBoardId, tasks: [] } };
+    });
+    get().saveConfig();
+  },
+
+  setActiveTaskBoard: (boardId) => {
+    set((state) => ({ config: { ...state.config, activeTaskBoardId: boardId, tasks: [] } }));
+    get().saveConfig();
+  },
+
   addTask: (text) => {
     const trimmed = text.trim();
     if (!trimmed) return;
     const now = new Date().toISOString();
     const tapes = ['#c0392b', '#e67e22', '#f39c12', '#27ae60', '#2980b9', '#8e44ad', '#e84393'];
-    const task: TaskNote = {
-      id: uuidv4(),
-      text: trimmed,
-      done: false,
-      x: 4 + Math.random() * 58,
-      y: 5 + Math.random() * 52,
-      rotation: Math.random() * 3.4 - 1.7,
-      tape: tapes[Math.floor(Math.random() * tapes.length)],
-      createdAt: now,
-      updatedAt: now,
-    };
-    set((state) => ({ config: { ...state.config, tasks: [task, ...(state.config.tasks || [])] } }));
+    set((state) => ({
+      config: updateActiveTaskBoard(state.config, (board) => {
+        const task: TaskNote = {
+          id: uuidv4(),
+          text: trimmed,
+          done: false,
+          x: 4 + Math.random() * 58,
+          y: 5 + Math.random() * 52,
+          rotation: Math.random() * 3.4 - 1.7,
+          tape: tapes[Math.floor(Math.random() * tapes.length)],
+          zIndex: nextTaskZIndex(board.notes),
+          createdAt: now,
+          updatedAt: now,
+        };
+        return { ...board, notes: [task, ...board.notes], updatedAt: now };
+      }),
+    }));
     get().saveConfig();
   },
 
   toggleTask: (taskId) => {
     const now = new Date().toISOString();
     set((state) => ({
-      config: {
-        ...state.config,
-        tasks: (state.config.tasks || []).map((task) => task.id === taskId ? { ...task, done: !task.done, updatedAt: now } : task),
-      },
+      config: updateActiveTaskBoard(state.config, (board) => ({
+        ...board,
+        notes: board.notes.map((task) => task.id === taskId ? { ...task, done: !task.done, updatedAt: now } : task),
+        updatedAt: now,
+      })),
     }));
     get().saveConfig();
   },
 
   deleteTask: (taskId) => {
+    const now = new Date().toISOString();
     set((state) => ({
-      config: {
-        ...state.config,
-        tasks: (state.config.tasks || []).filter((task) => task.id !== taskId),
-      },
+      config: updateActiveTaskBoard(state.config, (board) => ({
+        ...board,
+        notes: board.notes.filter((task) => task.id !== taskId),
+        updatedAt: now,
+      })),
     }));
     get().saveConfig();
   },
@@ -300,10 +406,14 @@ export const useStore = create<AppState>((set, get) => ({
   moveTask: (taskId, x, y) => {
     const now = new Date().toISOString();
     set((state) => ({
-      config: {
-        ...state.config,
-        tasks: (state.config.tasks || []).map((task) => task.id === taskId ? { ...task, x, y, updatedAt: now } : task),
-      },
+      config: updateActiveTaskBoard(state.config, (board) => {
+        const zIndex = nextTaskZIndex(board.notes);
+        return {
+          ...board,
+          notes: board.notes.map((task) => task.id === taskId ? { ...task, x, y, zIndex, updatedAt: now } : task),
+          updatedAt: now,
+        };
+      }),
     }));
     get().saveConfig();
   },
@@ -645,3 +755,4 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 }));
+

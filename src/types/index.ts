@@ -39,6 +39,15 @@ export interface TaskNote {
   y: number;
   rotation: number;
   tape: string;
+  zIndex: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaskBoardConfig {
+  id: string;
+  name: string;
+  notes: TaskNote[];
   createdAt: string;
   updatedAt: string;
 }
@@ -55,6 +64,8 @@ export interface AppConfig {
   searchHistory: string[];
   activeModule: ModuleId;
   tasks: TaskNote[];
+  taskBoards: TaskBoardConfig[];
+  activeTaskBoardId?: string;
   tabs: Tab[];
   activeTabId?: string;
 }
@@ -71,6 +82,16 @@ export const DEFAULT_CONFIG: AppConfig = {
   searchHistory: [],
   activeModule: 'shortcuts',
   tasks: [],
+  taskBoards: [
+    {
+      id: 'default-task-board',
+      name: '默认任务墙',
+      notes: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    },
+  ],
+  activeTaskBoardId: 'default-task-board',
   tabs: [
     {
       id: 'default',
@@ -89,3 +110,4 @@ export const DEFAULT_CONFIG: AppConfig = {
   ],
   activeTabId: 'default',
 };
+
