@@ -97,6 +97,19 @@ async function getBestIconDataUrl(iconSource: string, fallbackPath: string): Pro
   return (await getIconDataUrl(iconSource)) || (await getIconDataUrl(fallbackPath));
 }
 
+function getAppIconPath(preferIco: boolean = false): string | undefined {
+  const resourcesPath = (process as any).resourcesPath || '';
+  const names = preferIco ? ['icon.ico', 'icon.png'] : ['icon.png', 'icon.ico'];
+  const roots = [path.join(__dirname, '../resources'), resourcesPath];
+  for (const root of roots) {
+    for (const name of names) {
+      const iconPath = path.join(root, name);
+      if (fs.existsSync(iconPath)) return iconPath;
+    }
+  }
+  return undefined;
+}
+
 function fileToDataUrl(filePath: string): string | null {
   try {
     if (!fs.existsSync(filePath)) return null;
@@ -119,6 +132,7 @@ function createWindow() {
     show: false,
     skipTaskbar: false,
     alwaysOnTop: true,
+    icon: getAppIconPath(true),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -172,27 +186,14 @@ function toggleWindow() {
 }
 
 function createTray() {
-  // Load icon - try multiple paths
+  // Load icon from dev resources or packaged resources.
   let icon;
-  const resourcesPath = (process as any).resourcesPath || '';
-  const possiblePaths = [
-    path.join(__dirname, '../resources/icon.png'),
-    path.join(__dirname, '../resources/icon.ico'),
-    path.join(resourcesPath, 'icon.png'),
-    path.join(resourcesPath, 'icon.ico'),
-  ];
-
-  for (const iconPath of possiblePaths) {
+  const iconPath = getAppIconPath(false);
+  if (iconPath) {
     try {
-      if (fs.existsSync(iconPath)) {
-        icon = nativeImage.createFromPath(iconPath);
-        if (!icon.isEmpty()) break;
-      }
-    } catch (e) {
-      continue;
-    }
+      icon = nativeImage.createFromPath(iconPath);
+    } catch {}
   }
-
   // Fallback: create a simple icon
   if (!icon || icon.isEmpty()) {
     const iconSize = 16;
