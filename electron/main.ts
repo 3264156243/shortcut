@@ -12,6 +12,12 @@ const nativeTheme = electron.nativeTheme;
 const path = require('path');
 const fs = require('fs');
 
+const APP_USER_MODEL_ID = 'com.wanan.shortcut';
+
+if (process.platform === 'win32') {
+  app.setAppUserModelId(APP_USER_MODEL_ID);
+}
+
 let mainWindow: any = null;
 let tray: any = null;
 
