@@ -241,45 +241,68 @@ export default function PanelBody() {
     const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-card="true"]'));
     if (cards.length === 0) return;
 
+    const cardItems = cards
+      .map((card) => {
+        const rect = card.getBoundingClientRect();
+        return {
+          id: card.dataset.shortcutId || '',
+          rect,
+          centerX: rect.left + rect.width / 2,
+          centerY: rect.top + rect.height / 2,
+        };
+      })
+      .filter((item) => item.id);
+
+    if (cardItems.length === 0) return;
+
     const current = selectedShortcutId
-      ? cards.find((card) => card.dataset.shortcutId === selectedShortcutId)
+      ? cardItems.find((item) => item.id === selectedShortcutId)
       : null;
 
     if (!current) {
-      setSelectedShortcut(cards[0].dataset.shortcutId || null);
+      setSelectedShortcut(cardItems[0].id);
       return;
     }
 
-    const currentRect = current.getBoundingClientRect();
-    const currentCenter = {
-      x: currentRect.left + currentRect.width / 2,
-      y: currentRect.top + currentRect.height / 2,
-    };
-
-    let best: { id: string; score: number } | null = null;
-    for (const card of cards) {
-      if (card === current || !card.dataset.shortcutId) continue;
-      const rect = card.getBoundingClientRect();
-      const center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-      const dx = center.x - currentCenter.x;
-      const dy = center.y - currentCenter.y;
-      const inDirection =
-        (direction === 'ArrowLeft' && dx < -8) ||
-        (direction === 'ArrowRight' && dx > 8) ||
-        (direction === 'ArrowUp' && dy < -8) ||
-        (direction === 'ArrowDown' && dy > 8);
-      if (!inDirection) continue;
-
-      const primary = direction === 'ArrowLeft' || direction === 'ArrowRight' ? Math.abs(dx) : Math.abs(dy);
-      const secondary = direction === 'ArrowLeft' || direction === 'ArrowRight' ? Math.abs(dy) : Math.abs(dx);
-      const score = primary * 2 + secondary;
-      if (!best || score < best.score) {
-        best = { id: card.dataset.shortcutId, score };
+    const rowTolerance = Math.max(24, current.rect.height / 2);
+    const rows = cardItems.reduce<Array<typeof cardItems>>((acc, item) => {
+      const row = acc.find((items) => Math.abs(items[0].centerY - item.centerY) <= rowTolerance);
+      if (row) {
+        row.push(item);
+      } else {
+        acc.push([item]);
       }
+      return acc;
+    }, []);
+
+    rows.sort((a, b) => a[0].centerY - b[0].centerY);
+    rows.forEach((row) => row.sort((a, b) => a.centerX - b.centerX));
+
+    const currentRowIndex = rows.findIndex((row) => row.some((item) => item.id === current.id));
+    if (currentRowIndex === -1) return;
+
+    const currentRow = rows[currentRowIndex];
+    const currentColumnIndex = currentRow.findIndex((item) => item.id === current.id);
+    let nextId: string | null = null;
+
+    if (direction === 'ArrowLeft' || direction === 'ArrowRight') {
+      const offset = direction === 'ArrowLeft' ? -1 : 1;
+      const nextIndex = (currentColumnIndex + offset + currentRow.length) % currentRow.length;
+      nextId = currentRow[nextIndex]?.id || null;
+    } else {
+      const offset = direction === 'ArrowUp' ? -1 : 1;
+      const nextRowIndex = (currentRowIndex + offset + rows.length) % rows.length;
+      const nextRow = rows[nextRowIndex];
+      const next = nextRow.reduce((closest, item) => {
+        return Math.abs(item.centerX - current.centerX) < Math.abs(closest.centerX - current.centerX)
+          ? item
+          : closest;
+      }, nextRow[0]);
+      nextId = next?.id || null;
     }
 
-    if (best) {
-      setSelectedShortcut(best.id);
+    if (nextId) {
+      setSelectedShortcut(nextId);
     }
   }, [selectedShortcutId, setSelectedShortcut]);
 
@@ -511,5 +534,6 @@ export default function PanelBody() {
     </DndContext>
   );
 }
+
 
 
