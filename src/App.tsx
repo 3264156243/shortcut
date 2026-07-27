@@ -123,6 +123,16 @@ export default function App() {
         return;
       }
 
+      const latestOnRelease = useStore.getState();
+      if (latestOnRelease.activeModule === 'tasks') {
+        const taskBoards = latestOnRelease.config.taskBoards || [];
+        if (taskBoards.length > 1) {
+          const currentIndex = Math.max(0, taskBoards.findIndex((board) => board.id === latestOnRelease.config.activeTaskBoardId));
+          latestOnRelease.setActiveTaskBoard(taskBoards[(currentIndex + 1) % taskBoards.length].id);
+        }
+        return;
+      }
+
       if (shortSpaceTimer.current) {
         window.clearTimeout(shortSpaceTimer.current);
         shortSpaceTimer.current = null;
@@ -286,5 +296,4 @@ export default function App() {
     </div>
   );
 }
-
 

@@ -39,6 +39,19 @@ const TYPE_COLORS: Record<ShortcutType, string> = {
 const iconCache: Map<string, string> = new Map();
 const MENU_WIDTH = 152;
 
+const hasUrlScheme = (value: string) => /^https?:\/\//i.test(value.trim());
+
+const looksLikeWebUrl = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed || /\s/.test(trimmed) || /^[a-zA-Z]:[\\/]/.test(trimmed)) return false;
+  return hasUrlScheme(trimmed) || /^(localhost|[\w-]+(\.[\w-]+)+)(:\d+)?([/?#].*)?$/i.test(trimmed);
+};
+
+const normalizeUrl = (value: string) => {
+  const trimmed = value.trim();
+  return hasUrlScheme(trimmed) ? trimmed : `https://${trimmed}`;
+};
+
 function clampMenuPosition(left: number, top: number) {
   const maxLeft = Math.max(8, window.innerWidth - MENU_WIDTH - 8);
   const maxTop = Math.max(8, window.innerHeight - 180);
@@ -55,9 +68,9 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
   const searchQuery = useStore((s) => s.searchQuery);
   const { t } = useTranslation();
   const faviconUrl = useMemo(() => {
-    if (shortcut.type !== 'url' || shortcut.icon) return null;
+    if (shortcut.icon || (shortcut.type !== 'url' && !looksLikeWebUrl(shortcut.targetPath))) return null;
     try {
-      const url = new URL(shortcut.targetPath);
+      const url = new URL(normalizeUrl(shortcut.targetPath));
       return `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=64`;
     } catch {
       return null;
@@ -75,7 +88,7 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
   }, [faviconUrl, shortcut.icon]);
 
   useEffect(() => {
-    if (shortcut.type === 'url' || shortcut.icon || !shortcut.targetPath) return;
+    if (shortcut.type === 'url' || looksLikeWebUrl(shortcut.targetPath) || shortcut.icon || !shortcut.targetPath) return;
 
     const cached = iconCache.get(shortcut.targetPath);
     if (cached) {
@@ -127,7 +140,10 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
   const iconColor = shortcut.missing ? 'var(--color-danger)' : TYPE_COLORS[shortcut.type];
 
   const handleOpen = async () => {
-    if (shortcut.missing) {
+    const shouldOpenAsUrl = shortcut.type === 'url' || looksLikeWebUrl(shortcut.targetPath);
+    const openTarget = shouldOpenAsUrl ? normalizeUrl(shortcut.targetPath) : shortcut.targetPath;
+
+    if (shortcut.missing && !shouldOpenAsUrl) {
       addToast(`${t('shortcut.missing')}: ${shortcut.targetPath}`, 'error');
       return;
     }
@@ -135,16 +151,16 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
     const api = window.electronAPI;
     if (!api) {
       // Browser fallback
-      if (shortcut.type === 'url') {
-        window.open(shortcut.targetPath, '_blank');
+      if (shouldOpenAsUrl) {
+        window.open(openTarget, '_blank');
       }
       return;
     }
 
     try {
-      const result = shortcut.type === 'url'
-        ? await api.openExternal(shortcut.targetPath)
-        : await api.openTarget(shortcut.targetPath);
+      const result = shouldOpenAsUrl
+        ? await api.openExternal(openTarget)
+        : await api.openTarget(openTarget);
 
       if (result.success) {
         addToast(t('shortcut.opened', { name: shortcut.name }), 'success');
@@ -404,3 +420,4 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
     </motion.div>
   );
 }
+
