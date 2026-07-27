@@ -1,6 +1,6 @@
 ﻿import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import { AppConfig, DEFAULT_CONFIG, Tab, Group, Shortcut, Locale, PanelAnimation } from '../types';
+import { AppConfig, DEFAULT_CONFIG, Tab, Group, Shortcut, Locale, PanelAnimation, ModuleId, TaskNote } from '../types';
 import { t } from '../i18n';
 
 interface AppState {
@@ -8,6 +8,7 @@ interface AppState {
   activeTabId: string;
   searchQuery: string;
   selectedShortcutId: string | null;
+  activeModule: ModuleId;
   editingShortcut: Shortcut | null;
   editingGroupId: string | null;
   showAddModal: boolean;
@@ -25,8 +26,15 @@ interface AppState {
   setActiveTab: (tabId: string) => void;
   setSearchQuery: (q: string) => void;
   setSelectedShortcut: (shortcutId: string | null) => void;
+  setActiveModule: (moduleId: ModuleId) => void;
   addSearchHistory: (query: string) => void;
   deleteSearchHistory: (query: string) => void;
+
+  // Task actions
+  addTask: (text: string) => void;
+  toggleTask: (taskId: string) => void;
+  deleteTask: (taskId: string) => void;
+  moveTask: (taskId: string, x: number, y: number) => void;
 
   // Tab actions
   addTab: (name: string) => void;
@@ -83,6 +91,7 @@ declare global {
       openFolder: () => Promise<string | null>;
       saveFile: (name: string) => Promise<string | null>;
       openImportFile: () => Promise<string | null>;
+      openIconFile: () => Promise<string | null>;
       readFile: (path: string) => Promise<string | null>;
       writeFile: (path: string, data: string) => Promise<{ success: boolean; error?: string }>;
       fileExists: (path: string) => Promise<boolean>;
@@ -123,6 +132,7 @@ export const useStore = create<AppState>((set, get) => ({
   activeTabId: DEFAULT_CONFIG.activeTabId || 'default',
   searchQuery: '',
   selectedShortcutId: null,
+  activeModule: DEFAULT_CONFIG.activeModule,
   editingShortcut: null,
   editingGroupId: null,
   showAddModal: false,
@@ -142,8 +152,9 @@ export const useStore = create<AppState>((set, get) => ({
       try {
         const parsed = JSON.parse(raw) as AppConfig;
         set({
-          config: { ...DEFAULT_CONFIG, ...parsed, searchHistory: parsed.searchHistory || [] },
+          config: { ...DEFAULT_CONFIG, ...parsed, searchHistory: parsed.searchHistory || [], tasks: parsed.tasks || [], activeModule: parsed.activeModule || 'shortcuts' },
           activeTabId: parsed.activeTabId || parsed.tabs[0]?.id || 'default',
+          activeModule: parsed.activeModule || 'shortcuts',
         });
       } catch {
         console.error('Failed to parse config');
@@ -215,6 +226,16 @@ export const useStore = create<AppState>((set, get) => ({
 
   setSelectedShortcut: (shortcutId) => set({ selectedShortcutId: shortcutId }),
 
+  setActiveModule: (moduleId) => {
+    set((state) => ({
+      activeModule: moduleId,
+      config: { ...state.config, activeModule: moduleId },
+      searchQuery: moduleId === 'shortcuts' ? state.searchQuery : '',
+      selectedShortcutId: null,
+    }));
+    get().saveConfig();
+  },
+
   addSearchHistory: (query) => {
     const trimmed = query.trim();
     if (!trimmed) return;
@@ -235,6 +256,57 @@ export const useStore = create<AppState>((set, get) => ({
     get().saveConfig();
   },
 
+  addTask: (text) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const now = new Date().toISOString();
+    const tapes = ['#c0392b', '#e67e22', '#f39c12', '#27ae60', '#2980b9', '#8e44ad', '#e84393'];
+    const task: TaskNote = {
+      id: uuidv4(),
+      text: trimmed,
+      done: false,
+      x: 4 + Math.random() * 58,
+      y: 5 + Math.random() * 52,
+      rotation: Math.random() * 3.4 - 1.7,
+      tape: tapes[Math.floor(Math.random() * tapes.length)],
+      createdAt: now,
+      updatedAt: now,
+    };
+    set((state) => ({ config: { ...state.config, tasks: [task, ...(state.config.tasks || [])] } }));
+    get().saveConfig();
+  },
+
+  toggleTask: (taskId) => {
+    const now = new Date().toISOString();
+    set((state) => ({
+      config: {
+        ...state.config,
+        tasks: (state.config.tasks || []).map((task) => task.id === taskId ? { ...task, done: !task.done, updatedAt: now } : task),
+      },
+    }));
+    get().saveConfig();
+  },
+
+  deleteTask: (taskId) => {
+    set((state) => ({
+      config: {
+        ...state.config,
+        tasks: (state.config.tasks || []).filter((task) => task.id !== taskId),
+      },
+    }));
+    get().saveConfig();
+  },
+
+  moveTask: (taskId, x, y) => {
+    const now = new Date().toISOString();
+    set((state) => ({
+      config: {
+        ...state.config,
+        tasks: (state.config.tasks || []).map((task) => task.id === taskId ? { ...task, x, y, updatedAt: now } : task),
+      },
+    }));
+    get().saveConfig();
+  },
   addTab: (name) => {
     const id = uuidv4();
     set((s) => {
@@ -573,4 +645,3 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 }));
-

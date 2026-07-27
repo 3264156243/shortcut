@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+﻿const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // Config
@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openFolder: () => ipcRenderer.invoke('dialog:openFolder'),
   saveFile: (name: string) => ipcRenderer.invoke('dialog:saveFile', name),
   openImportFile: () => ipcRenderer.invoke('dialog:openImportFile'),
+  openIconFile: () => ipcRenderer.invoke('dialog:openIconFile'),
 
   // File system
   readFile: (path: string) => ipcRenderer.invoke('fs:readFile', path),

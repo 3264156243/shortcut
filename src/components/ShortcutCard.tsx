@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
 import { Shortcut, ShortcutType } from '../types';
@@ -54,37 +54,47 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
   const addToast = useStore((s) => s.addToast);
   const searchQuery = useStore((s) => s.searchQuery);
   const { t } = useTranslation();
-  const [fileIcon, setFileIcon] = useState<string | null>(shortcut.icon || null);
+  const faviconUrl = useMemo(() => {
+    if (shortcut.type !== 'url' || shortcut.icon) return null;
+    try {
+      const url = new URL(shortcut.targetPath);
+      return `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=64`;
+    } catch {
+      return null;
+    }
+  }, [shortcut.icon, shortcut.targetPath, shortcut.type]);
+  const [fileIcon, setFileIcon] = useState<string | null>(shortcut.icon || faviconUrl || null);
 
   const [showMenu, setShowMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState<{ left: number; top: number } | null>(null);
   const [isPressed, setIsPressed] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Fetch file icon for app type shortcuts
   useEffect(() => {
-    if (shortcut.type === 'app' && !shortcut.icon && shortcut.targetPath) {
-      // Check cache first
-      const cached = iconCache.get(shortcut.targetPath);
-      if (cached) {
-        setFileIcon(cached);
-        return;
-      }
+    setFileIcon(shortcut.icon || faviconUrl || null);
+  }, [faviconUrl, shortcut.icon]);
 
-      const api = window.electronAPI;
-      if (api?.getFileIcon) {
-        api.getFileIcon(shortcut.targetPath).then((iconDataUrl) => {
-          if (iconDataUrl) {
-            iconCache.set(shortcut.targetPath, iconDataUrl);
-            setFileIcon(iconDataUrl);
-          }
-        }).catch(() => {
-          // Ignore errors
-        });
-      }
+  useEffect(() => {
+    if (shortcut.type === 'url' || shortcut.icon || !shortcut.targetPath) return;
+
+    const cached = iconCache.get(shortcut.targetPath);
+    if (cached) {
+      setFileIcon(cached);
+      return;
+    }
+
+    const api = window.electronAPI;
+    if (api?.getFileIcon) {
+      api.getFileIcon(shortcut.targetPath).then((iconDataUrl) => {
+        if (iconDataUrl) {
+          iconCache.set(shortcut.targetPath, iconDataUrl);
+          setFileIcon(iconDataUrl);
+        }
+      }).catch(() => {
+        // Type icon remains as the visual fallback.
+      });
     }
   }, [shortcut.type, shortcut.icon, shortcut.targetPath]);
-
   // Sortable for drag and drop
   const {
     attributes,
@@ -254,7 +264,7 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
         }}
       >
         {fileIcon ? (
-          <img src={fileIcon} alt="" className="w-8 h-8 object-contain" />
+          <img src={fileIcon} alt="" className="w-8 h-8 object-contain" onError={() => setFileIcon(null)} />
         ) : (
           <Icon size={24} style={{ color: iconColor }} />
         )}
@@ -394,6 +404,3 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
     </motion.div>
   );
 }
-
-
-

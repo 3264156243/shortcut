@@ -1,6 +1,7 @@
-export type ShortcutType = 'app' | 'folder' | 'file' | 'url';
+﻿export type ShortcutType = 'app' | 'folder' | 'file' | 'url';
 export type Locale = 'zh-CN' | 'en';
 export type PanelAnimation = 'bottom' | 'top' | 'left' | 'right' | 'center';
+export type ModuleId = 'shortcuts' | 'tasks';
 
 export interface Shortcut {
   id: string;
@@ -30,6 +31,18 @@ export interface Tab {
   groups: Group[];
 }
 
+export interface TaskNote {
+  id: string;
+  text: string;
+  done: boolean;
+  x: number;
+  y: number;
+  rotation: number;
+  tape: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AppConfig {
   version: number;
   theme: 'dark' | 'light' | 'system';
@@ -40,6 +53,8 @@ export interface AppConfig {
   rememberWindowSize: boolean;
   closeOnBlur: boolean;
   searchHistory: string[];
+  activeModule: ModuleId;
+  tasks: TaskNote[];
   tabs: Tab[];
   activeTabId?: string;
 }
@@ -54,6 +69,8 @@ export const DEFAULT_CONFIG: AppConfig = {
   rememberWindowSize: true,
   closeOnBlur: true,
   searchHistory: [],
+  activeModule: 'shortcuts',
+  tasks: [],
   tabs: [
     {
       id: 'default',

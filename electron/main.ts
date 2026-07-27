@@ -64,6 +64,43 @@ function writeConfig(data: string) {
   fs.renameSync(tmp, CONFIG_FILE);
 }
 
+
+function expandWindowsEnv(input: string): string {
+  return input.replace(/%([^%]+)%/g, (_match, name) => process.env[name] || '');
+}
+
+function normalizeIconPath(iconSource: string): string {
+  const expanded = expandWindowsEnv(iconSource || '').trim();
+  const quoted = expanded.match(/^"([^"]+)"/);
+  const raw = quoted ? quoted[1] : expanded.split(/,(?=-?\d+$)/)[0];
+  return raw.trim().replace(/^"|"$/g, '');
+}
+
+async function getIconDataUrl(filePath: string): Promise<string | null> {
+  try {
+    const normalized = normalizeIconPath(filePath);
+    if (!normalized || !fs.existsSync(normalized)) return null;
+    const icon = await app.getFileIcon(normalized, { size: 'normal' });
+    return icon.isEmpty() ? null : icon.toDataURL();
+  } catch {
+    return null;
+  }
+}
+
+async function getBestIconDataUrl(iconSource: string, fallbackPath: string): Promise<string | null> {
+  return (await getIconDataUrl(iconSource)) || (await getIconDataUrl(fallbackPath));
+}
+
+function fileToDataUrl(filePath: string): string | null {
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    const ext = path.extname(filePath).toLowerCase().replace('.', '');
+    const mime = ext === 'svg' ? 'image/svg+xml' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : ext === 'ico' ? 'image/x-icon' : 'image/png';
+    return `data:${mime};base64,${fs.readFileSync(filePath).toString('base64')}`;
+  } catch {
+    return null;
+  }
+}
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 900,
@@ -249,6 +286,15 @@ ipcMain.handle('dialog:openImportFile', async () => {
   return result.canceled ? null : result.filePaths[0];
 });
 
+ipcMain.handle('dialog:openIconFile', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openFile'],
+    filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'ico', 'svg'] }],
+  });
+  if (result.canceled || !result.filePaths[0]) return null;
+  return fileToDataUrl(result.filePaths[0]);
+});
+
 ipcMain.handle('fs:readFile', async (_e: any, filePath: string) => {
   try {
     return fs.readFileSync(filePath, 'utf-8');
@@ -326,7 +372,7 @@ ipcMain.handle('system:getInstalledSoftware', async () => {
               softwareList.push({
                 name: displayName,
                 path: exePath,
-                icon: displayIcon || '',
+                icon: await getBestIconDataUrl(displayIcon, exePath) || '',
               });
             }
           }
@@ -353,7 +399,7 @@ ipcMain.handle('system:getInstalledSoftware', async () => {
           softwareList.push({
             name: displayName,
             path: exePath,
-            icon: displayIcon || '',
+            icon: await getBestIconDataUrl(displayIcon, exePath) || '',
           });
         }
       }
@@ -370,7 +416,7 @@ ipcMain.handle('system:getInstalledSoftware', async () => {
 
   for (const menuPath of startMenuPaths) {
     try {
-      scanShortcuts(menuPath, softwareList);
+      await scanShortcuts(menuPath, softwareList);
     } catch (e) {
       // Skip failed paths
     }
@@ -418,7 +464,7 @@ function findExeFiles(dir: string, maxDepth: number = 2): string[] {
   return results;
 }
 
-function scanShortcuts(dir: string, softwareList: any[]) {
+async function scanShortcuts(dir: string, softwareList: any[]) {
   try {
     const items = fs.readdirSync(dir, { withFileTypes: true });
     for (const item of items) {
@@ -432,7 +478,7 @@ function scanShortcuts(dir: string, softwareList: any[]) {
               softwareList.push({
                 name: name,
                 path: shortcut.target,
-                icon: shortcut.icon || '',
+                icon: await getBestIconDataUrl(shortcut.icon || '', shortcut.target) || '',
               });
             }
           }
@@ -440,7 +486,7 @@ function scanShortcuts(dir: string, softwareList: any[]) {
           // Skip invalid shortcuts
         }
       } else if (item.isDirectory()) {
-        scanShortcuts(fullPath, softwareList);
+        await scanShortcuts(fullPath, softwareList);
       }
     }
   } catch (e) {
@@ -471,9 +517,7 @@ ipcMain.handle('system:getFileInfo', async (_e: any, filePath: string) => {
 // Get file icon as data URL
 ipcMain.handle('system:getFileIcon', async (_e: any, filePath: string) => {
   try {
-    if (!fs.existsSync(filePath)) return null;
-    const icon = await app.getFileIcon(filePath, { size: 'normal' });
-    return icon.toDataURL();
+    return await getIconDataUrl(filePath);
   } catch (e) {
     return null;
   }
@@ -484,12 +528,7 @@ ipcMain.handle('system:getFileIcons', async (_e: any, filePaths: string[]) => {
   const results: Record<string, string | null> = {};
   for (const filePath of filePaths) {
     try {
-      if (fs.existsSync(filePath)) {
-        const icon = await app.getFileIcon(filePath, { size: 'normal' });
-        results[filePath] = icon.toDataURL();
-      } else {
-        results[filePath] = null;
-      }
+      results[filePath] = await getIconDataUrl(filePath);
     } catch (e) {
       results[filePath] = null;
     }

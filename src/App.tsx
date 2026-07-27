@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { useStore } from './store';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Minus, Square, X, Maximize2, Minimize2 } from 'lucide-react';
@@ -9,6 +9,8 @@ import AddShortcutModal from './components/AddShortcutModal';
 import SettingsPanel from './components/SettingsPanel';
 import ImportSoftwareModal from './components/ImportSoftwareModal';
 import ToastContainer from './components/Toast';
+import ModuleSidebar from './components/ModuleSidebar';
+import TaskBoard from './components/TaskBoard';
 import { PanelAnimation } from './types';
 
 // Animation variants based on direction
@@ -44,6 +46,7 @@ export default function App() {
   const showAddModal = useStore((s) => s.showAddModal);
   const showSettings = useStore((s) => s.showSettings);
   const showImportSoftware = useStore((s) => s.showImportSoftware);
+  const activeModule = useStore((s) => s.activeModule);
   const [animKey, setAnimKey] = useState(0);
   const [isMaximized, setIsMaximized] = useState(false);
 
@@ -143,7 +146,7 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-1">
-            <TopBar />
+            {activeModule === 'shortcuts' && <TopBar />}
 
             {/* Window controls */}
             <div className="flex items-center ml-2 no-drag">
@@ -151,7 +154,7 @@ export default function App() {
                 onClick={handleMinimize}
                 className="p-1.5 rounded-lg transition-all duration-150 hover:opacity-80"
                 style={{ color: 'var(--color-text-muted)' }}
-                title="最小化"
+                title="鏈€灏忓寲"
               >
                 <Minus size={14} />
               </button>
@@ -159,7 +162,7 @@ export default function App() {
                 onClick={handleMaximize}
                 className="p-1.5 rounded-lg transition-all duration-150 hover:opacity-80"
                 style={{ color: 'var(--color-text-muted)' }}
-                title={isMaximized ? '还原' : '最大化'}
+                title={isMaximized ? '杩樺師' : '鏈€澶у寲'}
               >
                 {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
               </button>
@@ -167,7 +170,7 @@ export default function App() {
                 onClick={handleClose}
                 className="p-1.5 rounded-lg transition-all duration-150 hover:bg-red-500 hover:text-white"
                 style={{ color: 'var(--color-text-muted)' }}
-                title="关闭"
+                title="鍏抽棴"
               >
                 <X size={14} />
               </button>
@@ -175,11 +178,19 @@ export default function App() {
           </div>
         </div>
 
-        {/* Tabs */}
-        <TabBar />
-
-        {/* Main content */}
-        <PanelBody />
+        <div className="flex min-h-0 flex-1">
+          <ModuleSidebar />
+          <main className="flex min-w-0 flex-1 flex-col">
+            {activeModule === 'shortcuts' ? (
+              <>
+                <TabBar />
+                <PanelBody />
+              </>
+            ) : (
+              <TaskBoard />
+            )}
+          </main>
+        </div>
       </motion.div>
 
       {/* Modals */}

@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
 import { ShortcutType } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, AppWindow, Folder, File, Globe, FolderOpen, Search } from 'lucide-react';
+import { X, AppWindow, Folder, File, Globe, FolderOpen, ImagePlus } from 'lucide-react';
 
 const SHORTCUT_TYPES: { type: ShortcutType; labelKey: string; icon: typeof AppWindow }[] = [
   { type: 'app', labelKey: 'modal.type.app', icon: AppWindow },
@@ -29,6 +29,7 @@ export default function AddShortcutModal() {
   const [targetPath, setTargetPath] = useState(editingShortcut?.targetPath || '');
   const [remark, setRemark] = useState(editingShortcut?.remark || '');
   const [icon, setIcon] = useState(editingShortcut?.icon || '');
+  const [iconManuallySet, setIconManuallySet] = useState(!!editingShortcut?.icon);
 
   useEffect(() => {
     // Auto-detect type from pasted URL
@@ -41,6 +42,41 @@ export default function AddShortcutModal() {
       }
     }
   }, [targetPath]);
+  useEffect(() => {
+    if (!targetPath.trim() || iconManuallySet) return;
+
+    if (type === 'url') {
+      try {
+        const url = new URL(targetPath.trim());
+        setIcon(`https://www.google.com/s2/favicons?domain=${url.hostname}&sz=64`);
+      } catch {}
+      return;
+    }
+
+    const api = window.electronAPI;
+    if (api?.getFileIcon) {
+      api.getFileIcon(targetPath.trim()).then((iconDataUrl) => {
+        if (iconDataUrl) setIcon(iconDataUrl);
+      }).catch(() => {
+        // The card type icon remains as fallback.
+      });
+    }
+  }, [iconManuallySet, targetPath, type]);
+
+  const handleChooseIcon = async () => {
+    const api = window.electronAPI;
+    if (!api?.openIconFile) return;
+    const iconDataUrl = await api.openIconFile();
+    if (iconDataUrl) {
+      setIcon(iconDataUrl);
+      setIconManuallySet(true);
+    }
+  };
+
+  const handleClearIcon = () => {
+    setIcon('');
+    setIconManuallySet(false);
+  };
 
   const handleBrowse = async () => {
     const api = window.electronAPI;
@@ -52,6 +88,7 @@ export default function AddShortcutModal() {
         const parts = path.split(/[\\/]/);
         setName(parts[parts.length - 1] || '');
       }
+      setIconManuallySet(false);
     }
   };
 
@@ -198,6 +235,34 @@ export default function AddShortcutModal() {
             </div>
           </div>
 
+          {/* Icon */}
+          <div className="mb-3">
+            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>{t('modal.icon')}</label>
+            <div className="flex items-center gap-2">
+              <div
+                className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 overflow-hidden"
+                style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
+              >
+                {icon ? <img src={icon} alt="" className="w-7 h-7 object-contain" /> : <ImagePlus size={18} style={{ color: 'var(--color-text-muted)' }} />}
+              </div>
+              <button
+                onClick={handleChooseIcon}
+                className="px-3 py-2 rounded-lg shrink-0 flex items-center gap-1.5 text-xs"
+                style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
+              >
+                <ImagePlus size={14} /> {t('modal.iconChoose')}
+              </button>
+              {icon && (
+                <button
+                  onClick={handleClearIcon}
+                  className="px-3 py-2 rounded-lg shrink-0 text-xs"
+                  style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}
+                >
+                  {t('modal.iconAuto')}
+                </button>
+              )}
+            </div>
+          </div>
           {/* Remark */}
           <div className="mb-4">
             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>{t('modal.remark')}</label>

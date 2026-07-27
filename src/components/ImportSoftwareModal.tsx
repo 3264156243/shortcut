@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+﻿import { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -247,7 +247,11 @@ export default function ImportSoftwareModal() {
                         border: '1px solid var(--color-border)',
                       }}
                     >
-                      <AppWindow size={16} style={{ color: 'var(--color-text-muted)' }} />
+                      {software.icon ? (
+                        <img src={software.icon} alt="" className="w-6 h-6 object-contain" />
+                      ) : (
+                        <AppWindow size={16} style={{ color: 'var(--color-text-muted)' }} />
+                      )}
                     </div>
                     <div className="flex-1 text-left min-w-0">
                       <div className="font-medium truncate">{software.name}</div>
