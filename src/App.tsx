@@ -107,7 +107,7 @@ export default function App() {
         longSpaceTriggered.current = true;
         shortSpaceTimer.current && window.clearTimeout(shortSpaceTimer.current);
         shortSpaceTimer.current = null;
-      }, 1000);
+      }, 800);
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
@@ -118,7 +118,7 @@ export default function App() {
       clearLongPress();
       event.preventDefault();
 
-      if (longSpaceTriggered.current || pressedFor >= 1000) {
+      if (longSpaceTriggered.current || pressedFor >= 800) {
         longSpaceTriggered.current = false;
         return;
       }

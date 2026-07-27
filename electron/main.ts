@@ -69,6 +69,12 @@ function expandWindowsEnv(input: string): string {
   return input.replace(/%([^%]+)%/g, (_match, name) => process.env[name] || '');
 }
 
+function normalizeExternalUrl(url: string): string {
+  const trimmed = (url || '').trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
 function normalizeIconPath(iconSource: string): string {
   const expanded = expandWindowsEnv(iconSource || '').trim();
   const quoted = expanded.match(/^"([^"]+)"/);
@@ -236,7 +242,7 @@ ipcMain.handle('shell:open', async (_e: any, targetPath: string) => {
 
 ipcMain.handle('shell:openExternal', async (_e: any, url: string) => {
   try {
-    await shell.openExternal(url);
+    await shell.openExternal(normalizeExternalUrl(url));
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message };
@@ -578,3 +584,4 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   globalShortcut.unregisterAll();
 });
+

@@ -233,6 +233,12 @@ export default function AddShortcutModal() {
                 type="text"
                 value={targetPath}
                 onChange={(e) => setTargetPath(e.target.value)}
+                onBlur={() => {
+                  const trimmed = targetPath.trim();
+                  if (trimmed && (type === 'url' || looksLikeWebUrl(trimmed))) {
+                    setTargetPath(normalizeUrl(trimmed));
+                  }
+                }}
                 placeholder={type === 'url' ? t('modal.urlPlaceholder') : t('modal.pathPlaceholder')}
                 style={{ ...inputStyle, flex: 1 }}
               />
