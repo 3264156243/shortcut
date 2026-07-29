@@ -12,7 +12,7 @@ import ToastContainer from './components/Toast';
 import ModuleSidebar from './components/ModuleSidebar';
 import TaskBoard from './components/TaskBoard';
 import UpdateModal from './components/UpdateModal';
-import AllShortcutsModal from './components/AllShortcutsModal';
+import KeyboardShortcutsModal from './components/KeyboardShortcutsModal';
 import { PanelAnimation, UpdateState } from './types';
 import { useTranslation } from './hooks/useTranslation';
 
@@ -55,7 +55,7 @@ export default function App() {
   const [isMaximized, setIsMaximized] = useState(false);
   const [updateState, setUpdateState] = useState<UpdateState | null>(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
-  const [showAllShortcuts, setShowAllShortcuts] = useState(false);
+  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
   const spaceDownAt = useRef<number | null>(null);
   const longSpaceTimer = useRef<number | null>(null);
   const shortSpaceTimer = useRef<number | null>(null);
@@ -140,7 +140,7 @@ export default function App() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!(event.code === 'Space' || event.key === ' ') || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
       const state = useStore.getState();
-      const isModalOpen = state.showAddModal || state.showSettings || state.showImportSoftware || !!document.querySelector('[data-task-modal], [data-update-modal], [data-all-shortcuts-modal]');
+      const isModalOpen = state.showAddModal || state.showSettings || state.showImportSoftware || !!document.querySelector('[data-task-modal], [data-update-modal], [data-keyboard-shortcuts-modal]');
       if (isEditableTarget(event.target) || isModalOpen) return;
 
       event.preventDefault();
@@ -350,7 +350,7 @@ export default function App() {
           <ModuleSidebar
             updateState={updateState}
             onUpdateClick={() => { void handleUpdateClick(); }}
-            onShowAllShortcuts={() => setShowAllShortcuts(true)}
+            onShowKeyboardShortcuts={() => setShowKeyboardShortcuts(true)}
           />
           <main className="flex min-w-0 flex-1 flex-col">
             {activeModule === 'shortcuts' ? (
@@ -369,7 +369,7 @@ export default function App() {
       {showAddModal && <AddShortcutModal />}
       {showSettings && <SettingsPanel />}
       {showImportSoftware && <ImportSoftwareModal />}
-      {showAllShortcuts && <AllShortcutsModal onClose={() => setShowAllShortcuts(false)} />}
+      {showKeyboardShortcuts && <KeyboardShortcutsModal onClose={() => setShowKeyboardShortcuts(false)} />}
 
       {/* Toasts */}
       <ToastContainer />

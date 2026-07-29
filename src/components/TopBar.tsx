@@ -45,7 +45,7 @@ export default function TopBar() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const state = useStore.getState();
-      const isModalOpen = state.showAddModal || state.showSettings || state.showImportSoftware || !!document.querySelector('[data-all-shortcuts-modal]');
+      const isModalOpen = state.showAddModal || state.showSettings || state.showImportSoftware || !!document.querySelector('[data-keyboard-shortcuts-modal]');
       if (isModalOpen) return;
 
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {

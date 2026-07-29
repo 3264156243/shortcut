@@ -1,4 +1,4 @@
-﻿import { CheckCircle2, CheckSquare, Download, Grid2X2, RefreshCw, Settings, Rows3 } from 'lucide-react';
+﻿import { CheckCircle2, CheckSquare, Download, Grid2X2, RefreshCw, Settings, Keyboard } from 'lucide-react';
 import { useStore } from '../store';
 import { ModuleId, UpdateState } from '../types';
 import { useTranslation } from '../hooks/useTranslation';
@@ -11,10 +11,10 @@ const modules: Array<{ id: ModuleId; label: string; icon: typeof Grid2X2 }> = [
 interface ModuleSidebarProps {
   updateState: UpdateState | null;
   onUpdateClick: () => void;
-  onShowAllShortcuts: () => void;
+  onShowKeyboardShortcuts: () => void;
 }
 
-export default function ModuleSidebar({ updateState, onUpdateClick, onShowAllShortcuts }: ModuleSidebarProps) {
+export default function ModuleSidebar({ updateState, onUpdateClick, onShowKeyboardShortcuts }: ModuleSidebarProps) {
   const activeModule = useStore((state) => state.activeModule);
   const setActiveModule = useStore((state) => state.setActiveModule);
   const openSettings = useStore((state) => state.openSettings);
@@ -77,13 +77,13 @@ export default function ModuleSidebar({ updateState, onUpdateClick, onShowAllSho
       <div className="mt-auto flex flex-col items-center gap-2">
         <button
           type="button"
-          onClick={onShowAllShortcuts}
+          onClick={onShowKeyboardShortcuts}
           className="flex h-12 w-12 flex-col items-center justify-center gap-0.5 rounded-xl text-[10px] transition-all duration-150 hover:opacity-85"
           style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
-          title="全部快捷方式"
+          title="查看快捷键"
         >
-          <Rows3 size={17} />
-          <span>全部</span>
+          <Keyboard size={17} />
+          <span>快捷键</span>
         </button>
         <button
           type="button"
