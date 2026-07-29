@@ -225,12 +225,18 @@ export default function TaskBoard() {
   };
 
   const removeTask = (taskId: string) => {
+    const note = wallRef.current?.querySelector<HTMLElement>(`[data-task-id="${taskId}"]`);
+    if (note) {
+      const rect = note.getBoundingClientRect();
+      note.style.setProperty('--shred-x', `${window.innerWidth / 2 - (rect.left + rect.width / 2)}px`);
+      note.style.setProperty('--shred-y', `${window.innerHeight / 2 - 12 - (rect.top + rect.height / 2)}px`);
+    }
     setDeletingId(taskId);
     setConfirmDeleteId(null);
     window.setTimeout(() => {
       deleteTask(taskId);
       setDeletingId((current) => current === taskId ? null : current);
-    }, 720);
+    }, 920);
   };
 
   return (
@@ -256,18 +262,18 @@ export default function TaskBoard() {
         }
         .task-note:hover { box-shadow: 3px 5px 16px rgba(0,0,0,.45); }
         .task-note.dragging { box-shadow: 6px 10px 30px rgba(0,0,0,.5); opacity: .94; cursor: grabbing; }
-        .task-note.tearing { animation: taskShred .72s cubic-bezier(.55,0,.9,.45) forwards; pointer-events: none; z-index: 12000 !important; }
-        @keyframes taskShred {
-          0% { opacity: 1; transform: rotate(var(--r)) scale(1); filter: none; }
-          35% { transform: rotate(0deg) translateY(26px) scale(.72); }
-          72% { opacity: .9; transform: rotate(0deg) translateY(155px) scale(.42,.68); filter: contrast(1.15); }
-          100% { opacity: 0; transform: rotate(0deg) translateY(220px) scale(.38,.04); clip-path: polygon(0 0,8% 0,8% 100%,14% 100%,14% 0,23% 0,23% 100%,31% 100%,31% 0,40% 0,40% 100%,49% 100%,49% 0,58% 0,58% 100%,67% 100%,67% 0,76% 0,76% 100%,85% 100%,85% 0,94% 0,94% 100%,100% 100%,100% 0); }
+        .task-note.tearing { animation: taskFeedShredder .92s cubic-bezier(.55,.02,.72,.42) forwards; pointer-events: none; z-index: 12000 !important; }
+        @keyframes taskFeedShredder {
+          0% { opacity: 1; transform: rotate(var(--r)) scale(1); }
+          58% { opacity: 1; transform: translate(var(--shred-x), calc(var(--shred-y) - 38px)) rotate(0deg) scale(.72); }
+          82% { opacity: .95; transform: translate(var(--shred-x), calc(var(--shred-y) - 8px)) rotate(0deg) scale(.62,.38); }
+          100% { opacity: 0; transform: translate(var(--shred-x), calc(var(--shred-y) + 8px)) rotate(0deg) scale(.5,.02); }
         }
-        .task-shredder-strip { animation: shredderStrip .65s ease-in forwards; }
+        .task-shredder-strip { animation: shredderStrip .5s ease-in forwards; opacity: 0; }
         @keyframes shredderStrip {
-          0% { opacity: 0; transform: translateY(-6px) rotate(var(--strip-r)); }
-          25% { opacity: 1; }
-          100% { opacity: 0; transform: translateY(58px) rotate(calc(var(--strip-r) * -1)); }
+          0% { opacity: 0; transform: translateY(-3px) rotate(var(--strip-r)); }
+          20% { opacity: 1; }
+          100% { opacity: 0; transform: translateY(62px) rotate(calc(var(--strip-r) * -1)); }
         }
         .task-note-text::after {
           content: '';
@@ -437,12 +443,14 @@ export default function TaskBoard() {
 
       <AnimatePresence>
         {deletingId && (
-          <motion.div className="pointer-events-none fixed bottom-[70px] left-1/2 z-[240] -translate-x-1/2" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}>
-            <div className="relative h-7 w-40 rounded-t-md border border-[#171210] bg-[#39312c] shadow-[0_8px_20px_rgba(0,0,0,.5)]">
-              <div className="absolute left-3 right-3 top-2 h-2 rounded-full bg-black shadow-inner" />
-              <div className="absolute left-4 right-4 top-4 flex justify-around overflow-visible">
+          <motion.div className="pointer-events-none fixed left-1/2 top-1/2 z-[13000] -translate-x-1/2 -translate-y-1/2" initial={{ opacity: 0, scale: 0.88 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.92 }}>
+            <div className="relative h-20 w-44 rounded-md border border-[#171210] bg-[#39312c] shadow-[0_14px_34px_rgba(0,0,0,.58)]">
+              <div className="absolute left-3 right-3 top-3 h-2 rounded-full bg-black shadow-[inset_0_2px_4px_rgba(0,0,0,.9)]" />
+              <div className="absolute left-5 right-5 top-8 h-px bg-white/10" />
+              <div className="absolute bottom-3 left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-[#9b2335] shadow-[0_0_7px_#9b2335]" />
+              <div className="absolute left-4 right-4 top-[72px] -z-10 flex justify-around overflow-visible">
                 {Array.from({ length: 9 }, (_, index) => (
-                  <span key={index} className="task-shredder-strip h-12 w-2 bg-[#e7ded0]" style={{ '--strip-r': `${index % 2 ? 5 : -4}deg`, animationDelay: `${index * 28}ms` } as React.CSSProperties} />
+                  <span key={index} className="task-shredder-strip h-12 w-2 bg-[#e7ded0]" style={{ '--strip-r': `${index % 2 ? 5 : -4}deg`, animationDelay: `${480 + index * 24}ms` } as React.CSSProperties} />
                 ))}
               </div>
             </div>
@@ -454,7 +462,7 @@ export default function TaskBoard() {
           <button
             onClick={() => setLongTextEnabled((enabled) => !enabled)}
             aria-pressed={longTextEnabled}
-            className="relative flex h-11 w-11 items-center justify-center rounded transition-all duration-150"
+            className="flex h-11 w-11 items-center justify-center rounded transition-all duration-150"
             style={{
               background: longTextEnabled ? '#efe3c8' : 'rgba(245,240,232,.08)',
               border: '1px solid ' + (longTextEnabled ? '#d0b984' : 'rgba(245,240,232,.14)'),
@@ -463,12 +471,11 @@ export default function TaskBoard() {
             title={longTextEnabled ? '关闭长文本' : '开启长文本'}
           >
             <FileText size={18} />
-            <span className="absolute ml-7 mt-7 rounded bg-black/45 px-1 text-[9px] leading-4 text-white/75">1</span>
           </button>
           <button
             onClick={() => setReminderEnabled((enabled) => !enabled)}
             aria-pressed={reminderEnabled}
-            className="relative flex h-11 w-11 items-center justify-center rounded transition-all duration-150"
+            className="flex h-11 w-11 items-center justify-center rounded transition-all duration-150"
             style={{
               background: reminderEnabled ? '#f2dadd' : 'rgba(245,240,232,.08)',
               border: '1px solid ' + (reminderEnabled ? '#cb8c96' : 'rgba(245,240,232,.14)'),
@@ -477,7 +484,6 @@ export default function TaskBoard() {
             title={reminderEnabled ? '关闭待办提醒' : '开启待办提醒'}
           >
             <Bell size={18} />
-            <span className="absolute ml-7 mt-7 rounded bg-black/45 px-1 text-[9px] leading-4 text-white/75">2</span>
           </button>
         </div>
         <div className="relative min-w-0 flex-1 overflow-hidden px-4 pb-2 pt-3" style={{ background: '#f5f0e8', boxShadow: 'inset 0 0 18px rgba(0,0,0,.04), 0 2px 6px rgba(0,0,0,.2)' }}>
