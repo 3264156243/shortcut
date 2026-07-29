@@ -19,13 +19,20 @@ if (-not $SkipBuild) {
 
 $package = Get-Content -LiteralPath 'package.json' -Encoding UTF8 | ConvertFrom-Json
 $setupName = $package.productName + '-' + $package.version + '-Setup.exe'
-$releaseNotesName = $package.productName + '-' + $package.version + '-ReleaseNotes.md'
+$releaseNotes = Get-ChildItem -LiteralPath (Join-Path $projectRoot 'release') -Filter 'ShortCut-*-ReleaseNotes.md' -File |
+  Sort-Object Name
+
+if (-not $releaseNotes) {
+  throw 'No release notes artifacts were generated.'
+}
+
 $artifacts = @(
   (Join-Path $projectRoot ('release/' + $setupName)),
-  (Join-Path $projectRoot ('release/' + $setupName + '.blockmap')),
-  (Join-Path $projectRoot ('release/' + $releaseNotesName)),
-  (Join-Path $projectRoot 'release/latest.yml')
+  (Join-Path $projectRoot ('release/' + $setupName + '.blockmap'))
 )
+$artifacts += @($releaseNotes.FullName)
+$artifacts += (Join-Path $projectRoot 'release/release-notes.json')
+$artifacts += (Join-Path $projectRoot 'release/latest.yml')
 
 foreach ($artifact in $artifacts) {
   if (-not (Test-Path -LiteralPath $artifact)) {
@@ -44,5 +51,5 @@ if ($LASTEXITCODE -ne 0) {
   throw 'Uploading update artifacts failed.'
 }
 
-Write-Host ('Uploaded version ' + $package.version + ' to ' + $destination)
+Write-Host ('Uploaded version ' + $package.version + ' and ' + $releaseNotes.Count + ' release notes to ' + $destination)
 Write-Host 'Verify: https://shortcut.326415.xyz/updates/latest.yml'

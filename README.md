@@ -71,14 +71,15 @@ npm run electron:build:dir
 release-notes/2.0.0.md
 ```
 
-构建脚本会自动校验版本说明，将内容嵌入 `latest.yml`，并生成独立的版本说明文件。更新目录结构：
+构建脚本会自动校验版本说明，将当前版本内容嵌入 `latest.yml`，为所有历史版本生成独立说明文件，并生成便于网站读取的 `release-notes.json`。更新目录结构：
 
 ```text
 https://shortcut.326415.xyz/updates/
 ├── latest.yml
 ├── ShortCut-x.x.x-Setup.exe
 ├── ShortCut-x.x.x-Setup.exe.blockmap
-└── ShortCut-x.x.x-ReleaseNotes.md
+├── ShortCut-x.x.x-ReleaseNotes.md
+└── release-notes.json
 ```
 
 发布步骤：
