@@ -47,11 +47,18 @@ function sendUpdateState(next: Partial<typeof updateState>) {
   }
 }
 
-function hasUpdateConfiguration() {
+function configureUpdateFeed() {
   if (!app.isPackaged) return false;
   const resourcesPath = (process as any).resourcesPath || '';
-  return fs.existsSync(path.join(resourcesPath, 'app-update.yml'))
+  const hasPackagedConfig = fs.existsSync(path.join(resourcesPath, 'app-update.yml'))
     || fs.existsSync(path.join(resourcesPath, 'app-update.yaml'));
+  if (!hasPackagedConfig) {
+    autoUpdater.setFeedURL({
+      provider: 'generic',
+      url: 'https://shortcut.326415.xyz/updates/',
+    });
+  }
+  return true;
 }
 
 function normalizeReleaseNotes(notes: unknown) {
@@ -123,7 +130,7 @@ function setupAutoUpdater() {
 async function checkForUpdates(manual = false) {
   setupAutoUpdater();
   sendUpdateState({ manual });
-  if (!hasUpdateConfiguration()) {
+  if (!configureUpdateFeed()) {
     sendUpdateState({
       status: app.isPackaged ? 'unconfigured' : 'idle',
       currentVersion: app.getVersion(),
