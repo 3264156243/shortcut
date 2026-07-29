@@ -2,7 +2,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Plus, Trash2 } from 'lucide-react';
 import { useStore } from '../store';
-import { TaskNote } from '../types';
+import { TaskBoardConfig, TaskNote } from '../types';
 
 const tapePositions = ['left', 'right', 'center'];
 
@@ -17,8 +17,10 @@ export default function TaskBoard() {
   const deleteTask = useStore((state) => state.deleteTask);
   const moveTask = useStore((state) => state.moveTask);
   const wallRef = useRef<HTMLDivElement>(null);
+  const taskInputRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState('');
   const [nameDraft, setNameDraft] = useState('');
+  const [renamingBoardId, setRenamingBoardId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -26,11 +28,11 @@ export default function TaskBoard() {
   const taskBoards = config.taskBoards?.length ? config.taskBoards : [];
   const activeBoard = taskBoards.find((board) => board.id === config.activeTaskBoardId) || taskBoards[0];
   const tasks = activeBoard?.notes || [];
+  const renamingBoard = taskBoards.find((board) => board.id === renamingBoardId);
 
   useEffect(() => {
-    setNameDraft(activeBoard?.name || '');
     setConfirmDeleteId(null);
-  }, [activeBoard?.id, activeBoard?.name]);
+  }, [activeBoard?.id]);
 
   const submit = () => {
     const text = draft.trim();
@@ -39,16 +41,27 @@ export default function TaskBoard() {
     setDraft('');
   };
 
+  const openRenameBoard = (board: TaskBoardConfig) => {
+    setActiveTaskBoard(board.id);
+    setNameDraft(board.name);
+    setRenamingBoardId(board.id);
+  };
+
   const commitBoardName = () => {
-    if (!activeBoard) return;
+    if (!renamingBoardId) return;
     const nextName = nameDraft.trim();
-    if (!nextName) {
-      setNameDraft(activeBoard.name);
-      return;
+    if (!nextName) return;
+    if (nextName !== renamingBoard?.name) {
+      renameTaskBoard(renamingBoardId, nextName);
     }
-    if (nextName !== activeBoard.name) {
-      renameTaskBoard(activeBoard.id, nextName);
-    }
+    setRenamingBoardId(null);
+  };
+
+  const focusTaskInput = (event: React.MouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest('[data-task-id]') || target.closest('[data-task-action]')) return;
+    taskInputRef.current?.focus();
+    taskInputRef.current?.select();
   };
 
   const createBoard = () => {
@@ -172,6 +185,7 @@ export default function TaskBoard() {
               <button
                 key={board.id}
                 onClick={() => setActiveTaskBoard(board.id)}
+                onDoubleClick={() => openRenameBoard(board)}
                 className="shrink-0 rounded px-3 py-1.5 text-xs transition-all duration-150"
                 style={{
                   background: active ? '#9b2335' : 'rgba(245,240,232,.08)',
@@ -179,7 +193,7 @@ export default function TaskBoard() {
                   color: active ? '#f5f0e8' : 'rgba(245,240,232,.72)',
                   fontFamily: "'Special Elite', 'Noto Serif SC', 'SimSun', serif",
                 }}
-                title={board.name}
+                title={`${board.name}（双击重命名）`}
               >
                 {board.name}
               </button>
@@ -195,24 +209,7 @@ export default function TaskBoard() {
           </button>
         </div>
         {activeBoard && (
-          <div className="flex shrink-0 items-center gap-2">
-            <input
-              value={nameDraft}
-              onChange={(event) => setNameDraft(event.target.value)}
-              onBlur={commitBoardName}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.currentTarget.blur();
-                }
-                if (event.key === 'Escape') {
-                  setNameDraft(activeBoard.name);
-                  event.currentTarget.blur();
-                }
-              }}
-              className="w-32 rounded border-none px-2 py-1 text-right text-sm outline-none"
-              style={{ background: 'rgba(245,240,232,.08)', color: '#f5f0e8', fontFamily: "'Special Elite', 'Noto Serif SC', 'SimSun', serif" }}
-              title="任务墙名称"
-            />
+          <div className="flex shrink-0 items-center">
             <button
               onClick={removeBoard}
               disabled={taskBoards.length <= 1}
@@ -226,7 +223,7 @@ export default function TaskBoard() {
         )}
       </div>
 
-      <div ref={wallRef} className="task-wall relative min-h-0 flex-1 overflow-hidden">
+      <div ref={wallRef} onDoubleClick={focusTaskInput} className="task-wall relative min-h-0 flex-1 overflow-hidden">
         {tasks.length === 0 && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center" style={{ color: 'rgba(245,240,232,.16)' }}>
             <div className="text-lg tracking-[.2em]">TASK WALL</div>
@@ -313,6 +310,7 @@ export default function TaskBoard() {
         <div className="relative flex-1 overflow-hidden px-4 pb-2 pt-3" style={{ background: '#f5f0e8', boxShadow: 'inset 0 0 18px rgba(0,0,0,.04), 0 2px 6px rgba(0,0,0,.2)' }}>
           <div className="absolute left-0 right-0 top-0 h-[3px] opacity-40" style={{ background: 'repeating-linear-gradient(90deg,#9b2335 0 5px,transparent 5px 12px)' }} />
           <input
+            ref={taskInputRef}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
@@ -336,6 +334,65 @@ export default function TaskBoard() {
           <Plus size={16} /> 钉到墙上
         </motion.button>
       </div>
+
+      <AnimatePresence>
+        {renamingBoard && (
+          <motion.div
+            className="fixed inset-0 z-[220] flex items-center justify-center p-5"
+            style={{ background: 'rgba(12, 9, 8, .72)' }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setRenamingBoardId(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ type: 'spring', damping: 24, stiffness: 320 }}
+              className="w-full max-w-sm p-5"
+              style={{ background: '#f5f0e8', boxShadow: '0 20px 60px rgba(0,0,0,.5)' }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="mb-4 text-base font-semibold" style={{ color: '#2c2416' }}>修改任务墙名称</div>
+              <input
+                value={nameDraft}
+                onChange={(event) => setNameDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    commitBoardName();
+                  }
+                  if (event.key === 'Escape') {
+                    setRenamingBoardId(null);
+                  }
+                }}
+                autoFocus
+                maxLength={30}
+                className="mb-5 w-full border px-3 py-2.5 text-sm outline-none"
+                style={{ borderColor: '#c9beae', background: '#fffdf8', color: '#2c2416' }}
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setRenamingBoardId(null)}
+                  className="px-4 py-2 text-sm transition-opacity hover:opacity-80"
+                  style={{ background: '#e7dfd2', color: '#6b5c48' }}
+                >
+                  取消
+                </button>
+                <button
+                  onClick={commitBoardName}
+                  disabled={!nameDraft.trim()}
+                  className="px-4 py-2 text-sm transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-45"
+                  style={{ background: '#9b2335', color: '#f5f0e8' }}
+                >
+                  保存
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
