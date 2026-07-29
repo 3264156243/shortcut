@@ -1,8 +1,9 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, Check, FileText, Plus, Trash2 } from 'lucide-react';
+import { Bell, Check, FileText, Plus, Trash2, X } from 'lucide-react';
 import { useStore } from '../store';
 import { TaskBoardConfig, TaskNote } from '../types';
+import TaskDateTimePicker, { createDefaultReminderValue } from './TaskDateTimePicker';
 
 const tapePositions = ['left', 'right', 'center'];
 interface TaskEditorState {
@@ -91,7 +92,7 @@ export default function TaskBoard() {
       longText: longTextEnabled,
       details: '',
       reminderEnabled,
-      reminderAt: '',
+      reminderAt: reminderEnabled ? createDefaultReminderValue() : '',
     });
     setDraft('');
   };
@@ -531,115 +532,168 @@ export default function TaskBoard() {
         {editor && (
           <motion.div
             data-task-modal
-            className="fixed inset-0 z-[230] flex items-center justify-center p-5"
-            style={{ background: 'rgba(12, 9, 8, .78)' }}
+            className="fixed inset-0 z-[230] flex items-center justify-center p-3 sm:p-6"
+            style={{ background: 'rgba(12, 9, 8, .82)', backdropFilter: 'blur(5px)' }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setEditor(null)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') setEditor(null);
+            }}
           >
             <motion.div
-              initial={{ opacity: 0, scale: 0.9, rotate: -1.5, y: 20 }}
-              animate={{ opacity: 1, scale: 1, rotate: -0.25, y: 0 }}
-              exit={{ opacity: 0, scale: 0.94, rotate: 1, y: 14 }}
-              transition={{ type: 'spring', damping: 22, stiffness: 300 }}
-              className="relative max-h-[86vh] w-full max-w-xl overflow-y-auto px-6 pb-6 pt-8"
+              initial={{ opacity: 0, scale: 0.96, y: 18 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.97, y: 12 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 320 }}
+              className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden border"
               style={{
-                background: '#f5f0e8',
+                background: '#f3eee5',
+                borderColor: '#5f4b3e',
                 color: '#2c2416',
-                boxShadow: '7px 12px 40px rgba(0,0,0,.55), inset 0 0 30px rgba(120,90,45,.05)',
+                boxShadow: '0 28px 80px rgba(0,0,0,.62)',
                 fontFamily: "'Special Elite', 'Noto Serif SC', 'SimSun', serif",
               }}
               onClick={(event) => event.stopPropagation()}
             >
-              <div className="absolute left-1/2 top-0 h-5 w-24 -translate-x-1/2 -rotate-1 opacity-55" style={{ background: '#c6a66a' }} />
-              <div className="mb-4 text-lg font-semibold">{editor.taskId ? '编辑任务纸条' : '新任务纸条'}</div>
-
-              <label className="mb-4 block text-xs font-semibold" style={{ color: '#756853' }}>
-                任务标题
-                <input
-                  value={editor.title}
-                  onChange={(event) => setEditor({ ...editor, title: event.target.value })}
-                  autoFocus={!editor.longText && !editor.reminderEnabled}
-                  maxLength={120}
-                  className="mt-1.5 w-full border-b bg-transparent px-1 py-2 text-base outline-none"
-                  style={{ borderColor: '#b9aa94', color: '#2c2416' }}
-                />
-              </label>
-
-              <div className="mb-4 flex gap-2">
+              <header className="flex shrink-0 items-center justify-between px-5 py-4" style={{ background: '#29231f', borderBottom: '3px solid #9b2335' }}>
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded" style={{ background: '#9b2335', color: '#fff8ed' }}>
+                    <FileText size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-base font-semibold" style={{ color: '#fff8ed' }}>
+                      {editor.taskId ? '编辑任务' : '新建任务'}
+                    </div>
+                    <div className="mt-0.5 text-xs" style={{ color: '#b9ab9a' }}>
+                      {editor.longText && editor.reminderEnabled ? '长文本与待办提醒' : editor.longText ? '长文本任务' : editor.reminderEnabled ? '待办提醒' : '普通任务'}
+                    </div>
+                  </div>
+                </div>
                 <button
-                  onClick={() => setEditor({ ...editor, longText: !editor.longText })}
-                  aria-pressed={editor.longText}
-                  className="flex items-center gap-2 rounded px-3 py-2 text-sm transition-opacity hover:opacity-85"
-                  style={{
-                    background: editor.longText ? '#e8d8b7' : '#e7dfd2',
-                    border: '1px solid ' + (editor.longText ? '#c5a96d' : '#c9beae'),
-                    color: editor.longText ? '#6f4f18' : '#6b5c48',
-                  }}
+                  type="button"
+                  onClick={() => setEditor(null)}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded transition-colors hover:bg-white/10"
+                  style={{ color: '#d7cabc' }}
+                  title="关闭"
                 >
-                  <FileText size={15} /> 长文本
+                  <X size={18} />
                 </button>
-                <button
-                  onClick={() => setEditor({ ...editor, reminderEnabled: !editor.reminderEnabled })}
-                  aria-pressed={editor.reminderEnabled}
-                  className="flex items-center gap-2 rounded px-3 py-2 text-sm transition-opacity hover:opacity-85"
-                  style={{
-                    background: editor.reminderEnabled ? '#efd2d7' : '#e7dfd2',
-                    border: '1px solid ' + (editor.reminderEnabled ? '#c9828e' : '#c9beae'),
-                    color: editor.reminderEnabled ? '#8e2132' : '#6b5c48',
-                  }}
-                >
-                  <Bell size={15} /> 待办提醒
-                </button>
+              </header>
+
+              <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+                <label className="mb-5 block">
+                  <span className="mb-2 block text-xs font-semibold" style={{ color: '#746550' }}>任务标题</span>
+                  <input
+                    value={editor.title}
+                    onChange={(event) => setEditor({ ...editor, title: event.target.value })}
+                    autoFocus={!editor.longText && !editor.reminderEnabled}
+                    maxLength={120}
+                    className="w-full border bg-[#fffdf8] px-3 py-3 text-base outline-none transition-colors focus:border-[#9b2335]"
+                    style={{ borderColor: '#cbbda8', color: '#2c2416', boxShadow: 'inset 3px 0 0 #9b2335' }}
+                  />
+                </label>
+
+                <div className="mb-5">
+                  <div className="mb-2 text-xs font-semibold" style={{ color: '#746550' }}>任务类型</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditor({ ...editor, longText: !editor.longText })}
+                      aria-pressed={editor.longText}
+                      className="flex h-11 items-center justify-center gap-2 rounded border text-sm transition-all duration-150"
+                      style={{
+                        background: editor.longText ? '#eadbbd' : '#fffdf8',
+                        borderColor: editor.longText ? '#b99552' : '#cbbda8',
+                        color: editor.longText ? '#664711' : '#655845',
+                        boxShadow: editor.longText ? 'inset 0 -2px 0 #b99552' : 'none',
+                      }}
+                    >
+                      <FileText size={16} /> 长文本
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextEnabled = !editor.reminderEnabled;
+                        setEditor({
+                          ...editor,
+                          reminderEnabled: nextEnabled,
+                          reminderAt: nextEnabled && !editor.reminderAt ? createDefaultReminderValue() : editor.reminderAt,
+                        });
+                      }}
+                      aria-pressed={editor.reminderEnabled}
+                      className="flex h-11 items-center justify-center gap-2 rounded border text-sm transition-all duration-150"
+                      style={{
+                        background: editor.reminderEnabled ? '#efd8dc' : '#fffdf8',
+                        borderColor: editor.reminderEnabled ? '#bd7180' : '#cbbda8',
+                        color: editor.reminderEnabled ? '#85283a' : '#655845',
+                        boxShadow: editor.reminderEnabled ? 'inset 0 -2px 0 #bd7180' : 'none',
+                      }}
+                    >
+                      <Bell size={16} /> 待办提醒
+                    </button>
+                  </div>
+                </div>
+
+                {editor.longText && (
+                  <section className="mb-5">
+                    <div className="mb-2 flex items-center gap-2 text-xs font-semibold" style={{ color: '#746550' }}>
+                      <FileText size={14} />
+                      正文
+                    </div>
+                    <textarea
+                      value={editor.details}
+                      onChange={(event) => setEditor({ ...editor, details: event.target.value })}
+                      autoFocus
+                      rows={7}
+                      placeholder="写下任务详情..."
+                      className="w-full resize-y border px-4 py-3 text-sm leading-7 outline-none transition-colors focus:border-[#9b2335]"
+                      style={{
+                        minHeight: '190px',
+                        borderColor: '#cbbda8',
+                        color: '#2c2416',
+                        backgroundColor: '#fffdf8',
+                        backgroundImage: 'repeating-linear-gradient(transparent, transparent 27px, rgba(108,88,61,.12) 27px, rgba(108,88,61,.12) 28px)',
+                        backgroundPosition: '0 12px',
+                      }}
+                    />
+                  </section>
+                )}
+
+                {editor.reminderEnabled && (
+                  <section>
+                    <div className="mb-2 flex items-center gap-2 text-xs font-semibold" style={{ color: '#746550' }}>
+                      <Bell size={14} />
+                      提醒日期与时间
+                    </div>
+                    <TaskDateTimePicker
+                      value={editor.reminderAt}
+                      onChange={(reminderAt) => setEditor({ ...editor, reminderAt })}
+                    />
+                  </section>
+                )}
               </div>
 
-              {editor.longText && (
-                <label className="mb-4 block text-xs font-semibold" style={{ color: '#756853' }}>
-                  纸条正文
-                  <textarea
-                    value={editor.details}
-                    onChange={(event) => setEditor({ ...editor, details: event.target.value })}
-                    autoFocus
-                    rows={8}
-                    placeholder="继续写下详细内容..."
-                    className="mt-1.5 w-full resize-y border bg-[#fffdf8] px-3 py-2.5 text-sm leading-relaxed outline-none"
-                    style={{ borderColor: '#c9beae', color: '#2c2416' }}
-                  />
-                </label>
-              )}
-
-              {editor.reminderEnabled && (
-                <label className="mb-5 block text-xs font-semibold" style={{ color: '#756853' }}>
-                  提醒时间
-                  <input
-                    type="datetime-local"
-                    value={editor.reminderAt}
-                    onChange={(event) => setEditor({ ...editor, reminderAt: event.target.value })}
-                    autoFocus={!editor.longText}
-                    className="mt-1.5 w-full border bg-[#fffdf8] px-3 py-2.5 text-sm outline-none"
-                    style={{ borderColor: '#c9beae', color: '#2c2416' }}
-                  />
-                </label>
-              )}
-
-              <div className="flex justify-end gap-2">
+              <footer className="flex shrink-0 items-center justify-end gap-2 border-t px-5 py-4" style={{ borderColor: '#d6cabb', background: '#e9e0d3' }}>
                 <button
+                  type="button"
                   onClick={() => setEditor(null)}
-                  className="px-4 py-2 text-sm transition-opacity hover:opacity-80"
-                  style={{ background: '#e7dfd2', color: '#6b5c48' }}
+                  className="rounded border px-4 py-2.5 text-sm transition-colors hover:bg-[#ddd1c1]"
+                  style={{ borderColor: '#bfb19e', color: '#645744' }}
                 >
                   取消
                 </button>
                 <button
+                  type="button"
                   onClick={saveTaskEditor}
                   disabled={!editor.title.trim() || (editor.reminderEnabled && !editor.reminderAt)}
-                  className="px-5 py-2 text-sm transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-45"
-                  style={{ background: '#9b2335', color: '#f5f0e8' }}
+                  className="rounded px-5 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                  style={{ background: '#9b2335', color: '#fff8ed' }}
                 >
-                  保存纸条
+                  保存任务
                 </button>
-              </div>
+              </footer>
             </motion.div>
           </motion.div>
         )}
