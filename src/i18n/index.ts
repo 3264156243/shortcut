@@ -102,7 +102,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     'settings.exportFailed': '导出失败',
     'settings.importSuccess': '导入成功',
     'settings.importFailed': '导入失败：配置文件格式无效',
-    'settings.version': 'ShortCut v2.0.1',
+    'settings.version': 'ShortCut v2.0.2',
     'update.title': '应用更新',
     'update.availableTitle': '发现新版本',
     'update.checkTitle': '检查更新',

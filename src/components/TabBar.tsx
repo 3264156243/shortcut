@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState, DragEvent as ReactDragEvent } from 'react';
 import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
 import { Plus, X, Pencil, MoreHorizontal } from 'lucide-react';
@@ -11,11 +11,13 @@ export default function TabBar() {
   const addTab = useStore((s) => s.addTab);
   const renameTab = useStore((s) => s.renameTab);
   const deleteTab = useStore((s) => s.deleteTab);
+  const reorderTabs = useStore((s) => s.reorderTabs);
   const { t } = useTranslation();
 
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [hoveredTabId, setHoveredTabId] = useState<string | null>(null);
+  const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
 
   const handleStartRename = (tabId: string, currentName: string) => {
     setEditingTabId(tabId);
@@ -51,19 +53,24 @@ export default function TabBar() {
           const isHovered = tab.id === hoveredTabId;
 
           return (
-            <motion.div
+            <div
               key={tab.id}
-              layout
-              initial={{ opacity: 0, scale: 0.9, y: -10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: -10 }}
-              transition={{
-                type: 'spring',
-                damping: 20,
-                stiffness: 300,
-                duration: 0.2,
+              draggable={editingTabId !== tab.id}
+              onDragStart={(event: ReactDragEvent<HTMLDivElement>) => {
+                setDraggingTabId(tab.id);
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', tab.id);
               }}
-              className="relative group"
+              onDragOver={(event: ReactDragEvent<HTMLDivElement>) => {
+                event.preventDefault();
+                const draggedId = draggingTabId || event.dataTransfer.getData('text/plain');
+                if (!draggedId || draggedId === tab.id) return;
+                const fromIndex = config.tabs.findIndex((item) => item.id === draggedId);
+                const toIndex = config.tabs.findIndex((item) => item.id === tab.id);
+                if (fromIndex >= 0 && toIndex >= 0 && fromIndex !== toIndex) reorderTabs(fromIndex, toIndex);
+              }}
+              onDragEnd={() => setDraggingTabId(null)}
+              className={`relative group ${draggingTabId === tab.id ? 'opacity-45' : ''}`}
               onMouseEnter={() => setHoveredTabId(tab.id)}
               onMouseLeave={() => setHoveredTabId(null)}
             >
@@ -155,7 +162,7 @@ export default function TabBar() {
                   transition={{ type: 'spring', damping: 20, stiffness: 300 }}
                 />
               )}
-            </motion.div>
+            </div>
           );
         })}
       </AnimatePresence>
