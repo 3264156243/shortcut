@@ -32,8 +32,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getFileIcons: (filePaths: string[]) => ipcRenderer.invoke('system:getFileIcons', filePaths),
   showNotification: (title: string, body: string) => ipcRenderer.invoke('notification:show', title, body),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  downloadUpdate: () => ipcRenderer.invoke('update:download'),
   getUpdateState: () => ipcRenderer.invoke('update:getState'),
-  getAppVersion: () => ipcRenderer.invoke('update:getVersion'),
   installUpdate: () => ipcRenderer.invoke('update:install'),
   onUpdateState: (callback: (state: unknown) => void) => {
     const handler = (_event: unknown, state: unknown) => callback(state);

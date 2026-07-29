@@ -12,6 +12,7 @@ export interface UpdateState {
   progress?: number;
   error?: string;
   manual?: boolean;
+  releaseNotes?: string;
 }
 
 export interface Shortcut {

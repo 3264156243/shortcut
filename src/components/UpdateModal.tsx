@@ -5,16 +5,19 @@ import { useTranslation } from '../hooks/useTranslation';
 
 interface UpdateModalProps {
   state: UpdateState;
+  onDownload: () => void;
   onInstall: () => void;
   onDismiss: () => void;
 }
 
-export default function UpdateModal({ state, onInstall, onDismiss }: UpdateModalProps) {
+export default function UpdateModal({ state, onDownload, onInstall, onDismiss }: UpdateModalProps) {
   const { t } = useTranslation();
-  const visible = state.status === 'available' || state.status === 'downloading' || state.status === 'downloaded' || (state.status === 'error' && !!state.manual);
-  const progress = Math.max(0, Math.min(100, state.progress || 0));
+  const available = state.status === 'available';
+  const downloading = state.status === 'downloading';
   const downloaded = state.status === 'downloaded';
   const failed = state.status === 'error';
+  const visible = available || downloading || downloaded || (failed && !!state.manual);
+  const progress = Math.max(0, Math.min(100, state.progress || 0));
 
   return (
     <AnimatePresence>
@@ -38,13 +41,15 @@ export default function UpdateModal({ state, onInstall, onDismiss }: UpdateModal
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between px-5 py-4" style={{ background: 'var(--color-bg-card)', borderBottom: '1px solid var(--color-border)' }}>
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ background: failed ? '#9b2335' : 'var(--color-accent)', color: 'white' }}>
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ background: failed ? '#9b2335' : 'var(--color-accent)', color: 'white' }}>
                   {failed ? <AlertTriangle size={18} /> : downloaded ? <CheckCircle2 size={18} /> : <Download size={18} />}
                 </div>
-                <div>
-                  <div className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>{t('update.title')}</div>
-                  <div className="mt-0.5 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
+                    {available ? t('update.availableTitle') : t('update.title')}
+                  </div>
+                  <div className="mt-0.5 truncate text-xs" style={{ color: 'var(--color-text-muted)' }}>
                     {state.version ? t('update.version', { version: state.version }) : t('update.current', { version: state.currentVersion })}
                   </div>
                 </div>
@@ -52,7 +57,7 @@ export default function UpdateModal({ state, onInstall, onDismiss }: UpdateModal
               <button
                 type="button"
                 onClick={onDismiss}
-                className="flex h-8 w-8 items-center justify-center rounded-lg transition-opacity hover:opacity-75"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-opacity hover:opacity-75"
                 style={{ color: 'var(--color-text-muted)' }}
                 title={t('update.close')}
               >
@@ -66,6 +71,21 @@ export default function UpdateModal({ state, onInstall, onDismiss }: UpdateModal
                   {t('update.failed')}
                   <div className="mt-2 break-words rounded-lg px-3 py-2 text-xs" style={{ background: 'var(--color-bg-card)', color: 'var(--color-text-muted)' }}>
                     {state.error || t('update.unknownError')}
+                  </div>
+                </div>
+              ) : available ? (
+                <div>
+                  <p className="text-sm leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
+                    {t('update.availablePrompt')}
+                  </p>
+                  <div className="mt-4">
+                    <div className="mb-2 text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>{t('update.releaseNotes')}</div>
+                    <div
+                      className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg px-3 py-3 text-sm leading-6"
+                      style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
+                    >
+                      {state.releaseNotes || t('update.noReleaseNotes')}
+                    </div>
                   </div>
                 </div>
               ) : downloaded ? (
@@ -95,11 +115,30 @@ export default function UpdateModal({ state, onInstall, onDismiss }: UpdateModal
                 <button
                   type="button"
                   onClick={onDismiss}
-                  className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm transition-opacity hover:opacity-80"
+                  className="rounded-lg px-4 py-2 text-sm transition-opacity hover:opacity-80"
                   style={{ background: 'var(--color-bg-card-hover)', color: 'var(--color-text-secondary)' }}
                 >
                   {t('update.close')}
                 </button>
+              ) : available ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={onDismiss}
+                    className="rounded-lg px-4 py-2 text-sm transition-opacity hover:opacity-80"
+                    style={{ background: 'var(--color-bg-card-hover)', color: 'var(--color-text-secondary)' }}
+                  >
+                    {t('update.later')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onDownload}
+                    className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-opacity hover:opacity-85"
+                    style={{ background: 'var(--color-accent)', color: 'white' }}
+                  >
+                    <Download size={15} /> {t('update.download')}
+                  </button>
+                </>
               ) : downloaded ? (
                 <>
                   <button

@@ -32,6 +32,7 @@ let updateState: {
   progress?: number;
   error?: string;
   manual?: boolean;
+  releaseNotes?: string;
 } = {
   status: 'idle',
   currentVersion: app.getVersion(),
@@ -53,10 +54,22 @@ function hasUpdateConfiguration() {
     || fs.existsSync(path.join(resourcesPath, 'app-update.yaml'));
 }
 
+function normalizeReleaseNotes(notes: unknown) {
+  if (typeof notes === 'string') {
+    const value = notes.trim();
+    return value || undefined;
+  }
+  if (!Array.isArray(notes)) return undefined;
+  const values = notes
+    .map((item: any) => typeof item === 'string' ? item : item?.note)
+    .filter((item: unknown): item is string => typeof item === 'string' && item.trim().length > 0);
+  return values.length ? values.join('\n\n') : undefined;
+}
+
 function setupAutoUpdater() {
   if (autoUpdaterReady) return;
   autoUpdaterReady = true;
-  autoUpdater.autoDownload = true;
+  autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
 
   autoUpdater.on('checking-for-update', () => {
@@ -67,6 +80,7 @@ function setupAutoUpdater() {
       status: 'available',
       currentVersion: app.getVersion(),
       version: info?.version,
+      releaseNotes: normalizeReleaseNotes(info?.releaseNotes),
       progress: 0,
       error: undefined,
     });
@@ -88,7 +102,14 @@ function setupAutoUpdater() {
     });
   });
   autoUpdater.on('update-not-available', () => {
-    sendUpdateState({ status: 'not-available', currentVersion: app.getVersion(), error: undefined });
+    sendUpdateState({
+      status: 'not-available',
+      currentVersion: app.getVersion(),
+      version: undefined,
+      progress: undefined,
+      releaseNotes: undefined,
+      error: undefined,
+    });
   });
   autoUpdater.on('error', (error: any) => {
     sendUpdateState({
@@ -118,6 +139,26 @@ async function checkForUpdates(manual = false) {
     sendUpdateState({
       status: 'error',
       error: error?.message || 'Update check failed',
+    });
+    return { success: false, status: 'error', error: updateState.error };
+  }
+}
+
+async function downloadUpdate() {
+  setupAutoUpdater();
+  if (updateState.status !== 'available') {
+    return { success: false, status: updateState.status };
+  }
+
+  sendUpdateState({ status: 'downloading', progress: 0, manual: true, error: undefined });
+  try {
+    await autoUpdater.downloadUpdate();
+    return { success: true, status: updateState.status };
+  } catch (error: any) {
+    sendUpdateState({
+      status: 'error',
+      error: error?.message || 'Update download failed',
+      manual: true,
     });
     return { success: false, status: 'error', error: updateState.error };
   }
@@ -368,8 +409,8 @@ ipcMain.handle('shell:showInFolder', async (_e: any, targetPath: string) => {
 });
 
 ipcMain.handle('update:check', () => checkForUpdates(true));
+ipcMain.handle('update:download', () => downloadUpdate());
 ipcMain.handle('update:getState', () => updateState);
-ipcMain.handle('update:getVersion', () => app.getVersion());
 ipcMain.handle('update:install', () => {
   if (updateState.status !== 'downloaded') return false;
   autoUpdater.quitAndInstall(false, true);

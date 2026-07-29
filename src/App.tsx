@@ -13,6 +13,7 @@ import ModuleSidebar from './components/ModuleSidebar';
 import TaskBoard from './components/TaskBoard';
 import UpdateModal from './components/UpdateModal';
 import { PanelAnimation, UpdateState } from './types';
+import { useTranslation } from './hooks/useTranslation';
 
 // Animation variants based on direction
 const getAnimationVariants = (direction: PanelAnimation) => {
@@ -48,6 +49,7 @@ export default function App() {
   const showSettings = useStore((s) => s.showSettings);
   const showImportSoftware = useStore((s) => s.showImportSoftware);
   const activeModule = useStore((s) => s.activeModule);
+  const addToast = useStore((s) => s.addToast);
   const [animKey, setAnimKey] = useState(0);
   const [isMaximized, setIsMaximized] = useState(false);
   const [updateState, setUpdateState] = useState<UpdateState | null>(null);
@@ -57,6 +59,7 @@ export default function App() {
   const shortSpaceTimer = useRef<number | null>(null);
   const longSpaceTriggered = useRef(false);
 
+  const { t } = useTranslation();
   const animationDirection = config.panelAnimation || 'bottom';
   const variants = useMemo(() => getAnimationVariants(animationDirection), [animationDirection]);
 
@@ -77,6 +80,34 @@ export default function App() {
     }
   };
 
+  const handleUpdateClick = async () => {
+    if (!api?.checkForUpdates) {
+      addToast(t('update.unconfigured'), 'error');
+      return;
+    }
+
+    const status = updateState?.status;
+    if (status === 'available' || status === 'downloading' || status === 'downloaded') {
+      setUpdateDismissed(false);
+      return;
+    }
+    if (status === 'checking') return;
+
+    setUpdateDismissed(false);
+    try {
+      const result = await api.checkForUpdates();
+      if (result.status === 'not-available') {
+        addToast(t('update.latest'), 'success');
+      } else if (result.status === 'unconfigured' || result.status === 'idle') {
+        addToast(t('update.unconfigured'), 'error');
+      } else if (!result.success && result.status !== 'error') {
+        addToast(t('update.checkFailed'), 'error');
+      }
+    } catch {
+      addToast(t('update.checkFailed'), 'error');
+    }
+  };
+
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);
@@ -85,7 +116,7 @@ export default function App() {
     api.getUpdateState().then(setUpdateState).catch(() => undefined);
     const unsubscribe = api.onUpdateState((nextState) => {
       setUpdateState(nextState);
-      if (nextState.status === 'available' || nextState.status === 'downloaded') {
+      if (nextState.status === 'available' || nextState.status === 'downloaded' || (nextState.status === 'error' && !!nextState.manual)) {
         setUpdateDismissed(false);
       }
     });
@@ -314,7 +345,10 @@ export default function App() {
         </div>
 
         <div className="flex min-h-0 flex-1">
-          <ModuleSidebar />
+          <ModuleSidebar
+            updateState={updateState}
+            onUpdateClick={() => { void handleUpdateClick(); }}
+          />
           <main className="flex min-w-0 flex-1 flex-col">
             {activeModule === 'shortcuts' ? (
               <>
@@ -339,6 +373,7 @@ export default function App() {
       {updateState && !updateDismissed && (
         <UpdateModal
           state={updateState}
+          onDownload={() => { void api?.downloadUpdate(); }}
           onInstall={() => { void api?.installUpdate(); }}
           onDismiss={() => setUpdateDismissed(true)}
         />

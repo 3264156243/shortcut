@@ -19,9 +19,11 @@ if (-not $SkipBuild) {
 
 $package = Get-Content -LiteralPath 'package.json' -Encoding UTF8 | ConvertFrom-Json
 $setupName = $package.productName + '-' + $package.version + '-Setup.exe'
+$releaseNotesName = $package.productName + '-' + $package.version + '-ReleaseNotes.md'
 $artifacts = @(
   (Join-Path $projectRoot ('release/' + $setupName)),
   (Join-Path $projectRoot ('release/' + $setupName + '.blockmap')),
+  (Join-Path $projectRoot ('release/' + $releaseNotesName)),
   (Join-Path $projectRoot 'release/latest.yml')
 )
 

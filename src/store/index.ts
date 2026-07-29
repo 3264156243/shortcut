@@ -110,8 +110,8 @@ declare global {
       getFileIcons: (filePaths: string[]) => Promise<Record<string, string | null>>;
       showNotification: (title: string, body: string) => Promise<boolean>;
       checkForUpdates: () => Promise<{ success: boolean; status: string; error?: string }>;
+      downloadUpdate: () => Promise<{ success: boolean; status: string; error?: string }>;
       getUpdateState: () => Promise<UpdateState>;
-      getAppVersion: () => Promise<string>;
       installUpdate: () => Promise<boolean>;
       onUpdateState: (callback: (state: UpdateState) => void) => () => void;
       getTheme: () => Promise<'dark' | 'light'>;
