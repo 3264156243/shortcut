@@ -108,6 +108,7 @@ declare global {
       getFileInfo: (filePath: string) => Promise<{ name: string; path: string; type: 'app' | 'folder' | 'file' } | null>;
       getFileIcon: (filePath: string) => Promise<string | null>;
       getFileIcons: (filePaths: string[]) => Promise<Record<string, string | null>>;
+      getWebsiteIcon: (url: string) => Promise<string | null>;
       showNotification: (title: string, body: string) => Promise<boolean>;
       checkForUpdates: () => Promise<{ success: boolean; status: string; error?: string }>;
       downloadUpdate: () => Promise<{ success: boolean; status: string; error?: string }>;
@@ -206,7 +207,7 @@ export const useStore = create<AppState>((set, get) => ({
       try {
         const parsed = JSON.parse(raw) as AppConfig;
         set({
-          config: { ...DEFAULT_CONFIG, ...parsed, searchHistory: parsed.searchHistory || [], activeModule: parsed.activeModule || 'shortcuts', ...normalizeTaskBoards(parsed) },
+          config: { ...DEFAULT_CONFIG, ...parsed, locale: 'zh-CN', searchHistory: parsed.searchHistory || [], activeModule: parsed.activeModule || 'shortcuts', ...normalizeTaskBoards(parsed) },
           activeTabId: parsed.activeTabId || parsed.tabs[0]?.id || 'default',
           activeModule: parsed.activeModule || 'shortcuts',
         });

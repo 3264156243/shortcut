@@ -1,5 +1,5 @@
 ﻿export type ShortcutType = 'app' | 'folder' | 'file' | 'url';
-export type Locale = 'zh-CN' | 'en';
+export type Locale = 'zh-CN';
 export type PanelAnimation = 'bottom' | 'top' | 'left' | 'right' | 'center';
 export type ModuleId = 'shortcuts' | 'tasks';
 

@@ -237,7 +237,7 @@ export default function App() {
     };
 
     void checkReminders();
-    const timer = window.setInterval(() => void checkReminders(), 15000);
+    const timer = window.setInterval(() => void checkReminders(), 30000);
     return () => window.clearInterval(timer);
   }, []);
   // Check initial maximized state

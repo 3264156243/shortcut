@@ -78,6 +78,22 @@ export default function TaskBoard() {
     return () => window.removeEventListener('task:focus-input', focusInput);
   }, []);
 
+  useEffect(() => {
+    const toggleTaskType = (event: KeyboardEvent) => {
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.matches('input, textarea, [contenteditable="true"]') || editor || renamingBoardId) return;
+      if (event.code === 'Digit1' || event.code === 'Numpad1') {
+        event.preventDefault();
+        setLongTextEnabled((enabled) => !enabled);
+      } else if (event.code === 'Digit2' || event.code === 'Numpad2') {
+        event.preventDefault();
+        setReminderEnabled((enabled) => !enabled);
+      }
+    };
+    window.addEventListener('keydown', toggleTaskType);
+    return () => window.removeEventListener('keydown', toggleTaskType);
+  }, [editor, renamingBoardId]);
   const submit = () => {
     const text = draft.trim();
     if (!text) return;
@@ -214,7 +230,7 @@ export default function TaskBoard() {
     window.setTimeout(() => {
       deleteTask(taskId);
       setDeletingId((current) => current === taskId ? null : current);
-    }, 420);
+    }, 720);
   };
 
   return (
@@ -240,12 +256,18 @@ export default function TaskBoard() {
         }
         .task-note:hover { box-shadow: 3px 5px 16px rgba(0,0,0,.45); }
         .task-note.dragging { box-shadow: 6px 10px 30px rgba(0,0,0,.5); opacity: .94; cursor: grabbing; }
-        .task-note.tearing { animation: taskTearOff .42s cubic-bezier(.5,0,1,1) forwards; pointer-events: none; }
-        @keyframes taskTearOff {
-          0% { opacity: 1; transform: rotate(var(--r)) scale(1); }
-          30% { transform: rotate(var(--r)) translateX(-7px); }
-          55% { transform: rotate(var(--r)) translateX(7px); }
-          100% { opacity: 0; transform: rotate(calc(var(--r) + 15deg)) translateY(80px) scale(.45); }
+        .task-note.tearing { animation: taskShred .72s cubic-bezier(.55,0,.9,.45) forwards; pointer-events: none; z-index: 12000 !important; }
+        @keyframes taskShred {
+          0% { opacity: 1; transform: rotate(var(--r)) scale(1); filter: none; }
+          35% { transform: rotate(0deg) translateY(26px) scale(.72); }
+          72% { opacity: .9; transform: rotate(0deg) translateY(155px) scale(.42,.68); filter: contrast(1.15); }
+          100% { opacity: 0; transform: rotate(0deg) translateY(220px) scale(.38,.04); clip-path: polygon(0 0,8% 0,8% 100%,14% 100%,14% 0,23% 0,23% 100%,31% 100%,31% 0,40% 0,40% 100%,49% 100%,49% 0,58% 0,58% 100%,67% 100%,67% 0,76% 0,76% 100%,85% 100%,85% 0,94% 0,94% 100%,100% 100%,100% 0); }
+        }
+        .task-shredder-strip { animation: shredderStrip .65s ease-in forwards; }
+        @keyframes shredderStrip {
+          0% { opacity: 0; transform: translateY(-6px) rotate(var(--strip-r)); }
+          25% { opacity: 1; }
+          100% { opacity: 0; transform: translateY(58px) rotate(calc(var(--strip-r) * -1)); }
         }
         .task-note-text::after {
           content: '';
@@ -413,12 +435,26 @@ export default function TaskBoard() {
         </AnimatePresence>
       </div>
 
+      <AnimatePresence>
+        {deletingId && (
+          <motion.div className="pointer-events-none fixed bottom-[70px] left-1/2 z-[240] -translate-x-1/2" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}>
+            <div className="relative h-7 w-40 rounded-t-md border border-[#171210] bg-[#39312c] shadow-[0_8px_20px_rgba(0,0,0,.5)]">
+              <div className="absolute left-3 right-3 top-2 h-2 rounded-full bg-black shadow-inner" />
+              <div className="absolute left-4 right-4 top-4 flex justify-around overflow-visible">
+                {Array.from({ length: 9 }, (_, index) => (
+                  <span key={index} className="task-shredder-strip h-12 w-2 bg-[#e7ded0]" style={{ '--strip-r': `${index % 2 ? 5 : -4}deg`, animationDelay: `${index * 28}ms` } as React.CSSProperties} />
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="flex shrink-0 items-end gap-2 px-3 pb-4 pt-3" style={{ background: '#171210', borderTop: '3px solid rgba(120,100,80,.12)' }}>
         <div className="flex shrink-0 items-center gap-1">
           <button
             onClick={() => setLongTextEnabled((enabled) => !enabled)}
             aria-pressed={longTextEnabled}
-            className="flex h-11 w-11 items-center justify-center rounded transition-all duration-150"
+            className="relative flex h-11 w-11 items-center justify-center rounded transition-all duration-150"
             style={{
               background: longTextEnabled ? '#efe3c8' : 'rgba(245,240,232,.08)',
               border: '1px solid ' + (longTextEnabled ? '#d0b984' : 'rgba(245,240,232,.14)'),
@@ -427,11 +463,12 @@ export default function TaskBoard() {
             title={longTextEnabled ? '关闭长文本' : '开启长文本'}
           >
             <FileText size={18} />
+            <span className="absolute ml-7 mt-7 rounded bg-black/45 px-1 text-[9px] leading-4 text-white/75">1</span>
           </button>
           <button
             onClick={() => setReminderEnabled((enabled) => !enabled)}
             aria-pressed={reminderEnabled}
-            className="flex h-11 w-11 items-center justify-center rounded transition-all duration-150"
+            className="relative flex h-11 w-11 items-center justify-center rounded transition-all duration-150"
             style={{
               background: reminderEnabled ? '#f2dadd' : 'rgba(245,240,232,.08)',
               border: '1px solid ' + (reminderEnabled ? '#cb8c96' : 'rgba(245,240,232,.14)'),
@@ -440,6 +477,7 @@ export default function TaskBoard() {
             title={reminderEnabled ? '关闭待办提醒' : '开启待办提醒'}
           >
             <Bell size={18} />
+            <span className="absolute ml-7 mt-7 rounded bg-black/45 px-1 text-[9px] leading-4 text-white/75">2</span>
           </button>
         </div>
         <div className="relative min-w-0 flex-1 overflow-hidden px-4 pb-2 pt-3" style={{ background: '#f5f0e8', boxShadow: 'inset 0 0 18px rgba(0,0,0,.04), 0 2px 6px rgba(0,0,0,.2)' }}>
@@ -547,7 +585,7 @@ export default function TaskBoard() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97, y: 12 }}
               transition={{ type: 'spring', damping: 25, stiffness: 320 }}
-              className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden border"
+              className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border"
               style={{
                 background: '#f3eee5',
                 borderColor: '#5f4b3e',
@@ -590,7 +628,7 @@ export default function TaskBoard() {
                     onChange={(event) => setEditor({ ...editor, title: event.target.value })}
                     autoFocus={!editor.longText && !editor.reminderEnabled}
                     maxLength={120}
-                    className="w-full border bg-[#fffdf8] px-3 py-3 text-base outline-none transition-colors focus:border-[#9b2335]"
+                    className="w-full rounded-md border bg-[#fffdf8] px-3 py-3 text-base outline-none transition-colors focus:border-[#9b2335]"
                     style={{ borderColor: '#cbbda8', color: '#2c2416', boxShadow: 'inset 3px 0 0 #9b2335' }}
                   />
                 </label>
@@ -648,7 +686,7 @@ export default function TaskBoard() {
                       autoFocus
                       rows={7}
                       placeholder="写下任务详情..."
-                      className="w-full resize-y border px-4 py-3 text-sm leading-7 outline-none transition-colors focus:border-[#9b2335]"
+                      className="w-full resize-y rounded-md border px-4 py-3 text-sm leading-7 outline-none transition-colors focus:border-[#9b2335]"
                       style={{
                         minHeight: '190px',
                         borderColor: '#cbbda8',

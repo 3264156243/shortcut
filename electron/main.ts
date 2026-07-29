@@ -13,6 +13,7 @@ const ElectronNotification = electron.Notification;
 const autoUpdater = require('electron-updater').autoUpdater;
 const path = require('path');
 const fs = require('fs');
+const net = electron.net;
 
 const APP_USER_MODEL_ID = 'com.wanan.shortcut';
 
@@ -275,6 +276,47 @@ function fileToDataUrl(filePath: string): string | null {
     return null;
   }
 }
+const MAX_FAVICON_BYTES = 1024 * 1024;
+
+async function fetchBuffer(url: string, accept: string, maxBytes = MAX_FAVICON_BYTES): Promise<{ data: Buffer; contentType: string; finalUrl: string }> {
+  const response = await net.fetch(url, {
+    headers: { Accept: accept, 'User-Agent': 'Mozilla/5.0 ShortCut/2' },
+    redirect: 'follow',
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const data = Buffer.from(await response.arrayBuffer());
+  if (!data.length || data.length > maxBytes) throw new Error('Icon file is empty or too large');
+  return { data, contentType: response.headers.get('content-type') || '', finalUrl: response.url || url };
+}
+
+function findFaviconUrl(html: string, pageUrl: string) {
+  const linkTags = html.match(/<link\b[^>]*>/gi) || [];
+  const candidates = linkTags.flatMap((tag: string) => {
+    const rel = tag.match(/\brel\s*=\s*["']([^"']+)["']/i)?.[1] || '';
+    const href = tag.match(/\bhref\s*=\s*["']([^"']+)["']/i)?.[1];
+    return /(?:^|\s)(?:shortcut\s+)?icon(?:\s|$)/i.test(rel) && href ? [href] : [];
+  });
+  try {
+    return new URL(candidates[0] || '/favicon.ico', pageUrl).toString();
+  } catch {
+    return null;
+  }
+}
+
+async function getWebsiteIcon(rawUrl: string): Promise<string | null> {
+  try {
+    const pageUrl = normalizeExternalUrl(rawUrl);
+    const page = await fetchBuffer(pageUrl, 'text/html,application/xhtml+xml', 5 * 1024 * 1024);
+    const html = page.data.toString('utf8').slice(0, 512 * 1024);
+    const iconUrl = findFaviconUrl(html, page.finalUrl);
+    if (!iconUrl) return null;
+    const icon = await fetchBuffer(iconUrl, 'image/avif,image/webp,image/png,image/svg+xml,image/*,*/*;q=0.8');
+    const mime = icon.contentType.split(';')[0] || (iconUrl.endsWith('.svg') ? 'image/svg+xml' : 'image/x-icon');
+    return `data:${mime};base64,${icon.data.toString('base64')}`;
+  } catch {
+    return null;
+  }
+}
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 900,
@@ -292,7 +334,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      backgroundThrottling: false,
+      backgroundThrottling: true,
     },
   });
 
@@ -405,6 +447,8 @@ ipcMain.handle('shell:openExternal', async (_e: any, url: string) => {
     return { success: false, error: err.message };
   }
 });
+
+ipcMain.handle('web:getIcon', (_e: any, url: string) => getWebsiteIcon(url));
 
 ipcMain.handle('shell:showInFolder', async (_e: any, targetPath: string) => {
   try {

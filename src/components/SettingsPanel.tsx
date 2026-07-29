@@ -1,14 +1,13 @@
 import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
-import { Locale, PanelAnimation } from '../types';
+import { PanelAnimation } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Moon, Sun, Monitor, Download, Upload, Keyboard, Globe, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Maximize, Power } from 'lucide-react';
+import { X, Moon, Sun, Monitor, Download, Upload, Keyboard, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Maximize, Power } from 'lucide-react';
 
 export default function SettingsPanel() {
   const closeSettings = useStore((s) => s.closeSettings);
   const config = useStore((s) => s.config);
   const setTheme = useStore((s) => s.setTheme);
-  const setLocale = useStore((s) => s.setLocale);
   const setPanelAnimation = useStore((s) => s.setPanelAnimation);
   const setOpenOnStartup = useStore((s) => s.setOpenOnStartup);
   const exportConfig = useStore((s) => s.exportConfig);
@@ -20,10 +19,6 @@ export default function SettingsPanel() {
     { value: 'system', labelKey: 'settings.theme.system', icon: Monitor },
   ];
 
-  const locales: { value: Locale; label: string }[] = [
-    { value: 'zh-CN', label: t('settings.language.zhCN') },
-    { value: 'en', label: t('settings.language.en') },
-  ];
 
   const animations: { value: PanelAnimation; labelKey: string; icon: typeof ArrowDown }[] = [
     { value: 'bottom', labelKey: 'settings.animation.bottom', icon: ArrowDown },
@@ -86,27 +81,6 @@ export default function SettingsPanel() {
                     }}
                   >
                     <Icon size={16} /> {t(labelKey)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Language */}
-            <div style={sectionStyle}>
-              <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--color-text)' }}>{t('settings.language')}</h3>
-              <div className="flex gap-2">
-                {locales.map(({ value, label }) => (
-                  <button
-                    key={value}
-                    onClick={() => setLocale(value)}
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm transition-all duration-150"
-                    style={{
-                      background: (config.locale || 'zh-CN') === value ? 'var(--color-accent)' : 'var(--color-bg-card-hover)',
-                      border: `1px solid ${(config.locale || 'zh-CN') === value ? 'var(--color-accent)' : 'var(--color-border)'}`,
-                      color: (config.locale || 'zh-CN') === value ? 'white' : 'var(--color-text-secondary)',
-                    }}
-                  >
-                    <Globe size={16} /> {label}
                   </button>
                 ))}
               </div>

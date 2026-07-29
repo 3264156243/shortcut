@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useMemo } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
 import { Shortcut, ShortcutType } from '../types';
@@ -37,6 +37,7 @@ const TYPE_COLORS: Record<ShortcutType, string> = {
 
 // Cache for file icons
 const iconCache: Map<string, string> = new Map();
+const websiteIconCache: Map<string, string> = new Map();
 const MENU_WIDTH = 152;
 
 const hasUrlScheme = (value: string) => /^https?:\/\//i.test(value.trim());
@@ -67,25 +68,28 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
   const addToast = useStore((s) => s.addToast);
   const searchQuery = useStore((s) => s.searchQuery);
   const { t } = useTranslation();
-  const faviconUrl = useMemo(() => {
-    if (shortcut.icon || (shortcut.type !== 'url' && !looksLikeWebUrl(shortcut.targetPath))) return null;
-    try {
-      const url = new URL(normalizeUrl(shortcut.targetPath));
-      return `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=64`;
-    } catch {
-      return null;
-    }
-  }, [shortcut.icon, shortcut.targetPath, shortcut.type]);
-  const [fileIcon, setFileIcon] = useState<string | null>(shortcut.icon || faviconUrl || null);
-
+  const [fileIcon, setFileIcon] = useState<string | null>(shortcut.icon || null);
   const [showMenu, setShowMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState<{ left: number; top: number } | null>(null);
   const [isPressed, setIsPressed] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
-    setFileIcon(shortcut.icon || faviconUrl || null);
-  }, [faviconUrl, shortcut.icon]);
+    setFileIcon(shortcut.icon || null);
+    if (shortcut.icon || (shortcut.type !== 'url' && !looksLikeWebUrl(shortcut.targetPath))) return;
+    const normalizedUrl = normalizeUrl(shortcut.targetPath);
+    const cached = websiteIconCache.get(normalizedUrl);
+    if (cached) {
+      setFileIcon(cached);
+      return;
+    }
+    window.electronAPI?.getWebsiteIcon(normalizedUrl).then((iconDataUrl) => {
+      if (iconDataUrl) {
+        websiteIconCache.set(normalizedUrl, iconDataUrl);
+        setFileIcon(iconDataUrl);
+      }
+    }).catch(() => undefined);
+  }, [shortcut.icon, shortcut.targetPath, shortcut.type]);
 
   useEffect(() => {
     if (shortcut.type === 'url' || looksLikeWebUrl(shortcut.targetPath) || shortcut.icon || !shortcut.targetPath) return;

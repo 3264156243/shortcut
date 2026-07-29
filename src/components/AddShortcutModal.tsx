@@ -59,11 +59,13 @@ export default function AddShortcutModal() {
     if (!targetPath.trim() || iconManuallySet) return;
 
     if (type === 'url') {
-      try {
-        const url = new URL(normalizeUrl(targetPath));
-        setIcon(`https://www.google.com/s2/favicons?domain=${url.hostname}&sz=64`);
-      } catch {}
-      return;
+      const normalizedUrl = normalizeUrl(targetPath);
+      const timer = window.setTimeout(() => {
+        window.electronAPI?.getWebsiteIcon(normalizedUrl).then((iconDataUrl) => {
+          if (iconDataUrl) setIcon(iconDataUrl);
+        }).catch(() => undefined);
+      }, 350);
+      return () => window.clearTimeout(timer);
     }
 
     const api = window.electronAPI;
