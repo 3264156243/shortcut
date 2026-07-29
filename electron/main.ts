@@ -10,6 +10,7 @@ const shell = electron.shell;
 const dialog = electron.dialog;
 const nativeTheme = electron.nativeTheme;
 const ElectronNotification = electron.Notification;
+const autoUpdater = require('electron-updater').autoUpdater;
 const path = require('path');
 const fs = require('fs');
 
@@ -22,6 +23,105 @@ if (process.platform === 'win32') {
 let mainWindow: any = null;
 let tray: any = null;
 
+type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error' | 'unconfigured';
+
+let updateState: {
+  status: UpdateStatus;
+  currentVersion: string;
+  version?: string;
+  progress?: number;
+  error?: string;
+  manual?: boolean;
+} = {
+  status: 'idle',
+  currentVersion: app.getVersion(),
+};
+
+let autoUpdaterReady = false;
+
+function sendUpdateState(next: Partial<typeof updateState>) {
+  updateState = { ...updateState, ...next };
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update:state', updateState);
+  }
+}
+
+function hasUpdateConfiguration() {
+  if (!app.isPackaged) return false;
+  const resourcesPath = (process as any).resourcesPath || '';
+  return fs.existsSync(path.join(resourcesPath, 'app-update.yml'))
+    || fs.existsSync(path.join(resourcesPath, 'app-update.yaml'));
+}
+
+function setupAutoUpdater() {
+  if (autoUpdaterReady) return;
+  autoUpdaterReady = true;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('checking-for-update', () => {
+    sendUpdateState({ status: 'checking', currentVersion: app.getVersion(), error: undefined });
+  });
+  autoUpdater.on('update-available', (info: any) => {
+    sendUpdateState({
+      status: 'available',
+      currentVersion: app.getVersion(),
+      version: info?.version,
+      progress: 0,
+      error: undefined,
+    });
+  });
+  autoUpdater.on('download-progress', (progress: any) => {
+    sendUpdateState({
+      status: 'downloading',
+      progress: Math.max(0, Math.min(100, Number(progress?.percent) || 0)),
+      version: updateState.version,
+      error: undefined,
+    });
+  });
+  autoUpdater.on('update-downloaded', (info: any) => {
+    sendUpdateState({
+      status: 'downloaded',
+      version: info?.version || updateState.version,
+      progress: 100,
+      error: undefined,
+    });
+  });
+  autoUpdater.on('update-not-available', () => {
+    sendUpdateState({ status: 'not-available', currentVersion: app.getVersion(), error: undefined });
+  });
+  autoUpdater.on('error', (error: any) => {
+    sendUpdateState({
+      status: 'error',
+      currentVersion: app.getVersion(),
+      error: error?.message || 'Update check failed',
+    });
+  });
+}
+
+async function checkForUpdates(manual = false) {
+  setupAutoUpdater();
+  sendUpdateState({ manual });
+  if (!hasUpdateConfiguration()) {
+    sendUpdateState({
+      status: app.isPackaged ? 'unconfigured' : 'idle',
+      currentVersion: app.getVersion(),
+      error: undefined,
+    });
+    return { success: false, status: updateState.status };
+  }
+
+  try {
+    await autoUpdater.checkForUpdates();
+    return { success: true, status: updateState.status };
+  } catch (error: any) {
+    sendUpdateState({
+      status: 'error',
+      error: error?.message || 'Update check failed',
+    });
+    return { success: false, status: 'error', error: updateState.error };
+  }
+}
 // Simple i18n for main process
 const trayTranslations: Record<string, Record<string, string>> = {
   'zh-CN': {
@@ -267,6 +367,14 @@ ipcMain.handle('shell:showInFolder', async (_e: any, targetPath: string) => {
   }
 });
 
+ipcMain.handle('update:check', () => checkForUpdates(true));
+ipcMain.handle('update:getState', () => updateState);
+ipcMain.handle('update:getVersion', () => app.getVersion());
+ipcMain.handle('update:install', () => {
+  if (updateState.status !== 'downloaded') return false;
+  autoUpdater.quitAndInstall(false, true);
+  return true;
+});
 ipcMain.handle('notification:show', (_e: any, title: string, body: string) => {
   try {
     if (!ElectronNotification.isSupported()) return false;
@@ -594,8 +702,16 @@ ipcMain.handle('window:maximize', () => {
 
 // App lifecycle
 app.whenReady().then(() => {
+  setupAutoUpdater();
   createWindow();
   createTray();
+
+  setTimeout(() => {
+    void checkForUpdates();
+  }, 5000);
+  setInterval(() => {
+    void checkForUpdates();
+  }, 6 * 60 * 60 * 1000);
 
   // Register global hotkey
   const ret = globalShortcut.register('Alt+Space', () => {

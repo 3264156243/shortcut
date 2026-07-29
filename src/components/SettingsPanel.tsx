@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
 import { Locale, PanelAnimation } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Moon, Sun, Monitor, Download, Upload, Keyboard, Globe, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Maximize, Power } from 'lucide-react';
+import { X, Moon, Sun, Monitor, Download, Upload, Keyboard, Globe, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Maximize, Power, RefreshCw } from 'lucide-react';
 
 export default function SettingsPanel() {
   const closeSettings = useStore((s) => s.closeSettings);
@@ -15,6 +15,33 @@ export default function SettingsPanel() {
   const exportConfig = useStore((s) => s.exportConfig);
   const importConfig = useStore((s) => s.importConfig);
   const { t } = useTranslation();
+  const [appVersion, setAppVersion] = useState('...');
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateFeedback, setUpdateFeedback] = useState('');
+
+  useEffect(() => {
+    window.electronAPI?.getAppVersion?.().then(setAppVersion).catch(() => undefined);
+  }, []);
+
+  const checkUpdates = async () => {
+    if (!window.electronAPI?.checkForUpdates || checkingUpdate) return;
+    setCheckingUpdate(true);
+    setUpdateFeedback('');
+    try {
+      const result = await window.electronAPI.checkForUpdates();
+      if (result.status === 'not-available') {
+        setUpdateFeedback(t('settings.updateLatest'));
+      } else if (result.status === 'unconfigured' || result.status === 'idle') {
+        setUpdateFeedback(t('settings.updateUnconfigured'));
+      } else if (!result.success || result.status === 'error') {
+        setUpdateFeedback(t('settings.updateFailed'));
+      }
+    } catch {
+      setUpdateFeedback(t('settings.updateFailed'));
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
 
   const themes: { value: 'dark' | 'light' | 'system'; labelKey: string; icon: typeof Moon }[] = [
     { value: 'dark', labelKey: 'settings.theme.dark', icon: Moon },
@@ -179,6 +206,27 @@ export default function SettingsPanel() {
               </div>
             </div>
 
+            {/* Updates */}
+            <div style={sectionStyle}>
+              <h3 className="mb-3 text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('settings.updates')}</h3>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                  {t('settings.currentVersion', { version: appVersion })}
+                </span>
+                <button
+                  onClick={() => void checkUpdates()}
+                  disabled={checkingUpdate || !window.electronAPI?.checkForUpdates}
+                  className="flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+                  style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
+                >
+                  <RefreshCw size={15} className={checkingUpdate ? 'animate-spin' : ''} />
+                  {checkingUpdate ? t('update.checking') : t('settings.checkUpdates')}
+                </button>
+              </div>
+              {updateFeedback && (
+                <p className="mt-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>{updateFeedback}</p>
+              )}
+            </div>
             {/* Data */}
             <div style={sectionStyle}>
               <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--color-text)' }}>{t('settings.data')}</h3>
@@ -190,9 +238,6 @@ export default function SettingsPanel() {
                   <Upload size={16} /> {t('settings.import')}
                 </button>
               </div>
-            </div>
-            <div className="text-center py-2">
-              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{t('settings.version')}</p>
             </div>
           </div>
         </motion.div>

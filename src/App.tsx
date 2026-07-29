@@ -11,7 +11,8 @@ import ImportSoftwareModal from './components/ImportSoftwareModal';
 import ToastContainer from './components/Toast';
 import ModuleSidebar from './components/ModuleSidebar';
 import TaskBoard from './components/TaskBoard';
-import { PanelAnimation } from './types';
+import UpdateModal from './components/UpdateModal';
+import { PanelAnimation, UpdateState } from './types';
 
 // Animation variants based on direction
 const getAnimationVariants = (direction: PanelAnimation) => {
@@ -49,6 +50,8 @@ export default function App() {
   const activeModule = useStore((s) => s.activeModule);
   const [animKey, setAnimKey] = useState(0);
   const [isMaximized, setIsMaximized] = useState(false);
+  const [updateState, setUpdateState] = useState<UpdateState | null>(null);
+  const [updateDismissed, setUpdateDismissed] = useState(false);
   const spaceDownAt = useRef<number | null>(null);
   const longSpaceTimer = useRef<number | null>(null);
   const shortSpaceTimer = useRef<number | null>(null);
@@ -78,6 +81,17 @@ export default function App() {
     loadConfig();
   }, [loadConfig]);
   useEffect(() => {
+    if (!api?.onUpdateState) return;
+    api.getUpdateState().then(setUpdateState).catch(() => undefined);
+    const unsubscribe = api.onUpdateState((nextState) => {
+      setUpdateState(nextState);
+      if (nextState.status === 'available' || nextState.status === 'downloaded') {
+        setUpdateDismissed(false);
+      }
+    });
+    return unsubscribe;
+  }, [api]);
+  useEffect(() => {
     const isEditableTarget = (target: EventTarget | null) => {
       const element = target as HTMLElement | null;
       return !!element && (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.isContentEditable);
@@ -93,7 +107,7 @@ export default function App() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!(event.code === 'Space' || event.key === ' ') || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
       const state = useStore.getState();
-      const isModalOpen = state.showAddModal || state.showSettings || state.showImportSoftware || !!document.querySelector('[data-task-modal]');
+      const isModalOpen = state.showAddModal || state.showSettings || state.showImportSoftware || !!document.querySelector('[data-task-modal], [data-update-modal]');
       if (isEditableTarget(event.target) || isModalOpen) return;
 
       event.preventDefault();
@@ -321,6 +335,14 @@ export default function App() {
 
       {/* Toasts */}
       <ToastContainer />
+
+      {updateState && !updateDismissed && (
+        <UpdateModal
+          state={updateState}
+          onInstall={() => { void api?.installUpdate(); }}
+          onDismiss={() => setUpdateDismissed(true)}
+        />
+      )}
     </div>
   );
 }

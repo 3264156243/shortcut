@@ -19,6 +19,12 @@
       "to": "icon.ico"
     }
   ],
+  "publish": [
+    {
+      "provider": "generic",
+      "url": "https://shortcut.326415.xyz/updates/"
+    }
+  ],
   "win": {
     "target": [
       {

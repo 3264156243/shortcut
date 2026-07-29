@@ -3,6 +3,17 @@ export type Locale = 'zh-CN' | 'en';
 export type PanelAnimation = 'bottom' | 'top' | 'left' | 'right' | 'center';
 export type ModuleId = 'shortcuts' | 'tasks';
 
+export type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error' | 'unconfigured';
+
+export interface UpdateState {
+  status: UpdateStatus;
+  currentVersion: string;
+  version?: string;
+  progress?: number;
+  error?: string;
+  manual?: boolean;
+}
+
 export interface Shortcut {
   id: string;
   name: string;

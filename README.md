@@ -61,6 +61,35 @@ npm run electron:build
 npm run electron:build:dir
 ```
 
+## 自动更新发布
+
+正式安装版使用 `electron-updater` 检查更新。程序启动后会在后台检查新版本，下载完成后提示重启安装，用户配置保存在安装目录之外，不会因为覆盖安装丢失。
+
+更新文件目录：
+
+```text
+https://shortcut.326415.xyz/updates/
+├── latest.yml
+├── ShortCut-x.x.x-Setup.exe
+└── ShortCut-x.x.x-Setup.exe.blockmap
+```
+
+构建更新包：
+
+```powershell
+npm run electron:build
+```
+
+上传更新文件到服务器：
+
+```powershell
+npm run release:update
+```
+
+`release:update` 不保存服务器密码，会通过 Windows OpenSSH 交互式要求输入密码。正式启用前需要确保域名已解析到服务器并配置 HTTPS。已经发布的旧版本不包含更新器，用户需要先手动安装一次带更新器的新版。
+
+Nginx 模板位于 `deploy/nginx/shortcut.326415.xyz.conf`，服务器静态目录为 `/www/wwwroot/ShortCut`，项目介绍网站放在根目录，更新文件放在 `updates` 子目录。
+
 ## 项目结构
 
 ```text

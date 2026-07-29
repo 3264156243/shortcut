@@ -1,6 +1,6 @@
 ﻿import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import { AppConfig, DEFAULT_CONFIG, Tab, Group, Shortcut, Locale, PanelAnimation, ModuleId, TaskNote, TaskBoardConfig } from '../types';
+import { AppConfig, DEFAULT_CONFIG, Tab, Group, Shortcut, Locale, PanelAnimation, ModuleId, TaskNote, TaskBoardConfig, UpdateState } from '../types';
 import { t } from '../i18n';
 
 interface AppState {
@@ -109,6 +109,11 @@ declare global {
       getFileIcon: (filePath: string) => Promise<string | null>;
       getFileIcons: (filePaths: string[]) => Promise<Record<string, string | null>>;
       showNotification: (title: string, body: string) => Promise<boolean>;
+      checkForUpdates: () => Promise<{ success: boolean; status: string; error?: string }>;
+      getUpdateState: () => Promise<UpdateState>;
+      getAppVersion: () => Promise<string>;
+      installUpdate: () => Promise<boolean>;
+      onUpdateState: (callback: (state: UpdateState) => void) => () => void;
       getTheme: () => Promise<'dark' | 'light'>;
       closeWindow: () => Promise<void>;
       minimizeWindow: () => Promise<void>;
