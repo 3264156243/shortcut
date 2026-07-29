@@ -34,6 +34,10 @@ export interface Tab {
 export interface TaskNote {
   id: string;
   text: string;
+  longText?: boolean;
+  details?: string;
+  reminderAt?: string;
+  remindedAt?: string;
   done: boolean;
   x: number;
   y: number;

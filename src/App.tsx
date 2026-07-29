@@ -93,7 +93,7 @@ export default function App() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!(event.code === 'Space' || event.key === ' ') || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
       const state = useStore.getState();
-      const isModalOpen = state.showAddModal || state.showSettings || state.showImportSoftware;
+      const isModalOpen = state.showAddModal || state.showSettings || state.showImportSoftware || !!document.querySelector('[data-task-modal]');
       if (isEditableTarget(event.target) || isModalOpen) return;
 
       event.preventDefault();
@@ -123,21 +123,14 @@ export default function App() {
         return;
       }
 
-      const latestOnRelease = useStore.getState();
-      if (latestOnRelease.activeModule === 'tasks') {
-        const taskBoards = latestOnRelease.config.taskBoards || [];
-        if (taskBoards.length > 1) {
-          const currentIndex = Math.max(0, taskBoards.findIndex((board) => board.id === latestOnRelease.config.activeTaskBoardId));
-          latestOnRelease.setActiveTaskBoard(taskBoards[(currentIndex + 1) % taskBoards.length].id);
-        }
-        return;
-      }
-
       if (shortSpaceTimer.current) {
         window.clearTimeout(shortSpaceTimer.current);
         shortSpaceTimer.current = null;
-        if (useStore.getState().activeModule === 'shortcuts') {
+        const latest = useStore.getState();
+        if (latest.activeModule === 'shortcuts') {
           window.dispatchEvent(new Event('shortcut:focus-search'));
+        } else {
+          window.dispatchEvent(new Event('task:focus-input'));
         }
         return;
       }
@@ -149,6 +142,12 @@ export default function App() {
           if (tabs.length > 1) {
             const currentIndex = Math.max(0, tabs.findIndex((tab) => tab.id === latest.activeTabId));
             latest.setActiveTab(tabs[(currentIndex + 1) % tabs.length].id);
+          }
+        } else {
+          const taskBoards = latest.config.taskBoards || [];
+          if (taskBoards.length > 1) {
+            const currentIndex = Math.max(0, taskBoards.findIndex((board) => board.id === latest.config.activeTaskBoardId));
+            latest.setActiveTaskBoard(taskBoards[(currentIndex + 1) % taskBoards.length].id);
           }
         }
         shortSpaceTimer.current = null;
@@ -167,6 +166,35 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    let checking = false;
+
+    const checkReminders = async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const state = useStore.getState();
+        const now = Date.now();
+        for (const board of state.config.taskBoards || []) {
+          for (const task of board.notes || []) {
+            if (!task.reminderAt || task.remindedAt) continue;
+            const reminderTime = new Date(task.reminderAt).getTime();
+            if (!Number.isFinite(reminderTime) || reminderTime > now) continue;
+            const shown = await window.electronAPI?.showNotification('任务提醒', task.text);
+            if (shown) {
+              useStore.getState().markTaskReminded(board.id, task.id);
+            }
+          }
+        }
+      } finally {
+        checking = false;
+      }
+    };
+
+    void checkReminders();
+    const timer = window.setInterval(() => void checkReminders(), 15000);
+    return () => window.clearInterval(timer);
+  }, []);
   // Check initial maximized state
   useEffect(() => {
     if (api?.isMaximized) {

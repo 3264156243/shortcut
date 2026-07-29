@@ -35,7 +35,9 @@ interface AppState {
   renameTaskBoard: (boardId: string, name: string) => void;
   deleteTaskBoard: (boardId: string) => void;
   setActiveTaskBoard: (boardId: string) => void;
-  addTask: (text: string) => void;
+  addTask: (text: string, options?: { longText?: boolean; details?: string; reminderAt?: string }) => string | null;
+  updateTask: (taskId: string, updates: Partial<TaskNote>) => void;
+  markTaskReminded: (boardId: string, taskId: string) => void;
   toggleTask: (taskId: string) => void;
   deleteTask: (taskId: string) => void;
   moveTask: (taskId: string, x: number, y: number) => void;
@@ -106,6 +108,7 @@ declare global {
       getFileInfo: (filePath: string) => Promise<{ name: string; path: string; type: 'app' | 'folder' | 'file' } | null>;
       getFileIcon: (filePath: string) => Promise<string | null>;
       getFileIcons: (filePaths: string[]) => Promise<Record<string, string | null>>;
+      showNotification: (title: string, body: string) => Promise<boolean>;
       getTheme: () => Promise<'dark' | 'light'>;
       closeWindow: () => Promise<void>;
       minimizeWindow: () => Promise<void>;
@@ -354,16 +357,20 @@ export const useStore = create<AppState>((set, get) => ({
     get().saveConfig();
   },
 
-  addTask: (text) => {
+  addTask: (text, options) => {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed) return null;
     const now = new Date().toISOString();
+    const taskId = uuidv4();
     const tapes = ['#c0392b', '#e67e22', '#f39c12', '#27ae60', '#2980b9', '#8e44ad', '#e84393'];
     set((state) => ({
       config: updateActiveTaskBoard(state.config, (board) => {
         const task: TaskNote = {
-          id: uuidv4(),
+          id: taskId,
           text: trimmed,
+          longText: options?.longText || undefined,
+          details: options?.longText ? (options.details?.trim() || '') : undefined,
+          reminderAt: options?.reminderAt || undefined,
           done: false,
           x: 4 + Math.random() * 58,
           y: 5 + Math.random() * 52,
@@ -377,8 +384,36 @@ export const useStore = create<AppState>((set, get) => ({
       }),
     }));
     get().saveConfig();
+    return taskId;
   },
 
+  updateTask: (taskId, updates) => {
+    const now = new Date().toISOString();
+    set((state) => ({
+      config: updateActiveTaskBoard(state.config, (board) => ({
+        ...board,
+        notes: board.notes.map((task) => task.id === taskId ? { ...task, ...updates, updatedAt: now } : task),
+        updatedAt: now,
+      })),
+    }));
+    get().saveConfig();
+  },
+
+  markTaskReminded: (boardId, taskId) => {
+    const now = new Date().toISOString();
+    set((state) => ({
+      config: {
+        ...state.config,
+        taskBoards: state.config.taskBoards.map((board) => board.id === boardId ? {
+          ...board,
+          notes: board.notes.map((task) => task.id === taskId ? { ...task, remindedAt: now, updatedAt: now } : task),
+          updatedAt: now,
+        } : board),
+        tasks: [],
+      },
+    }));
+    get().saveConfig();
+  },
   toggleTask: (taskId) => {
     const now = new Date().toISOString();
     set((state) => ({

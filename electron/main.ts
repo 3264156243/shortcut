@@ -9,6 +9,7 @@ const nativeImage = electron.nativeImage;
 const shell = electron.shell;
 const dialog = electron.dialog;
 const nativeTheme = electron.nativeTheme;
+const ElectronNotification = electron.Notification;
 const path = require('path');
 const fs = require('fs');
 
@@ -143,6 +144,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false,
     },
   });
 
@@ -265,6 +267,26 @@ ipcMain.handle('shell:showInFolder', async (_e: any, targetPath: string) => {
   }
 });
 
+ipcMain.handle('notification:show', (_e: any, title: string, body: string) => {
+  try {
+    if (!ElectronNotification.isSupported()) return false;
+    const notification = new ElectronNotification({
+      title,
+      body,
+      icon: getAppIconPath(false),
+    });
+    notification.on('click', () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
+    notification.show();
+    return true;
+  } catch {
+    return false;
+  }
+});
 ipcMain.handle('dialog:openFile', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openFile'],
