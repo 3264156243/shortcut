@@ -1,4 +1,4 @@
-﻿param(
+param(
   [string]$ServerHost = '43.108.21.35',
   [int]$Port = 22,
   [string]$User = 'root',
@@ -20,9 +20,9 @@ if (-not $SkipBuild) {
 $package = Get-Content -LiteralPath 'package.json' -Encoding UTF8 | ConvertFrom-Json
 $setupName = $package.productName + '-' + $package.version + '-Setup.exe'
 $artifacts = @(
-  (Join-Path $projectRoot 'release/latest.yml'),
   (Join-Path $projectRoot ('release/' + $setupName)),
-  (Join-Path $projectRoot ('release/' + $setupName + '.blockmap'))
+  (Join-Path $projectRoot ('release/' + $setupName + '.blockmap')),
+  (Join-Path $projectRoot 'release/latest.yml')
 )
 
 foreach ($artifact in $artifacts) {
