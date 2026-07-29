@@ -2,7 +2,7 @@ import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
 import { PanelAnimation } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Moon, Sun, Monitor, Download, Upload, Keyboard, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Maximize, Power } from 'lucide-react';
+import { X, Moon, Sun, Monitor, Download, Upload, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Maximize, Power } from 'lucide-react';
 
 export default function SettingsPanel() {
   const closeSettings = useStore((s) => s.closeSettings);
@@ -104,17 +104,6 @@ export default function SettingsPanel() {
                     <Icon size={14} /> {t(labelKey)}
                   </button>
                 ))}
-              </div>
-            </div>
-
-            {/* Hotkey */}
-            <div style={sectionStyle}>
-              <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--color-text)' }}>{t('settings.hotkey')}</h3>
-              <div className="flex items-center gap-2">
-                <Keyboard size={16} style={{ color: 'var(--color-text-muted)' }} />
-                <span className="text-sm px-3 py-1 rounded-lg font-mono" style={{ background: 'var(--color-bg-card-hover)', color: 'var(--color-accent)' }}>
-                  {config.globalHotkey}
-                </span>
               </div>
             </div>
 

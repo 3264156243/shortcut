@@ -2,6 +2,7 @@
 import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
 import { Shortcut, Tab, Group } from '../types';
+import { executeShortcut } from '../utils/openShortcut';
 import GroupSection from './GroupSection';
 import EmptyState from './EmptyState';
 import { Plus, AppWindow, Folder, File, Globe, ChevronDown, ChevronRight } from 'lucide-react';
@@ -209,34 +210,18 @@ export default function PanelBody() {
   }, [activeTab, searchQuery, searchResults]);
 
   const openShortcut = useCallback(async (shortcut: Shortcut) => {
-    if (shortcut.missing) {
+    if (shortcut.missing && shortcut.type !== 'group' && shortcut.type !== 'bat') {
       addToast(`${t('shortcut.missing')}: ${shortcut.targetPath}`, 'error');
       return;
     }
-
-    const api = window.electronAPI;
-    if (!api) {
-      if (shortcut.type === 'url') {
-        window.open(shortcut.targetPath, '_blank');
-      }
-      return;
-    }
-
     try {
-      const result = shortcut.type === 'url'
-        ? await api.openExternal(shortcut.targetPath)
-        : await api.openTarget(shortcut.targetPath);
-
-      if (result.success) {
-        addToast(t('shortcut.opened', { name: shortcut.name }), 'success');
-      } else {
-        addToast(t('shortcut.openFailed', { error: result.error || '' }), 'error');
-      }
+      const result = await executeShortcut(shortcut);
+      if (result.success) addToast(t('shortcut.opened', { name: shortcut.name }), 'success');
+      else addToast(t('shortcut.openFailed', { error: result.error || '' }), 'error');
     } catch (err: any) {
       addToast(t('shortcut.openFailed', { error: err.message }), 'error');
     }
   }, [addToast, t]);
-
   const moveSelection = useCallback((direction: 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight') => {
     const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-card="true"]'));
     if (cards.length === 0) return;

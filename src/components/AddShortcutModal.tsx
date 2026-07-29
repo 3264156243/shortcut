@@ -1,333 +1,94 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { AppWindow, File, Folder, Globe, ImagePlus, Layers3, Plus, ShieldCheck, SquareTerminal, Trash2, X } from 'lucide-react';
 import { useStore } from '../store';
-import { useTranslation } from '../hooks/useTranslation';
-import { ShortcutType } from '../types';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, AppWindow, Folder, File, Globe, FolderOpen, ImagePlus } from 'lucide-react';
+import { ShortcutTarget, ShortcutTargetType, ShortcutType } from '../types';
 
-const SHORTCUT_TYPES: { type: ShortcutType; labelKey: string; icon: typeof AppWindow }[] = [
-  { type: 'app', labelKey: 'modal.type.app', icon: AppWindow },
-  { type: 'folder', labelKey: 'modal.type.folder', icon: Folder },
-  { type: 'file', labelKey: 'modal.type.file', icon: File },
-  { type: 'url', labelKey: 'modal.type.url', icon: Globe },
+const types: Array<{ type: ShortcutType; label: string; icon: typeof AppWindow }> = [
+  { type: 'app', label: '程序', icon: AppWindow }, { type: 'folder', label: '文件夹', icon: Folder },
+  { type: 'file', label: '文件', icon: File }, { type: 'url', label: '网页', icon: Globe },
+  { type: 'group', label: '快捷方式组', icon: Layers3 }, { type: 'bat', label: 'BAT 文件', icon: SquareTerminal },
 ];
+const targetTypes: Array<{ type: ShortcutTargetType; label: string }> = [
+  { type: 'app', label: '程序' }, { type: 'folder', label: '文件夹' }, { type: 'file', label: '文件' }, { type: 'url', label: '网页' },
+];
+const hasScheme = (value: string) => /^https?:\/\//i.test(value.trim());
+const normalizeUrl = (value: string) => hasScheme(value) ? value.trim() : `https://${value.trim()}`;
+const looksLikeUrl = (value: string) => hasScheme(value) || /^(localhost|[\w-]+(\.[\w-]+)+)(:\d+)?([/?#].*)?$/i.test(value.trim());
+const newTarget = (): ShortcutTarget => ({ id: crypto.randomUUID(), name: '', type: 'app', targetPath: '' });
 
-const hasUrlScheme = (value: string) => /^https?:\/\//i.test(value.trim());
-
-const looksLikeWebUrl = (value: string) => {
-  const trimmed = value.trim();
-  if (!trimmed || /\s/.test(trimmed) || /^[a-zA-Z]:[\\/]/.test(trimmed)) return false;
-  return hasUrlScheme(trimmed) || /^(localhost|[\w-]+(\.[\w-]+)+)(:\d+)?([/?#].*)?$/i.test(trimmed);
-};
-
-const normalizeUrl = (value: string) => {
-  const trimmed = value.trim();
-  return hasUrlScheme(trimmed) ? trimmed : `https://${trimmed}`;
-};
 export default function AddShortcutModal() {
-  const closeAddModal = useStore((s) => s.closeAddModal);
-  const addShortcut = useStore((s) => s.addShortcut);
-  const updateShortcut = useStore((s) => s.updateShortcut);
-  const editingShortcut = useStore((s) => s.editingShortcut);
-  const editingGroupId = useStore((s) => s.editingGroupId);
-  const activeTabId = useStore((s) => s.activeTabId);
-  const addToast = useStore((s) => s.addToast);
-  const { t } = useTranslation();
-
-  const isEditing = !!editingShortcut;
-
-  const [type, setType] = useState<ShortcutType>(editingShortcut?.type || 'app');
-  const [name, setName] = useState(editingShortcut?.name || '');
-  const [targetPath, setTargetPath] = useState(editingShortcut?.targetPath || '');
-  const [remark, setRemark] = useState(editingShortcut?.remark || '');
-  const [icon, setIcon] = useState(editingShortcut?.icon || '');
-  const [iconManuallySet, setIconManuallySet] = useState(!!editingShortcut?.icon);
+  const close = useStore((state) => state.closeAddModal);
+  const addShortcut = useStore((state) => state.addShortcut);
+  const updateShortcut = useStore((state) => state.updateShortcut);
+  const editing = useStore((state) => state.editingShortcut);
+  const groupId = useStore((state) => state.editingGroupId) || '';
+  const tabId = useStore((state) => state.activeTabId);
+  const addToast = useStore((state) => state.addToast);
+  const [type, setType] = useState<ShortcutType>(editing?.type || 'app');
+  const [name, setName] = useState(editing?.name || '');
+  const [targetPath, setTargetPath] = useState(editing?.targetPath || '');
+  const [remark, setRemark] = useState(editing?.remark || '');
+  const [icon, setIcon] = useState(editing?.icon || '');
+  const [manualIcon, setManualIcon] = useState(!!editing?.icon);
+  const [targets, setTargets] = useState<ShortcutTarget[]>(editing?.targets?.length ? editing.targets : [newTarget()]);
+  const [batContent, setBatContent] = useState(editing?.batContent || '');
+  const [runAsAdmin, setRunAsAdmin] = useState(!!editing?.runAsAdmin);
 
   useEffect(() => {
-    // Auto-detect type from pasted URL
-    if (looksLikeWebUrl(targetPath)) {
-      const normalizedTarget = normalizeUrl(targetPath);
-      setType('url');
-      if (!name) {
-        try {
-          setName(new URL(normalizedTarget).hostname);
-        } catch {}
-      }
-    }
-  }, [targetPath]);
-  useEffect(() => {
-    if (!targetPath.trim() || iconManuallySet) return;
-
+    if (manualIcon || !targetPath.trim() || type === 'group' || type === 'bat') return;
     if (type === 'url') {
-      const normalizedUrl = normalizeUrl(targetPath);
-      const timer = window.setTimeout(() => {
-        window.electronAPI?.getWebsiteIcon(normalizedUrl).then((iconDataUrl) => {
-          if (iconDataUrl) setIcon(iconDataUrl);
-        }).catch(() => undefined);
-      }, 350);
+      const timer = window.setTimeout(() => window.electronAPI?.getWebsiteIcon(normalizeUrl(targetPath)).then((value) => value && setIcon(value)).catch(() => undefined), 350);
       return () => window.clearTimeout(timer);
     }
+    window.electronAPI?.getFileIcon(targetPath.trim()).then((value) => value && setIcon(value)).catch(() => undefined);
+  }, [manualIcon, targetPath, type]);
 
-    const api = window.electronAPI;
-    if (api?.getFileIcon) {
-      api.getFileIcon(targetPath.trim()).then((iconDataUrl) => {
-        if (iconDataUrl) setIcon(iconDataUrl);
-      }).catch(() => {
-        // The card type icon remains as fallback.
-      });
-    }
-  }, [iconManuallySet, targetPath, type]);
-
-  const handleChooseIcon = async () => {
-    const api = window.electronAPI;
-    if (!api?.openIconFile) return;
-    const iconDataUrl = await api.openIconFile();
-    if (iconDataUrl) {
-      setIcon(iconDataUrl);
-      setIconManuallySet(true);
-    }
+  const browse = async (targetType: ShortcutTargetType = type as ShortcutTargetType, targetId?: string) => {
+    if (targetType === 'url') return;
+    const path = targetType === 'folder' ? await window.electronAPI?.openFolder() : await window.electronAPI?.openFile();
+    if (!path) return;
+    if (targetId) setTargets((items) => items.map((item) => item.id === targetId ? { ...item, targetPath: path, name: item.name || path.split(/[\\/]/).pop() || '' } : item));
+    else { setTargetPath(path); setName((current) => current || path.split(/[\\/]/).pop() || ''); setManualIcon(false); }
   };
+  const chooseIcon = async () => { const value = await window.electronAPI?.openIconFile(); if (value) { setIcon(value); setManualIcon(true); } };
+  const updateTarget = (id: string, updates: Partial<ShortcutTarget>) => setTargets((items) => items.map((item) => item.id === id ? { ...item, ...updates } : item));
 
-  const handleClearIcon = () => {
-    setIcon('');
-    setIconManuallySet(false);
-  };
-
-  const handleBrowse = async () => {
-    const api = window.electronAPI;
-    if (!api) return;
-    const path = type === 'folder' ? await api.openFolder() : await api.openFile();
-    if (path) {
-      setTargetPath(path);
-      if (!name) {
-        const parts = path.split(/[\\/]/);
-        setName(parts[parts.length - 1] || '');
-      }
-      setIconManuallySet(false);
-    }
-  };
-
-  const handleSubmit = () => {
-    if (!name.trim() || !targetPath.trim()) {
-      addToast(t('modal.error.nameRequired'), 'error');
-      return;
-    }
-
-    const groupId = editingGroupId || '';
-    if (!groupId) {
-      addToast(t('modal.error.noGroup'), 'error');
-      return;
-    }
-
-    const trimmedTarget = targetPath.trim();
-    const finalType: ShortcutType = type === 'url' || looksLikeWebUrl(trimmedTarget) ? 'url' : type;
-    const finalTarget = finalType === 'url' ? normalizeUrl(trimmedTarget) : trimmedTarget;
-
-    if (isEditing && editingShortcut) {
-      updateShortcut(activeTabId, groupId, editingShortcut.id, {
-        name: name.trim(),
-        type: finalType,
-        targetPath: finalTarget,
-        remark: remark.trim() || undefined,
-        icon: icon || undefined,
-      });
-      addToast(t('modal.updated'), 'success');
+  const submit = () => {
+    const title = name.trim();
+    if (!title || !groupId) { addToast('请填写名称', 'error'); return; }
+    let finalType = type;
+    let finalPath = targetPath.trim();
+    let finalTargets: ShortcutTarget[] | undefined;
+    if (type === 'group') {
+      finalTargets = targets.map((item) => ({ ...item, name: item.name.trim() || item.targetPath.trim(), targetPath: item.type === 'url' ? normalizeUrl(item.targetPath) : item.targetPath.trim() })).filter((item) => item.targetPath);
+      if (!finalTargets.length) { addToast('请至少添加一个有效目标', 'error'); return; }
+      finalPath = '快捷方式组';
+    } else if (type === 'bat') {
+      if (!batContent.trim()) { addToast('请填写 BAT 内容', 'error'); return; }
+      finalPath = 'BAT 脚本';
     } else {
-      addShortcut(activeTabId, groupId, {
-        name: name.trim(),
-        type: finalType,
-        targetPath: finalTarget,
-        remark: remark.trim() || undefined,
-        icon: icon || undefined,
-      });
-      addToast(t('modal.added'), 'success');
+      if (!finalPath) { addToast('请填写目标路径或网址', 'error'); return; }
+      if (type === 'url' || looksLikeUrl(finalPath)) { finalType = 'url'; finalPath = normalizeUrl(finalPath); }
     }
-    closeAddModal();
+    const data = { name: title, type: finalType, targetPath: finalPath, targets: finalTargets, batContent: type === 'bat' ? batContent : undefined, runAsAdmin: type === 'bat' ? runAsAdmin : undefined, remark: remark.trim() || undefined, icon: icon || undefined };
+    if (editing) updateShortcut(tabId, groupId, editing.id, data); else addShortcut(tabId, groupId, data);
+    addToast(editing ? '快捷方式已更新' : '快捷方式已添加', 'success'); close();
   };
+  const inputClass = 'w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]';
+  const inputStyle = { background: 'var(--color-bg-card)', borderColor: 'var(--color-border)', color: 'var(--color-text)' };
 
-  const inputStyle: React.CSSProperties = {
-    background: 'var(--color-bg-card)',
-    border: '1px solid var(--color-border)',
-    borderRadius: 'var(--radius-sm)',
-    color: 'var(--color-text)',
-    padding: '8px 12px',
-    fontSize: '14px',
-    outline: 'none',
-    width: '100%',
-  };
-
-  return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center"
-        style={{ background: 'var(--color-overlay)' }}
-        onClick={closeAddModal}
-      >
-        <motion.div
-          initial={{ scale: 0.95, opacity: 0, y: 10 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.95, opacity: 0, y: 10 }}
-          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="w-full max-w-md p-6 rounded-2xl"
-          style={{
-            background: 'var(--color-bg-secondary)',
-            border: '1px solid var(--color-border)',
-            boxShadow: '0 20px 60px var(--color-shadow)',
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>
-              {isEditing ? t('modal.edit.title') : t('modal.add.title')}
-            </h2>
-            <button
-              onClick={closeAddModal}
-              className="p-1.5 rounded-lg hover:opacity-80 transition-opacity"
-              style={{ color: 'var(--color-text-muted)' }}
-            >
-              <X size={18} />
-            </button>
-          </div>
-
-          {/* Type selector */}
-          <div className="flex gap-2 mb-4">
-            {SHORTCUT_TYPES.map(({ type: t_type, labelKey, icon: Icon }) => (
-              <button
-                key={t_type}
-                onClick={() => setType(t_type)}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all duration-150"
-                style={{
-                  background: type === t_type ? 'var(--color-accent)' : 'var(--color-bg-card)',
-                  border: `1px solid ${type === t_type ? 'var(--color-accent)' : 'var(--color-border)'}`,
-                  color: type === t_type ? 'white' : 'var(--color-text-secondary)',
-                }}
-              >
-                <Icon size={14} />
-                {t(labelKey)}
-              </button>
-            ))}
-          </div>
-
-          {/* Name */}
-          <div className="mb-3">
-            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>{t('modal.name')}</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={t('modal.namePlaceholder')}
-              style={inputStyle}
-              autoFocus
-            />
-          </div>
-
-          {/* Target path */}
-          <div className="mb-3">
-            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-              {type === 'url' ? t('modal.url') : t('modal.path')}
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={targetPath}
-                onChange={(e) => setTargetPath(e.target.value)}
-                onBlur={() => {
-                  const trimmed = targetPath.trim();
-                  if (trimmed && (type === 'url' || looksLikeWebUrl(trimmed))) {
-                    setTargetPath(normalizeUrl(trimmed));
-                  }
-                }}
-                placeholder={type === 'url' ? t('modal.urlPlaceholder') : t('modal.pathPlaceholder')}
-                style={{ ...inputStyle, flex: 1 }}
-              />
-              {type !== 'url' && (
-                <button
-                  onClick={handleBrowse}
-                  className="px-3 rounded-lg shrink-0 flex items-center gap-1.5 text-xs"
-                  style={{
-                    background: 'var(--color-bg-card)',
-                    border: '1px solid var(--color-border)',
-                    color: 'var(--color-text-secondary)',
-                  }}
-                >
-                  <FolderOpen size={14} /> {t('modal.browse')}
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Icon */}
-          <div className="mb-3">
-            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>{t('modal.icon')}</label>
-            <div className="flex items-center gap-2">
-              <div
-                className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 overflow-hidden"
-                style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
-              >
-                {icon ? <img src={icon} alt="" className="w-7 h-7 object-contain" /> : <ImagePlus size={18} style={{ color: 'var(--color-text-muted)' }} />}
-              </div>
-              <button
-                onClick={handleChooseIcon}
-                className="px-3 py-2 rounded-lg shrink-0 flex items-center gap-1.5 text-xs"
-                style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
-              >
-                <ImagePlus size={14} /> {t('modal.iconChoose')}
-              </button>
-              {icon && (
-                <button
-                  onClick={handleClearIcon}
-                  className="px-3 py-2 rounded-lg shrink-0 text-xs"
-                  style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}
-                >
-                  {t('modal.iconAuto')}
-                </button>
-              )}
-            </div>
-          </div>
-          {/* Remark */}
-          <div className="mb-4">
-            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>{t('modal.remark')}</label>
-            <textarea
-              value={remark}
-              onChange={(e) => setRemark(e.target.value)}
-              placeholder={t('modal.remarkPlaceholder')}
-              rows={2}
-              style={{ ...inputStyle, resize: 'vertical' }}
-            />
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-2">
-            <button
-              onClick={closeAddModal}
-              className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 hover:opacity-80"
-              style={{
-                background: 'var(--color-bg-card)',
-                border: '1px solid var(--color-border)',
-                color: 'var(--color-text-secondary)',
-              }}
-            >
-              {t('modal.cancel')}
-            </button>
-            <button
-              onClick={handleSubmit}
-              className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-[0.98]"
-              style={{
-                background: 'var(--color-accent)',
-                color: 'white',
-                boxShadow: '0 2px 8px var(--color-accent-glow)',
-              }}
-            >
-              {isEditing ? t('modal.save') : t('modal.add')}
-            </button>
-          </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
-  );
+  return <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ background: 'var(--color-overlay)' }} onClick={close}>
+    <motion.section initial={{ opacity: 0, scale: .96 }} animate={{ opacity: 1, scale: 1 }} className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', boxShadow: '0 24px 70px var(--color-shadow)' }} onClick={(event) => event.stopPropagation()}>
+      <header className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: 'var(--color-border)' }}><h2 className="text-base font-semibold" style={{ color: 'var(--color-text)' }}>{editing ? '编辑快捷方式' : '新增快捷方式'}</h2><button onClick={close} className="flex h-8 w-8 items-center justify-center rounded-md"><X size={18} /></button></header>
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+        <div><label className="mb-2 block text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>类型</label><div className="grid grid-cols-3 gap-2">{types.map(({ type: value, label, icon: Icon }) => <button key={value} onClick={() => setType(value)} className="flex h-10 items-center justify-center gap-2 rounded-md text-sm" style={{ background: type === value ? 'var(--color-accent)' : 'var(--color-bg-card)', border: `1px solid ${type === value ? 'var(--color-accent)' : 'var(--color-border)'}`, color: type === value ? 'white' : 'var(--color-text-secondary)' }}><Icon size={15} />{label}</button>)}</div></div>
+        <label className="block"><span className="mb-2 block text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>名称</span><input value={name} onChange={(event) => setName(event.target.value)} className={inputClass} style={inputStyle} placeholder={type === 'group' ? '例如：开始工作' : type === 'bat' ? '例如：清理缓存' : '快捷方式名称'} /></label>
+        {type === 'group' ? <div><div className="mb-2 flex items-center justify-between"><span className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>组内目标</span><button onClick={() => setTargets((items) => [...items, newTarget()])} className="flex items-center gap-1 rounded-md px-2 py-1 text-xs" style={{ color: 'var(--color-accent)' }}><Plus size={13} />添加</button></div><div className="space-y-2">{targets.map((item) => <div key={item.id} className="grid grid-cols-[90px_1fr_34px_34px] gap-2 rounded-md p-2" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}><select value={item.type} onChange={(event) => updateTarget(item.id, { type: event.target.value as ShortcutTargetType })} className="rounded-md border px-2 text-xs outline-none" style={inputStyle}>{targetTypes.map((entry) => <option key={entry.type} value={entry.type}>{entry.label}</option>)}</select><input value={item.targetPath} onChange={(event) => updateTarget(item.id, { targetPath: event.target.value })} className={inputClass} style={inputStyle} placeholder={item.type === 'url' ? '网址' : '目标路径'} />{item.type !== 'url' ? <button onClick={() => void browse(item.type, item.id)} className="flex items-center justify-center rounded-md" title="浏览"><Folder size={15} /></button> : <span /> }<button onClick={() => setTargets((items) => items.filter((target) => target.id !== item.id))} className="flex items-center justify-center rounded-md" style={{ color: 'var(--color-danger)' }} title="移除"><Trash2 size={15} /></button></div>)}</div></div> : type === 'bat' ? <div className="space-y-3"><label className="block"><span className="mb-2 block text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>BAT 内容</span><textarea value={batContent} onChange={(event) => setBatContent(event.target.value)} rows={10} spellCheck={false} className={`${inputClass} resize-y font-mono leading-6`} style={inputStyle} placeholder={'例如：\necho Hello\npause'} /></label><label className="flex cursor-pointer items-center justify-between rounded-md p-3" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}><span className="flex items-center gap-2 text-sm" style={{ color: 'var(--color-text)' }}><ShieldCheck size={17} />一键管理员运行</span><input type="checkbox" checked={runAsAdmin} onChange={(event) => setRunAsAdmin(event.target.checked)} className="h-4 w-4 accent-[var(--color-accent)]" /></label></div> : <label className="block"><span className="mb-2 block text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>{type === 'url' ? '网址' : '目标路径'}</span><div className="flex gap-2"><input value={targetPath} onChange={(event) => setTargetPath(event.target.value)} onBlur={() => { if (type === 'url' && targetPath.trim()) setTargetPath(normalizeUrl(targetPath)); }} className={inputClass} style={inputStyle} placeholder={type === 'url' ? 'example.com' : '选择或输入路径'} />{type !== 'url' && <button onClick={() => void browse()} className="shrink-0 rounded-md px-3 text-sm" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>浏览</button>}</div></label>}
+        <div><span className="mb-2 block text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>图标</span><div className="flex items-center gap-2"><div className="flex h-10 w-10 items-center justify-center rounded-md" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>{icon ? <img src={icon} alt="" className="h-7 w-7 object-contain" /> : <ImagePlus size={18} />}</div><button onClick={() => void chooseIcon()} className="rounded-md px-3 py-2 text-xs" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>选择图标</button>{icon && <button onClick={() => { setIcon(''); setManualIcon(false); }} className="text-xs" style={{ color: 'var(--color-accent)' }}>恢复自动</button>}</div></div>
+        <label className="block"><span className="mb-2 block text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>备注</span><input value={remark} onChange={(event) => setRemark(event.target.value)} className={inputClass} style={inputStyle} placeholder="可选" /></label>
+      </div>
+      <footer className="flex justify-end gap-2 border-t px-5 py-4" style={{ borderColor: 'var(--color-border)' }}><button onClick={close} className="rounded-md px-4 py-2 text-sm" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>取消</button><button onClick={submit} className="rounded-md px-5 py-2 text-sm text-white" style={{ background: 'var(--color-accent)' }}>{editing ? '保存修改' : '添加'}</button></footer>
+    </motion.section>
+  </div>;
 }
-

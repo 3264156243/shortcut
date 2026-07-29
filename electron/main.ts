@@ -13,6 +13,7 @@ const ElectronNotification = electron.Notification;
 const autoUpdater = require('electron-updater').autoUpdater;
 const path = require('path');
 const fs = require('fs');
+const childProcess = require('child_process');
 const net = electron.net;
 
 const APP_USER_MODEL_ID = 'com.wanan.shortcut';
@@ -450,6 +451,30 @@ ipcMain.handle('shell:openExternal', async (_e: any, url: string) => {
 
 ipcMain.handle('web:getIcon', (_e: any, url: string) => getWebsiteIcon(url));
 
+ipcMain.handle('shell:runBat', async (_e: any, content: string, runAsAdmin: boolean) => {
+  try {
+    if (!content.trim()) return { success: false, error: 'BAT content is empty' };
+    const batDirectory = path.join(app.getPath('userData'), 'bat');
+    fs.mkdirSync(batDirectory, { recursive: true });
+    const batPath = path.join(batDirectory, `shortcut-${Date.now()}.bat`);
+    fs.writeFileSync(batPath, `\uFEFF@echo off\r\n@chcp 65001 >nul\r\n${content}\r\n`, 'utf8');
+    if (runAsAdmin) {
+      const escapedPath = batPath.replace(/'/g, "''");
+      childProcess.spawn('powershell.exe', [
+        '-NoProfile',
+        '-WindowStyle', 'Hidden',
+        '-Command',
+        `Start-Process -FilePath 'cmd.exe' -ArgumentList '/c','"${escapedPath}"' -Verb RunAs`,
+      ], { detached: true, windowsHide: true, stdio: 'ignore' }).unref();
+    } else {
+      childProcess.spawn('cmd.exe', ['/c', batPath], { detached: true, windowsHide: false, stdio: 'ignore' }).unref();
+    }
+    setTimeout(() => fs.rm(batPath, { force: true }, () => undefined), 60000);
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+});
 ipcMain.handle('shell:showInFolder', async (_e: any, targetPath: string) => {
   try {
     shell.showItemInFolder(targetPath);

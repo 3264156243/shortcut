@@ -2,6 +2,7 @@
 import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
 import { Shortcut, ShortcutType } from '../types';
+import { executeShortcut } from '../utils/openShortcut';
 import { motion } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import { useSortable } from '@dnd-kit/sortable';
@@ -9,7 +10,7 @@ import { CSS } from '@dnd-kit/utilities';
 import {
   AppWindow, Folder, File, Globe, Pencil, Trash2,
   Copy, MoreVertical, AlertTriangle, GripVertical,
-  FolderOpen
+  FolderOpen, Layers3, SquareTerminal
 } from 'lucide-react';
 
 interface Props {
@@ -26,6 +27,8 @@ const TYPE_ICONS: Record<ShortcutType, typeof AppWindow> = {
   folder: Folder,
   file: File,
   url: Globe,
+  group: Layers3,
+  bat: SquareTerminal,
 };
 
 const TYPE_COLORS: Record<ShortcutType, string> = {
@@ -33,6 +36,8 @@ const TYPE_COLORS: Record<ShortcutType, string> = {
   folder: '#f59e0b',
   file: '#22c55e',
   url: '#3b82f6',
+  group: '#a855f7',
+  bat: '#64748b',
 };
 
 // Cache for file icons
@@ -92,7 +97,7 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
   }, [shortcut.icon, shortcut.targetPath, shortcut.type]);
 
   useEffect(() => {
-    if (shortcut.type === 'url' || looksLikeWebUrl(shortcut.targetPath) || shortcut.icon || !shortcut.targetPath) return;
+    if (shortcut.type === 'url' || shortcut.type === 'group' || shortcut.type === 'bat' || looksLikeWebUrl(shortcut.targetPath) || shortcut.icon || !shortcut.targetPath) return;
 
     const cached = iconCache.get(shortcut.targetPath);
     if (cached) {
@@ -144,38 +149,18 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
   const iconColor = shortcut.missing ? 'var(--color-danger)' : TYPE_COLORS[shortcut.type];
 
   const handleOpen = async () => {
-    const shouldOpenAsUrl = shortcut.type === 'url' || looksLikeWebUrl(shortcut.targetPath);
-    const openTarget = shouldOpenAsUrl ? normalizeUrl(shortcut.targetPath) : shortcut.targetPath;
-
-    if (shortcut.missing && !shouldOpenAsUrl) {
+    if (shortcut.missing && shortcut.type !== 'group' && shortcut.type !== 'bat') {
       addToast(`${t('shortcut.missing')}: ${shortcut.targetPath}`, 'error');
       return;
     }
-
-    const api = window.electronAPI;
-    if (!api) {
-      // Browser fallback
-      if (shouldOpenAsUrl) {
-        window.open(openTarget, '_blank');
-      }
-      return;
-    }
-
     try {
-      const result = shouldOpenAsUrl
-        ? await api.openExternal(openTarget)
-        : await api.openTarget(openTarget);
-
-      if (result.success) {
-        addToast(t('shortcut.opened', { name: shortcut.name }), 'success');
-      } else {
-        addToast(t('shortcut.openFailed', { error: result.error || '' }), 'error');
-      }
+      const result = await executeShortcut(shortcut);
+      if (result.success) addToast(t('shortcut.opened', { name: shortcut.name }), 'success');
+      else addToast(t('shortcut.openFailed', { error: result.error || '' }), 'error');
     } catch (err: any) {
       addToast(t('shortcut.openFailed', { error: err.message }), 'error');
     }
   };
-
   const handleCopyPath = () => {
     navigator.clipboard.writeText(shortcut.targetPath);
     addToast(t('shortcut.pathCopied'), 'info');
@@ -344,6 +329,7 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
             >
               <Pencil size={12} /> {t('shortcut.edit')}
             </button>
+            {shortcut.type !== 'group' && shortcut.type !== 'bat' && (
             <button
               onClick={handleCopyPath}
               className="flex items-center gap-2 w-full px-3 py-1.5 text-xs hover:opacity-80 transition-opacity"
@@ -351,7 +337,8 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
             >
               <Copy size={12} /> {t('shortcut.copyPath')}
             </button>
-            {shortcut.type !== 'url' && (
+            )}
+            {shortcut.type !== 'url' && shortcut.type !== 'group' && shortcut.type !== 'bat' && (
               <button
                 onClick={handleShowInFolder}
                 className="flex items-center gap-2 w-full px-3 py-1.5 text-xs hover:opacity-80 transition-opacity"

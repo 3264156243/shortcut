@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Shell
   openTarget: (targetPath: string) => ipcRenderer.invoke('shell:open', targetPath),
   openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
+  runBat: (content: string, runAsAdmin: boolean) => ipcRenderer.invoke('shell:runBat', content, runAsAdmin),
   showInFolder: (targetPath: string) => ipcRenderer.invoke('shell:showInFolder', targetPath),
 
   // Dialogs

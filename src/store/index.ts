@@ -92,6 +92,7 @@ declare global {
       writeConfig: (data: string) => Promise<void>;
       openTarget: (path: string) => Promise<{ success: boolean; error?: string }>;
       openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
+      runBat: (content: string, runAsAdmin: boolean) => Promise<{ success: boolean; error?: string }>;
       showInFolder: (path: string) => Promise<{ success: boolean; error?: string }>;
       openFile: () => Promise<string | null>;
       openFolder: () => Promise<string | null>;

@@ -1,4 +1,12 @@
-﻿export type ShortcutType = 'app' | 'folder' | 'file' | 'url';
+﻿export type ShortcutType = 'app' | 'folder' | 'file' | 'url' | 'group' | 'bat';
+export type ShortcutTargetType = 'app' | 'folder' | 'file' | 'url';
+
+export interface ShortcutTarget {
+  id: string;
+  name: string;
+  type: ShortcutTargetType;
+  targetPath: string;
+}
 export type Locale = 'zh-CN';
 export type PanelAnimation = 'bottom' | 'top' | 'left' | 'right' | 'center';
 export type ModuleId = 'shortcuts' | 'tasks';
@@ -20,6 +28,9 @@ export interface Shortcut {
   name: string;
   type: ShortcutType;
   targetPath: string;
+  targets?: ShortcutTarget[];
+  batContent?: string;
+  runAsAdmin?: boolean;
   icon?: string;
   remark?: string;
   createdAt: string;

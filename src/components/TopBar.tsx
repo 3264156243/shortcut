@@ -1,7 +1,7 @@
 ﻿import { useState, useRef, useEffect, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
-import { Search, Plus, Settings, X, Download, History, Trash2 } from 'lucide-react';
+import { Search, Plus, X, Download, History, Trash2 } from 'lucide-react';
 
 export default function TopBar() {
   const searchQuery = useStore((s) => s.searchQuery);
@@ -11,7 +11,6 @@ export default function TopBar() {
   const activeTabId = useStore((s) => s.activeTabId);
   const config = useStore((s) => s.config);
   const openAddModal = useStore((s) => s.openAddModal);
-  const openSettings = useStore((s) => s.openSettings);
   const openImportSoftware = useStore((s) => s.openImportSoftware);
   const addGroup = useStore((s) => s.addGroup);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -46,7 +45,7 @@ export default function TopBar() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const state = useStore.getState();
-      const isModalOpen = state.showAddModal || state.showSettings || state.showImportSoftware;
+      const isModalOpen = state.showAddModal || state.showSettings || state.showImportSoftware || !!document.querySelector('[data-all-shortcuts-modal]');
       if (isModalOpen) return;
 
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -188,18 +187,6 @@ export default function TopBar() {
         <Plus size={16} />
       </button>
 
-      <button
-        onClick={openSettings}
-        className="p-2 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
-        style={{
-          background: 'var(--color-bg-card)',
-          border: '1px solid var(--color-border)',
-          color: 'var(--color-text-secondary)',
-        }}
-        title={t('settings.button')}
-      >
-        <Settings size={16} />
-      </button>
     </div>
   );
 }
