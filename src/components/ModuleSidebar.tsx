@@ -1,4 +1,4 @@
-﻿import { CheckCircle2, CheckSquare, Download, Grid2X2, RefreshCw, Settings, Keyboard } from 'lucide-react';
+﻿import { CheckCircle2, CheckSquare, Download, Grid2X2, RefreshCw, Settings, Keyboard, Languages } from 'lucide-react';
 import { useStore } from '../store';
 import { ModuleId, UpdateState } from '../types';
 import { useTranslation } from '../hooks/useTranslation';
@@ -6,6 +6,7 @@ import { useTranslation } from '../hooks/useTranslation';
 const modules: Array<{ id: ModuleId; label: string; icon: typeof Grid2X2 }> = [
   { id: 'shortcuts', label: '快捷', icon: Grid2X2 },
   { id: 'tasks', label: '任务', icon: CheckSquare },
+  { id: 'translate', label: '翻译', icon: Languages },
 ];
 
 interface ModuleSidebarProps {

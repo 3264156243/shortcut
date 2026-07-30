@@ -1,0 +1,18 @@
+[Unit]
+Description=ShortCut translation proxy
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/www/wwwroot/ShortCut/translation
+EnvironmentFile=/etc/shortcut-translation.env
+ExecStart=/usr/bin/python3 /www/wwwroot/ShortCut/translation/translation-proxy.py
+Restart=always
+RestartSec=3
+User=www
+Group=www
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

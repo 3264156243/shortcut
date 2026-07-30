@@ -111,6 +111,7 @@ declare global {
       getFileIcon: (filePath: string) => Promise<string | null>;
       getFileIcons: (filePaths: string[]) => Promise<Record<string, string | null>>;
       getWebsiteIcon: (url: string) => Promise<string | null>;
+      translateText: (text: string, from: string, to: string) => Promise<{ success: boolean; translatedText?: string; from?: string; to?: string; error?: string }>;
       showNotification: (title: string, body: string) => Promise<boolean>;
       checkForUpdates: () => Promise<{ success: boolean; status: string; error?: string }>;
       downloadUpdate: () => Promise<{ success: boolean; status: string; error?: string }>;

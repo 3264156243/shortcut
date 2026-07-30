@@ -9,7 +9,7 @@ export interface ShortcutTarget {
 }
 export type Locale = 'zh-CN';
 export type PanelAnimation = 'bottom' | 'top' | 'left' | 'right' | 'center';
-export type ModuleId = 'shortcuts' | 'tasks';
+export type ModuleId = 'shortcuts' | 'tasks' | 'translate';
 
 export type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error' | 'unconfigured';
 

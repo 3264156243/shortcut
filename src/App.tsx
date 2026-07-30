@@ -13,6 +13,7 @@ import ModuleSidebar from './components/ModuleSidebar';
 import TaskBoard from './components/TaskBoard';
 import UpdateModal from './components/UpdateModal';
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal';
+import TranslatePanel from './components/TranslatePanel';
 import { PanelAnimation, UpdateState } from './types';
 import { useTranslation } from './hooks/useTranslation';
 import appIcon from './assets/app-icon.png';
@@ -154,7 +155,9 @@ export default function App() {
       clearLongPress();
       longSpaceTimer.current = window.setTimeout(() => {
         const latest = useStore.getState();
-        latest.setActiveModule(latest.activeModule === 'shortcuts' ? 'tasks' : 'shortcuts');
+        const modules = ['shortcuts', 'tasks', 'translate'] as const;
+        const currentIndex = Math.max(0, modules.indexOf(latest.activeModule));
+        latest.setActiveModule(modules[(currentIndex + 1) % modules.length]);
         longSpaceTriggered.current = true;
         shortSpaceTimer.current && window.clearTimeout(shortSpaceTimer.current);
         shortSpaceTimer.current = null;
@@ -180,7 +183,7 @@ export default function App() {
         const latest = useStore.getState();
         if (latest.activeModule === 'shortcuts') {
           window.dispatchEvent(new Event('shortcut:focus-search'));
-        } else {
+        } else if (latest.activeModule === 'tasks') {
           window.dispatchEvent(new Event('task:focus-input'));
         }
         return;
@@ -194,7 +197,7 @@ export default function App() {
             const currentIndex = Math.max(0, tabs.findIndex((tab) => tab.id === latest.activeTabId));
             latest.setActiveTab(tabs[(currentIndex + 1) % tabs.length].id);
           }
-        } else {
+        } else if (latest.activeModule === 'tasks') {
           const taskBoards = latest.config.taskBoards || [];
           if (taskBoards.length > 1) {
             const currentIndex = Math.max(0, taskBoards.findIndex((board) => board.id === latest.config.activeTaskBoardId));
@@ -359,8 +362,10 @@ export default function App() {
                 <TabBar />
                 <PanelBody />
               </>
-            ) : (
+            ) : activeModule === 'tasks' ? (
               <TaskBoard />
+            ) : (
+              <TranslatePanel />
             )}
           </main>
         </div>

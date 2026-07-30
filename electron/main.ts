@@ -10,6 +10,8 @@ const shell = electron.shell;
 const dialog = electron.dialog;
 const nativeTheme = electron.nativeTheme;
 const ElectronNotification = electron.Notification;
+const clipboard = electron.clipboard;
+const electronScreen = electron.screen;
 const autoUpdater = require('electron-updater').autoUpdater;
 const path = require('path');
 const fs = require('fs');
@@ -24,6 +26,8 @@ if (process.platform === 'win32') {
 
 let mainWindow: any = null;
 let tray: any = null;
+let translationBubble: any = null;
+let selectionTranslationBusy = false;
 
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error' | 'unconfigured';
 
@@ -318,6 +322,97 @@ async function getWebsiteIcon(rawUrl: string): Promise<string | null> {
     return null;
   }
 }
+const TRANSLATE_PROXY_URL = 'https://shortcut.326415.xyz/api/translate';
+const TRANSLATION_LANGUAGES = new Set(['auto', 'zh', 'en', 'jp', 'kor', 'fra', 'de', 'ru', 'spa', 'ara', 'th', 'it', 'pt', 'vie']);
+
+async function translateText(text: string, from = 'auto', to = 'zh') {
+  const normalizedText = String(text || '').trim().slice(0, 5000);
+  if (!normalizedText) return { success: false, error: '请输入需要翻译的文字' };
+  if (!TRANSLATION_LANGUAGES.has(from) || !TRANSLATION_LANGUAGES.has(to) || to === 'auto') return { success: false, error: '不支持的语言类型' };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await net.fetch(TRANSLATE_PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: normalizedText, from, to }),
+      signal: controller.signal,
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload?.success) throw new Error(payload?.error || `HTTP ${response.status}`);
+    return payload;
+  } catch (error: any) {
+    return { success: false, error: error?.name === 'AbortError' ? '翻译请求超时' : (error?.message || '翻译服务暂不可用') };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function escapeBubbleHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] || char));
+}
+
+function showTranslationBubble(source: string, translated: string, error?: string) {
+  translationBubble?.destroy();
+  const width = 380;
+  const height = Math.min(240, Math.max(128, 96 + Math.ceil((source.length + translated.length) / 28) * 22));
+  const cursor = electronScreen.getCursorScreenPoint();
+  const workArea = electronScreen.getDisplayNearestPoint(cursor).workArea;
+  const x = Math.max(workArea.x + 8, Math.min(cursor.x + 16, workArea.x + workArea.width - width - 8));
+  const y = Math.max(workArea.y + 8, Math.min(cursor.y + 20, workArea.y + workArea.height - height - 8));
+  translationBubble = new BrowserWindow({
+    width, height, x, y, frame: false, transparent: true, resizable: false,
+    alwaysOnTop: true, skipTaskbar: true, focusable: false, show: false,
+    webPreferences: { contextIsolation: true, nodeIntegration: false },
+  });
+  const body = error
+    ? `<div class="error">${escapeBubbleHtml(error)}</div>`
+    : `<div class="source">${escapeBubbleHtml(source)}</div><div class="divider"></div><div class="result">${escapeBubbleHtml(translated)}</div>`;
+  const html = `<!doctype html><meta charset="utf-8"><style>*{box-sizing:border-box}body{margin:0;padding:8px;background:transparent;font-family:"Microsoft YaHei UI",sans-serif}.bubble{max-height:${height - 16}px;overflow:hidden;background:rgba(27,29,35,.97);border:1px solid rgba(255,255,255,.14);border-radius:8px;box-shadow:0 12px 36px rgba(0,0,0,.42);padding:14px 16px;color:#f6f7fb}.source{font-size:12px;line-height:1.6;color:#9da3b2;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.divider{height:1px;background:rgba(255,255,255,.1);margin:10px 0}.result{font-size:15px;line-height:1.7;white-space:pre-wrap;max-height:120px;overflow:hidden}.error{font-size:14px;line-height:1.7;color:#ffb5bd}</style><div class="bubble">${body}</div>`;
+  translationBubble.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`);
+  translationBubble.once('ready-to-show', () => translationBubble?.showInactive());
+  translationBubble.on('closed', () => { translationBubble = null; });
+  setTimeout(() => { if (translationBubble && !translationBubble.isDestroyed()) translationBubble.close(); }, 10000);
+}
+
+function snapshotClipboard() {
+  return { text: clipboard.readText(), html: clipboard.readHTML(), rtf: clipboard.readRTF(), image: clipboard.readImage(), bookmark: clipboard.readBookmark() };
+}
+
+function restoreClipboard(snapshot: ReturnType<typeof snapshotClipboard>) {
+  const data: any = {};
+  if (snapshot.text) data.text = snapshot.text;
+  if (snapshot.html) data.html = snapshot.html;
+  if (snapshot.rtf) data.rtf = snapshot.rtf;
+  if (!snapshot.image.isEmpty()) data.image = snapshot.image;
+  if (snapshot.bookmark?.title || snapshot.bookmark?.url) data.bookmark = snapshot.bookmark;
+  clipboard.clear();
+  if (Object.keys(data).length) clipboard.write(data);
+}
+
+async function translateCurrentSelection() {
+  if (selectionTranslationBusy) return;
+  selectionTranslationBusy = true;
+  const snapshot = snapshotClipboard();
+  try {
+    clipboard.clear();
+    await new Promise<void>((resolve, reject) => {
+      childProcess.execFile('powershell.exe', ['-NoProfile', '-STA', '-WindowStyle', 'Hidden', '-Command', "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^c')"], { windowsHide: true }, (error: Error | null) => error ? reject(error) : resolve());
+    });
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    const selectedText = clipboard.readText().trim().slice(0, 5000);
+    restoreClipboard(snapshot);
+    if (!selectedText) { showTranslationBubble('', '', '没有读取到选中的文字'); return; }
+    const result = await translateText(selectedText, 'auto', 'zh');
+    if (result.success) showTranslationBubble(selectedText, result.translatedText || '');
+    else showTranslationBubble('', '', result.error || '翻译失败');
+  } catch (error: any) {
+    restoreClipboard(snapshot);
+    showTranslationBubble('', '', error?.message || '无法读取选中文字');
+  } finally {
+    selectionTranslationBusy = false;
+  }
+}
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 900,
@@ -450,6 +545,8 @@ ipcMain.handle('shell:openExternal', async (_e: any, url: string) => {
 });
 
 ipcMain.handle('web:getIcon', (_e: any, url: string) => getWebsiteIcon(url));
+
+ipcMain.handle('translate:text', (_e: any, text: string, from: string, to: string) => translateText(text, from, to));
 
 ipcMain.handle('shell:runBat', async (_e: any, content: string, runAsAdmin: boolean) => {
   try {
@@ -838,6 +935,12 @@ app.whenReady().then(() => {
   });
   if (!ret) {
     console.error('Failed to register Alt+Space hotkey');
+  }
+  const translateHotkey = globalShortcut.register('Alt+E', () => {
+    void translateCurrentSelection();
+  });
+  if (!translateHotkey) {
+    console.error('Failed to register Alt+E hotkey');
   }
 });
 

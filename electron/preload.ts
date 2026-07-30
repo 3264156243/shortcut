@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getFileIcon: (filePath: string) => ipcRenderer.invoke('system:getFileIcon', filePath),
   getFileIcons: (filePaths: string[]) => ipcRenderer.invoke('system:getFileIcons', filePaths),
   getWebsiteIcon: (url: string) => ipcRenderer.invoke('web:getIcon', url),
+  translateText: (text: string, from: string, to: string) => ipcRenderer.invoke('translate:text', text, from, to),
   showNotification: (title: string, body: string) => ipcRenderer.invoke('notification:show', title, body),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
   downloadUpdate: () => ipcRenderer.invoke('update:download'),
