@@ -355,24 +355,26 @@ function escapeBubbleHtml(value: string) {
 function showTranslationBubble(source: string, translated: string, error?: string) {
   translationBubble?.destroy();
   const width = 380;
-  const height = Math.min(240, Math.max(128, 96 + Math.ceil((source.length + translated.length) / 28) * 22));
+  const height = Math.min(340, Math.max(144, 104 + Math.ceil((source.length + translated.length) / 30) * 22));
   const cursor = electronScreen.getCursorScreenPoint();
   const workArea = electronScreen.getDisplayNearestPoint(cursor).workArea;
   const x = Math.max(workArea.x + 8, Math.min(cursor.x + 16, workArea.x + workArea.width - width - 8));
   const y = Math.max(workArea.y + 8, Math.min(cursor.y + 20, workArea.y + workArea.height - height - 8));
   translationBubble = new BrowserWindow({
     width, height, x, y, frame: false, transparent: true, resizable: false,
-    alwaysOnTop: true, skipTaskbar: true, focusable: false, show: false,
+    alwaysOnTop: true, skipTaskbar: true, focusable: true, show: false,
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
+  translationBubble.setAlwaysOnTop(true, 'screen-saver');
   const body = error
     ? `<div class="error">${escapeBubbleHtml(error)}</div>`
     : `<div class="source">${escapeBubbleHtml(source)}</div><div class="divider"></div><div class="result">${escapeBubbleHtml(translated)}</div>`;
-  const html = `<!doctype html><meta charset="utf-8"><style>*{box-sizing:border-box}body{margin:0;padding:8px;background:transparent;font-family:"Microsoft YaHei UI",sans-serif}.bubble{max-height:${height - 16}px;overflow:hidden;background:rgba(27,29,35,.97);border:1px solid rgba(255,255,255,.14);border-radius:8px;box-shadow:0 12px 36px rgba(0,0,0,.42);padding:14px 16px;color:#f6f7fb}.source{font-size:12px;line-height:1.6;color:#9da3b2;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.divider{height:1px;background:rgba(255,255,255,.1);margin:10px 0}.result{font-size:15px;line-height:1.7;white-space:pre-wrap;max-height:120px;overflow:hidden}.error{font-size:14px;line-height:1.7;color:#ffb5bd}</style><div class="bubble">${body}</div>`;
+  const html = `<!doctype html><meta charset="utf-8"><style>*{box-sizing:border-box}html,body{height:100%}body{margin:0;padding:8px;background:transparent;font-family:"Microsoft YaHei UI",sans-serif;color:#f5f5f6}.bubble{display:flex;max-height:100%;flex-direction:column;overflow:hidden;background:#1d1e22;border:1px solid rgba(255,255,255,.12);border-radius:10px;box-shadow:0 16px 48px rgba(0,0,0,.48)}.source{flex:none;padding:13px 16px 11px;font-size:12px;line-height:1.6;color:#9698a1;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.divider{height:1px;flex:none;background:rgba(255,255,255,.08);margin:0 16px}.result{min-height:0;overflow-y:auto;padding:12px 16px 15px;font-size:15px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere}.result::-webkit-scrollbar{width:5px}.result::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:3px}.error{padding:18px 16px;font-size:14px;line-height:1.7;color:#ffb2ba}</style><div class="bubble">${body}</div>`;
   translationBubble.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`);
-  translationBubble.once('ready-to-show', () => translationBubble?.showInactive());
+  translationBubble.once('ready-to-show', () => translationBubble?.show());
+  translationBubble.on('blur', () => { if (translationBubble && !translationBubble.isDestroyed()) translationBubble.close(); });
   translationBubble.on('closed', () => { translationBubble = null; });
-  setTimeout(() => { if (translationBubble && !translationBubble.isDestroyed()) translationBubble.close(); }, 10000);
+  setTimeout(() => { if (translationBubble && !translationBubble.isDestroyed()) translationBubble.close(); }, 5000);
 }
 
 function snapshotClipboard() {
