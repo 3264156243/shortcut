@@ -27,6 +27,8 @@ if (process.platform === 'win32') {
 let mainWindow: any = null;
 let tray: any = null;
 let translationBubble: any = null;
+let translationBubbleCloseTimer: ReturnType<typeof setTimeout> | null = null;
+let translationBubblePinned = false;
 let selectionTranslationBusy = false;
 
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error' | 'unconfigured';
@@ -352,8 +354,19 @@ function escapeBubbleHtml(value: string) {
   return value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] || char));
 }
 
+function scheduleTranslationBubbleClose() {
+  if (translationBubbleCloseTimer) clearTimeout(translationBubbleCloseTimer);
+  translationBubbleCloseTimer = null;
+  if (translationBubblePinned) return;
+  translationBubbleCloseTimer = setTimeout(() => {
+    if (translationBubble && !translationBubble.isDestroyed()) translationBubble.close();
+  }, 5000);
+}
+
 function showTranslationBubble(source: string, translated: string, error?: string) {
   translationBubble?.destroy();
+  translationBubblePinned = false;
+  if (translationBubbleCloseTimer) clearTimeout(translationBubbleCloseTimer);
   const width = 380;
   const height = Math.min(340, Math.max(144, 104 + Math.ceil((source.length + translated.length) / 30) * 22));
   const cursor = electronScreen.getCursorScreenPoint();
@@ -368,19 +381,32 @@ function showTranslationBubble(source: string, translated: string, error?: strin
   translationBubble.setAlwaysOnTop(true, 'screen-saver');
   const body = error
     ? `<div class="error">${escapeBubbleHtml(error)}</div>`
-    : `<div class="tape"></div><div class="source">${escapeBubbleHtml(source)}</div><div class="divider"></div><div class="result-head"><span>译文</span><button id="copy" title="复制译文">▣</button></div><div class="result">${escapeBubbleHtml(translated)}</div>`;
-  const html = `<!doctype html><meta charset="utf-8"><style>*{box-sizing:border-box}html,body{height:100%}body{margin:0;padding:8px;background:transparent;font-family:"Special Elite","Noto Serif SC","Microsoft YaHei UI",serif;color:#2c2416}.bubble{position:relative;display:flex;max-height:100%;flex-direction:column;overflow:hidden;background:#f5f0e8;border:1px solid rgba(80,60,35,.18);border-radius:8px;box-shadow:4px 8px 28px rgba(0,0,0,.48)}.tape{position:absolute;left:50%;top:-3px;width:72px;height:17px;transform:translateX(-50%) rotate(-1deg);background:rgba(201,166,107,.72);border:1px solid rgba(90,65,35,.1)}.source{flex:none;padding:22px 16px 10px;font-size:12px;line-height:1.6;color:#81735f;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.divider{height:1px;flex:none;background:#d8ccba;margin:0 16px}.result-head{display:flex;align-items:center;justify-content:space-between;padding:8px 12px 0 16px;color:#746550;font-size:11px;font-weight:700}.result-head button{width:28px;height:28px;border:1px solid #cbbda8;border-radius:7px;background:#fffaf0;color:#655845;cursor:pointer;font-size:14px}.result-head button:hover{background:#e7dfd2}.result{min-height:0;overflow-y:auto;padding:5px 16px 16px;font-size:15px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere;background-image:repeating-linear-gradient(transparent,transparent 25px,rgba(108,88,61,.09) 25px,rgba(108,88,61,.09) 26px)}.result::-webkit-scrollbar{width:5px}.result::-webkit-scrollbar-thumb{background:#b9aa95;border-radius:3px}.error{padding:20px 16px;font-size:14px;line-height:1.7;color:#9b2335}</style><div class="bubble">${body}</div><script>document.getElementById("copy")?.addEventListener("click",()=>{document.title="shortcut-copy-translation"})</script>`;
+    : `<div class="tape"></div><div class="source">${escapeBubbleHtml(source)}</div><div class="divider"></div><div class="result-head"><span>译文</span><div class="actions"><button id="pin" title="固定纸条">◇</button><button id="copy" title="复制译文">▣</button></div></div><div class="result">${escapeBubbleHtml(translated)}</div>`;
+  const html = `<!doctype html><meta charset="utf-8"><style>*{box-sizing:border-box}html,body{height:100%}body{margin:0;padding:8px;background:transparent;font-family:"Special Elite","Noto Serif SC","Microsoft YaHei UI",serif;color:#2c2416}.bubble{position:relative;display:flex;max-height:100%;flex-direction:column;overflow:hidden;background:#f5f0e8;border:1px solid rgba(80,60,35,.18);border-radius:8px;box-shadow:4px 8px 28px rgba(0,0,0,.48)}.tape{position:absolute;left:50%;top:-3px;width:72px;height:17px;transform:translateX(-50%) rotate(-1deg);background:rgba(201,166,107,.72);border:1px solid rgba(90,65,35,.1)}.source{-webkit-app-region:drag;cursor:move;flex:none;padding:22px 16px 10px;font-size:12px;line-height:1.6;color:#81735f;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.divider{height:1px;flex:none;background:#d8ccba;margin:0 16px}.result-head{display:flex;align-items:center;justify-content:space-between;padding:8px 12px 0 16px;color:#746550;font-size:11px;font-weight:700}.actions{display:flex;gap:6px;-webkit-app-region:no-drag}.result-head button{width:28px;height:28px;border:1px solid #cbbda8;border-radius:7px;background:#fffaf0;color:#655845;cursor:pointer;font-size:14px}.result-head button:hover{background:#e7dfd2}.result{min-height:0;overflow-y:auto;padding:5px 16px 16px;font-size:15px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere;background-image:repeating-linear-gradient(transparent,transparent 25px,rgba(108,88,61,.09) 25px,rgba(108,88,61,.09) 26px)}.result::-webkit-scrollbar{width:5px}.result::-webkit-scrollbar-thumb{background:#b9aa95;border-radius:3px}.error{padding:20px 16px;font-size:14px;line-height:1.7;color:#9b2335}</style><div class="bubble">${body}</div><script>const notify=a=>document.title="shortcut-bubble:"+a+":"+Date.now();document.getElementById("copy")?.addEventListener("click",()=>notify("copy"));document.getElementById("pin")?.addEventListener("click",()=>notify("pin"));document.querySelector(".source")?.addEventListener("pointerdown",()=>notify("interaction"));document.querySelector(".result")?.addEventListener("scroll",()=>notify("interaction"),{passive:true})</script>`;
   translationBubble.webContents.on('page-title-updated', (event: any, title: string) => {
-    if (title !== 'shortcut-copy-translation') return;
+    if (!title.startsWith('shortcut-bubble:')) return;
     event.preventDefault();
-    clipboard.writeText(translated);
-    void translationBubble?.webContents.executeJavaScript("const b=document.getElementById('copy');if(b){b.textContent='✓';setTimeout(()=>b.textContent='▣',1200)}");
+    const action = title.split(':')[1];
+    if (action === 'copy') {
+      clipboard.writeText(translated);
+      void translationBubble?.webContents.executeJavaScript("const b=document.getElementById('copy');if(b){b.textContent='✓';setTimeout(()=>b.textContent='▣',1200)}");
+    } else if (action === 'pin') {
+      translationBubblePinned = !translationBubblePinned;
+      const mark = translationBubblePinned ? '◆' : '◇';
+      const hint = translationBubblePinned ? '取消固定' : '固定纸条';
+      void translationBubble?.webContents.executeJavaScript("const b=document.getElementById('pin');if(b){b.textContent=" + JSON.stringify(mark) + ";b.title=" + JSON.stringify(hint) + "}");
+    }
+    scheduleTranslationBubbleClose();
   });
   translationBubble.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`);
-  translationBubble.once('ready-to-show', () => translationBubble?.show());
-  translationBubble.on('blur', () => { if (translationBubble && !translationBubble.isDestroyed()) translationBubble.close(); });
-  translationBubble.on('closed', () => { translationBubble = null; });
-  setTimeout(() => { if (translationBubble && !translationBubble.isDestroyed()) translationBubble.close(); }, 5000);
+  translationBubble.once('ready-to-show', () => { translationBubble?.show(); scheduleTranslationBubbleClose(); });
+  translationBubble.on('blur', () => { if (!translationBubblePinned && translationBubble && !translationBubble.isDestroyed()) translationBubble.close(); });
+  translationBubble.on('closed', () => {
+    if (translationBubbleCloseTimer) clearTimeout(translationBubbleCloseTimer);
+    translationBubbleCloseTimer = null;
+    translationBubblePinned = false;
+    translationBubble = null;
+  });
 }
 
 function snapshotClipboard() {

@@ -185,6 +185,8 @@ export default function App() {
           window.dispatchEvent(new Event('shortcut:focus-search'));
         } else if (latest.activeModule === 'tasks') {
           window.dispatchEvent(new Event('task:focus-input'));
+        } else if (latest.activeModule === 'translate') {
+          window.dispatchEvent(new Event('translate:toggle-input'));
         }
         return;
       }

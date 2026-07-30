@@ -19,6 +19,16 @@ export default function TranslatePanel() {
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const requestId = useRef(0);
+  const sourceRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const toggleInput = () => {
+      if (document.activeElement === sourceRef.current) sourceRef.current?.blur();
+      else sourceRef.current?.focus();
+    };
+    window.addEventListener('translate:toggle-input', toggleInput);
+    return () => window.removeEventListener('translate:toggle-input', toggleInput);
+  }, []);
 
   useEffect(() => {
     const text = source.trim();
@@ -86,11 +96,13 @@ export default function TranslatePanel() {
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-2 gap-6 p-6">
         <section className="relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg" style={{ background: '#f5f0e8', color: '#2c2416', boxShadow: '4px 7px 20px rgba(0,0,0,.42),0 0 0 1px rgba(0,0,0,.08)' }}>
-          <div className="flex h-12 shrink-0 items-center justify-between px-5 text-xs font-semibold" style={{ color: '#746550', borderBottom: '1px solid #d9cdbc' }}><span>原文</span><button onClick={() => setSource('')} disabled={!source} className="flex h-8 w-8 items-center justify-center rounded-md transition-colors disabled:opacity-25" title="清空"><Trash2 size={15} /></button></div>
-          <textarea autoFocus value={source} onChange={(event) => setSource(event.target.value.slice(0, 5000))} placeholder="在这里输入或粘贴文字" className="min-h-0 flex-1 resize-none bg-transparent px-5 py-4 pb-10 text-[15px] leading-7 outline-none" style={{ color: '#2c2416', fontFamily: "'Special Elite', 'Noto Serif SC', 'SimSun', serif", backgroundImage: 'repeating-linear-gradient(transparent,transparent 27px,rgba(108,88,61,.1) 27px,rgba(108,88,61,.1) 28px)' }} />
+          <div className="absolute left-1/2 top-0 z-10 h-5 w-20 -translate-x-1/2 -translate-y-1 -rotate-1 opacity-70" style={{ background: '#c9a66b', border: '1px solid rgba(90,65,35,.12)' }} />
+          <div className="flex h-12 shrink-0 items-center justify-between px-5 pt-2 text-xs font-semibold" style={{ color: '#746550', borderBottom: '1px solid #d9cdbc' }}><span>原文</span><button onClick={() => setSource('')} disabled={!source} className="flex h-8 w-8 items-center justify-center rounded-md transition-colors disabled:opacity-25" title="清空"><Trash2 size={15} /></button></div>
+          <textarea ref={sourceRef} autoFocus value={source} onChange={(event) => setSource(event.target.value.slice(0, 5000))} placeholder="在这里输入或粘贴文字" className="min-h-0 flex-1 resize-none bg-transparent px-5 py-4 pb-10 text-[15px] leading-7 outline-none" style={{ color: '#2c2416', fontFamily: "'Special Elite', 'Noto Serif SC', 'SimSun', serif", backgroundImage: 'repeating-linear-gradient(transparent,transparent 27px,rgba(108,88,61,.1) 27px,rgba(108,88,61,.1) 28px)' }} />
           <span className="absolute bottom-3 right-4 text-[11px]" style={{ color: '#aa9b85' }}>{source.length}/5000</span>
         </section>
         <section className="relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg" style={{ background: '#fffaf0', color: '#2c2416', boxShadow: '4px 7px 20px rgba(0,0,0,.42),0 0 0 1px rgba(0,0,0,.08)' }}>
+          <div className="absolute left-1/2 top-0 z-10 h-5 w-20 -translate-x-1/2 -translate-y-1 rotate-1 opacity-70" style={{ background: '#b9c6a2', border: '1px solid rgba(60,80,45,.12)' }} />
           <div className="flex h-11 shrink-0 items-center justify-between px-4 text-xs font-medium" style={{ color: '#746550', borderBottom: '1px solid #d9cdbc' }}><span className="flex items-center gap-2">译文{loading && <LoaderCircle size={13} className="animate-spin" />}</span></div>
           {result ? <><div className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap px-5 py-4 pr-14 text-[15px] leading-7" style={{ color: '#2c2416', fontFamily: "'Special Elite', 'Noto Serif SC', 'SimSun', serif", backgroundImage: 'repeating-linear-gradient(transparent,transparent 27px,rgba(108,88,61,.09) 27px,rgba(108,88,61,.09) 28px)' }}>{visibleResult}<span className="ml-0.5 inline-block h-4 w-[2px] animate-pulse bg-[#9b2335]" /></div><button onClick={() => void copyResult()} className="absolute right-4 top-15 flex h-8 w-8 items-center justify-center rounded-md border" style={{ borderColor: '#cbbda8', color: copied ? '#27694a' : '#655845' }} title="复制译文">{copied ? <Check size={15} /> : <Copy size={15} />}</button></> : <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3" style={{ color: 'var(--color-text-muted)' }}><Languages size={28} strokeWidth={1.5} /><span className="text-sm">译文将在这里自动显示</span></div>}
         </section>
