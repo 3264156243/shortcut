@@ -15,6 +15,7 @@ import UpdateModal from './components/UpdateModal';
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal';
 import { PanelAnimation, UpdateState } from './types';
 import { useTranslation } from './hooks/useTranslation';
+import appIcon from './assets/app-icon.png';
 
 // Animation variants based on direction
 const getAnimationVariants = (direction: PanelAnimation) => {
@@ -56,6 +57,7 @@ export default function App() {
   const [updateState, setUpdateState] = useState<UpdateState | null>(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
+  const [appVersion, setAppVersion] = useState('');
   const spaceDownAt = useRef<number | null>(null);
   const longSpaceTimer = useRef<number | null>(null);
   const shortSpaceTimer = useRef<number | null>(null);
@@ -111,6 +113,8 @@ export default function App() {
   };
 
   useEffect(() => {
+    api?.getVersion?.().then(setAppVersion).catch(() => undefined);
+  }, [api]);  useEffect(() => {
     loadConfig();
   }, [loadConfig]);
   useEffect(() => {
@@ -305,12 +309,9 @@ export default function App() {
         {/* Title bar drag region */}
         <div className="titlebar-drag flex items-center justify-between px-3 pt-2 shrink-0">
           <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-md flex items-center justify-center" style={{ background: 'var(--color-accent)' }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-              </svg>
-            </div>
+            <img src={appIcon} alt="" className="h-5 w-5 object-contain" />
             <span className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>ShortCut</span>
+            {appVersion && <span className="text-[11px] font-medium" style={{ color: 'var(--color-text-muted)' }}>v{appVersion}</span>}
           </div>
 
           <div className="flex items-center gap-1">

@@ -576,6 +576,8 @@ ipcMain.handle('fs:exists', (_e: any, filePath: string) => {
   return fs.existsSync(filePath);
 });
 
+ipcMain.handle('app:getVersion', () => app.getVersion());
+
 ipcMain.handle('app:getPath', (_e: any, name: string) => {
   return app.getPath(name as any);
 });

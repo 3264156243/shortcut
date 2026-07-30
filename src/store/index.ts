@@ -103,6 +103,7 @@ declare global {
       writeFile: (path: string, data: string) => Promise<{ success: boolean; error?: string }>;
       fileExists: (path: string) => Promise<boolean>;
       getPath: (name: string) => Promise<string>;
+      getVersion: () => Promise<string>;
       getOpenAtLogin: () => Promise<boolean>;
       setOpenAtLogin: (enabled: boolean) => Promise<boolean>;
       getInstalledSoftware: () => Promise<Array<{ name: string; path: string; icon: string }>>;
