@@ -49,6 +49,7 @@ export default function TaskBoard() {
   const moveTask = useStore((state) => state.moveTask);
   const wallRef = useRef<HTMLDivElement>(null);
   const taskInputRef = useRef<HTMLInputElement>(null);
+  const lastInputSpaceAt = useRef(0);
   const [draft, setDraft] = useState('');
   const [longTextEnabled, setLongTextEnabled] = useState(false);
   const [reminderEnabled, setReminderEnabled] = useState(false);
@@ -493,6 +494,17 @@ export default function TaskBoard() {
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
+              if (event.key === ' ') {
+                const now = performance.now();
+                if (now - lastInputSpaceAt.current < 320) {
+                  event.preventDefault();
+                  lastInputSpaceAt.current = 0;
+                  setDraft((current) => current.endsWith(' ') ? current.slice(0, -1) : current);
+                  taskInputRef.current?.blur();
+                  return;
+                }
+                lastInputSpaceAt.current = now;
+              }
               if (event.key === 'Enter') {
                 event.preventDefault();
                 submit();

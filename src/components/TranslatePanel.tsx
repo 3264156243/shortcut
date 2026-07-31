@@ -99,7 +99,7 @@ export default function TranslatePanel() {
         <section className="relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg" style={{ background: '#f5f0e8', color: '#2c2416', boxShadow: '4px 7px 20px rgba(0,0,0,.42),0 0 0 1px rgba(0,0,0,.08)' }}>
           <div className="absolute left-1/2 top-0 z-10 h-5 w-20 -translate-x-1/2 -translate-y-1 -rotate-1 opacity-70" style={{ background: '#c9a66b', border: '1px solid rgba(90,65,35,.12)' }} />
           <div className="flex h-12 shrink-0 items-center justify-between px-5 pt-2 text-xs font-semibold" style={{ color: '#746550', borderBottom: '1px solid #d9cdbc' }}><span>原文</span><button onClick={() => setSource('')} disabled={!source} className="flex h-8 w-8 items-center justify-center rounded-md transition-colors disabled:opacity-25" title="清空"><Trash2 size={15} /></button></div>
-          <textarea ref={sourceRef} autoFocus value={source} onKeyDown={(event) => {
+          <textarea ref={sourceRef} value={source} onKeyDown={(event) => {
             if (event.key !== ' ') return;
             const now = performance.now();
             if (now - lastInputSpaceAt.current < 320) {
