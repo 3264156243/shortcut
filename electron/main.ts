@@ -30,6 +30,8 @@ let translationBubble: any = null;
 let translationBubbleCloseTimer: ReturnType<typeof setTimeout> | null = null;
 let translationBubblePinned = false;
 let selectionTranslationBusy = false;
+let hardwareMonitorProcess: any = null;
+let hardwareMonitorBuffer = '';
 
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error' | 'unconfigured';
 
@@ -184,6 +186,59 @@ async function downloadUpdate() {
     return { success: false, status: 'error', error: updateState.error };
   }
 }
+function getHardwareMonitorPath() {
+  return app.isPackaged
+    ? path.join((process as any).resourcesPath, 'hardware-monitor', 'ShortCut.HardwareMonitor.exe')
+    : path.join(__dirname, '..', 'resources', 'hardware-monitor', 'ShortCut.HardwareMonitor.exe');
+}
+
+function stopHardwareMonitor() {
+  if (!hardwareMonitorProcess) return;
+  const processToStop = hardwareMonitorProcess;
+  hardwareMonitorProcess = null;
+  hardwareMonitorBuffer = '';
+  try { processToStop.kill(); } catch { }
+}
+
+function startHardwareMonitor() {
+  if (hardwareMonitorProcess) return { success: true };
+  const executable = getHardwareMonitorPath();
+  if (!fs.existsSync(executable)) return { success: false, error: '硬件监控组件不存在' };
+
+  try {
+    hardwareMonitorProcess = childProcess.spawn(executable, [], {
+      cwd: path.dirname(executable),
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    hardwareMonitorProcess.stdout.setEncoding('utf8');
+    hardwareMonitorProcess.stdout.on('data', (chunk: string) => {
+      hardwareMonitorBuffer += chunk;
+      const lines = hardwareMonitorBuffer.split(/\r?\n/);
+      hardwareMonitorBuffer = lines.pop() || '';
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const data = JSON.parse(line);
+          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('cockpit:data', data);
+        } catch { }
+      }
+    });
+    hardwareMonitorProcess.on('exit', () => {
+      hardwareMonitorProcess = null;
+      hardwareMonitorBuffer = '';
+    });
+    hardwareMonitorProcess.on('error', (error: Error) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('cockpit:data', { error: error.message });
+      stopHardwareMonitor();
+    });
+    return { success: true };
+  } catch (error: any) {
+    stopHardwareMonitor();
+    return { success: false, error: error?.message || '硬件监控启动失败' };
+  }
+}
+
 // Simple i18n for main process
 const trayTranslations: Record<string, Record<string, string>> = {
   'zh-CN': {
@@ -581,6 +636,9 @@ ipcMain.handle('shell:openExternal', async (_e: any, url: string) => {
 });
 
 ipcMain.handle('web:getIcon', (_e: any, url: string) => getWebsiteIcon(url));
+
+ipcMain.handle('cockpit:start', () => startHardwareMonitor());
+ipcMain.handle('cockpit:stop', () => { stopHardwareMonitor(); return true; });
 
 ipcMain.handle('translate:text', (_e: any, text: string, from: string, to: string) => translateText(text, from, to));
 
@@ -985,6 +1043,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  stopHardwareMonitor();
   globalShortcut.unregisterAll();
 });
 

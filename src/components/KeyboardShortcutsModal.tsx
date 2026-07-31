@@ -7,7 +7,7 @@ const sections = [
     items: [
       { keys: ['Alt', 'Space'], description: '显示或隐藏 ShortCut' },
       { keys: ['Alt', 'E'], description: '翻译当前选中的文字' },
-      { keys: ['长按 Space 0.5 秒'], description: '循环切换快捷、任务与翻译板块' },
+      { keys: ['长按 Space 0.5 秒'], description: '循环切换快捷、任务、驾驶舱与翻译板块' },
     ],
   },
   {

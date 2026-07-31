@@ -14,6 +14,7 @@ import TaskBoard from './components/TaskBoard';
 import UpdateModal from './components/UpdateModal';
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal';
 import TranslatePanel from './components/TranslatePanel';
+import CockpitPanel from './components/CockpitPanel';
 import { PanelAnimation, UpdateState } from './types';
 import { useTranslation } from './hooks/useTranslation';
 import appIcon from './assets/app-icon.png';
@@ -155,7 +156,7 @@ export default function App() {
       clearLongPress();
       longSpaceTimer.current = window.setTimeout(() => {
         const latest = useStore.getState();
-        const modules = ['shortcuts', 'tasks', 'translate'] as const;
+        const modules = ['shortcuts', 'tasks', 'cockpit', 'translate'] as const;
         const currentIndex = Math.max(0, modules.indexOf(latest.activeModule));
         latest.setActiveModule(modules[(currentIndex + 1) % modules.length]);
         longSpaceTriggered.current = true;
@@ -366,6 +367,8 @@ export default function App() {
               </>
             ) : activeModule === 'tasks' ? (
               <TaskBoard />
+            ) : activeModule === 'cockpit' ? (
+              <CockpitPanel />
             ) : (
               <TranslatePanel />
             )}

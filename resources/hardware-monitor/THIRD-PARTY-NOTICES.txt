@@ -1,0 +1,12 @@
+LibreHardwareMonitor
+====================
+
+This directory contains LibreHardwareMonitor 0.9.6 and runtime dependencies used
+by ShortCut's optional computer cockpit module.
+
+Project: https://github.com/LibreHardwareMonitor/LibreHardwareMonitor
+License: Mozilla Public License 2.0 (MPL-2.0)
+License text: https://www.mozilla.org/MPL/2.0/
+
+ShortCut starts the hardware monitor bridge only while the cockpit page is open
+and stops it when the user leaves that page.

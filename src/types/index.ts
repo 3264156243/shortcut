@@ -9,7 +9,16 @@ export interface ShortcutTarget {
 }
 export type Locale = 'zh-CN';
 export type PanelAnimation = 'bottom' | 'top' | 'left' | 'right' | 'center';
-export type ModuleId = 'shortcuts' | 'tasks' | 'translate';
+export type ModuleId = 'shortcuts' | 'tasks' | 'cockpit' | 'translate';
+
+export interface CockpitData {
+  timestamp?: number;
+  error?: string;
+  cpu?: { name?: string; temperature?: number | null; usage?: number | null };
+  gpu?: { name?: string; temperature?: number | null; usage?: number | null };
+  motherboard?: { name?: string; temperature?: number | null };
+  battery?: { level?: number | null; status?: string; temperature?: number | null; voltage?: number | null; health?: number | null };
+}
 
 export type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error' | 'unconfigured';
 

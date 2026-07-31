@@ -22,6 +22,10 @@
     {
       "from": "resources/icon.ico",
       "to": "icon.ico"
+    },
+    {
+      "from": "resources/hardware-monitor",
+      "to": "hardware-monitor"
     }
   ],
   "publish": [

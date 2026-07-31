@@ -34,6 +34,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getFileIcons: (filePaths: string[]) => ipcRenderer.invoke('system:getFileIcons', filePaths),
   getWebsiteIcon: (url: string) => ipcRenderer.invoke('web:getIcon', url),
   translateText: (text: string, from: string, to: string) => ipcRenderer.invoke('translate:text', text, from, to),
+  startCockpit: () => ipcRenderer.invoke('cockpit:start'),
+  stopCockpit: () => ipcRenderer.invoke('cockpit:stop'),
+  onCockpitData: (callback: (data: unknown) => void) => {
+    const handler = (_event: unknown, data: unknown) => callback(data);
+    ipcRenderer.on('cockpit:data', handler);
+    return () => ipcRenderer.removeListener('cockpit:data', handler);
+  },
   showNotification: (title: string, body: string) => ipcRenderer.invoke('notification:show', title, body),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
   downloadUpdate: () => ipcRenderer.invoke('update:download'),

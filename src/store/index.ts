@@ -112,6 +112,9 @@ declare global {
       getFileIcons: (filePaths: string[]) => Promise<Record<string, string | null>>;
       getWebsiteIcon: (url: string) => Promise<string | null>;
       translateText: (text: string, from: string, to: string) => Promise<{ success: boolean; translatedText?: string; from?: string; to?: string; error?: string }>;
+      startCockpit: () => Promise<{ success: boolean; error?: string }>;
+      stopCockpit: () => Promise<boolean>;
+      onCockpitData: (callback: (data: unknown) => void) => () => void;
       showNotification: (title: string, body: string) => Promise<boolean>;
       checkForUpdates: () => Promise<{ success: boolean; status: string; error?: string }>;
       downloadUpdate: () => Promise<{ success: boolean; status: string; error?: string }>;

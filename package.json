@@ -10,9 +10,10 @@
     "preview": "vite preview",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "release:prepare": "node scripts/prepare-release-notes.mjs",
-    "electron:build": "npm run build && tsc -p tsconfig.electron.json && npm run release:prepare && electron-builder --win --publish never",
-    "electron:build:dir": "npm run build && tsc -p tsconfig.electron.json && npm run release:prepare && electron-builder --win --dir",
-    "release:update": "powershell -ExecutionPolicy Bypass -File scripts/publish-update.ps1"
+    "electron:build": "npm run build && tsc -p tsconfig.electron.json && npm run hardware:build && npm run release:prepare && electron-builder --win --publish never",
+    "electron:build:dir": "npm run build && tsc -p tsconfig.electron.json && npm run hardware:build && npm run release:prepare && electron-builder --win --dir",
+    "release:update": "powershell -ExecutionPolicy Bypass -File scripts/publish-update.ps1",
+    "hardware:build": "powershell -ExecutionPolicy Bypass -File scripts/build-hardware-monitor.ps1"
   },
   "keywords": [
     "electron",
