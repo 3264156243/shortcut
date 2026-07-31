@@ -12,6 +12,7 @@ const nativeTheme = electron.nativeTheme;
 const ElectronNotification = electron.Notification;
 const clipboard = electron.clipboard;
 const electronScreen = electron.screen;
+const desktopCapturer = electron.desktopCapturer;
 const autoUpdater = require('electron-updater').autoUpdater;
 const path = require('path');
 const fs = require('fs');
@@ -32,6 +33,7 @@ let translationBubblePinned = false;
 let selectionTranslationBusy = false;
 let hardwareMonitorProcess: any = null;
 let hardwareMonitorBuffer = '';
+let captureOverlay: any = null;
 
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error' | 'unconfigured';
 
@@ -466,6 +468,105 @@ function showTranslationBubble(source: string, translated: string, error?: strin
   });
 }
 
+
+async function captureDisplayImage(display: any) {
+  const scaleFactor = display.scaleFactor || 1;
+  const thumbnailSize = {
+    width: Math.max(1, Math.round(display.bounds.width * scaleFactor)),
+    height: Math.max(1, Math.round(display.bounds.height * scaleFactor)),
+  };
+  const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize });
+  const source = sources.find((item: any) => String(item.display_id) === String(display.id)) || sources[0];
+  if (!source || source.thumbnail.isEmpty()) throw new Error('未能获取屏幕画面');
+  return source.thumbnail;
+}
+
+function showScreenshotNotification(message: string) {
+  if (ElectronNotification.isSupported()) {
+    new ElectronNotification({ title: '截图已复制', body: message, silent: true }).show();
+  }
+}
+
+async function captureCurrentDisplay() {
+  try {
+    const display = electronScreen.getDisplayNearestPoint(electronScreen.getCursorScreenPoint());
+    const image = await captureDisplayImage(display);
+    clipboard.writeImage(image);
+    showScreenshotNotification('当前屏幕已写入剪贴板');
+  } catch (error) {
+    console.error('Failed to capture screen', error);
+  }
+}
+
+async function startRegionCapture() {
+  try {
+    if (captureOverlay && !captureOverlay.isDestroyed()) captureOverlay.destroy();
+    const display = electronScreen.getDisplayNearestPoint(electronScreen.getCursorScreenPoint());
+    const image = await captureDisplayImage(display);
+    const dataUrl = image.toDataURL();
+    const html = '<!doctype html><meta charset="utf-8"><style>' +
+      '*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;cursor:crosshair;user-select:none}' +
+      'body{background:#000}img{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}' +
+      '#shade{position:absolute;inset:0;background:rgba(0,0,0,.34)}' +
+      '#selection{display:none;position:absolute;border:1px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.42);background:rgba(255,255,255,.04)}' +
+      '#size{position:absolute;left:0;top:-30px;padding:5px 8px;border-radius:5px;background:#111;color:#fff;font:12px "Segoe UI",sans-serif;white-space:nowrap}' +
+      '#hint{position:absolute;left:50%;top:18px;transform:translateX(-50%);padding:7px 12px;border-radius:6px;background:rgba(15,15,18,.86);color:#fff;font:13px "Microsoft YaHei UI",sans-serif}' +
+      '</style><img src="' + dataUrl + '"><div id="shade"></div><div id="selection"><span id="size"></span></div><div id="hint">拖动选择截图区域，Esc 或右键取消</div>' +
+      '<script>const box=document.getElementById("selection"),size=document.getElementById("size"),shade=document.getElementById("shade");let start=null;' +
+      'const draw=(x,y)=>{const left=Math.min(start.x,x),top=Math.min(start.y,y),width=Math.abs(x-start.x),height=Math.abs(y-start.y);box.style.cssText="display:block;left:"+left+"px;top:"+top+"px;width:"+width+"px;height:"+height+"px";size.textContent=Math.round(width)+" × "+Math.round(height)};' +
+      'addEventListener("mousedown",e=>{if(e.button!==0)return;start={x:e.clientX,y:e.clientY};shade.style.display="none";draw(e.clientX,e.clientY)});' +
+      'addEventListener("mousemove",e=>{if(start)draw(e.clientX,e.clientY)});' +
+      'addEventListener("mouseup",e=>{if(!start||e.button!==0)return;const x=Math.min(start.x,e.clientX),y=Math.min(start.y,e.clientY),w=Math.abs(e.clientX-start.x),h=Math.abs(e.clientY-start.y);start=null;if(w<3||h<3){shade.style.display="block";box.style.display="none";return}location.href="shortcut-capture://select?x="+x+"&y="+y+"&width="+w+"&height="+h});' +
+      'addEventListener("keydown",e=>{if(e.key==="Escape")location.href="shortcut-capture://cancel"});addEventListener("contextmenu",e=>{e.preventDefault();location.href="shortcut-capture://cancel"});</script>';
+
+    captureOverlay = new BrowserWindow({
+      x: display.bounds.x,
+      y: display.bounds.y,
+      width: display.bounds.width,
+      height: display.bounds.height,
+      frame: false,
+      resizable: false,
+      movable: false,
+      transparent: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      fullscreenable: false,
+      show: false,
+      webPreferences: { contextIsolation: true, nodeIntegration: false },
+    });
+    captureOverlay.setAlwaysOnTop(true, 'screen-saver');
+    captureOverlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    const finish = (url: string) => {
+      if (!captureOverlay || captureOverlay.isDestroyed()) return;
+      if (url.startsWith('shortcut-capture://select')) {
+        const selection = new URL(url);
+        const scaleFactor = display.scaleFactor || 1;
+        const x = Math.max(0, Math.round(Number(selection.searchParams.get('x')) * scaleFactor));
+        const y = Math.max(0, Math.round(Number(selection.searchParams.get('y')) * scaleFactor));
+        const width = Math.min(image.getSize().width - x, Math.max(1, Math.round(Number(selection.searchParams.get('width')) * scaleFactor)));
+        const height = Math.min(image.getSize().height - y, Math.max(1, Math.round(Number(selection.searchParams.get('height')) * scaleFactor)));
+        if (width > 0 && height > 0) {
+          clipboard.writeImage(image.crop({ x, y, width, height }));
+          showScreenshotNotification('所选区域已写入剪贴板');
+        }
+      }
+      captureOverlay.destroy();
+    };
+    captureOverlay.webContents.on('will-navigate', (event: any, url: string) => {
+      if (!url.startsWith('shortcut-capture://')) return;
+      event.preventDefault();
+      finish(url);
+    });
+    captureOverlay.on('closed', () => { captureOverlay = null; });
+    await captureOverlay.loadURL('data:text/html;charset=UTF-8,' + encodeURIComponent(html));
+    captureOverlay.show();
+    captureOverlay.focus();
+  } catch (error) {
+    console.error('Failed to start region capture', error);
+    if (captureOverlay && !captureOverlay.isDestroyed()) captureOverlay.destroy();
+  }
+}
+
 function snapshotClipboard() {
   return { text: clipboard.readText(), html: clipboard.readHTML(), rtf: clipboard.readRTF(), image: clipboard.readImage(), bookmark: clipboard.readBookmark() };
 }
@@ -651,11 +752,12 @@ ipcMain.handle('shell:runBat', async (_e: any, content: string, runAsAdmin: bool
     fs.writeFileSync(batPath, `\uFEFF@echo off\r\n@chcp 65001 >nul\r\n${content}\r\n`, 'utf8');
     if (runAsAdmin) {
       const escapedPath = batPath.replace(/'/g, "''");
+      const escapedDirectory = batDirectory.replace(/'/g, "''");
       childProcess.spawn('powershell.exe', [
         '-NoProfile',
         '-WindowStyle', 'Hidden',
         '-Command',
-        `Start-Process -FilePath 'cmd.exe' -ArgumentList '/c','"${escapedPath}"' -Verb RunAs`,
+        `Start-Process -FilePath '${escapedPath}' -WorkingDirectory '${escapedDirectory}' -Verb RunAs`,
       ], { detached: true, windowsHide: true, stdio: 'ignore' }).unref();
     } else {
       childProcess.spawn('cmd.exe', ['/c', batPath], { detached: true, windowsHide: false, stdio: 'ignore' }).unref();
@@ -1036,6 +1138,18 @@ app.whenReady().then(() => {
   if (!translateHotkey) {
     console.error('Failed to register Alt+E hotkey');
   }
+  const fullScreenshotHotkey = globalShortcut.register('Alt+S', () => {
+    void captureCurrentDisplay();
+  });
+  if (!fullScreenshotHotkey) {
+    console.error('Failed to register Alt+S hotkey');
+  }
+  const regionScreenshotHotkey = globalShortcut.register('Alt+D', () => {
+    void startRegionCapture();
+  });
+  if (!regionScreenshotHotkey) {
+    console.error('Failed to register Alt+D hotkey');
+  }
 });
 
 app.on('window-all-closed', () => {
@@ -1044,6 +1158,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   stopHardwareMonitor();
+  if (captureOverlay && !captureOverlay.isDestroyed()) captureOverlay.destroy();
   globalShortcut.unregisterAll();
 });
 
