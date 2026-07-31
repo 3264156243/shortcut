@@ -17,6 +17,7 @@ const sections = [
       { keys: ['双击 Space'], description: '聚焦搜索框' },
       { keys: ['Ctrl', 'K'], description: '聚焦搜索框' },
       { keys: ['↑', '↓', '←', '→'], description: '移动快捷方式选择光标，支持跨行循环' },
+      { keys: ['W', 'A', 'S', 'D'], description: '非输入状态下映射为上下左右移动' },
       { keys: ['Enter'], description: '打开当前选中的快捷方式' },
       { keys: ['Esc'], description: '清空搜索或退出搜索框' },
     ],

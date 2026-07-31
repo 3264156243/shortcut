@@ -330,9 +330,14 @@ export default function PanelBody() {
       const isTyping = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
       if (isTyping) return;
 
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+      const directionKeys: Record<string, 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight'> = {
+        ArrowUp: 'ArrowUp', ArrowDown: 'ArrowDown', ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight',
+        w: 'ArrowUp', s: 'ArrowDown', a: 'ArrowLeft', d: 'ArrowRight',
+      };
+      const direction = directionKeys[event.key.length === 1 ? event.key.toLowerCase() : event.key];
+      if (direction && !event.ctrlKey && !event.metaKey && !event.altKey) {
         event.preventDefault();
-        moveSelection(event.key as 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight');
+        moveSelection(direction);
         return;
       }
 
