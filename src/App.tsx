@@ -46,6 +46,8 @@ const getAnimationVariants = (direction: PanelAnimation) => {
   return variants[direction] || variants.bottom;
 };
 
+const moduleOrder = ['shortcuts', 'tasks', 'cockpit', 'translate'] as const;
+
 export default function App() {
   const config = useStore((s) => s.config);
   const loadConfig = useStore((s) => s.loadConfig);
@@ -144,11 +146,21 @@ export default function App() {
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!(event.code === 'Space' || event.key === ' ') || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
       const state = useStore.getState();
       const isModalOpen = state.showAddModal || state.showSettings || state.showImportSoftware || !!document.querySelector('[data-task-modal], [data-update-modal], [data-keyboard-shortcuts-modal]');
       if (isEditableTarget(event.target) || isModalOpen) return;
 
+      const key = event.key.toLowerCase();
+      if (key === 'z' || key === 'x') {
+        event.preventDefault();
+        const currentIndex = Math.max(0, moduleOrder.indexOf(state.activeModule));
+        const direction = key === 'z' ? -1 : 1;
+        state.setActiveModule(moduleOrder[(currentIndex + direction + moduleOrder.length) % moduleOrder.length]);
+        return;
+      }
+
+      if (!(event.code === 'Space' || event.key === ' ')) return;
       event.preventDefault();
       if (spaceDownAt.current !== null) return;
       spaceDownAt.current = performance.now();
@@ -156,9 +168,8 @@ export default function App() {
       clearLongPress();
       longSpaceTimer.current = window.setTimeout(() => {
         const latest = useStore.getState();
-        const modules = ['shortcuts', 'tasks', 'cockpit', 'translate'] as const;
-        const currentIndex = Math.max(0, modules.indexOf(latest.activeModule));
-        latest.setActiveModule(modules[(currentIndex + 1) % modules.length]);
+        const currentIndex = Math.max(0, moduleOrder.indexOf(latest.activeModule));
+        latest.setActiveModule(moduleOrder[(currentIndex + 1) % moduleOrder.length]);
         longSpaceTriggered.current = true;
         shortSpaceTimer.current && window.clearTimeout(shortSpaceTimer.current);
         shortSpaceTimer.current = null;
