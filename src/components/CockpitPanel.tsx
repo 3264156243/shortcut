@@ -75,9 +75,9 @@ export default function CockpitPanel() {
     </div>
     <section className="shrink-0 border-t border-white/10 pt-4">
       <div className="mb-3 flex items-center gap-2"><BatteryCharging size={17} className="text-emerald-400" /><h2 className="text-xs font-semibold text-zinc-300">电池系统</h2></div>
-      <div className="grid grid-cols-2 items-center gap-4 md:grid-cols-[minmax(180px,1.5fr)_repeat(4,minmax(90px,1fr))] md:gap-5">
+      <div className="grid grid-cols-2 items-center gap-4 md:grid-cols-[minmax(180px,1.5fr)_repeat(3,minmax(90px,1fr))] md:gap-5">
         <div className="col-span-2 flex min-w-0 items-center gap-3 md:col-span-1"><Battery size={25} className="shrink-0 text-emerald-400" /><div className="min-w-0 flex-1"><div className="mb-1.5 flex justify-between text-xs"><span className="text-zinc-500">剩余电量</span><span className="font-semibold text-zinc-200">{format(battery?.level, '%')}</span></div><div className="h-2 overflow-hidden rounded bg-zinc-800"><div className="h-full rounded bg-emerald-400 transition-[width] duration-500" style={{ width: `${level}%` }} /></div></div></div>
-        <BatteryValue label="状态" value={battery?.status || missing} /><BatteryValue label="温度" value={format(battery?.temperature, '°C')} /><BatteryValue label="电压" value={format(battery?.voltage, ' V')} /><BatteryValue label="健康值" value={format(battery?.health, '%')} />
+        <BatteryValue label="状态" value={battery?.status || missing} /><BatteryValue label="电压" value={format(battery?.voltage, ' V')} /><BatteryValue label="健康值" value={format(battery?.health, '%')} />
       </div>
     </section>
   </div>;

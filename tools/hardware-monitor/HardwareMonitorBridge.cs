@@ -31,7 +31,6 @@ internal sealed class BatteryMetric
 {
     public double? level { get; set; }
     public string status { get; set; }
-    public double? temperature { get; set; }
     public double? voltage { get; set; }
     public double? health { get; set; }
 }
@@ -119,7 +118,6 @@ internal static class Program
         IHardware batteryHardware = all.FirstOrDefault(item => item.HardwareType.ToString().IndexOf("Battery", StringComparison.OrdinalIgnoreCase) >= 0);
         if (batteryHardware != null)
         {
-            result.temperature = MaxSensor(batteryHardware, SensorType.Temperature);
             result.level = MaxSensor(batteryHardware, SensorType.Level, "Charge", "Level");
             result.voltage = MaxSensor(batteryHardware, SensorType.Voltage) ;
         }

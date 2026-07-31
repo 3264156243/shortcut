@@ -17,7 +17,7 @@ export interface CockpitData {
   cpu?: { name?: string; temperature?: number | null; usage?: number | null };
   gpu?: { name?: string; temperature?: number | null; usage?: number | null };
   memory?: { name?: string; temperature?: number | null; usage?: number | null };
-  battery?: { level?: number | null; status?: string; temperature?: number | null; voltage?: number | null; health?: number | null };
+  battery?: { level?: number | null; status?: string; voltage?: number | null; health?: number | null };
 }
 
 export type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error' | 'unconfigured';
