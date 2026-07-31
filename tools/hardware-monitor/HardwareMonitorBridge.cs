@@ -41,7 +41,7 @@ internal sealed class Snapshot
     public long timestamp { get; set; }
     public Metric cpu { get; set; }
     public Metric gpu { get; set; }
-    public Metric motherboard { get; set; }
+    public Metric memory { get; set; }
     public BatteryMetric battery { get; set; }
 }
 
@@ -76,6 +76,29 @@ internal static class Program
         double? temperature = matches.Select(item => MaxSensor(item, SensorType.Temperature, "Package", "Core", "GPU Core", "System")).FirstOrDefault(value => value.HasValue);
         double? load = usage ? matches.Select(item => MaxSensor(item, SensorType.Load, "Total", "GPU Core", "Core")).FirstOrDefault(value => value.HasValue) : null;
         return new Metric { name = primary.Name, temperature = temperature, usage = load };
+    }
+
+
+    private static Metric ReadMemory(IEnumerable<IHardware> all)
+    {
+        List<IHardware> hardware = all.ToList();
+        List<IHardware> memory = hardware.Where(item =>
+            item.HardwareType.ToString().IndexOf("Memory", StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+        double? usage = memory.Select(item => MaxSensor(item, SensorType.Load, "Memory")).FirstOrDefault(value => value.HasValue);
+
+        IEnumerable<ISensor> temperatureSensors = hardware
+            .Where(item => item.HardwareType.ToString().IndexOf("Gpu", StringComparison.OrdinalIgnoreCase) < 0)
+            .SelectMany(item => item.Sensors)
+            .Where(sensor => sensor.SensorType == SensorType.Temperature && sensor.Value.HasValue)
+            .Where(sensor =>
+                sensor.Name.IndexOf("DIMM", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                sensor.Name.IndexOf("DRAM", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                sensor.Name.IndexOf("Memory", StringComparison.OrdinalIgnoreCase) >= 0);
+        double? temperature = temperatureSensors.Any()
+            ? Math.Round(temperatureSensors.Max(sensor => sensor.Value.Value), 1)
+            : (double?)null;
+
+        return new Metric { name = "系统内存", temperature = temperature, usage = usage };
     }
 
     private static object WmiValue(ManagementBaseObject item, string property)
@@ -144,7 +167,7 @@ internal static class Program
             IsGpuEnabled = true,
             IsMotherboardEnabled = true,
             IsBatteryEnabled = true,
-            IsMemoryEnabled = false,
+            IsMemoryEnabled = true,
             IsStorageEnabled = false,
             IsNetworkEnabled = false,
             IsControllerEnabled = false,
@@ -165,7 +188,7 @@ internal static class Program
                     timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                     cpu = ReadMetric(all, type => type.IndexOf("Cpu", StringComparison.OrdinalIgnoreCase) >= 0, true),
                     gpu = ReadMetric(all, type => type.IndexOf("Gpu", StringComparison.OrdinalIgnoreCase) >= 0, true),
-                    motherboard = ReadMetric(all, type => type.IndexOf("Motherboard", StringComparison.OrdinalIgnoreCase) >= 0, false),
+                    memory = ReadMemory(all),
                     battery = ReadBattery(all)
                 };
                 Console.WriteLine(serializer.Serialize(snapshot));

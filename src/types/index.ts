@@ -16,7 +16,7 @@ export interface CockpitData {
   error?: string;
   cpu?: { name?: string; temperature?: number | null; usage?: number | null };
   gpu?: { name?: string; temperature?: number | null; usage?: number | null };
-  motherboard?: { name?: string; temperature?: number | null };
+  memory?: { name?: string; temperature?: number | null; usage?: number | null };
   battery?: { level?: number | null; status?: string; temperature?: number | null; voltage?: number | null; health?: number | null };
 }
 

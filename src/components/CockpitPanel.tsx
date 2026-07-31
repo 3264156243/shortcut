@@ -70,7 +70,7 @@ export default function CockpitPanel() {
     </header>
     <div className="grid min-h-[310px] flex-1 grid-cols-2 items-center justify-items-center gap-3 py-2 md:grid-cols-[minmax(180px,1fr)_minmax(120px,170px)_minmax(180px,1fr)]">
       <Dial label="CPU" name={data?.cpu?.name} temperature={data?.cpu?.temperature} usage={data?.cpu?.usage} color="#29b6f6" />
-      <div className="col-span-2 row-start-1 max-w-[150px] self-start pt-3 md:col-span-1 md:col-start-2 md:max-w-none"><Dial small label="主板" name={data?.motherboard?.name} temperature={data?.motherboard?.temperature} color="#ffb74d" /></div>
+      <div className="col-span-2 row-start-1 max-w-[150px] self-start pt-3 md:col-span-1 md:col-start-2 md:max-w-none"><Dial small label="内存" name={data?.memory?.name} temperature={data?.memory?.temperature} usage={data?.memory?.usage} color="#ffb74d" /></div>
       <Dial label="GPU" name={data?.gpu?.name} temperature={data?.gpu?.temperature} usage={data?.gpu?.usage} color="#ef5350" />
     </div>
     <section className="shrink-0 border-t border-white/10 pt-4">
