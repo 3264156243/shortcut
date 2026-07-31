@@ -38,6 +38,9 @@ let updateState: {
   currentVersion: string;
   version?: string;
   progress?: number;
+  bytesPerSecond?: number;
+  transferred?: number;
+  total?: number;
   error?: string;
   manual?: boolean;
   releaseNotes?: string;
@@ -104,6 +107,9 @@ function setupAutoUpdater() {
     sendUpdateState({
       status: 'downloading',
       progress: Math.max(0, Math.min(100, Number(progress?.percent) || 0)),
+      bytesPerSecond: Math.max(0, Number(progress?.bytesPerSecond) || 0),
+      transferred: Math.max(0, Number(progress?.transferred) || 0),
+      total: Math.max(0, Number(progress?.total) || 0),
       version: updateState.version,
       error: undefined,
     });
@@ -165,7 +171,7 @@ async function downloadUpdate() {
     return { success: false, status: updateState.status };
   }
 
-  sendUpdateState({ status: 'downloading', progress: 0, manual: true, error: undefined });
+  sendUpdateState({ status: 'downloading', progress: 0, bytesPerSecond: 0, transferred: 0, total: undefined, manual: true, error: undefined });
   try {
     await autoUpdater.downloadUpdate();
     return { success: true, status: updateState.status };

@@ -123,7 +123,7 @@ export default function App() {
     api.getUpdateState().then(setUpdateState).catch(() => undefined);
     const unsubscribe = api.onUpdateState((nextState) => {
       setUpdateState(nextState);
-      if (nextState.status === 'available' || nextState.status === 'downloaded' || (nextState.status === 'error' && !!nextState.manual)) {
+      if (nextState.status === 'available' || (nextState.status === 'error' && !!nextState.manual)) {
         setUpdateDismissed(false);
       }
     });

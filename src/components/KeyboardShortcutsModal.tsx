@@ -22,6 +22,13 @@ const sections = [
     ],
   },
   {
+    title: '翻译板块',
+    items: [
+      { keys: ['双击 Space'], description: '进入或退出原文输入模式' },
+      { keys: ['Alt', 'E'], description: '在任意程序中翻译当前选中的文字' },
+    ],
+  },
+  {
     title: '任务墙',
     items: [
       { keys: ['Space'], description: '切换到下一个任务墙' },

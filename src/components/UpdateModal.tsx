@@ -3,6 +3,21 @@ import { AlertTriangle, CheckCircle2, Download, RefreshCw, X } from 'lucide-reac
 import { UpdateState } from '../types';
 import { useTranslation } from '../hooks/useTranslation';
 
+function formatSpeed(bytesPerSecond = 0) {
+  if (!bytesPerSecond) return '计算中';
+  if (bytesPerSecond >= 1024 * 1024) return (bytesPerSecond / 1024 / 1024).toFixed(1) + ' MB/s';
+  return Math.max(1, Math.round(bytesPerSecond / 1024)) + ' KB/s';
+}
+
+function formatRemaining(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds < 0) return '计算中';
+  if (seconds < 60) return Math.max(1, Math.ceil(seconds)) + ' 秒';
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes < 60) return minutes + ' 分钟';
+  const hours = Math.floor(minutes / 60);
+  return hours + ' 小时 ' + (minutes % 60) + ' 分钟';
+}
+
 interface UpdateModalProps {
   state: UpdateState;
   onDownload: () => void;
@@ -18,6 +33,9 @@ export default function UpdateModal({ state, onDownload, onInstall, onDismiss }:
   const failed = state.status === 'error';
   const visible = available || downloading || downloaded || (failed && !!state.manual);
   const progress = Math.max(0, Math.min(100, state.progress || 0));
+  const remainingSeconds = state.bytesPerSecond && state.total
+    ? Math.max(0, (state.total - (state.transferred || 0)) / state.bytesPerSecond)
+    : Number.NaN;
 
   return (
     <AnimatePresence>
@@ -103,8 +121,9 @@ export default function UpdateModal({ state, onDownload, onInstall, onDismiss }:
                       animate={{ width: progress + '%' }}
                     />
                   </div>
-                  <div className="mt-2 text-right text-xs tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
-                    {Math.round(progress)}%
+                  <div className="mt-2 flex items-center justify-between gap-3 text-xs tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
+                    <span>速度 {formatSpeed(state.bytesPerSecond)} · 预计剩余 {formatRemaining(remainingSeconds)}</span>
+                    <span>{Math.round(progress)}%</span>
                   </div>
                 </div>
               )}

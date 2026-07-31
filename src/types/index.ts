@@ -18,6 +18,9 @@ export interface UpdateState {
   currentVersion: string;
   version?: string;
   progress?: number;
+  bytesPerSecond?: number;
+  transferred?: number;
+  total?: number;
   error?: string;
   manual?: boolean;
   releaseNotes?: string;
