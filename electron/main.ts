@@ -301,6 +301,32 @@ function normalizeExternalUrl(url: string): string {
   return `https://${trimmed}`;
 }
 
+function encodePowerShellCommand(command: string) {
+  return Buffer.from(command, 'utf16le').toString('base64');
+}
+
+function launchIndependent(targetPath: string) {
+  return new Promise<void>((resolve, reject) => {
+    const escapedPath = targetPath.replace(/'/g, "''");
+    let workingDirectory = path.dirname(targetPath);
+    try {
+      if (fs.statSync(targetPath).isDirectory()) workingDirectory = targetPath;
+    } catch { }
+    const escapedDirectory = workingDirectory.replace(/'/g, "''");
+    const command = `Start-Process -FilePath '${escapedPath}' -WorkingDirectory '${escapedDirectory}'`;
+    const launcher = childProcess.spawn('powershell.exe', [
+      '-NoProfile',
+      '-WindowStyle', 'Hidden',
+      '-EncodedCommand', encodePowerShellCommand(command),
+    ], { detached: true, windowsHide: true, stdio: 'ignore' });
+    launcher.once('spawn', () => {
+      launcher.unref();
+      resolve();
+    });
+    launcher.once('error', reject);
+  });
+}
+
 function normalizeIconPath(iconSource: string): string {
   const expanded = expandWindowsEnv(iconSource || '').trim();
   const quoted = expanded.match(/^"([^"]+)"/);
@@ -720,7 +746,8 @@ ipcMain.handle('config:write', (_e: any, data: string) => writeConfig(data));
 
 ipcMain.handle('shell:open', async (_e: any, targetPath: string) => {
   try {
-    await shell.openPath(targetPath);
+    if (!targetPath || !fs.existsSync(targetPath)) return { success: false, error: '目标不存在' };
+    await launchIndependent(targetPath);
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message };
@@ -749,20 +776,38 @@ ipcMain.handle('shell:runBat', async (_e: any, content: string, runAsAdmin: bool
     const batDirectory = path.join(app.getPath('userData'), 'bat');
     fs.mkdirSync(batDirectory, { recursive: true });
     const batPath = path.join(batDirectory, `shortcut-${Date.now()}.bat`);
-    fs.writeFileSync(batPath, `\uFEFF@echo off\r\n@chcp 65001 >nul\r\n${content}\r\n`, 'utf8');
+    const normalizedContent = content.replace(/^\uFEFF/, '');
+    fs.writeFileSync(batPath, `@chcp 65001 >nul\r\n${normalizedContent}\r\n`, 'utf8');
+
+    const selfElevates = /%1\s+mshta\b.*ShellExecute/i.test(content);
+    const commandLine = `call "${batPath}"${selfElevates ? ' ::' : ''}`;
     if (runAsAdmin) {
-      const escapedPath = batPath.replace(/'/g, "''");
       const escapedDirectory = batDirectory.replace(/'/g, "''");
-      childProcess.spawn('powershell.exe', [
-        '-NoProfile',
-        '-WindowStyle', 'Hidden',
-        '-Command',
-        `Start-Process -FilePath '${escapedPath}' -WorkingDirectory '${escapedDirectory}' -Verb RunAs`,
-      ], { detached: true, windowsHide: true, stdio: 'ignore' }).unref();
+      const escapedCommandLine = commandLine.replace(/'/g, "''");
+      const elevatedCommand = `Set-Location -LiteralPath '${escapedDirectory}'; & $env:ComSpec '/d' '/s' '/c' '${escapedCommandLine}'; exit $LASTEXITCODE`;
+      const elevatedEncoded = encodePowerShellCommand(elevatedCommand);
+      const bootstrapCommand = `Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile -ExecutionPolicy Bypass -EncodedCommand ${elevatedEncoded}' -Verb RunAs -WindowStyle Hidden`;
+      await new Promise<void>((resolve, reject) => {
+        const launcher = childProcess.spawn('powershell.exe', [
+          '-NoProfile',
+          '-WindowStyle', 'Hidden',
+          '-EncodedCommand', encodePowerShellCommand(bootstrapCommand),
+        ], { detached: true, windowsHide: true, stdio: 'ignore' });
+        launcher.once('spawn', () => {
+          launcher.unref();
+          resolve();
+        });
+        launcher.once('error', reject);
+      });
     } else {
-      childProcess.spawn('cmd.exe', ['/c', batPath], { detached: true, windowsHide: false, stdio: 'ignore' }).unref();
+      const runner = childProcess.spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', commandLine], {
+        detached: true,
+        windowsHide: true,
+        stdio: 'ignore',
+      });
+      runner.unref();
     }
-    setTimeout(() => fs.rm(batPath, { force: true }, () => undefined), 60000);
+    setTimeout(() => fs.rm(batPath, { force: true }, () => undefined), 5 * 60 * 1000);
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message };
