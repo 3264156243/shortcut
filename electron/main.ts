@@ -305,19 +305,14 @@ function encodePowerShellCommand(command: string) {
   return Buffer.from(command, 'utf16le').toString('base64');
 }
 
-function launchIndependent(targetPath: string) {
+function launchIndependentExecutable(targetPath: string) {
   return new Promise<void>((resolve, reject) => {
-    const escapedPath = targetPath.replace(/'/g, "''");
-    let workingDirectory = path.dirname(targetPath);
-    try {
-      if (fs.statSync(targetPath).isDirectory()) workingDirectory = targetPath;
-    } catch { }
-    const escapedDirectory = workingDirectory.replace(/'/g, "''");
-    const command = `Start-Process -FilePath '${escapedPath}' -WorkingDirectory '${escapedDirectory}'`;
-    const launcher = childProcess.spawn('powershell.exe', [
-      '-NoProfile',
-      '-WindowStyle', 'Hidden',
-      '-EncodedCommand', encodePowerShellCommand(command),
+    const escapedPath = targetPath.replace(/"/g, '""');
+    const launcher = childProcess.spawn(process.env.ComSpec || 'cmd.exe', [
+      '/d',
+      '/s',
+      '/c',
+      `start "" "${escapedPath}"`,
     ], { detached: true, windowsHide: true, stdio: 'ignore' });
     launcher.once('spawn', () => {
       launcher.unref();
@@ -747,7 +742,13 @@ ipcMain.handle('config:write', (_e: any, data: string) => writeConfig(data));
 ipcMain.handle('shell:open', async (_e: any, targetPath: string) => {
   try {
     if (!targetPath || !fs.existsSync(targetPath)) return { success: false, error: '目标不存在' };
-    await launchIndependent(targetPath);
+    const extension = path.extname(targetPath).toLowerCase();
+    if (extension === '.exe' || extension === '.com' || extension === '.lnk') {
+      await launchIndependentExecutable(targetPath);
+    } else {
+      const error = await shell.openPath(targetPath);
+      if (error) return { success: false, error };
+    }
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message };

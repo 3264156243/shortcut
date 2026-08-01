@@ -1,6 +1,6 @@
 ﻿import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import { AppConfig, DEFAULT_CONFIG, Tab, Group, Shortcut, Locale, PanelAnimation, ModuleId, TaskNote, TaskBoardConfig, UpdateState } from '../types';
+import { AppConfig, DEFAULT_CONFIG, Tab, Group, Shortcut, Locale, PanelAnimation, ModuleId, TaskNote, TaskBoardConfig, TaskEditorDraft, UpdateState } from '../types';
 import { t } from '../i18n';
 
 interface AppState {
@@ -35,6 +35,7 @@ interface AppState {
   renameTaskBoard: (boardId: string, name: string) => void;
   deleteTaskBoard: (boardId: string) => void;
   setActiveTaskBoard: (boardId: string) => void;
+  setTaskEditorDraft: (draft: TaskEditorDraft | null) => void;
   addTask: (text: string, options?: { longText?: boolean; details?: string; reminderAt?: string }) => string | null;
   updateTask: (taskId: string, updates: Partial<TaskNote>) => void;
   markTaskReminded: (boardId: string, taskId: string) => void;
@@ -84,6 +85,8 @@ interface Toast {
   message: string;
   type: 'success' | 'error' | 'info';
 }
+
+let taskEditorSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
 declare global {
   interface Window {
@@ -367,6 +370,20 @@ export const useStore = create<AppState>((set, get) => ({
   setActiveTaskBoard: (boardId) => {
     set((state) => ({ config: { ...state.config, activeTaskBoardId: boardId, tasks: [] } }));
     get().saveConfig();
+  },
+
+  setTaskEditorDraft: (draft) => {
+    set((state) => ({
+      config: {
+        ...state.config,
+        taskEditorDraft: draft || undefined,
+      },
+    }));
+    if (taskEditorSaveTimer) clearTimeout(taskEditorSaveTimer);
+    taskEditorSaveTimer = setTimeout(() => {
+      taskEditorSaveTimer = null;
+      void get().saveConfig();
+    }, 200);
   },
 
   addTask: (text, options) => {

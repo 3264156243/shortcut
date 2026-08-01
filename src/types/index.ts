@@ -91,6 +91,18 @@ export interface TaskBoardConfig {
   updatedAt: string;
 }
 
+export interface TaskEditorDraft {
+  boardId: string;
+  taskId: string | null;
+  title: string;
+  longText: boolean;
+  details: string;
+  reminderEnabled: boolean;
+  reminderAt: string;
+  originalReminderAt?: string;
+  originalRemindedAt?: string;
+}
+
 export interface AppConfig {
   version: number;
   theme: 'dark' | 'light' | 'system';
@@ -105,6 +117,7 @@ export interface AppConfig {
   tasks: TaskNote[];
   taskBoards: TaskBoardConfig[];
   activeTaskBoardId?: string;
+  taskEditorDraft?: TaskEditorDraft;
   tabs: Tab[];
   activeTabId?: string;
 }

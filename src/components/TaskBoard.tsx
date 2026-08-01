@@ -2,20 +2,11 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, Check, FileText, Plus, Trash2, X } from 'lucide-react';
 import { useStore } from '../store';
-import { TaskBoardConfig, TaskNote } from '../types';
+import { TaskBoardConfig, TaskEditorDraft, TaskNote } from '../types';
 import TaskDateTimePicker, { createDefaultReminderValue } from './TaskDateTimePicker';
 
 const tapePositions = ['left', 'right', 'center'];
-interface TaskEditorState {
-  taskId: string | null;
-  title: string;
-  longText: boolean;
-  details: string;
-  reminderEnabled: boolean;
-  reminderAt: string;
-  originalReminderAt?: string;
-  originalRemindedAt?: string;
-}
+type TaskEditorState = Omit<TaskEditorDraft, 'boardId'>;
 
 const toDateTimeLocal = (iso?: string) => {
   if (!iso) return '';
@@ -47,13 +38,13 @@ export default function TaskBoard() {
   const toggleTask = useStore((state) => state.toggleTask);
   const deleteTask = useStore((state) => state.deleteTask);
   const moveTask = useStore((state) => state.moveTask);
+  const setTaskEditorDraft = useStore((state) => state.setTaskEditorDraft);
   const wallRef = useRef<HTMLDivElement>(null);
   const taskInputRef = useRef<HTMLInputElement>(null);
   const lastInputSpaceAt = useRef(0);
   const [draft, setDraft] = useState('');
   const [longTextEnabled, setLongTextEnabled] = useState(false);
   const [reminderEnabled, setReminderEnabled] = useState(false);
-  const [editor, setEditor] = useState<TaskEditorState | null>(null);
   const [nameDraft, setNameDraft] = useState('');
   const [renamingBoardId, setRenamingBoardId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -64,6 +55,10 @@ export default function TaskBoard() {
   const activeBoard = taskBoards.find((board) => board.id === config.activeTaskBoardId) || taskBoards[0];
   const tasks = activeBoard?.notes || [];
   const renamingBoard = taskBoards.find((board) => board.id === renamingBoardId);
+  const editor = config.taskEditorDraft?.boardId === activeBoard?.id ? config.taskEditorDraft : null;
+  const setEditor = (nextEditor: TaskEditorState | null) => {
+    setTaskEditorDraft(nextEditor && activeBoard ? { ...nextEditor, boardId: activeBoard.id } : null);
+  };
 
   useEffect(() => {
     setConfirmDeleteId(null);
