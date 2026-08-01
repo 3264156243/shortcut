@@ -305,20 +305,42 @@ function encodePowerShellCommand(command: string) {
   return Buffer.from(command, 'utf16le').toString('base64');
 }
 
-function launchIndependentExecutable(targetPath: string) {
+function launchViaWindowsShell(targetPath: string, options: { runAsAdmin?: boolean; argument?: string; hide?: boolean } = {}) {
   return new Promise<void>((resolve, reject) => {
-    const escapedPath = targetPath.replace(/"/g, '""');
-    const launcher = childProcess.spawn(process.env.ComSpec || 'cmd.exe', [
-      '/d',
-      '/s',
-      '/c',
-      `start "" "${escapedPath}"`,
-    ], { detached: true, windowsHide: true, stdio: 'ignore' });
-    launcher.once('spawn', () => {
-      launcher.unref();
-      resolve();
+    const workingDirectory = path.dirname(targetPath);
+    const command = [
+      "$ErrorActionPreference = 'Stop'",
+      "$params = @{ FilePath = $env:SHORTCUT_TARGET; WorkingDirectory = $env:SHORTCUT_CWD; PassThru = $true }",
+      "if ($env:SHORTCUT_RUN_AS_ADMIN -eq '1') { $params.Verb = 'RunAs' }",
+      "if ($env:SHORTCUT_ARGUMENT) { $params.ArgumentList = @($env:SHORTCUT_ARGUMENT) }",
+      "if ($env:SHORTCUT_HIDE -eq '1') { $params.WindowStyle = 'Hidden' }",
+      "$process = Start-Process @params",
+      "if (-not $process) { throw 'Windows did not create the target process.' }",
+    ].join('; ');
+    const launcher = childProcess.spawn('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy', 'Bypass',
+      '-EncodedCommand', encodePowerShellCommand(command),
+    ], {
+      windowsHide: true,
+      env: {
+        ...process.env,
+        SHORTCUT_TARGET: targetPath,
+        SHORTCUT_CWD: workingDirectory,
+        SHORTCUT_RUN_AS_ADMIN: options.runAsAdmin ? '1' : '0',
+        SHORTCUT_ARGUMENT: options.argument || '',
+        SHORTCUT_HIDE: options.hide ? '1' : '0',
+      },
+      stdio: ['ignore', 'ignore', 'pipe'],
     });
+    let stderr = '';
+    launcher.stderr?.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
     launcher.once('error', reject);
+    launcher.once('close', (code: number | null) => {
+      if (code === 0) resolve();
+      else reject(new Error(stderr.trim() || `Windows launcher exited with code ${code ?? 'unknown'}`));
+    });
   });
 }
 
@@ -744,7 +766,7 @@ ipcMain.handle('shell:open', async (_e: any, targetPath: string) => {
     if (!targetPath || !fs.existsSync(targetPath)) return { success: false, error: '目标不存在' };
     const extension = path.extname(targetPath).toLowerCase();
     if (extension === '.exe' || extension === '.com' || extension === '.lnk') {
-      await launchIndependentExecutable(targetPath);
+      await launchViaWindowsShell(targetPath);
     } else {
       const error = await shell.openPath(targetPath);
       if (error) return { success: false, error };
@@ -781,33 +803,11 @@ ipcMain.handle('shell:runBat', async (_e: any, content: string, runAsAdmin: bool
     fs.writeFileSync(batPath, `@chcp 65001 >nul\r\n${normalizedContent}\r\n`, 'utf8');
 
     const selfElevates = /%1\s+mshta\b.*ShellExecute/i.test(content);
-    const commandLine = `call "${batPath}"${selfElevates ? ' ::' : ''}`;
-    if (runAsAdmin) {
-      const escapedDirectory = batDirectory.replace(/'/g, "''");
-      const escapedCommandLine = commandLine.replace(/'/g, "''");
-      const elevatedCommand = `Set-Location -LiteralPath '${escapedDirectory}'; & $env:ComSpec '/d' '/s' '/c' '${escapedCommandLine}'; exit $LASTEXITCODE`;
-      const elevatedEncoded = encodePowerShellCommand(elevatedCommand);
-      const bootstrapCommand = `Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile -ExecutionPolicy Bypass -EncodedCommand ${elevatedEncoded}' -Verb RunAs -WindowStyle Hidden`;
-      await new Promise<void>((resolve, reject) => {
-        const launcher = childProcess.spawn('powershell.exe', [
-          '-NoProfile',
-          '-WindowStyle', 'Hidden',
-          '-EncodedCommand', encodePowerShellCommand(bootstrapCommand),
-        ], { detached: true, windowsHide: true, stdio: 'ignore' });
-        launcher.once('spawn', () => {
-          launcher.unref();
-          resolve();
-        });
-        launcher.once('error', reject);
-      });
-    } else {
-      const runner = childProcess.spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', commandLine], {
-        detached: true,
-        windowsHide: true,
-        stdio: 'ignore',
-      });
-      runner.unref();
-    }
+    await launchViaWindowsShell(batPath, {
+      runAsAdmin,
+      argument: selfElevates ? '::' : undefined,
+      hide: true,
+    });
     setTimeout(() => fs.rm(batPath, { force: true }, () => undefined), 5 * 60 * 1000);
     return { success: true };
   } catch (err: any) {
