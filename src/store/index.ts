@@ -125,6 +125,11 @@ declare global {
       installUpdate: () => Promise<boolean>;
       onUpdateState: (callback: (state: UpdateState) => void) => () => void;
       getTheme: () => Promise<'dark' | 'light'>;
+      getIslandState: () => Promise<{ enabled: boolean; style: string; position: string; autoHideFullscreen: boolean }>;
+      setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean) => Promise<{ success: boolean; error?: string }>;
+      moveIsland: (screenX: number, screenY: number, deltaX: number, deltaY: number) => Promise<{ success: boolean; error?: string }>;
+      toggleIsland: () => Promise<{ visible: boolean }>;
+      onIslandConfig: (callback: (state: unknown) => void) => () => void;
       closeWindow: () => Promise<void>;
       minimizeWindow: () => Promise<void>;
       maximizeWindow: () => Promise<boolean>;

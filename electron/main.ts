@@ -34,6 +34,9 @@ let selectionTranslationBusy = false;
 let hardwareMonitorProcess: any = null;
 let hardwareMonitorBuffer = '';
 let captureOverlay: any = null;
+let islandWindow: any = null;
+let islandProgrammaticMove = false;
+let islandUserHidden = false;
 
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error' | 'unconfigured';
 
@@ -188,6 +191,136 @@ async function downloadUpdate() {
     return { success: false, status: 'error', error: updateState.error };
   }
 }
+const ISLAND_SIZE = { width: 360, height: 330 };
+const ISLAND_COLLAPSED_HEIGHT = 70;
+const ISLAND_POSITIONS: Record<string, { x: number; y: number }> = {
+  'top-center': { x: 0.5, y: 0.08 },
+  'top-left': { x: 0.12, y: 0.08 },
+  'top-right': { x: 0.88, y: 0.08 },
+  'left-center': { x: 0.12, y: 0.5 },
+  'right-center': { x: 0.88, y: 0.5 },
+};
+
+function getIslandPreferences(): any {
+  try {
+    const raw = readConfig();
+    if (!raw) return {};
+    return JSON.parse(raw)?.island || {};
+  } catch {
+    return {};
+  }
+}
+
+function isIslandEnabled(prefs: any): boolean {
+  return prefs?.enabled === true;
+}
+
+function islandPositionBounds(prefs: any): { x: number; y: number; width: number; height: number } {
+  const position = prefs.position || 'top-center';
+  const preset = ISLAND_POSITIONS[position] || ISLAND_POSITIONS['top-center'];
+  const display = electronScreen.getPrimaryDisplay();
+  const area = display.workArea;
+  const width = Math.min(ISLAND_SIZE.width, Math.max(260, area.width));
+  const height = Math.min(ISLAND_SIZE.height, Math.max(220, area.height));
+  const customX = Number(prefs.x);
+  const customY = Number(prefs.y);
+  if (position === 'custom' && Number.isFinite(customX) && Number.isFinite(customY)) {
+    return {
+      x: Math.max(area.x, Math.min(area.x + area.width - width, Math.round(customX))),
+      y: Math.max(area.y, Math.min(area.y + area.height - height, Math.round(customY))),
+      width,
+      height,
+    };
+  }
+  return {
+    x: Math.round(area.x + area.width * preset.x - width / 2),
+    y: Math.round(area.y + area.height * preset.y),
+    width,
+    height,
+  };
+}
+
+function anyFullscreenWindow(): boolean {
+  try {
+    return BrowserWindow.getAllWindows().some((win: any) => !win.isDestroyed() && win.isVisible() && win.isFullScreen());
+  } catch {
+    return false;
+  }
+}
+
+function applyIslandVisibility() {
+  if (!islandWindow || islandWindow.isDestroyed()) return;
+  const prefs = getIslandPreferences();
+  if (prefs.autoHideFullscreen !== false && anyFullscreenWindow()) {
+    islandWindow.hide();
+  } else if (isIslandEnabled(prefs) && !islandUserHidden) {
+    islandWindow.showInactive();
+  }
+}
+
+function positionIslandWindow(force = false) {
+  if (!islandWindow || islandWindow.isDestroyed()) return;
+  const bounds = islandPositionBounds(getIslandPreferences());
+  islandProgrammaticMove = true;
+  islandWindow.setBounds(bounds);
+  islandProgrammaticMove = false;
+  if (force) applyIslandVisibility();
+}
+
+function createIslandWindow() {
+  if (islandWindow && !islandWindow.isDestroyed()) {
+    islandUserHidden = false;
+    islandWindow.showInactive();
+    return;
+  }
+  const prefs = getIslandPreferences();
+  if (!isIslandEnabled(prefs)) return;
+  const bounds = islandPositionBounds(prefs);
+  islandWindow = new BrowserWindow({
+    ...bounds,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    resizable: false,
+    movable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    focusable: false,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+    },
+  });
+  islandWindow.setAlwaysOnTop(true, 'screen-saver');
+  islandWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  if (process.env.VITE_DEV_SERVER_URL) {
+    islandWindow.loadURL(process.env.VITE_DEV_SERVER_URL + '/island.html');
+  } else {
+    islandWindow.loadFile(path.join(__dirname, '../dist/island.html'));
+  }
+  islandWindow.once('ready-to-show', () => {
+    applyIslandVisibility();
+  });
+  islandWindow.on('closed', () => { islandWindow = null; });
+  islandWindow.on('move', () => {
+    if (!islandWindow || islandWindow.isDestroyed()) return;
+    if (islandProgrammaticMove) return;
+    const [x, y] = islandWindow.getPosition();
+    try {
+      const raw = readConfig();
+      const cfg = raw ? JSON.parse(raw) : {};
+      const island = cfg.island || {};
+      if (island.position !== 'custom') {
+        writeConfig(JSON.stringify({ ...cfg, island: { ...island, position: 'custom', x, y } }, null, 2));
+      }
+    } catch {}
+  });
+}
+
 function getHardwareMonitorPath() {
   return app.isPackaged
     ? path.join((process as any).resourcesPath, 'hardware-monitor', 'ShortCut.HardwareMonitor.exe')
@@ -757,6 +890,64 @@ function createTray() {
   tray.setContextMenu(contextMenu);
 }
 
+// Dynamic island IPC
+ipcMain.handle('island:getState', () => getIslandPreferences());
+ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position: string, autoHideFullscreen: boolean) => {
+  try {
+    const raw = readConfig();
+    const cfg = raw ? JSON.parse(raw) : {};
+    const island = {
+      ...(cfg.island || {}),
+      enabled: !!enabled,
+      style: style || 'capsule',
+      position: position || 'top-center',
+      autoHideFullscreen: autoHideFullscreen !== false,
+    };
+    writeConfig(JSON.stringify({ ...cfg, island }, null, 2));
+    if (island.enabled) {
+      islandUserHidden = false;
+      createIslandWindow();
+    } else {
+      islandUserHidden = true;
+      if (islandWindow && !islandWindow.isDestroyed()) islandWindow.hide();
+    }
+    if (islandWindow && !islandWindow.isDestroyed()) positionIslandWindow(true);
+    if (islandWindow && !islandWindow.isDestroyed()) {
+      islandWindow.webContents.send('island:config', island);
+    }
+    return { success: true, island };
+  } catch (error: any) {
+    return { success: false, error: error?.message || '???????' };
+  }
+});
+ipcMain.handle('island:move', (_e: any, _screenX: number, _screenY: number, deltaX: number, deltaY: number) => {
+  try {
+    if (!islandWindow || islandWindow.isDestroyed()) return { success: false };
+    const bounds = islandWindow.getBounds();
+    const nextX = bounds.x + deltaX;
+    const nextY = bounds.y + deltaY;
+    const display = electronScreen.getDisplayMatching(bounds);
+    const area = display.workArea;
+    const clampedX = Math.max(area.x, Math.min(area.x + area.width - bounds.width, nextX));
+    const clampedY = Math.max(area.y, Math.min(area.y + area.height - bounds.height, nextY));
+    islandWindow.setBounds({ x: clampedX, y: clampedY, width: bounds.width, height: bounds.height });
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error?.message || '????' };
+  }
+});
+function toggleIslandWindow() {
+  if (islandWindow && !islandWindow.isDestroyed() && islandWindow.isVisible()) {
+    islandUserHidden = true;
+    islandWindow.hide();
+    return { visible: false };
+  }
+  islandUserHidden = false;
+  createIslandWindow();
+  return { visible: true };
+}
+ipcMain.handle('island:toggle', () => toggleIslandWindow());
+
 // IPC Handlers
 ipcMain.handle('config:read', () => readConfig());
 ipcMain.handle('config:write', (_e: any, data: string) => writeConfig(data));
@@ -1163,6 +1354,8 @@ app.whenReady().then(() => {
   setupAutoUpdater();
   createWindow();
   createTray();
+  createIslandWindow();
+  setInterval(() => applyIslandVisibility(), 1500);
 
   setTimeout(() => {
     void checkForUpdates();
@@ -1196,6 +1389,12 @@ app.whenReady().then(() => {
   if (!regionScreenshotHotkey) {
     console.error('Failed to register Alt+D hotkey');
   }
+  const islandHotkey = globalShortcut.register('Alt+I', () => {
+    toggleIslandWindow();
+  });
+  if (!islandHotkey) {
+    console.error('Failed to register Alt+I hotkey');
+  }
 });
 
 app.on('window-all-closed', () => {
@@ -1203,8 +1402,8 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  if (islandWindow && !islandWindow.isDestroyed()) islandWindow.destroy();
   stopHardwareMonitor();
   if (captureOverlay && !captureOverlay.isDestroyed()) captureOverlay.destroy();
   globalShortcut.unregisterAll();
 });
-

@@ -52,6 +52,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('update:state', handler);
   },
 
+  // Dynamic island
+  getIslandState: () => ipcRenderer.invoke('island:getState'),
+  setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean) => ipcRenderer.invoke('island:set', enabled, style, position, autoHideFullscreen),
+  moveIsland: (screenX: number, screenY: number, deltaX: number, deltaY: number) => ipcRenderer.invoke('island:move', screenX, screenY, deltaX, deltaY),
+  toggleIsland: () => ipcRenderer.invoke('island:toggle'),
+  onIslandConfig: (callback: (state: unknown) => void) => {
+    const handler = (_event: unknown, state: unknown) => callback(state);
+    ipcRenderer.on('island:config', handler);
+    return () => ipcRenderer.removeListener('island:config', handler);
+  },
+
   // Theme
   getTheme: () => ipcRenderer.invoke('app:getTheme'),
 

@@ -9,6 +9,19 @@ export interface ShortcutTarget {
 }
 export type Locale = 'zh-CN';
 export type PanelAnimation = 'bottom' | 'top' | 'left' | 'right' | 'center';
+export type IslandStyle = 'capsule' | 'glass' | 'paper';
+export type IslandPosition = 'top-center' | 'top-left' | 'top-right' | 'left-center' | 'right-center';
+
+export interface IslandPreferences {
+  enabled: boolean;
+  style: IslandStyle;
+  position: IslandPosition;
+  autoHideFullscreen: boolean;
+  x?: number;
+  y?: number;
+  displayId?: number;
+}
+
 export type ModuleId = 'shortcuts' | 'tasks' | 'cockpit' | 'translate';
 
 export interface CockpitData {
@@ -120,6 +133,7 @@ export interface AppConfig {
   taskEditorDraft?: TaskEditorDraft;
   tabs: Tab[];
   activeTabId?: string;
+  island?: IslandPreferences;
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
