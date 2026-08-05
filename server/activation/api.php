@@ -1,5 +1,6 @@
 <?php
 
+session_start();
 header('Content-Type: application/json; charset=utf-8');
 require __DIR__ . '/config.php';
 
@@ -14,10 +15,9 @@ function respond($data) {
     exit;
 }
 
-function require_admin($input) {
-    global $ADMIN_PASSWORD;
-    if (!isset($input['adminPassword']) || $input['adminPassword'] !== $ADMIN_PASSWORD) {
-        respond(['success' => false, 'message' => '管理员密码错误']);
+function require_admin() {
+    if (empty($_SESSION['admin'])) {
+        respond(['success' => false, 'message' => '未登录']);
     }
 }
 
@@ -26,16 +26,29 @@ switch ($action) {
         respond(['success' => true, 'service' => 'shortcut-activation', 'time' => date('c')]);
         break;
 
+    case 'login':
+        global $ADMIN_PASSWORD;
+        if (isset($input['adminPassword']) && $input['adminPassword'] === $ADMIN_PASSWORD) {
+            $_SESSION['admin'] = true;
+            respond(['success' => true, 'message' => '登录成功']);
+        }
+        respond(['success' => false, 'message' => '管理员密码错误']);
+        break;
+
+    case 'logout':
+        $_SESSION['admin'] = false;
+        session_destroy();
+        respond(['success' => true, 'message' => '已退出']);
+        break;
+
     case 'generate':
-        require_admin($input);
-        $plan = isset($input['plan']) && trim($input['plan']) !== '' ? trim($input['plan']) : '基础版';
+        require_admin();
         $days = isset($input['days']) ? max(1, min(3650, intval($input['days']))) : 365;
         $codes = load_codes();
         $code = generate_code();
         $now = time();
         $record = [
             'code' => $code,
-            'plan' => $plan,
             'days' => $days,
             'status' => 'active',
             'machine' => null,
@@ -84,7 +97,6 @@ switch ($action) {
         respond([
             'success' => true,
             'active' => true,
-            'plan' => $found['plan'],
             'expiresAt' => $found['expires_at'],
             'machineCode' => $machine,
             'message' => '激活成功',
@@ -92,12 +104,54 @@ switch ($action) {
         break;
 
     case 'list':
-        require_admin($input);
+        require_admin();
         $codes = load_codes();
         usort($codes, function ($a, $b) {
             return strcmp($b['created_at'], $a['created_at']);
         });
         respond(['success' => true, 'codes' => $codes]);
+        break;
+
+    case 'disable':
+        require_admin();
+        $code = isset($input['code']) ? strtoupper(trim($input['code'])) : '';
+        $codes = load_codes();
+        foreach ($codes as $index => $record) {
+            if (strtoupper(trim($record['code'])) === $code) {
+                $codes[$index]['status'] = 'disabled';
+                save_codes($codes);
+                respond(['success' => true, 'message' => '已禁用']);
+            }
+        }
+        respond(['success' => false, 'message' => '激活码不存在']);
+        break;
+
+    case 'enable':
+        require_admin();
+        $code = isset($input['code']) ? strtoupper(trim($input['code'])) : '';
+        $codes = load_codes();
+        foreach ($codes as $index => $record) {
+            if (strtoupper(trim($record['code'])) === $code) {
+                $codes[$index]['status'] = 'active';
+                save_codes($codes);
+                respond(['success' => true, 'message' => '已启用']);
+            }
+        }
+        respond(['success' => false, 'message' => '激活码不存在']);
+        break;
+
+    case 'delete':
+        require_admin();
+        $code = isset($input['code']) ? strtoupper(trim($input['code'])) : '';
+        $codes = load_codes();
+        $kept = array_values(array_filter($codes, function ($record) use ($code) {
+            return strtoupper(trim($record['code'])) !== $code;
+        }));
+        if (count($kept) === count($codes)) {
+            respond(['success' => false, 'message' => '激活码不存在']);
+        }
+        save_codes($kept);
+        respond(['success' => true, 'message' => '已删除']);
         break;
 
     default:

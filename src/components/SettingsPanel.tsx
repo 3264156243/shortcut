@@ -157,7 +157,7 @@ export default function SettingsPanel() {
               <div className="flex flex-col gap-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
                 <span>机器码：{licenseState?.machineCode || '生成中...'}</span>
                 <span>
-                  状态：{licenseState?.status === 'active' ? `已激活${licenseState?.plan ? ' · ' + licenseState.plan : ''}${licenseState?.expiresAt ? ' · 到期 ' + new Date(licenseState.expiresAt).toLocaleDateString('zh-CN') : ''}` : (licenseState?.message || '未激活')}
+                  状态：{licenseState?.status === 'active' ? `已激活${licenseState?.expiresAt ? ' · 到期 ' + new Date(licenseState.expiresAt).toLocaleDateString('zh-CN') : ''}` : (licenseState?.message || '未激活')}
                 </span>
               </div>
             </div>

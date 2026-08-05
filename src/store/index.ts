@@ -110,6 +110,7 @@ declare global {
       getLicenseState: () => Promise<unknown>;
       activateLicense: (code: string) => Promise<unknown>;
       checkLicense: () => Promise<unknown>;
+      getLicenseGate: () => Promise<unknown>;
       getOpenAtLogin: () => Promise<boolean>;
       setOpenAtLogin: (enabled: boolean) => Promise<boolean>;
       getInstalledSoftware: () => Promise<Array<{ name: string; path: string; icon: string }>>;

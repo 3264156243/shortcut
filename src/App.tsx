@@ -16,6 +16,7 @@ import KeyboardShortcutsModal from './components/KeyboardShortcutsModal';
 import TranslatePanel from './components/TranslatePanel';
 import CockpitPanel from './components/CockpitPanel';
 import IslandPanel from './components/IslandPanel';
+import ActivationGate from './components/ActivationGate';
 import { PanelAnimation, UpdateState } from './types';
 import { useTranslation } from './hooks/useTranslation';
 import appIcon from './assets/app-icon.png';
@@ -63,6 +64,14 @@ export default function App() {
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
   const [appVersion, setAppVersion] = useState('');
+  const [licenseGate, setLicenseGate] = useState<{
+    required: boolean;
+    activated: boolean;
+    checking: boolean;
+    machineCode?: string;
+    message?: string;
+  } | null>({ required: true, activated: false, checking: true });
+  const [initialLicenseCode, setInitialLicenseCode] = useState('');
   const spaceDownAt = useRef<number | null>(null);
   const longSpaceTimer = useRef<number | null>(null);
   const shortSpaceTimer = useRef<number | null>(null);
@@ -119,7 +128,22 @@ export default function App() {
 
   useEffect(() => {
     api?.getVersion?.().then(setAppVersion).catch(() => undefined);
-  }, [api]);  useEffect(() => {
+  }, [api]);
+  useEffect(() => {
+    if (!api?.getLicenseGate) {
+      setLicenseGate({ required: false, activated: true, checking: false });
+      return;
+    }
+    api.getLicenseState().then((state) => {
+      setInitialLicenseCode((state as any)?.code || '');
+    }).catch(() => undefined);
+    api.getLicenseGate().then((gate) => {
+      setLicenseGate(gate as any);
+    }).catch(() => {
+      setLicenseGate({ required: true, activated: false, checking: false, message: '无法连接激活服务器' });
+    });
+  }, [api]);
+  useEffect(() => {
     loadConfig();
   }, [loadConfig]);
   useEffect(() => {
@@ -309,6 +333,18 @@ export default function App() {
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
   }, []);
+
+  if (licenseGate?.required) {
+    return (
+      <ActivationGate
+        checking={licenseGate.checking}
+        machineCode={licenseGate.machineCode}
+        initialCode={initialLicenseCode}
+        message={licenseGate.message}
+        onActivated={() => setLicenseGate({ required: false, activated: true, checking: false })}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden" style={{ background: 'var(--color-bg)' }}>

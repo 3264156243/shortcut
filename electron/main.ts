@@ -1415,6 +1415,22 @@ ipcMain.handle('app:getVersion', () => app.getVersion());
 ipcMain.handle('license:getState', () => ({ ...readLicense(), machineCode: getMachineCode() }));
 ipcMain.handle('license:activate', (_e: any, code: string) => checkLicense(String(code || '').trim()));
 ipcMain.handle('license:check', () => checkLicense());
+ipcMain.handle('license:gate', async () => {
+  const machineCode = getMachineCode();
+  const current = readLicense();
+  if (!current.code) {
+    return { required: true, activated: false, checking: false, machineCode, message: '请先输入激活码' };
+  }
+  try {
+    const result = await checkLicense();
+    if (result.success) {
+      return { required: false, activated: true, checking: false, machineCode, ...result };
+    }
+    return { required: true, activated: false, checking: false, machineCode, message: result.message };
+  } catch {
+    return { required: true, activated: false, checking: false, machineCode, message: '无法连接激活服务器，请检查网络后重试' };
+  }
+});
 
 ipcMain.handle('app:getPath', (_e: any, name: string) => {
   return app.getPath(name as any);

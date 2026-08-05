@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getLicenseState: () => ipcRenderer.invoke('license:getState'),
   activateLicense: (code: string) => ipcRenderer.invoke('license:activate', code),
   checkLicense: () => ipcRenderer.invoke('license:check'),
+  getLicenseGate: () => ipcRenderer.invoke('license:gate'),
   getOpenAtLogin: () => ipcRenderer.invoke('app:getOpenAtLogin'),
   setOpenAtLogin: (enabled: boolean) => ipcRenderer.invoke('app:setOpenAtLogin', enabled),
 
