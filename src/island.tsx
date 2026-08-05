@@ -23,6 +23,12 @@ interface LyricLine {
   text: string;
 }
 
+const ORBIT_DOTS = Array.from({ length: 12 }, (_, index) => ({
+  delay: index * (4 / 12),
+  hue: Math.round((index / 12) * 360),
+  front: index === 0,
+}));
+
 const DEFAULT_STATE: IslandState = {
   enabled: true,
   style: 'capsule',
@@ -245,6 +251,7 @@ function IslandApp() {
     expanded ? 'expanded' : (showMusic && mini ? 'mini' : 'collapsed'),
     arrival ? 'music-arrived' : '',
     showMusic && state.displayState === 'collapsed' && state.orbitGlow ? 'orbit-glow' : '',
+    showMusic && state.displayState === 'collapsed' && state.orbitGlow && !music.isPlaying ? 'orbit-paused' : '',
   ].join(' ');
 
   return (
@@ -255,9 +262,17 @@ function IslandApp() {
       {arrival ? <div className="island-drop-ball" /> : null}
       {showMusic && state.displayState === 'collapsed' && state.orbitGlow ? (
         <div className="island-orbit">
-          <div className="island-orbit-trail" style={{ animationDelay: '-0.7s' }} />
-          <div className="island-orbit-trail" style={{ animationDelay: '-0.35s' }} />
-          <div className="island-orbit-ball" />
+          {ORBIT_DOTS.map((dot) => (
+            <div
+              key={dot.delay}
+              className={['island-orbit-dot', dot.front ? 'front' : ''].join(' ')}
+              style={{
+                animationDelay: `${dot.delay}s`,
+                background: `hsl(${dot.hue} 95% 62%)`,
+                boxShadow: `0 0 10px hsl(${dot.hue} 95% 62% / .9)`,
+              }}
+            />
+          ))}
         </div>
       ) : null}
       <div className="island-shell">
