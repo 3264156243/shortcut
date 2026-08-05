@@ -11,6 +11,7 @@ export default function IslandPanel() {
     autoHideFullscreen: true,
     musicEnabled: true,
     lyricBounce: true,
+    orbitGlow: true,
     displayState: 'collapsed' as IslandDisplayState,
   };
 
@@ -18,7 +19,7 @@ export default function IslandPanel() {
     const next = { ...island, ...updates };
     useStore.setState((s) => ({ config: { ...s.config, island: next } }));
     await useStore.getState().saveConfig();
-    const result = await window.electronAPI?.setIsland(next.enabled, next.style, next.position, next.autoHideFullscreen, next.musicEnabled !== false, next.lyricBounce !== false, next.displayState || 'collapsed');
+    const result = await window.electronAPI?.setIsland(next.enabled, next.style, next.position, next.autoHideFullscreen, next.musicEnabled !== false, next.lyricBounce !== false, next.displayState || 'collapsed', next.orbitGlow !== false);
     if (result && !result.success && result.error) {
       console.error(result.error);
     }
@@ -51,6 +52,10 @@ export default function IslandPanel() {
             <label className="flex items-center justify-between cursor-pointer">
               <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>歌词逐字跳动</span>
               <input type="checkbox" checked={island.lyricBounce !== false} onChange={(e) => void updateIsland({ lyricBounce: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
+            </label>
+            <label className="flex items-center justify-between cursor-pointer">
+              <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>播放时光效环绕</span>
+              <input type="checkbox" checked={island.orbitGlow !== false} onChange={(e) => void updateIsland({ orbitGlow: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
             </label>
             <label className="flex items-center justify-between cursor-pointer">
               <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>全屏时自动隐藏</span>

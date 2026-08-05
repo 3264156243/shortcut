@@ -20,6 +20,7 @@ export interface IslandPreferences {
   autoHideFullscreen: boolean;
   musicEnabled?: boolean;
   lyricBounce?: boolean;
+  orbitGlow?: boolean;
   displayState?: IslandDisplayState;
   x?: number;
   y?: number;

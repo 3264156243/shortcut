@@ -14,6 +14,7 @@ interface IslandState {
   autoHideFullscreen: boolean;
   musicEnabled: boolean;
   lyricBounce: boolean;
+  orbitGlow: boolean;
   displayState: IslandDisplayState;
 }
 
@@ -29,6 +30,7 @@ const DEFAULT_STATE: IslandState = {
   autoHideFullscreen: true,
   musicEnabled: true,
   lyricBounce: true,
+  orbitGlow: true,
   displayState: 'collapsed',
 };
 
@@ -102,6 +104,7 @@ function IslandApp() {
           autoHideFullscreen: prefs.autoHideFullscreen !== false,
           musicEnabled: prefs.musicEnabled !== false,
           lyricBounce: prefs.lyricBounce !== false,
+          orbitGlow: prefs.orbitGlow !== false,
           displayState: prefs.displayState || 'collapsed',
         });
       } catch {}
@@ -121,6 +124,7 @@ function IslandApp() {
         autoHideFullscreen: next.autoHideFullscreen ?? current.autoHideFullscreen,
         musicEnabled: next.musicEnabled ?? current.musicEnabled,
         lyricBounce: next.lyricBounce ?? current.lyricBounce,
+        orbitGlow: next.orbitGlow ?? current.orbitGlow,
         displayState: (next.displayState as IslandDisplayState) ?? current.displayState,
       }));
     });
@@ -240,6 +244,7 @@ function IslandApp() {
     state.style,
     expanded ? 'expanded' : (showMusic && mini ? 'mini' : 'collapsed'),
     arrival ? 'music-arrived' : '',
+    showMusic && state.displayState === 'collapsed' && state.orbitGlow ? 'orbit-glow' : '',
   ].join(' ');
 
   return (
@@ -248,6 +253,14 @@ function IslandApp() {
       data-position={state.position}
     >
       {arrival ? <div className="island-drop-ball" /> : null}
+      {showMusic && state.displayState === 'collapsed' && state.orbitGlow ? (
+        <div className="island-orbit">
+          <div className="island-orbit-track">
+            <div className="island-orbit-trail" />
+            <div className="island-orbit-ball" />
+          </div>
+        </div>
+      ) : null}
       <div className="island-shell">
         {showMusic ? (
           <div className="island-mini">
