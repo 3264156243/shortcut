@@ -15,6 +15,7 @@ import UpdateModal from './components/UpdateModal';
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal';
 import TranslatePanel from './components/TranslatePanel';
 import CockpitPanel from './components/CockpitPanel';
+import IslandPanel from './components/IslandPanel';
 import { PanelAnimation, UpdateState } from './types';
 import { useTranslation } from './hooks/useTranslation';
 import appIcon from './assets/app-icon.png';
@@ -46,7 +47,7 @@ const getAnimationVariants = (direction: PanelAnimation) => {
   return variants[direction] || variants.bottom;
 };
 
-const moduleOrder = ['shortcuts', 'tasks', 'cockpit', 'translate'] as const;
+const moduleOrder = ['shortcuts', 'tasks', 'cockpit', 'translate', 'island'] as const;
 
 export default function App() {
   const config = useStore((s) => s.config);
@@ -380,6 +381,8 @@ export default function App() {
               <TaskBoard />
             ) : activeModule === 'cockpit' ? (
               <CockpitPanel />
+            ) : activeModule === 'island' ? (
+              <IslandPanel />
             ) : (
               <TranslatePanel />
             )}

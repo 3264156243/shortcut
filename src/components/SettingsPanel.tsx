@@ -2,8 +2,7 @@ import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
 import { PanelAnimation } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Moon, Sun, Monitor, Download, Upload, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Maximize, Power, Smartphone, Move, Film } from 'lucide-react';
-import { IslandStyle, IslandPosition } from '../types';
+import { X, Moon, Sun, Monitor, Download, Upload, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Maximize, Power } from 'lucide-react';
 
 export default function SettingsPanel() {
   const closeSettings = useStore((s) => s.closeSettings);
@@ -29,16 +28,6 @@ export default function SettingsPanel() {
     { value: 'center', labelKey: 'settings.animation.center', icon: Maximize },
   ];
 
-  const island = config.island || { enabled: true, style: 'capsule' as IslandStyle, position: 'top-center' as IslandPosition, autoHideFullscreen: true, musicEnabled: true };
-  const updateIsland = async (updates: Partial<typeof island>) => {
-    const next = { ...island, ...updates };
-    useStore.setState((s) => ({ config: { ...s.config, island: next } }));
-    await useStore.getState().saveConfig();
-    const result = await window.electronAPI?.setIsland(next.enabled, next.style, next.position, next.autoHideFullscreen, next.musicEnabled !== false);
-    if (result && !result.success && result.error) {
-      console.error(result.error);
-    }
-  };
   const sectionStyle: React.CSSProperties = {
     background: 'var(--color-bg-card)',
     border: '1px solid var(--color-border)',
@@ -148,68 +137,6 @@ export default function SettingsPanel() {
                     className="w-4 h-4 accent-indigo-500"
                   />
                 </label>
-              </div>
-            </div>
-
-            {/* Dynamic island */}
-            <div style={sectionStyle}>
-              <h3 className="text-sm font-medium mb-3 flex items-center gap-2" style={{ color: 'var(--color-text)' }}>
-                <Smartphone size={16} style={{ color: 'var(--color-accent)' }} /> 灵动岛
-              </h3>
-              <div className="flex flex-col gap-3">
-                <label className="flex items-center justify-between cursor-pointer">
-                  <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>启用灵动岛</span>
-                  <input type="checkbox" checked={island.enabled} onChange={(e) => void updateIsland({ enabled: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
-                </label>
-                <label className="flex items-center justify-between cursor-pointer">
-                  <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>全屏时自动隐藏</span>
-                  <input type="checkbox" checked={island.autoHideFullscreen} onChange={(e) => void updateIsland({ autoHideFullscreen: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
-                </label>
-                <label className="flex items-center justify-between cursor-pointer">
-                  <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>音乐模块</span>
-                  <input type="checkbox" checked={island.musicEnabled !== false} onChange={(e) => void updateIsland({ musicEnabled: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
-                </label>
-                <div>
-                  <div className="mb-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>展示样式</div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['capsule','glass','paper'] as IslandStyle[]).map((style) => (
-                      <button
-                        key={style}
-                        onClick={() => void updateIsland({ style })}
-                        className="flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs transition-all duration-150"
-                        style={{
-                          background: island.style === style ? 'var(--color-accent)' : 'var(--color-bg-card-hover)',
-                          border: '1px solid ' + (island.style === style ? 'var(--color-accent)' : 'var(--color-border)'),
-                          color: island.style === style ? 'white' : 'var(--color-text-secondary)',
-                        }}
-                      >
-                        <Smartphone size={14} /> {style === 'capsule' ? '胶囊' : style === 'glass' ? '玻璃' : '纸张'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <div className="mb-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>显示位置</div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {([['top-center','顶部居中'],['top-left','左上'],['top-right','右上'],['left-center','左侧居中'],['right-center','右侧居中']] as Array<[IslandPosition,string]>).map(([position,label]) => (
-                      <button
-                        key={position}
-                        onClick={() => void updateIsland({ position })}
-                        className="flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs transition-all duration-150"
-                        style={{
-                          background: island.position === position ? 'var(--color-accent)' : 'var(--color-bg-card-hover)',
-                          border: '1px solid ' + (island.position === position ? 'var(--color-accent)' : 'var(--color-border)'),
-                          color: island.position === position ? 'white' : 'var(--color-text-secondary)',
-                        }}
-                      >
-                        <Move size={14} /> {label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-                  <Film size={14} /> 可用 Alt+I 快捷键显示或隐藏
-                </div>
               </div>
             </div>
 

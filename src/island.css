@@ -29,20 +29,34 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
   border-radius: 24px;
   box-shadow: 0 24px 70px rgba(0,0,0,.55);
 }
+.island-root.mini .island-shell {
+  width: 78px;
+  height: 78px;
+  padding: 0;
+  border-radius: 50%;
+  box-shadow: 0 12px 34px rgba(0,0,0,.45);
+}
 
 .island-compact {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   height: 46px;
   white-space: nowrap;
+  cursor: grab;
   transition: opacity .28s, transform .35s cubic-bezier(.22,1,.36,1);
 }
+.island-compact:active { cursor: grabbing; }
 .island-root.expanded .island-compact {
   opacity: 0;
   pointer-events: none;
   transform: translateY(-8px) scale(.96);
+}
+.island-root.mini .island-compact {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .island-panel-content {
@@ -59,15 +73,37 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
   height: auto;
   transform: translateY(0);
 }
+.island-root.mini .island-panel-content { opacity: 0; pointer-events: none; height: 0; }
 
-.island-drag-handle { position: absolute; left: 14px; width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 50% 45%, rgba(255,255,255,.55) 0 3px, transparent 4px), radial-gradient(circle at 50% 50%, rgba(255,255,255,.32) 0 2px, transparent 3px); opacity: .9; }
+.island-mini {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+.island-mini:active { cursor: grabbing; }
+.island-root.mini .island-mini { display: flex; }
+.island-mini-disc {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.2);
+  box-shadow: 0 0 0 4px rgba(0,0,0,.22), 0 4px 14px rgba(0,0,0,.4);
+  animation: island-spin 14s linear infinite;
+  animation-play-state: paused;
+}
+.island-mini-disc.spinning { animation-play-state: running; }
+.island-mini-disc-fallback { display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.75); }
 .island-pill-cover { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; flex: none; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.18); box-shadow: 0 0 0 3px rgba(0,0,0,.18), 0 2px 8px rgba(0,0,0,.35); animation: island-spin 14s linear infinite; animation-play-state: paused; }
 .island-pill-cover.spinning, .island-music-disc.spinning { animation-play-state: running; }
 .island-pill-cover-fallback { display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.7); }
-.island-pill-lyric { max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: rgba(255,255,255,.92); }
+.island-pill-lyric { max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: rgba(255,255,255,.92); animation: island-lyric-bounce 1.8s ease-in-out infinite; }
 .island-time { font-size: 21px; font-weight: 600; letter-spacing: 0; font-variant-numeric: tabular-nums; }
 .island-date { font-size: 12px; color: rgba(255,255,255,.62); }
-.island-dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 8px rgba(74,222,128,.8); }
 
 .island-panel-title { font-size: 13px; color: rgba(255,255,255,.55); margin-bottom: 8px; }
 .island-panel-clock { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -84,7 +120,7 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
 .island-music-artist { margin-top: 4px; font-size: 12px; color: rgba(255,255,255,.68); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .island-music-album { margin-top: 3px; font-size: 11px; color: rgba(255,255,255,.45); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.island-lyrics { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); min-height: 84px; display: flex; flex-direction: column; justify-content: center; gap: 4px; transition: background .35s, border-color .35s; }
+.island-lyrics { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); min-height: 44px; display: flex; flex-direction: column; justify-content: center; transition: background .35s, border-color .35s; }
 .island-lyric { font-size: 13px; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: opacity .3s, transform .3s, color .3s; }
 .island-lyric.prev { color: rgba(255,255,255,.42); opacity: .85; }
 .island-lyric.current { color: transparent; font-size: 15px; font-weight: 700; background: linear-gradient(90deg, #67e8f9, #a5b4fc, #f0abfc); -webkit-background-clip: text; background-clip: text; transform: scale(1.02); }
@@ -109,7 +145,8 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
 .island-root.paper .island-shell { background: #f5f0e8; border: 1px solid #d6c9b8; color: #4a3b2c; box-shadow: 4px 5px 0 rgba(151,124,88,.22); border-radius: 10px; }
 .island-root.paper.expanded .island-shell { border-radius: 14px; box-shadow: 8px 10px 0 rgba(151,124,88,.18); }
 .island-root.paper .island-date { color: rgba(74,59,44,.6); }
-.island-root.paper .island-dot { background: #9b2335; box-shadow: none; }
+.island-root.paper .island-mini-disc { background: rgba(151,124,88,.12); border-color: rgba(151,124,88,.35); }
+.island-root.paper.mini .island-shell { border-radius: 50%; }
 .island-root.paper .island-panel-title, .island-root.paper .island-panel-hint { color: rgba(74,59,44,.6); }
 .island-root.paper .island-panel-date { color: rgba(74,59,44,.8); }
 .island-root.paper .island-pill-lyric { color: #4a3b2c; }
@@ -122,3 +159,35 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
 
 .island-root[data-position="left-center"], .island-root[data-position="right-center"] { align-items: center; padding-top: 0; }
 @keyframes island-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes island-lyric-bounce {
+  0%, 100% { transform: translateY(0); }
+  45% { transform: translateY(-4px); }
+  60% { transform: translateY(0); }
+  72% { transform: translateY(-2px); }
+  84% { transform: translateY(0); }
+}
+@keyframes island-drop {
+  0% { transform: translate(-50%, -56px) scale(.35); opacity: 0; }
+  18% { transform: translate(-50%, -10px) scale(.7); opacity: 1; }
+  58% { transform: translate(-50%, 16px) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, 16px) scale(2.4); opacity: 0; }
+}
+.island-drop-ball {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.95), #22d3ee 45%, #6366f1 100%);
+  box-shadow: 0 0 18px rgba(99,102,241,.9);
+  pointer-events: none;
+  z-index: 5;
+  animation: island-drop 1s cubic-bezier(.22,1,.36,1) forwards;
+}
+.island-root.music-arrived .island-shell { animation: island-pop .6s cubic-bezier(.22,1,.36,1); }
+@keyframes island-pop {
+  0% { transform: scale(.82); }
+  55% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}

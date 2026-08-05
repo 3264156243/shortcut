@@ -30,8 +30,7 @@ const DEFAULT_STATE: IslandState = {
 
 function nowText(): string {
   const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return d.toLocaleTimeString('zh-CN', { hour12: false }) + '.' + pad(d.getMilliseconds());
+  return d.toLocaleTimeString('zh-CN', { hour12: false });
 }
 
 function dateText(): string {
@@ -75,7 +74,10 @@ function IslandApp() {
   const [hovered, setHovered] = useState(false);
   const [music, setMusic] = useState<MusicState>({ available: false });
   const [seekPreview, setSeekPreview] = useState<number | null>(null);
+  const [mini, setMini] = useState(false);
+  const [arrival, setArrival] = useState(false);
   const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
+  const draggedRef = useRef(false);
   const positionAnchorRef = useRef<{ positionMs: number; at: number } | null>(null);
   const [dragging, setDragging] = useState(false);
   const progressRef = useRef<HTMLDivElement | null>(null);
@@ -138,6 +140,13 @@ function IslandApp() {
     return unsubscribe;
   }, []);
 
+  useEffect(() => {
+    if (!music.available) return;
+    setArrival(true);
+    const timer = window.setTimeout(() => setArrival(false), 1000);
+    return () => window.clearTimeout(timer);
+  }, [music.available]);
+
   const lyrics = useMemo(() => parseLyrics(music.lyrics), [music.lyrics]);
   const anchor = positionAnchorRef.current;
   const extrapolatedMs = anchor && music.isPlaying
@@ -159,12 +168,11 @@ function IslandApp() {
     return index;
   }, [lyrics, positionMs]);
   const currentLyric = displayIndex >= 0 ? lyrics[displayIndex].text : (music.title || '');
-  const prevLyric = displayIndex > 0 ? lyrics[displayIndex - 1].text : '';
-  const nextLyric = displayIndex >= 0 && displayIndex < lyrics.length - 1 ? lyrics[displayIndex + 1].text : '';
   const progress = music.durationMs ? Math.max(0, Math.min(100, (positionMs / music.durationMs) * 100)) : 0;
 
   const onDragStart = (e: React.PointerEvent) => {
     dragRef.current = { sx: e.screenX, sy: e.screenY, ox: e.clientX, oy: e.clientY };
+    draggedRef.current = false;
     setDragging(true);
   };
   const onDragMove = (e: React.PointerEvent) => {
@@ -172,11 +180,22 @@ function IslandApp() {
     e.preventDefault();
     const deltaX = e.screenX - dragRef.current.sx;
     const deltaY = e.screenY - dragRef.current.sy;
+    if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
+      draggedRef.current = true;
+    }
     window.electronAPI?.moveIsland(dragRef.current.sx, dragRef.current.sy, deltaX, deltaY);
   };
   const onDragEnd = () => {
     dragRef.current = null;
     setDragging(false);
+  };
+  const onCompactClick = () => {
+    if (draggedRef.current) return;
+    setMini((current) => !current);
+  };
+  const onMiniClick = () => {
+    if (draggedRef.current) return;
+    setMini(false);
   };
 
   const control = (action: string) => {
@@ -212,24 +231,53 @@ function IslandApp() {
 
   const expanded = hovered || dragging;
   const showMusic = state.musicEnabled && music.available;
+  const rootClass = [
+    'island-root',
+    state.style,
+    expanded ? 'expanded' : (showMusic && mini ? 'mini' : 'collapsed'),
+    arrival ? 'music-arrived' : '',
+  ].join(' ');
 
   return (
     <div
-      className={['island-root', state.style, expanded ? 'expanded' : 'collapsed'].join(' ')}
+      className={rootClass}
       data-position={state.position}
       data-drag={dragging ? 'true' : 'false'}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
+      {arrival ? <div className="island-drop-ball" /> : null}
       <div className="island-shell">
-        <div className="island-compact">
+        {showMusic ? (
           <div
-            className="island-drag-handle"
-            title="拖动灵动岛"
+            className="island-mini"
+            onClick={onMiniClick}
             onPointerDown={onDragStart}
             onPointerMove={onDragMove}
             onPointerUp={onDragEnd}
-          />
+          >
+            {music.coverUrl ? (
+              <img
+                className={['island-mini-disc', music.isPlaying ? 'spinning' : 'paused'].join(' ')}
+                src={music.coverUrl}
+                alt=""
+                draggable={false}
+              />
+            ) : (
+              <div className={['island-mini-disc', 'island-mini-disc-fallback', music.isPlaying ? 'spinning' : 'paused'].join(' ')}>
+                <Music size={22} />
+              </div>
+            )}
+          </div>
+        ) : null}
+        <div
+          className="island-compact"
+          title="点击切换缩起样式，拖动移动灵动岛"
+          onPointerDown={onDragStart}
+          onPointerMove={onDragMove}
+          onPointerUp={onDragEnd}
+          onClick={onCompactClick}
+        >
           {showMusic ? (
             <>
               {music.coverUrl ? (
@@ -252,7 +300,6 @@ function IslandApp() {
               <div className="island-date">{dateText()}</div>
             </>
           )}
-          <div className="island-dot" />
         </div>
         <div className="island-panel-content">
         {showMusic ? (
@@ -278,11 +325,7 @@ function IslandApp() {
             </div>
             <div className="island-lyrics">
               {lyrics.length ? (
-                <>
-                  <div className="island-lyric prev">{prevLyric || '　'}</div>
-                  <div className="island-lyric current">{currentLyric || '　'}</div>
-                  <div className="island-lyric next">{nextLyric || '　'}</div>
-                </>
+                <div className="island-lyric current">{currentLyric || '　'}</div>
               ) : (
                 <div className="island-lyric current">{music.title || '暂无歌词'}</div>
               )}

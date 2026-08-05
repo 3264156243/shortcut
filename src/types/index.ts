@@ -36,7 +36,7 @@ export interface MusicState {
   durationMs?: number;
 }
 
-export type ModuleId = 'shortcuts' | 'tasks' | 'cockpit' | 'translate';
+export type ModuleId = 'shortcuts' | 'tasks' | 'cockpit' | 'translate' | 'island';
 
 export interface CockpitData {
   timestamp?: number;
