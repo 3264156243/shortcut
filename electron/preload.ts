@@ -24,6 +24,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fileExists: (path: string) => ipcRenderer.invoke('fs:exists', path),
   getPath: (name: string) => ipcRenderer.invoke('app:getPath', name),
   getVersion: () => ipcRenderer.invoke('app:getVersion'),
+  getLicenseState: () => ipcRenderer.invoke('license:getState'),
+  activateLicense: (code: string) => ipcRenderer.invoke('license:activate', code),
+  checkLicense: () => ipcRenderer.invoke('license:check'),
   getOpenAtLogin: () => ipcRenderer.invoke('app:getOpenAtLogin'),
   setOpenAtLogin: (enabled: boolean) => ipcRenderer.invoke('app:setOpenAtLogin', enabled),
 

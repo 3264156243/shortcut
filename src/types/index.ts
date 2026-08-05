@@ -67,6 +67,16 @@ export interface UpdateState {
   releaseNotes?: string;
 }
 
+export interface LicenseState {
+  code?: string;
+  machineCode?: string;
+  plan?: string;
+  status?: string;
+  expiresAt?: string;
+  lastCheckAt?: string;
+  message?: string;
+}
+
 export interface Shortcut {
   id: string;
   name: string;
@@ -153,6 +163,7 @@ export interface AppConfig {
   tabs: Tab[];
   activeTabId?: string;
   island?: IslandPreferences;
+  license?: LicenseState;
 }
 
 export const DEFAULT_CONFIG: AppConfig = {

@@ -16,8 +16,10 @@ const desktopCapturer = electron.desktopCapturer;
 const autoUpdater = require('electron-updater').autoUpdater;
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const childProcess = require('child_process');
 const net = electron.net;
+const nodeCrypto = require('crypto');
 
 const APP_USER_MODEL_ID = 'com.wanan.shortcut';
 
@@ -36,6 +38,7 @@ let hardwareMonitorBuffer = '';
 let captureOverlay: any = null;
 let islandWindow: any = null;
 let islandProgrammaticMove = false;
+let islandProgrammaticMoveUntil = 0;
 let islandUserHidden = false;
 let musicBridgeProcess: any = null;
 let musicBridgeBuffer = '';
@@ -287,6 +290,7 @@ function positionIslandWindow(force = false) {
   if (!islandWindow || islandWindow.isDestroyed()) return;
   const bounds = islandPositionBounds(getIslandPreferences());
   islandProgrammaticMove = true;
+  islandProgrammaticMoveUntil = Date.now() + 1000;
   islandWindow.setBounds(bounds);
   islandProgrammaticMove = false;
   if (force) applyIslandVisibility();
@@ -336,14 +340,9 @@ function createIslandWindow() {
   islandWindow.on('closed', () => { islandWindow = null; });
   islandWindow.on('moved', () => {
     if (!islandWindow || islandWindow.isDestroyed()) return;
-    if (islandProgrammaticMove) return;
+    if (islandProgrammaticMove || Date.now() < islandProgrammaticMoveUntil) return;
     const [x, y] = islandWindow.getPosition();
-    try {
-      const raw = readConfig();
-      const cfg = raw ? JSON.parse(raw) : {};
-      const island = cfg.island || {};
-      writeConfig(JSON.stringify({ ...cfg, island: { ...island, position: 'custom', x, y } }, null, 2));
-    } catch {}
+    writeIslandConfig({ position: 'custom', x, y });
   });
 }
 
@@ -449,6 +448,74 @@ function runMusicBridgeCommand(args: string[]) {
   });
 }
 
+const LICENSE_API_URL = 'https://shortcut.326415.xyz/activation/api.php';
+
+function getMachineCode(): string {
+  let mac = '';
+  const interfaces = os.networkInterfaces();
+  for (const key of Object.keys(interfaces)) {
+    for (const item of interfaces[key] || []) {
+      if (!item.internal && item.mac && item.mac !== '00:00:00:00:00:00') {
+        mac = item.mac;
+        break;
+      }
+    }
+    if (mac) break;
+  }
+  const source = [os.hostname(), mac, os.arch(), os.cpus()[0]?.model || '', os.platform()].join('|');
+  return nodeCrypto.createHash('sha256').update(source).digest('hex').slice(0, 32).toUpperCase();
+}
+
+async function licenseRequest(action: string, payload: any = {}) {
+  const response = await net.fetch(LICENSE_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, ...payload }),
+  });
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { success: false, message: text || '激活服务响应异常' };
+  }
+}
+
+function readLicense(): any {
+  const cfg = readConfigObject();
+  return cfg?.license || {};
+}
+
+function writeLicense(license: any) {
+  const cfg = readConfigObject();
+  if (!cfg) return false;
+  writeConfig(JSON.stringify({ ...cfg, license: { ...(cfg.license || {}), ...license } }, null, 2));
+  return true;
+}
+
+async function checkLicense(code?: string) {
+  const machineCode = getMachineCode();
+  const current = readLicense();
+  const activeCode = code || current.code;
+  if (!activeCode) {
+    return { success: true, active: false, message: '未激活', machineCode };
+  }
+  const result = await licenseRequest('check', { code: activeCode, machineCode });
+  writeLicense({
+    code: activeCode,
+    machineCode,
+    plan: result.plan,
+    status: result.success ? 'active' : 'invalid',
+    expiresAt: result.expiresAt,
+    lastCheckAt: new Date().toISOString(),
+    message: result.message,
+  });
+  return { ...result, machineCode };
+}
+
+function checkLicenseOnStartup() {
+  void checkLicense().catch(() => undefined);
+}
+
 function getHardwareMonitorPath() {
   return app.isPackaged
     ? path.join((process as any).resourcesPath, 'hardware-monitor', 'ShortCut.HardwareMonitor.exe')
@@ -543,12 +610,77 @@ function readConfig(): string {
   return fs.readFileSync(CONFIG_FILE, 'utf-8');
 }
 
+const BACKUP_KEEP_COUNT = 3;
+
+function isHealthyConfigObject(cfg: any): boolean {
+  return !!cfg && typeof cfg === 'object' && Array.isArray(cfg.tabs) && Array.isArray(cfg.taskBoards);
+}
+
+function backupConfig() {
+  try {
+    if (!fs.existsSync(CONFIG_FILE)) return;
+    const current = readConfigObject();
+    if (!isHealthyConfigObject(current)) return;
+    const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+    const backup = path.join(CONFIG_DIR, `config.backup-${stamp}.json`);
+    if (fs.existsSync(backup)) return;
+    fs.copyFileSync(CONFIG_FILE, backup);
+    const backups = fs.readdirSync(CONFIG_DIR)
+      .filter((name: string) => /^config\.backup-\d{14}\.json$/.test(name))
+      .sort()
+      .reverse();
+    for (const name of backups.slice(BACKUP_KEEP_COUNT)) {
+      try { fs.unlinkSync(path.join(CONFIG_DIR, name)); } catch {}
+    }
+  } catch {}
+}
+
+function restoreFromBackupIfNeeded() {
+  try {
+    ensureConfigDir();
+    if (!fs.existsSync(CONFIG_FILE)) return;
+    const cfg = readConfigObject();
+    if (isHealthyConfigObject(cfg)) return;
+    const backups = fs.readdirSync(CONFIG_DIR)
+      .filter((name: string) => /^config\.backup-\d{14}\.json$/.test(name))
+      .sort()
+      .reverse();
+    for (const name of backups) {
+      try {
+        const candidate = JSON.parse(fs.readFileSync(path.join(CONFIG_DIR, name), 'utf8'));
+        if (isHealthyConfigObject(candidate)) {
+          fs.copyFileSync(path.join(CONFIG_DIR, name), CONFIG_FILE);
+          return;
+        }
+      } catch {}
+    }
+  } catch {}
+}
+
 function writeConfig(data: string) {
   ensureConfigDir();
+  backupConfig();
   // write to temp then rename for crash safety
   const tmp = CONFIG_FILE + '.tmp';
   fs.writeFileSync(tmp, data, 'utf-8');
   fs.renameSync(tmp, CONFIG_FILE);
+}
+
+function readConfigObject(): any | null {
+  const raw = readConfig();
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function writeIslandConfig(island: any) {
+  const cfg = readConfigObject();
+  if (!cfg) return false;
+  writeConfig(JSON.stringify({ ...cfg, island: { ...(cfg.island || {}), ...island } }, null, 2));
+  return true;
 }
 
 
@@ -1088,6 +1220,7 @@ ipcMain.handle('island:moveTo', (_e: any, x: number, y: number) => {
     const nextX = Math.max(area.x, Math.min(area.x + area.width - bounds.width, Math.round(Number(x) || 0)));
     const nextY = Math.max(area.y, Math.min(area.y + area.height - bounds.height, Math.round(Number(y) || 0)));
     islandProgrammaticMove = true;
+    islandProgrammaticMoveUntil = Date.now() + 1000;
     islandWindow.setBounds({ x: nextX, y: nextY, width: bounds.width, height: bounds.height });
     islandProgrammaticMove = false;
     return { success: true, x: nextX, y: nextY };
@@ -1098,15 +1231,7 @@ ipcMain.handle('island:moveTo', (_e: any, x: number, y: number) => {
 ipcMain.handle('island:finishMove', () => {
   if (!islandWindow || islandWindow.isDestroyed()) return false;
   const [x, y] = islandWindow.getPosition();
-  try {
-    const raw = readConfig();
-    const cfg = raw ? JSON.parse(raw) : {};
-    const island = cfg.island || {};
-    writeConfig(JSON.stringify({ ...cfg, island: { ...island, position: 'custom', x, y } }, null, 2));
-    return true;
-  } catch {
-    return false;
-  }
+  return writeIslandConfig({ position: 'custom', x, y });
 });
 function toggleIslandWindow() {
   if (islandWindow && !islandWindow.isDestroyed() && islandWindow.isVisible()) {
@@ -1287,6 +1412,9 @@ ipcMain.handle('fs:exists', (_e: any, filePath: string) => {
 });
 
 ipcMain.handle('app:getVersion', () => app.getVersion());
+ipcMain.handle('license:getState', () => ({ ...readLicense(), machineCode: getMachineCode() }));
+ipcMain.handle('license:activate', (_e: any, code: string) => checkLicense(String(code || '').trim()));
+ipcMain.handle('license:check', () => checkLicense());
 
 ipcMain.handle('app:getPath', (_e: any, name: string) => {
   return app.getPath(name as any);
@@ -1531,10 +1659,13 @@ ipcMain.handle('window:maximize', () => {
 
 // App lifecycle
 app.whenReady().then(() => {
+  restoreFromBackupIfNeeded();
+  backupConfig();
   setupAutoUpdater();
   createWindow();
   createTray();
   createIslandWindow();
+  checkLicenseOnStartup();
   setInterval(() => applyIslandVisibility(), 1500);
 
   setTimeout(() => {

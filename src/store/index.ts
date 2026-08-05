@@ -107,6 +107,9 @@ declare global {
       fileExists: (path: string) => Promise<boolean>;
       getPath: (name: string) => Promise<string>;
       getVersion: () => Promise<string>;
+      getLicenseState: () => Promise<unknown>;
+      activateLicense: (code: string) => Promise<unknown>;
+      checkLicense: () => Promise<unknown>;
       getOpenAtLogin: () => Promise<boolean>;
       setOpenAtLogin: (enabled: boolean) => Promise<boolean>;
       getInstalledSoftware: () => Promise<Array<{ name: string; path: string; icon: string }>>;

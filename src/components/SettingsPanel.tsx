@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
 import { PanelAnimation } from '../types';
@@ -13,6 +14,9 @@ export default function SettingsPanel() {
   const exportConfig = useStore((s) => s.exportConfig);
   const importConfig = useStore((s) => s.importConfig);
   const { t } = useTranslation();
+  const [licenseCode, setLicenseCode] = useState('');
+  const [licenseState, setLicenseState] = useState<any>(null);
+  const [licenseBusy, setLicenseBusy] = useState(false);
   const themes: { value: 'dark' | 'light' | 'system'; labelKey: string; icon: typeof Moon }[] = [
     { value: 'dark', labelKey: 'settings.theme.dark', icon: Moon },
     { value: 'light', labelKey: 'settings.theme.light', icon: Sun },
@@ -33,6 +37,25 @@ export default function SettingsPanel() {
     border: '1px solid var(--color-border)',
     borderRadius: 'var(--radius-md)',
     padding: '16px',
+  };
+
+  useEffect(() => {
+    void window.electronAPI?.getLicenseState?.().then((state) => {
+      setLicenseState(state);
+      setLicenseCode((state as any)?.code || '');
+    });
+  }, []);
+
+  const handleActivate = async () => {
+    if (!licenseCode.trim() || licenseBusy) return;
+    setLicenseBusy(true);
+    try {
+      const result = await window.electronAPI?.activateLicense(licenseCode.trim());
+      setLicenseState(result);
+      await useStore.getState().loadConfig();
+    } finally {
+      setLicenseBusy(false);
+    }
   };
 
   return (
@@ -104,6 +127,38 @@ export default function SettingsPanel() {
                     <Icon size={14} /> {t(labelKey)}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            {/* License */}
+            <div style={sectionStyle}>
+              <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--color-text)' }}>激活码</h3>
+              <div className="flex gap-2 mb-2">
+                <input
+                  value={licenseCode}
+                  onChange={(e) => setLicenseCode(e.target.value)}
+                  placeholder="请输入激活码"
+                  className="flex-1 min-w-0 px-3 py-2 rounded-xl text-sm outline-none transition-all duration-150"
+                  style={{
+                    background: 'var(--color-bg-card-hover)',
+                    border: '1px solid var(--color-border)',
+                    color: 'var(--color-text)',
+                  }}
+                />
+                <button
+                  onClick={() => void handleActivate()}
+                  disabled={licenseBusy || !licenseCode.trim()}
+                  className="px-4 py-2 rounded-xl text-sm transition-all duration-150 disabled:opacity-50"
+                  style={{ background: 'var(--color-accent)', color: 'white' }}
+                >
+                  {licenseBusy ? '核对中' : '激活'}
+                </button>
+              </div>
+              <div className="flex flex-col gap-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                <span>机器码：{licenseState?.machineCode || '生成中...'}</span>
+                <span>
+                  状态：{licenseState?.status === 'active' ? `已激活${licenseState?.plan ? ' · ' + licenseState.plan : ''}${licenseState?.expiresAt ? ' · 到期 ' + new Date(licenseState.expiresAt).toLocaleDateString('zh-CN') : ''}` : (licenseState?.message || '未激活')}
+                </span>
               </div>
             </div>
 
