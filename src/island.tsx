@@ -132,15 +132,17 @@ function IslandApp() {
 
   const lyrics = useMemo(() => parseLyrics(music.lyrics), [music.lyrics]);
   const positionMs = seekPreview ?? music.positionMs ?? 0;
-  const lyricIndex = useMemo(() => {
+  const displayIndex = useMemo(() => {
+    if (!lyrics.length) return -1;
     let index = -1;
     for (let i = 0; i < lyrics.length; i++) {
-      if (lyrics[i].timeMs <= positionMs) index = i;
+      const start = lyrics[i].timeMs;
+      const activation = i === 0 ? start : start - Math.floor((start - lyrics[i - 1].timeMs) / 2);
+      if (activation <= positionMs) index = i;
       else break;
     }
     return index;
   }, [lyrics, positionMs]);
-  const displayIndex = lyrics.length ? Math.min(lyricIndex + 1, lyrics.length - 1) : -1;
   const currentLyric = displayIndex >= 0 ? lyrics[displayIndex].text : (music.title || '');
   const prevLyric = displayIndex > 0 ? lyrics[displayIndex - 1].text : '';
   const nextLyric = displayIndex >= 0 && displayIndex < lyrics.length - 1 ? lyrics[displayIndex + 1].text : '';
