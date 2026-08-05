@@ -54,13 +54,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Dynamic island
   getIslandState: () => ipcRenderer.invoke('island:getState'),
-  setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean) => ipcRenderer.invoke('island:set', enabled, style, position, autoHideFullscreen),
+  setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean) => ipcRenderer.invoke('island:set', enabled, style, position, autoHideFullscreen, musicEnabled),
   moveIsland: (screenX: number, screenY: number, deltaX: number, deltaY: number) => ipcRenderer.invoke('island:move', screenX, screenY, deltaX, deltaY),
   toggleIsland: () => ipcRenderer.invoke('island:toggle'),
   onIslandConfig: (callback: (state: unknown) => void) => {
     const handler = (_event: unknown, state: unknown) => callback(state);
     ipcRenderer.on('island:config', handler);
     return () => ipcRenderer.removeListener('island:config', handler);
+  },
+  startMusicBridge: () => ipcRenderer.invoke('island:music:start'),
+  stopMusicBridge: () => ipcRenderer.invoke('island:music:stop'),
+  getMusicState: () => ipcRenderer.invoke('island:music:state'),
+  controlMusic: (action: string) => ipcRenderer.invoke('island:music:control', action),
+  seekMusic: (ms: number) => ipcRenderer.invoke('island:music:seek', ms),
+  onIslandMusic: (callback: (state: unknown) => void) => {
+    const handler = (_event: unknown, state: unknown) => callback(state);
+    ipcRenderer.on('island:music', handler);
+    return () => ipcRenderer.removeListener('island:music', handler);
   },
 
   // Theme

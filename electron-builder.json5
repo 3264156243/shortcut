@@ -26,6 +26,10 @@
     {
       "from": "resources/hardware-monitor",
       "to": "hardware-monitor"
+    },
+    {
+      "from": "resources/music-bridge",
+      "to": "music-bridge"
     }
   ],
   "publish": [

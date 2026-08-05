@@ -37,6 +37,9 @@ let captureOverlay: any = null;
 let islandWindow: any = null;
 let islandProgrammaticMove = false;
 let islandUserHidden = false;
+let musicBridgeProcess: any = null;
+let musicBridgeBuffer = '';
+let latestMusicState: any = null;
 
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error' | 'unconfigured';
 
@@ -305,6 +308,9 @@ function createIslandWindow() {
   islandWindow.once('ready-to-show', () => {
     applyIslandVisibility();
   });
+  if (prefs.musicEnabled !== false) {
+    startMusicBridge();
+  }
   islandWindow.on('closed', () => { islandWindow = null; });
   islandWindow.on('move', () => {
     if (!islandWindow || islandWindow.isDestroyed()) return;
@@ -318,6 +324,108 @@ function createIslandWindow() {
         writeConfig(JSON.stringify({ ...cfg, island: { ...island, position: 'custom', x, y } }, null, 2));
       }
     } catch {}
+  });
+}
+
+function getMusicBridgePath() {
+  return app.isPackaged
+    ? path.join((process as any).resourcesPath, 'music-bridge', 'netmusic-bridge.ps1')
+    : path.join(__dirname, '..', 'resources', 'music-bridge', 'netmusic-bridge.ps1');
+}
+
+function sendIslandMusic(state: any) {
+  latestMusicState = state;
+  if (islandWindow && !islandWindow.isDestroyed()) {
+    islandWindow.webContents.send('island:music', state);
+  }
+}
+
+function startMusicBridge() {
+  if (musicBridgeProcess) return { success: true };
+  const script = getMusicBridgePath();
+  if (!fs.existsSync(script)) {
+    return { success: false, error: '音乐桥接脚本不存在' };
+  }
+  try {
+    musicBridgeProcess = childProcess.spawn('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy', 'Bypass',
+      '-File', script,
+    ], {
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    musicBridgeProcess.stdout.setEncoding('utf8');
+    musicBridgeProcess.stdout.on('data', (chunk: string) => {
+      musicBridgeBuffer += chunk;
+      const lines = musicBridgeBuffer.split(/\r?\n/);
+      musicBridgeBuffer = lines.pop() || '';
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          sendIslandMusic(JSON.parse(line));
+        } catch {}
+      }
+    });
+    musicBridgeProcess.on('exit', () => {
+      musicBridgeProcess = null;
+      musicBridgeBuffer = '';
+    });
+    musicBridgeProcess.on('error', () => {
+      stopMusicBridge();
+    });
+    return { success: true };
+  } catch (error: any) {
+    stopMusicBridge();
+    return { success: false, error: error?.message || '音乐桥接启动失败' };
+  }
+}
+
+function stopMusicBridge() {
+  if (!musicBridgeProcess) return;
+  const processToStop = musicBridgeProcess;
+  musicBridgeProcess = null;
+  musicBridgeBuffer = '';
+  try { processToStop.kill(); } catch {}
+}
+
+function runMusicBridgeCommand(args: string[]) {
+  const script = getMusicBridgePath();
+  return new Promise<any>((resolve) => {
+    let child: any;
+    try {
+      child = childProcess.spawn('powershell.exe', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy', 'Bypass',
+        '-File', script,
+        ...args,
+      ], {
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } catch (error: any) {
+      resolve({ success: false, error: error?.message || '命令执行失败' });
+      return;
+    }
+    let out = '';
+    let err = '';
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => { out += chunk; });
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk: string) => { err += chunk; });
+    child.once('close', () => {
+      try {
+        const firstLine = out.trim().split(/\r?\n/)[0];
+        resolve(firstLine ? JSON.parse(firstLine) : { success: false, error: err.trim() || '命令执行失败' });
+      } catch {
+        resolve({ success: false, error: err.trim() || '命令输出解析失败' });
+      }
+    });
+    child.once('error', (error: Error) => {
+      resolve({ success: false, error: error.message });
+    });
   });
 }
 
@@ -892,7 +1000,7 @@ function createTray() {
 
 // Dynamic island IPC
 ipcMain.handle('island:getState', () => getIslandPreferences());
-ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position: string, autoHideFullscreen: boolean) => {
+ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean) => {
   try {
     const raw = readConfig();
     const cfg = raw ? JSON.parse(raw) : {};
@@ -902,13 +1010,20 @@ ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position
       style: style || 'capsule',
       position: position || 'top-center',
       autoHideFullscreen: autoHideFullscreen !== false,
+      musicEnabled: musicEnabled !== false,
     };
     writeConfig(JSON.stringify({ ...cfg, island }, null, 2));
     if (island.enabled) {
       islandUserHidden = false;
       createIslandWindow();
+      if (island.musicEnabled) {
+        startMusicBridge();
+      } else {
+        stopMusicBridge();
+      }
     } else {
       islandUserHidden = true;
+      stopMusicBridge();
       if (islandWindow && !islandWindow.isDestroyed()) islandWindow.hide();
     }
     if (islandWindow && !islandWindow.isDestroyed()) positionIslandWindow(true);
@@ -917,7 +1032,7 @@ ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position
     }
     return { success: true, island };
   } catch (error: any) {
-    return { success: false, error: error?.message || '???????' };
+    return { success: false, error: error?.message || '保存灵动岛配置失败' };
   }
 });
 ipcMain.handle('island:move', (_e: any, _screenX: number, _screenY: number, deltaX: number, deltaY: number) => {
@@ -933,7 +1048,7 @@ ipcMain.handle('island:move', (_e: any, _screenX: number, _screenY: number, delt
     islandWindow.setBounds({ x: clampedX, y: clampedY, width: bounds.width, height: bounds.height });
     return { success: true };
   } catch (error: any) {
-    return { success: false, error: error?.message || '????' };
+    return { success: false, error: error?.message || '移动灵动岛失败' };
   }
 });
 function toggleIslandWindow() {
@@ -947,6 +1062,14 @@ function toggleIslandWindow() {
   return { visible: true };
 }
 ipcMain.handle('island:toggle', () => toggleIslandWindow());
+ipcMain.handle('island:music:start', () => startMusicBridge());
+ipcMain.handle('island:music:stop', () => {
+  stopMusicBridge();
+  return true;
+});
+ipcMain.handle('island:music:state', () => latestMusicState || { available: false });
+ipcMain.handle('island:music:control', (_e: any, action: string) => runMusicBridgeCommand(['-Control', String(action || '').toLowerCase()]));
+ipcMain.handle('island:music:seek', (_e: any, ms: number) => runMusicBridgeCommand(['-Seek', String(Math.round(Number(ms) || 0))]));
 
 // IPC Handlers
 ipcMain.handle('config:read', () => readConfig());
@@ -1403,6 +1526,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   if (islandWindow && !islandWindow.isDestroyed()) islandWindow.destroy();
+  stopMusicBridge();
   stopHardwareMonitor();
   if (captureOverlay && !captureOverlay.isDestroyed()) captureOverlay.destroy();
   globalShortcut.unregisterAll();

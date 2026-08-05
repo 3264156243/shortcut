@@ -29,12 +29,12 @@ export default function SettingsPanel() {
     { value: 'center', labelKey: 'settings.animation.center', icon: Maximize },
   ];
 
-  const island = config.island || { enabled: false, style: 'capsule' as IslandStyle, position: 'top-center' as IslandPosition, autoHideFullscreen: true };
+  const island = config.island || { enabled: false, style: 'capsule' as IslandStyle, position: 'top-center' as IslandPosition, autoHideFullscreen: true, musicEnabled: true };
   const updateIsland = async (updates: Partial<typeof island>) => {
     const next = { ...island, ...updates };
     useStore.setState((s) => ({ config: { ...s.config, island: next } }));
     await useStore.getState().saveConfig();
-    const result = await window.electronAPI?.setIsland(next.enabled, next.style, next.position, next.autoHideFullscreen);
+    const result = await window.electronAPI?.setIsland(next.enabled, next.style, next.position, next.autoHideFullscreen, next.musicEnabled !== false);
     if (result && !result.success && result.error) {
       console.error(result.error);
     }
@@ -154,19 +154,23 @@ export default function SettingsPanel() {
             {/* Dynamic island */}
             <div style={sectionStyle}>
               <h3 className="text-sm font-medium mb-3 flex items-center gap-2" style={{ color: 'var(--color-text)' }}>
-                <Smartphone size={16} style={{ color: 'var(--color-accent)' }} /> ???
+                <Smartphone size={16} style={{ color: 'var(--color-accent)' }} /> 灵动岛
               </h3>
               <div className="flex flex-col gap-3">
                 <label className="flex items-center justify-between cursor-pointer">
-                  <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>?????</span>
+                  <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>启用灵动岛</span>
                   <input type="checkbox" checked={island.enabled} onChange={(e) => void updateIsland({ enabled: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
                 </label>
                 <label className="flex items-center justify-between cursor-pointer">
-                  <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>?????????</span>
+                  <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>全屏时自动隐藏</span>
                   <input type="checkbox" checked={island.autoHideFullscreen} onChange={(e) => void updateIsland({ autoHideFullscreen: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
                 </label>
+                <label className="flex items-center justify-between cursor-pointer">
+                  <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>音乐模块</span>
+                  <input type="checkbox" checked={island.musicEnabled !== false} onChange={(e) => void updateIsland({ musicEnabled: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
+                </label>
                 <div>
-                  <div className="mb-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>????</div>
+                  <div className="mb-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>展示样式</div>
                   <div className="grid grid-cols-3 gap-2">
                     {(['capsule','glass','paper'] as IslandStyle[]).map((style) => (
                       <button
@@ -179,15 +183,15 @@ export default function SettingsPanel() {
                           color: island.style === style ? 'white' : 'var(--color-text-secondary)',
                         }}
                       >
-                        <Smartphone size={14} /> {style === 'capsule' ? '??' : style === 'glass' ? '??' : '??'}
+                        <Smartphone size={14} /> {style === 'capsule' ? '胶囊' : style === 'glass' ? '玻璃' : '纸张'}
                       </button>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <div className="mb-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>????</div>
+                  <div className="mb-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>显示位置</div>
                   <div className="grid grid-cols-3 gap-2">
-                    {([['top-center','????'],['top-left','????'],['top-right','????'],['left-center','????'],['right-center','????']] as Array<[IslandPosition,string]>).map(([position,label]) => (
+                    {([['top-center','顶部居中'],['top-left','左上'],['top-right','右上'],['left-center','左侧居中'],['right-center','右侧居中']] as Array<[IslandPosition,string]>).map(([position,label]) => (
                       <button
                         key={position}
                         onClick={() => void updateIsland({ position })}
@@ -204,7 +208,7 @@ export default function SettingsPanel() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-                  <Film size={14} /> ????????????Alt+I ?????
+                  <Film size={14} /> 可用 Alt+I 快捷键显示或隐藏
                 </div>
               </div>
             </div>

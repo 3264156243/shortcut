@@ -17,9 +17,23 @@ export interface IslandPreferences {
   style: IslandStyle;
   position: IslandPosition;
   autoHideFullscreen: boolean;
+  musicEnabled?: boolean;
   x?: number;
   y?: number;
   displayId?: number;
+}
+
+export interface MusicState {
+  available: boolean;
+  title?: string | null;
+  artist?: string | null;
+  album?: string | null;
+  songId?: number | string | null;
+  lyrics?: string | null;
+  coverUrl?: string | null;
+  isPlaying?: boolean;
+  positionMs?: number;
+  durationMs?: number;
 }
 
 export type ModuleId = 'shortcuts' | 'tasks' | 'cockpit' | 'translate';
@@ -176,4 +190,3 @@ export const DEFAULT_CONFIG: AppConfig = {
   ],
   activeTabId: 'default',
 };
-
