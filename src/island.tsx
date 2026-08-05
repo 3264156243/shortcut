@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Music, Pause, Play, SkipBack, SkipForward } from 'lucide-react';
 import './island.css';
-import type { MusicState } from './types';
+import type { IslandDisplayState, MusicState } from './types';
 
 type IslandStyle = 'capsule' | 'glass' | 'paper';
 type IslandPosition = 'top-center' | 'top-left' | 'top-right' | 'left-center' | 'right-center';
@@ -14,6 +14,7 @@ interface IslandState {
   autoHideFullscreen: boolean;
   musicEnabled: boolean;
   lyricBounce: boolean;
+  displayState: IslandDisplayState;
 }
 
 interface LyricLine {
@@ -28,6 +29,7 @@ const DEFAULT_STATE: IslandState = {
   autoHideFullscreen: true,
   musicEnabled: true,
   lyricBounce: true,
+  displayState: 'collapsed',
 };
 
 function nowText(): string {
@@ -73,23 +75,12 @@ function formatTime(ms: number | undefined | null): string {
 function IslandApp() {
   const [state, setState] = useState<IslandState>(DEFAULT_STATE);
   const [time, setTime] = useState(nowText);
-  const [hovered, setHovered] = useState(false);
   const [music, setMusic] = useState<MusicState>({ available: false });
   const [seekPreview, setSeekPreview] = useState<number | null>(null);
-  const [mini, setMini] = useState(false);
   const [arrival, setArrival] = useState(false);
-  const dragRef = useRef<{
-    pointerId: number;
-    offsetX: number;
-    offsetY: number;
-    raf: number | null;
-    pending: { x: number; y: number } | null;
-  } | null>(null);
-  const draggedRef = useRef(false);
   const positionAnchorRef = useRef<{ positionMs: number; at: number } | null>(null);
   const lastDisplayIndexRef = useRef(-1);
   const songKeyRef = useRef('');
-  const [dragging, setDragging] = useState(false);
   const progressRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -111,6 +102,7 @@ function IslandApp() {
           autoHideFullscreen: prefs.autoHideFullscreen !== false,
           musicEnabled: prefs.musicEnabled !== false,
           lyricBounce: prefs.lyricBounce !== false,
+          displayState: prefs.displayState || 'collapsed',
         });
       } catch {}
     };
@@ -129,6 +121,7 @@ function IslandApp() {
         autoHideFullscreen: next.autoHideFullscreen ?? current.autoHideFullscreen,
         musicEnabled: next.musicEnabled ?? current.musicEnabled,
         lyricBounce: next.lyricBounce ?? current.lyricBounce,
+        displayState: (next.displayState as IslandDisplayState) ?? current.displayState,
       }));
     });
     return unsubscribe;
@@ -208,61 +201,6 @@ function IslandApp() {
   const progress = music.durationMs ? Math.max(0, Math.min(100, (positionMs / music.durationMs) * 100)) : 0;
   const lyricNeedsMarquee = currentLyric.length > 18;
 
-  const onDragStart = async (e: React.PointerEvent) => {
-    e.preventDefault();
-    draggedRef.current = false;
-    const bounds = await window.electronAPI?.getIslandBounds?.();
-    if (!bounds) return;
-    dragRef.current = {
-      pointerId: e.pointerId,
-      offsetX: e.screenX - bounds.x,
-      offsetY: e.screenY - bounds.y,
-      raf: null,
-      pending: null,
-    };
-    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-    setDragging(true);
-  };
-  const onDragMove = (e: React.PointerEvent) => {
-    const ref = dragRef.current;
-    if (!ref || ref.pointerId !== e.pointerId) return;
-    e.preventDefault();
-    if (Math.abs(e.movementX || 0) > 3 || Math.abs(e.movementY || 0) > 3) {
-      draggedRef.current = true;
-    }
-    ref.pending = {
-      x: e.screenX - ref.offsetX,
-      y: e.screenY - ref.offsetY,
-    };
-    if (ref.raf === null) {
-      ref.raf = window.requestAnimationFrame(() => {
-        const current = dragRef.current;
-        if (current && current.pending) {
-          void window.electronAPI?.moveIslandTo?.(current.pending.x, current.pending.y);
-          current.pending = null;
-        }
-        if (current) current.raf = null;
-      });
-    }
-  };
-  const onDragEnd = (e: React.PointerEvent) => {
-    const ref = dragRef.current;
-    if (!ref) return;
-    if (ref.raf !== null) {
-      window.cancelAnimationFrame(ref.raf);
-    }
-    if (ref.pending) {
-      void window.electronAPI?.moveIslandTo?.(ref.pending.x, ref.pending.y);
-    }
-    void window.electronAPI?.finishIslandMove?.();
-    try {
-      (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
-    } catch {}
-    dragRef.current = null;
-    draggedRef.current = false;
-    setDragging(false);
-  };
-
   const control = (action: string) => {
     void window.electronAPI?.controlMusic?.(action);
   };
@@ -294,7 +232,8 @@ function IslandApp() {
     }
   };
 
-  const expanded = hovered;
+  const expanded = state.displayState === 'expanded';
+  const mini = state.displayState === 'mini';
   const showMusic = state.musicEnabled && music.available;
   const rootClass = [
     'island-root',
@@ -307,22 +246,11 @@ function IslandApp() {
     <div
       className={rootClass}
       data-position={state.position}
-      data-drag={dragging ? 'true' : 'false'}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
     >
       {arrival ? <div className="island-drop-ball" /> : null}
-      <div
-        className="island-shell"
-        onPointerDown={onDragStart}
-        onPointerMove={onDragMove}
-        onPointerUp={onDragEnd}
-        onPointerCancel={onDragEnd}
-      >
+      <div className="island-shell">
         {showMusic ? (
-          <div
-            className="island-mini"
-          >
+          <div className="island-mini">
             {music.coverUrl ? (
               <img
                 className={['island-mini-disc', music.isPlaying ? 'spinning' : 'paused'].join(' ')}

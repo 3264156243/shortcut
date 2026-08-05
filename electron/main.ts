@@ -215,6 +215,7 @@ function getIslandPreferences(): any {
       autoHideFullscreen: island?.autoHideFullscreen !== false,
       musicEnabled: island?.musicEnabled !== false,
       lyricBounce: island?.lyricBounce !== false,
+      displayState: island?.displayState || 'collapsed',
       ...(island?.x != null ? { x: island.x } : {}),
       ...(island?.y != null ? { y: island.y } : {}),
     };
@@ -226,6 +227,7 @@ function getIslandPreferences(): any {
       autoHideFullscreen: true,
       musicEnabled: true,
       lyricBounce: true,
+      displayState: 'collapsed',
     };
   }
 }
@@ -301,7 +303,7 @@ function createIslandWindow() {
     transparent: true,
     backgroundColor: '#00000000',
     resizable: false,
-    movable: false,
+    movable: true,
     alwaysOnTop: true,
     skipTaskbar: true,
     hasShadow: false,
@@ -1016,7 +1018,7 @@ function createTray() {
 
 // Dynamic island IPC
 ipcMain.handle('island:getState', () => getIslandPreferences());
-ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean) => {
+ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string) => {
   try {
     const raw = readConfig();
     const cfg = raw ? JSON.parse(raw) : {};
@@ -1028,6 +1030,7 @@ ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position
       autoHideFullscreen: autoHideFullscreen !== false,
       musicEnabled: musicEnabled !== false,
       lyricBounce: lyricBounce !== false,
+      displayState: displayState || 'collapsed',
     };
     writeConfig(JSON.stringify({ ...cfg, island }, null, 2));
     if (island.enabled) {

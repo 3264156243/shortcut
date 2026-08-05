@@ -1,6 +1,6 @@
 import { Film, Smartphone } from 'lucide-react';
 import { useStore } from '../store';
-import { IslandStyle, IslandPosition } from '../types';
+import { IslandDisplayState, IslandStyle, IslandPosition } from '../types';
 
 export default function IslandPanel() {
   const config = useStore((s) => s.config);
@@ -11,13 +11,14 @@ export default function IslandPanel() {
     autoHideFullscreen: true,
     musicEnabled: true,
     lyricBounce: true,
+    displayState: 'collapsed' as IslandDisplayState,
   };
 
   const updateIsland = async (updates: Partial<typeof island>) => {
     const next = { ...island, ...updates };
     useStore.setState((s) => ({ config: { ...s.config, island: next } }));
     await useStore.getState().saveConfig();
-    const result = await window.electronAPI?.setIsland(next.enabled, next.style, next.position, next.autoHideFullscreen, next.musicEnabled !== false, next.lyricBounce !== false);
+    const result = await window.electronAPI?.setIsland(next.enabled, next.style, next.position, next.autoHideFullscreen, next.musicEnabled !== false, next.lyricBounce !== false, next.displayState || 'collapsed');
     if (result && !result.success && result.error) {
       console.error(result.error);
     }
@@ -73,6 +74,30 @@ export default function IslandPanel() {
                 }}
               >
                 <Smartphone size={14} /> {style === 'capsule' ? '胶囊' : style === 'glass' ? '玻璃' : '纸张'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={sectionStyle}>
+          <div className="mb-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>显示状态</div>
+          <div className="grid grid-cols-3 gap-2">
+            {([
+              ['collapsed', '收起'],
+              ['mini', '迷你'],
+              ['expanded', '展开'],
+            ] as Array<[IslandDisplayState, string]>).map(([displayState, label]) => (
+              <button
+                key={displayState}
+                onClick={() => void updateIsland({ displayState })}
+                className="flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs transition-all duration-150"
+                style={{
+                  background: (island.displayState || 'collapsed') === displayState ? 'var(--color-accent)' : 'var(--color-bg-card-hover)',
+                  border: '1px solid ' + ((island.displayState || 'collapsed') === displayState ? 'var(--color-accent)' : 'var(--color-border)'),
+                  color: (island.displayState || 'collapsed') === displayState ? 'white' : 'var(--color-text-secondary)',
+                }}
+              >
+                {label}
               </button>
             ))}
           </div>

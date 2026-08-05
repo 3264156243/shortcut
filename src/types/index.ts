@@ -11,6 +11,7 @@ export type Locale = 'zh-CN';
 export type PanelAnimation = 'bottom' | 'top' | 'left' | 'right' | 'center';
 export type IslandStyle = 'capsule' | 'glass' | 'paper';
 export type IslandPosition = 'top-center' | 'top-left' | 'top-right' | 'left-center' | 'right-center';
+export type IslandDisplayState = 'collapsed' | 'mini' | 'expanded';
 
 export interface IslandPreferences {
   enabled: boolean;
@@ -19,6 +20,7 @@ export interface IslandPreferences {
   autoHideFullscreen: boolean;
   musicEnabled?: boolean;
   lyricBounce?: boolean;
+  displayState?: IslandDisplayState;
   x?: number;
   y?: number;
   displayId?: number;

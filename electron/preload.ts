@@ -54,7 +54,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Dynamic island
   getIslandState: () => ipcRenderer.invoke('island:getState'),
-  setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean) => ipcRenderer.invoke('island:set', enabled, style, position, autoHideFullscreen, musicEnabled, lyricBounce),
+  setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string) => ipcRenderer.invoke('island:set', enabled, style, position, autoHideFullscreen, musicEnabled, lyricBounce, displayState),
   moveIsland: (screenX: number, screenY: number, deltaX: number, deltaY: number) => ipcRenderer.invoke('island:move', screenX, screenY, deltaX, deltaY),
   getIslandBounds: () => ipcRenderer.invoke('island:getBounds'),
   moveIslandTo: (x: number, y: number) => ipcRenderer.invoke('island:moveTo', x, y),
