@@ -194,4 +194,15 @@ export const DEFAULT_CONFIG: AppConfig = {
     },
   ],
   activeTabId: 'default',
+  island: {
+    enabled: true,
+    style: 'capsule',
+    position: 'top-center',
+    autoHideFullscreen: true,
+    musicEnabled: true,
+    lyricBounce: true,
+    orbitGlow: true,
+    barsEnabled: true,
+    displayState: 'collapsed',
+  },
 };

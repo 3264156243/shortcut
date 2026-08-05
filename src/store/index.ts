@@ -229,8 +229,9 @@ export const useStore = create<AppState>((set, get) => ({
     if (raw) {
       try {
         const parsed = JSON.parse(raw) as AppConfig;
+        const island = { ...DEFAULT_CONFIG.island, ...(parsed.island || {}) };
         set({
-          config: { ...DEFAULT_CONFIG, ...parsed, locale: 'zh-CN', searchHistory: parsed.searchHistory || [], activeModule: parsed.activeModule || 'shortcuts', ...normalizeTaskBoards(parsed) },
+          config: { ...DEFAULT_CONFIG, ...parsed, island, locale: 'zh-CN', searchHistory: parsed.searchHistory || [], activeModule: parsed.activeModule || 'shortcuts', ...normalizeTaskBoards(parsed) },
           activeTabId: parsed.activeTabId || parsed.tabs[0]?.id || 'default',
           activeModule: parsed.activeModule || 'shortcuts',
         });
