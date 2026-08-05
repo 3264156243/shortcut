@@ -1,6 +1,6 @@
 ﻿import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import { AppConfig, DEFAULT_CONFIG, Tab, Group, Shortcut, Locale, PanelAnimation, ModuleId, TaskNote, TaskBoardConfig, TaskEditorDraft, UpdateState } from '../types';
+import { AppConfig, DEFAULT_CONFIG, Tab, Group, Shortcut, Locale, PanelAnimation, ModuleId, TaskNote, TaskBoardConfig, TaskEditorDraft, UpdateState, IslandPreferences } from '../types';
 import { t } from '../i18n';
 
 interface AppState {
@@ -229,7 +229,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (raw) {
       try {
         const parsed = JSON.parse(raw) as AppConfig;
-        const island = { ...DEFAULT_CONFIG.island, ...(parsed.island || {}) };
+        const island: IslandPreferences = { ...DEFAULT_CONFIG.island!, ...(parsed.island || {}) };
         set({
           config: { ...DEFAULT_CONFIG, ...parsed, island, locale: 'zh-CN', searchHistory: parsed.searchHistory || [], activeModule: parsed.activeModule || 'shortcuts', ...normalizeTaskBoards(parsed) },
           activeTabId: parsed.activeTabId || parsed.tabs[0]?.id || 'default',
