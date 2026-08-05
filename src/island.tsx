@@ -79,6 +79,8 @@ function IslandApp() {
   const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
   const draggedRef = useRef(false);
   const positionAnchorRef = useRef<{ positionMs: number; at: number } | null>(null);
+  const lastDisplayIndexRef = useRef(-1);
+  const songKeyRef = useRef('');
   const [dragging, setDragging] = useState(false);
   const progressRef = useRef<HTMLDivElement | null>(null);
 
@@ -125,10 +127,19 @@ function IslandApp() {
   useEffect(() => {
     const applyMusic = (data: MusicState) => {
       setMusic(data);
-      positionAnchorRef.current = {
-        positionMs: Number(data.positionMs) || 0,
-        at: Date.now(),
-      };
+      const now = Date.now();
+      const newMs = Number(data.positionMs) || 0;
+      const prev = positionAnchorRef.current;
+      if (data.isPlaying && prev) {
+        const elapsed = Math.max(0, now - prev.at);
+        const expected = prev.positionMs + elapsed;
+        // 播放中只前进不回退，SMTC 小误差不打断本地推算
+        positionAnchorRef.current = newMs >= expected - 500
+          ? { positionMs: Math.max(newMs, expected), at: now }
+          : { positionMs: newMs, at: now };
+      } else {
+        positionAnchorRef.current = { positionMs: newMs, at: now };
+      }
     };
     const unsubscribe = window.electronAPI?.onIslandMusic?.((data: unknown) => {
       if (data) applyMusic(data as MusicState);
@@ -156,17 +167,33 @@ function IslandApp() {
     ? Math.max(0, Math.min(extrapolatedMs, music.durationMs))
     : extrapolatedMs;
   const positionMs = seekPreview ?? basePositionMs;
+  const songKey = `${music.title}|${music.artist}`;
   const displayIndex = useMemo(() => {
-    if (!lyrics.length) return -1;
-    let index = -1;
+    if (songKeyRef.current !== songKey) {
+      songKeyRef.current = songKey;
+      lastDisplayIndexRef.current = -1;
+    }
+    if (!lyrics.length) {
+      lastDisplayIndexRef.current = -1;
+      return -1;
+    }
+    let rawIndex = -1;
     for (let i = 0; i < lyrics.length; i++) {
       const start = lyrics[i].timeMs;
       const activation = i === 0 ? start : start - Math.floor((start - lyrics[i - 1].timeMs) / 2);
-      if (activation <= positionMs) index = i;
+      if (activation <= positionMs) rawIndex = i;
       else break;
     }
-    return index;
-  }, [lyrics, positionMs]);
+    const prev = lastDisplayIndexRef.current;
+    let next = rawIndex;
+    if (prev >= 0 && prev < lyrics.length && rawIndex < prev) {
+      // 防止半句边界因进度小抖动来回跳
+      const holdUntil = lyrics[prev].timeMs - 300;
+      if (positionMs >= holdUntil) next = prev;
+    }
+    lastDisplayIndexRef.current = next;
+    return next;
+  }, [lyrics, positionMs, songKey]);
   const currentLyric = displayIndex >= 0 ? lyrics[displayIndex].text : (music.title || '');
   const progress = music.durationMs ? Math.max(0, Math.min(100, (positionMs / music.durationMs) * 100)) : 0;
   const lyricNeedsMarquee = currentLyric.length > 18;
