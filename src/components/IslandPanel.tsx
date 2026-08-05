@@ -18,7 +18,6 @@ export default function IslandPanel() {
   const updateIsland = async (updates: Partial<typeof island>) => {
     const next = { ...island, ...updates };
     useStore.setState((s) => ({ config: { ...s.config, island: next } }));
-    await useStore.getState().saveConfig();
     const result = await window.electronAPI?.setIsland(next.enabled, next.style, next.position, next.autoHideFullscreen, next.musicEnabled !== false, next.lyricBounce !== false, next.displayState || 'collapsed', next.orbitGlow !== false);
     if (result && !result.success && result.error) {
       console.error(result.error);

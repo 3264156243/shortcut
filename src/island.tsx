@@ -255,10 +255,9 @@ function IslandApp() {
       {arrival ? <div className="island-drop-ball" /> : null}
       {showMusic && state.displayState === 'collapsed' && state.orbitGlow ? (
         <div className="island-orbit">
-          <div className="island-orbit-track">
-            <div className="island-orbit-trail" />
-            <div className="island-orbit-ball" />
-          </div>
+          <div className="island-orbit-trail" style={{ animationDelay: '-0.7s' }} />
+          <div className="island-orbit-trail" style={{ animationDelay: '-0.35s' }} />
+          <div className="island-orbit-ball" />
         </div>
       ) : null}
       <div className="island-shell">
