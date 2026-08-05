@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ChevronUp, Music, Pause, Play, SkipBack, SkipForward } from 'lucide-react';
+import { Music, Pause, Play, SkipBack, SkipForward } from 'lucide-react';
 import './island.css';
 import type { MusicState } from './types';
 
@@ -73,12 +73,18 @@ function formatTime(ms: number | undefined | null): string {
 function IslandApp() {
   const [state, setState] = useState<IslandState>(DEFAULT_STATE);
   const [time, setTime] = useState(nowText);
-  const [open, setOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const [music, setMusic] = useState<MusicState>({ available: false });
   const [seekPreview, setSeekPreview] = useState<number | null>(null);
   const [mini, setMini] = useState(false);
   const [arrival, setArrival] = useState(false);
-  const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    offsetX: number;
+    offsetY: number;
+    raf: number | null;
+    pending: { x: number; y: number } | null;
+  } | null>(null);
   const draggedRef = useRef(false);
   const positionAnchorRef = useRef<{ positionMs: number; at: number } | null>(null);
   const lastDisplayIndexRef = useRef(-1);
@@ -202,38 +208,59 @@ function IslandApp() {
   const progress = music.durationMs ? Math.max(0, Math.min(100, (positionMs / music.durationMs) * 100)) : 0;
   const lyricNeedsMarquee = currentLyric.length > 18;
 
-  const onDragStart = (e: React.PointerEvent) => {
-    dragRef.current = { sx: e.screenX, sy: e.screenY, ox: e.clientX, oy: e.clientY };
+  const onDragStart = async (e: React.PointerEvent) => {
+    e.preventDefault();
     draggedRef.current = false;
+    const bounds = await window.electronAPI?.getIslandBounds?.();
+    if (!bounds) return;
+    dragRef.current = {
+      pointerId: e.pointerId,
+      offsetX: e.screenX - bounds.x,
+      offsetY: e.screenY - bounds.y,
+      raf: null,
+      pending: null,
+    };
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
     setDragging(true);
   };
   const onDragMove = (e: React.PointerEvent) => {
-    if (!dragRef.current) return;
+    const ref = dragRef.current;
+    if (!ref || ref.pointerId !== e.pointerId) return;
     e.preventDefault();
-    const deltaX = e.screenX - dragRef.current.sx;
-    const deltaY = e.screenY - dragRef.current.sy;
-    if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
+    if (Math.abs(e.movementX || 0) > 3 || Math.abs(e.movementY || 0) > 3) {
       draggedRef.current = true;
     }
-    window.electronAPI?.moveIsland(dragRef.current.sx, dragRef.current.sy, deltaX, deltaY);
+    ref.pending = {
+      x: e.screenX - ref.offsetX,
+      y: e.screenY - ref.offsetY,
+    };
+    if (ref.raf === null) {
+      ref.raf = window.requestAnimationFrame(() => {
+        const current = dragRef.current;
+        if (current && current.pending) {
+          void window.electronAPI?.moveIslandTo?.(current.pending.x, current.pending.y);
+          current.pending = null;
+        }
+        if (current) current.raf = null;
+      });
+    }
   };
-  const onDragEnd = () => {
+  const onDragEnd = (e: React.PointerEvent) => {
+    const ref = dragRef.current;
+    if (!ref) return;
+    if (ref.raf !== null) {
+      window.cancelAnimationFrame(ref.raf);
+    }
+    if (ref.pending) {
+      void window.electronAPI?.moveIslandTo?.(ref.pending.x, ref.pending.y);
+    }
+    void window.electronAPI?.finishIslandMove?.();
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+    } catch {}
     dragRef.current = null;
+    draggedRef.current = false;
     setDragging(false);
-  };
-  const onCompactClick = () => {
-    if (draggedRef.current) return;
-    setMini(false);
-    setOpen(true);
-  };
-  const onMiniClick = () => {
-    if (draggedRef.current) return;
-    setMini(false);
-    setOpen(false);
-  };
-  const onShrink = () => {
-    setOpen(false);
-    setMini(true);
   };
 
   const control = (action: string) => {
@@ -267,7 +294,7 @@ function IslandApp() {
     }
   };
 
-  const expanded = open;
+  const expanded = hovered;
   const showMusic = state.musicEnabled && music.available;
   const rootClass = [
     'island-root',
@@ -281,16 +308,18 @@ function IslandApp() {
       className={rootClass}
       data-position={state.position}
       data-drag={dragging ? 'true' : 'false'}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       {arrival ? <div className="island-drop-ball" /> : null}
       <div className="island-shell">
         {showMusic ? (
           <div
             className="island-mini"
-            onClick={onMiniClick}
             onPointerDown={onDragStart}
             onPointerMove={onDragMove}
             onPointerUp={onDragEnd}
+            onPointerCancel={onDragEnd}
           >
             {music.coverUrl ? (
               <img
@@ -308,11 +337,11 @@ function IslandApp() {
         ) : null}
         <div
           className="island-compact"
-          title="点击切换缩起样式，拖动移动灵动岛"
+          title="拖动移动灵动岛"
           onPointerDown={onDragStart}
           onPointerMove={onDragMove}
           onPointerUp={onDragEnd}
-          onClick={onCompactClick}
+          onPointerCancel={onDragEnd}
         >
           {showMusic ? (
             <>
@@ -361,7 +390,7 @@ function IslandApp() {
         <div className="island-panel-content">
         {showMusic ? (
           <>
-            <div className="island-music-head" onClick={onShrink} title="点击收起">
+            <div className="island-music-head">
               {music.coverUrl ? (
                 <div className={['island-music-disc', music.isPlaying ? 'spinning' : 'paused'].join(' ')}>
                   <img className="island-music-cover" src={music.coverUrl} alt="" draggable={false} />
@@ -379,13 +408,6 @@ function IslandApp() {
                 {music.album ? <div className="island-music-album">{music.album}</div> : null}
               </div>
               <div className="island-panel-clock">{time.slice(0, 8)}</div>
-              <button
-                className="island-collapse"
-                onClick={(e) => { e.stopPropagation(); onShrink(); }}
-                title="收起"
-              >
-                <ChevronUp size={16} />
-              </button>
             </div>
             <div className="island-lyrics">
               {lyrics.length ? (

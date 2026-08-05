@@ -1068,6 +1068,39 @@ ipcMain.handle('island:move', (_e: any, _screenX: number, _screenY: number, delt
     return { success: false, error: error?.message || '移动灵动岛失败' };
   }
 });
+ipcMain.handle('island:getBounds', () => {
+  if (!islandWindow || islandWindow.isDestroyed()) return null;
+  return islandWindow.getBounds();
+});
+ipcMain.handle('island:moveTo', (_e: any, x: number, y: number) => {
+  try {
+    if (!islandWindow || islandWindow.isDestroyed()) return { success: false };
+    const bounds = islandWindow.getBounds();
+    const display = electronScreen.getDisplayMatching(bounds);
+    const area = display.workArea;
+    const nextX = Math.max(area.x, Math.min(area.x + area.width - bounds.width, Math.round(Number(x) || 0)));
+    const nextY = Math.max(area.y, Math.min(area.y + area.height - bounds.height, Math.round(Number(y) || 0)));
+    islandProgrammaticMove = true;
+    islandWindow.setBounds({ x: nextX, y: nextY, width: bounds.width, height: bounds.height });
+    islandProgrammaticMove = false;
+    return { success: true, x: nextX, y: nextY };
+  } catch (error: any) {
+    return { success: false, error: error?.message || '移动灵动岛失败' };
+  }
+});
+ipcMain.handle('island:finishMove', () => {
+  if (!islandWindow || islandWindow.isDestroyed()) return false;
+  const [x, y] = islandWindow.getPosition();
+  try {
+    const raw = readConfig();
+    const cfg = raw ? JSON.parse(raw) : {};
+    const island = cfg.island || {};
+    writeConfig(JSON.stringify({ ...cfg, island: { ...island, position: 'custom', x, y } }, null, 2));
+    return true;
+  } catch {
+    return false;
+  }
+});
 function toggleIslandWindow() {
   if (islandWindow && !islandWindow.isDestroyed() && islandWindow.isVisible()) {
     islandUserHidden = true;

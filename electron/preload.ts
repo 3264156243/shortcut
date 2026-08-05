@@ -56,6 +56,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getIslandState: () => ipcRenderer.invoke('island:getState'),
   setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean) => ipcRenderer.invoke('island:set', enabled, style, position, autoHideFullscreen, musicEnabled, lyricBounce),
   moveIsland: (screenX: number, screenY: number, deltaX: number, deltaY: number) => ipcRenderer.invoke('island:move', screenX, screenY, deltaX, deltaY),
+  getIslandBounds: () => ipcRenderer.invoke('island:getBounds'),
+  moveIslandTo: (x: number, y: number) => ipcRenderer.invoke('island:moveTo', x, y),
+  finishIslandMove: () => ipcRenderer.invoke('island:finishMove'),
   toggleIsland: () => ipcRenderer.invoke('island:toggle'),
   onIslandConfig: (callback: (state: unknown) => void) => {
     const handler = (_event: unknown, state: unknown) => callback(state);

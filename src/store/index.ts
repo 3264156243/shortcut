@@ -128,6 +128,9 @@ declare global {
       getIslandState: () => Promise<{ enabled: boolean; style: string; position: string; autoHideFullscreen: boolean; musicEnabled?: boolean }>;
       setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean) => Promise<{ success: boolean; error?: string }>;
       moveIsland: (screenX: number, screenY: number, deltaX: number, deltaY: number) => Promise<{ success: boolean; error?: string }>;
+      getIslandBounds: () => Promise<{ x: number; y: number; width: number; height: number } | null>;
+      moveIslandTo: (x: number, y: number) => Promise<{ success: boolean; error?: string }>;
+      finishIslandMove: () => Promise<boolean>;
       toggleIsland: () => Promise<{ visible: boolean }>;
       onIslandConfig: (callback: (state: unknown) => void) => () => void;
       startMusicBridge: () => Promise<{ success: boolean; error?: string }>;
