@@ -22,6 +22,7 @@ pnpm-debug.log*
 .asar-work/
 .asar-refresh/
 *.tsbuildinfo
+island-shot.png
 
 # Environment
 .env
