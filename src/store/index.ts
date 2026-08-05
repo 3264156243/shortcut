@@ -126,7 +126,7 @@ declare global {
       onUpdateState: (callback: (state: UpdateState) => void) => () => void;
       getTheme: () => Promise<'dark' | 'light'>;
       getIslandState: () => Promise<{ enabled: boolean; style: string; position: string; autoHideFullscreen: boolean; musicEnabled?: boolean }>;
-      setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean) => Promise<{ success: boolean; error?: string }>;
+      setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean) => Promise<{ success: boolean; error?: string }>;
       moveIsland: (screenX: number, screenY: number, deltaX: number, deltaY: number) => Promise<{ success: boolean; error?: string }>;
       toggleIsland: () => Promise<{ visible: boolean }>;
       onIslandConfig: (callback: (state: unknown) => void) => () => void;

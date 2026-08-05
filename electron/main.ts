@@ -214,6 +214,7 @@ function getIslandPreferences(): any {
       position: island?.position || 'top-center',
       autoHideFullscreen: island?.autoHideFullscreen !== false,
       musicEnabled: island?.musicEnabled !== false,
+      lyricBounce: island?.lyricBounce !== false,
       ...(island?.x != null ? { x: island.x } : {}),
       ...(island?.y != null ? { y: island.y } : {}),
     };
@@ -224,6 +225,7 @@ function getIslandPreferences(): any {
       position: 'top-center',
       autoHideFullscreen: true,
       musicEnabled: true,
+      lyricBounce: true,
     };
   }
 }
@@ -1014,7 +1016,7 @@ function createTray() {
 
 // Dynamic island IPC
 ipcMain.handle('island:getState', () => getIslandPreferences());
-ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean) => {
+ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean) => {
   try {
     const raw = readConfig();
     const cfg = raw ? JSON.parse(raw) : {};
@@ -1025,6 +1027,7 @@ ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position
       position: position || 'top-center',
       autoHideFullscreen: autoHideFullscreen !== false,
       musicEnabled: musicEnabled !== false,
+      lyricBounce: lyricBounce !== false,
     };
     writeConfig(JSON.stringify({ ...cfg, island }, null, 2));
     if (island.enabled) {

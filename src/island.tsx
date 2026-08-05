@@ -13,6 +13,7 @@ interface IslandState {
   position: IslandPosition;
   autoHideFullscreen: boolean;
   musicEnabled: boolean;
+  lyricBounce: boolean;
 }
 
 interface LyricLine {
@@ -26,6 +27,7 @@ const DEFAULT_STATE: IslandState = {
   position: 'top-center',
   autoHideFullscreen: true,
   musicEnabled: true,
+  lyricBounce: true,
 };
 
 function nowText(): string {
@@ -102,6 +104,7 @@ function IslandApp() {
           position: prefs.position || 'top-center',
           autoHideFullscreen: prefs.autoHideFullscreen !== false,
           musicEnabled: prefs.musicEnabled !== false,
+          lyricBounce: prefs.lyricBounce !== false,
         });
       } catch {}
     };
@@ -119,6 +122,7 @@ function IslandApp() {
         position: next.position ?? current.position,
         autoHideFullscreen: next.autoHideFullscreen ?? current.autoHideFullscreen,
         musicEnabled: next.musicEnabled ?? current.musicEnabled,
+        lyricBounce: next.lyricBounce ?? current.lyricBounce,
       }));
     });
     return unsubscribe;
@@ -330,6 +334,18 @@ function IslandApp() {
                     <span>{currentLyric || music.title || '正在播放'}</span>
                     <span>{currentLyric || music.title || '正在播放'}</span>
                   </div>
+                ) : state.lyricBounce ? (
+                  <span className="island-lyric-chars">
+                    {(currentLyric || music.title || '正在播放').split('').map((ch, index) => (
+                      <span
+                        key={index}
+                        className="island-lyric-char"
+                        style={{ animationDelay: `${Math.min(index * 0.05, 1.5)}s` }}
+                      >
+                        {ch === ' ' ? '\u00A0' : ch}
+                      </span>
+                    ))}
+                  </span>
                 ) : (
                   <span>{currentLyric || music.title || '正在播放'}</span>
                 )}

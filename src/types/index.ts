@@ -18,6 +18,7 @@ export interface IslandPreferences {
   position: IslandPosition;
   autoHideFullscreen: boolean;
   musicEnabled?: boolean;
+  lyricBounce?: boolean;
   x?: number;
   y?: number;
   displayId?: number;

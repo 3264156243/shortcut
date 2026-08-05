@@ -10,13 +10,14 @@ export default function IslandPanel() {
     position: 'top-center' as IslandPosition,
     autoHideFullscreen: true,
     musicEnabled: true,
+    lyricBounce: true,
   };
 
   const updateIsland = async (updates: Partial<typeof island>) => {
     const next = { ...island, ...updates };
     useStore.setState((s) => ({ config: { ...s.config, island: next } }));
     await useStore.getState().saveConfig();
-    const result = await window.electronAPI?.setIsland(next.enabled, next.style, next.position, next.autoHideFullscreen, next.musicEnabled !== false);
+    const result = await window.electronAPI?.setIsland(next.enabled, next.style, next.position, next.autoHideFullscreen, next.musicEnabled !== false, next.lyricBounce !== false);
     if (result && !result.success && result.error) {
       console.error(result.error);
     }
@@ -45,6 +46,10 @@ export default function IslandPanel() {
             <label className="flex items-center justify-between cursor-pointer">
               <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>音乐模块</span>
               <input type="checkbox" checked={island.musicEnabled !== false} onChange={(e) => void updateIsland({ musicEnabled: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
+            </label>
+            <label className="flex items-center justify-between cursor-pointer">
+              <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>歌词逐字跳动</span>
+              <input type="checkbox" checked={island.lyricBounce !== false} onChange={(e) => void updateIsland({ lyricBounce: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
             </label>
             <label className="flex items-center justify-between cursor-pointer">
               <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>全屏时自动隐藏</span>
