@@ -41,8 +41,9 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0 12px;
   height: 46px;
   white-space: nowrap;
   cursor: grab;
@@ -101,16 +102,43 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
 .island-pill-cover { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; flex: none; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.18); box-shadow: 0 0 0 3px rgba(0,0,0,.18), 0 2px 8px rgba(0,0,0,.35); animation: island-spin 14s linear infinite; animation-play-state: paused; }
 .island-pill-cover.spinning, .island-music-disc.spinning { animation-play-state: running; }
 .island-pill-cover-fallback { display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.7); }
-.island-pill-lyric { max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: rgba(255,255,255,.92); animation: island-lyric-bounce 1.8s ease-in-out infinite; }
+.island-pill-lyric {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 13px;
+  color: rgba(255,255,255,.92);
+  animation: island-lyric-bounce 1.8s ease-in-out infinite;
+}
+.island-pill-lyric.marquee .island-pill-lyric-track {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: island-marquee 12s linear infinite;
+}
+.island-pill-lyric-track span { display: inline-block; padding-right: 48px; }
 .island-time { font-size: 21px; font-weight: 600; letter-spacing: 0; font-variant-numeric: tabular-nums; }
 .island-date { font-size: 12px; color: rgba(255,255,255,.62); }
 
 .island-panel-title { font-size: 13px; color: rgba(255,255,255,.55); margin-bottom: 8px; }
 .island-panel-clock { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.island-collapse {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.08);
+  color: rgba(255,255,255,.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .15s, transform .15s;
+}
+.island-collapse:hover { background: rgba(255,255,255,.18); transform: translateY(1px); }
 .island-panel-date { font-size: 13px; color: rgba(255,255,255,.72); margin-top: 2px; }
 .island-panel-hint { margin-top: 12px; font-size: 12px; color: rgba(255,255,255,.45); border-top: 1px solid rgba(255,255,255,.1); padding-top: 10px; }
 
-.island-music-head { display: flex; align-items: center; gap: 14px; }
+.island-music-head { display: flex; align-items: center; gap: 14px; cursor: pointer; }
 .island-music-disc { position: relative; width: 72px; height: 72px; border-radius: 50%; flex: none; background: radial-gradient(circle at 50% 50%, rgba(255,255,255,.16) 0 6%, rgba(18,20,26,.18) 7% 12%, rgba(255,255,255,.06) 13% 18%, rgba(18,20,26,.16) 19% 26%, rgba(255,255,255,.05) 27% 34%, rgba(18,20,26,.14) 35% 44%, rgba(255,255,255,.04) 45% 55%, rgba(18,20,26,.12) 56% 70%, rgba(255,255,255,.03) 71% 100%); border: 1px solid rgba(255,255,255,.22); box-shadow: 0 0 0 5px rgba(0,0,0,.2), 0 10px 24px rgba(0,0,0,.4); animation: island-spin 16s linear infinite; animation-play-state: paused; overflow: hidden; }
 .island-music-cover { position: absolute; inset: 8px; width: calc(100% - 16px); height: calc(100% - 16px); border-radius: 50%; object-fit: cover; }
 .island-music-cover-fallback { display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.7); }
@@ -156,6 +184,7 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
 .island-root.paper .island-progress-track { background: rgba(151,124,88,.28); }
 .island-root.paper .island-control { background: rgba(151,124,88,.12); border-color: rgba(151,124,88,.35); color: #4a3b2c; }
 .island-root.paper .island-control.main { background: #9b2335; color: #fff; box-shadow: 4px 5px 0 rgba(151,124,88,.25); }
+.island-root.paper .island-collapse { background: rgba(151,124,88,.12); border-color: rgba(151,124,88,.35); color: #4a3b2c; }
 
 .island-root[data-position="left-center"], .island-root[data-position="right-center"] { align-items: center; padding-top: 0; }
 @keyframes island-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -190,4 +219,8 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
   0% { transform: scale(.82); }
   55% { transform: scale(1.04); }
   100% { transform: scale(1); }
+}
+@keyframes island-marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
 }

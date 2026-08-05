@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Music, Pause, Play, SkipBack, SkipForward } from 'lucide-react';
+import { ChevronUp, Music, Pause, Play, SkipBack, SkipForward } from 'lucide-react';
 import './island.css';
 import type { MusicState } from './types';
 
@@ -71,7 +71,7 @@ function formatTime(ms: number | undefined | null): string {
 function IslandApp() {
   const [state, setState] = useState<IslandState>(DEFAULT_STATE);
   const [time, setTime] = useState(nowText);
-  const [hovered, setHovered] = useState(false);
+  const [open, setOpen] = useState(false);
   const [music, setMusic] = useState<MusicState>({ available: false });
   const [seekPreview, setSeekPreview] = useState<number | null>(null);
   const [mini, setMini] = useState(false);
@@ -169,6 +169,7 @@ function IslandApp() {
   }, [lyrics, positionMs]);
   const currentLyric = displayIndex >= 0 ? lyrics[displayIndex].text : (music.title || '');
   const progress = music.durationMs ? Math.max(0, Math.min(100, (positionMs / music.durationMs) * 100)) : 0;
+  const lyricNeedsMarquee = currentLyric.length > 18;
 
   const onDragStart = (e: React.PointerEvent) => {
     dragRef.current = { sx: e.screenX, sy: e.screenY, ox: e.clientX, oy: e.clientY };
@@ -191,11 +192,17 @@ function IslandApp() {
   };
   const onCompactClick = () => {
     if (draggedRef.current) return;
-    setMini((current) => !current);
+    setMini(false);
+    setOpen(true);
   };
   const onMiniClick = () => {
     if (draggedRef.current) return;
     setMini(false);
+    setOpen(false);
+  };
+  const onShrink = () => {
+    setOpen(false);
+    setMini(true);
   };
 
   const control = (action: string) => {
@@ -229,7 +236,7 @@ function IslandApp() {
     }
   };
 
-  const expanded = hovered || dragging;
+  const expanded = open;
   const showMusic = state.musicEnabled && music.available;
   const rootClass = [
     'island-root',
@@ -243,8 +250,6 @@ function IslandApp() {
       className={rootClass}
       data-position={state.position}
       data-drag={dragging ? 'true' : 'false'}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
     >
       {arrival ? <div className="island-drop-ball" /> : null}
       <div className="island-shell">
@@ -292,7 +297,16 @@ function IslandApp() {
                   <Music size={16} />
                 </div>
               )}
-              <div className="island-pill-lyric">{currentLyric || music.title || '正在播放'}</div>
+              <div className={['island-pill-lyric', lyricNeedsMarquee ? 'marquee' : ''].join(' ')}>
+                {lyricNeedsMarquee ? (
+                  <div className="island-pill-lyric-track">
+                    <span>{currentLyric || music.title || '正在播放'}</span>
+                    <span>{currentLyric || music.title || '正在播放'}</span>
+                  </div>
+                ) : (
+                  <span>{currentLyric || music.title || '正在播放'}</span>
+                )}
+              </div>
             </>
           ) : (
             <>
@@ -304,7 +318,7 @@ function IslandApp() {
         <div className="island-panel-content">
         {showMusic ? (
           <>
-            <div className="island-music-head">
+            <div className="island-music-head" onClick={onShrink} title="点击收起">
               {music.coverUrl ? (
                 <div className={['island-music-disc', music.isPlaying ? 'spinning' : 'paused'].join(' ')}>
                   <img className="island-music-cover" src={music.coverUrl} alt="" draggable={false} />
@@ -322,6 +336,13 @@ function IslandApp() {
                 {music.album ? <div className="island-music-album">{music.album}</div> : null}
               </div>
               <div className="island-panel-clock">{time.slice(0, 8)}</div>
+              <button
+                className="island-collapse"
+                onClick={(e) => { e.stopPropagation(); onShrink(); }}
+                title="收起"
+              >
+                <ChevronUp size={16} />
+              </button>
             </div>
             <div className="island-lyrics">
               {lyrics.length ? (
@@ -346,13 +367,13 @@ function IslandApp() {
               </div>
             </div>
             <div className="island-controls">
-              <button className="island-control" onClick={() => control('prev')} onPointerDown={(e) => e.stopPropagation()} title="上一首">
+              <button className="island-control" onClick={(e) => { e.stopPropagation(); control('prev'); }} onPointerDown={(e) => e.stopPropagation()} title="上一首">
                 <SkipBack size={18} />
               </button>
-              <button className="island-control main" onClick={() => control('toggle')} onPointerDown={(e) => e.stopPropagation()} title="播放或暂停">
+              <button className="island-control main" onClick={(e) => { e.stopPropagation(); control('toggle'); }} onPointerDown={(e) => e.stopPropagation()} title="播放或暂停">
                 {music.isPlaying ? <Pause size={20} /> : <Play size={20} />}
               </button>
-              <button className="island-control" onClick={() => control('next')} onPointerDown={(e) => e.stopPropagation()} title="下一首">
+              <button className="island-control" onClick={(e) => { e.stopPropagation(); control('next'); }} onPointerDown={(e) => e.stopPropagation()} title="下一首">
                 <SkipForward size={18} />
               </button>
             </div>

@@ -1,4 +1,4 @@
-import { Film, Move, Smartphone } from 'lucide-react';
+import { Film, Smartphone } from 'lucide-react';
 import { useStore } from '../store';
 import { IslandStyle, IslandPosition } from '../types';
 
@@ -73,34 +73,8 @@ export default function IslandPanel() {
           </div>
         </div>
 
-        <div style={sectionStyle}>
-          <div className="mb-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>显示位置</div>
-          <div className="grid grid-cols-3 gap-2">
-            {([
-              ['top-center', '顶部居中'],
-              ['top-left', '左上'],
-              ['top-right', '右上'],
-              ['left-center', '左侧居中'],
-              ['right-center', '右侧居中'],
-            ] as Array<[IslandPosition, string]>).map(([position, label]) => (
-              <button
-                key={position}
-                onClick={() => void updateIsland({ position })}
-                className="flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs transition-all duration-150"
-                style={{
-                  background: island.position === position ? 'var(--color-accent)' : 'var(--color-bg-card-hover)',
-                  border: '1px solid ' + (island.position === position ? 'var(--color-accent)' : 'var(--color-border)'),
-                  color: island.position === position ? 'white' : 'var(--color-text-secondary)',
-                }}
-              >
-                <Move size={14} /> {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
         <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-          <Film size={14} /> 可用 Alt+I 快捷键显示或隐藏灵动岛
+          <Film size={14} /> 直接按住灵动岛拖动即可移动位置，Alt+I 可显示或隐藏
         </div>
       </div>
     </div>
