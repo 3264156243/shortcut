@@ -39,6 +39,7 @@ function Read-Session {
     $item.songId = $null
     $item.lyricsSource = $null
     $item.lyrics = $null
+    $item.coverUrl = $null
     if ($media.Thumbnail) {
       try {
         $stream = Wait-WinRtTask $media.Thumbnail.OpenReadAsync() ([Windows.Storage.Streams.IRandomAccessStreamWithContentType])
@@ -58,6 +59,7 @@ function Read-Session {
       $item.songId = $lyricsResult.songId
       $item.lyricsSource = $lyricsResult.source
       $item.lyrics = $lyricsResult.lyrics
+      $item.coverUrl = $lyricsResult.coverUrl
     }
   } catch {
     $item.title = $null
@@ -67,6 +69,7 @@ function Read-Session {
     $item.songId = $null
     $item.lyricsSource = $null
     $item.lyrics = $null
+    $item.coverUrl = $null
   }
   try {
     $playback = $Session.GetPlaybackInfo()
@@ -78,8 +81,8 @@ function Read-Session {
   }
   try {
     $timeline = $Session.GetTimelineProperties()
-    $item.positionMs = [long]($timeline.Position.Duration / 10000)
-    $item.durationMs = [long]($timeline.EndTime.Duration / 10000)
+    $item.positionMs = [long]($timeline.Position.Ticks / 10000)
+    $item.durationMs = [long]($timeline.EndTime.Ticks / 10000)
   } catch {
     $item.positionMs = 0
     $item.durationMs = 0
@@ -103,10 +106,28 @@ function Get-NetEaseLyrics {
     if (-not $song) { $song = $songs | Select-Object -First 1 }
     if (-not $song) { return @{ songId = $null; source = $null; lyrics = $null } }
     $lyric = Invoke-RestMethod -Method Get -Uri "https://music.163.com/api/song/lyric?id=$($song.id)&lv=-1&kv=-1&tv=-1" -Headers @{ Referer = "https://music.163.com"; "User-Agent" = $ua } -TimeoutSec 8
-    return @{ songId = $song.id; source = "netease"; lyrics = $lyric.lrc.lyric }
+    $coverUrl = $null
+    if ($song.album.picId) {
+      $coverUrl = ConvertTo-NetEaseCoverUrl -PicId ([string]$song.album.picId) -Size 500
+    }
+    return @{ songId = $song.id; source = "netease"; lyrics = $lyric.lrc.lyric; coverUrl = $coverUrl }
   } catch {
-    return @{ songId = $null; source = $null; lyrics = $null }
+    return @{ songId = $null; source = $null; lyrics = $null; coverUrl = $null }
   }
+}
+
+function ConvertTo-NetEaseCoverUrl {
+  param([string]$PicId, [int]$Size = 500)
+  $magic = "3go8&`$8*3*3h0k(2)2"
+  $magicBytes = [System.Text.Encoding]::UTF8.GetBytes($magic)
+  $bytes = [System.Text.Encoding]::UTF8.GetBytes($PicId)
+  for ($i = 0; $i -lt $bytes.Length; $i++) {
+    $bytes[$i] = $bytes[$i] -bxor $magicBytes[$i % $magicBytes.Length]
+  }
+  $md5 = [System.Security.Cryptography.MD5]::Create()
+  $digest = $md5.ComputeHash($bytes)
+  $enc = [Convert]::ToBase64String($digest).Replace("/", "_").Replace("+", "-")
+  return "https://p1.music.126.net/$enc/$PicId.jpg`?param=${Size}y${Size}"
 }
 
 function Invoke-MediaControl {
