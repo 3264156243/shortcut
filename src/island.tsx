@@ -76,6 +76,7 @@ function IslandApp() {
   const [music, setMusic] = useState<MusicState>({ available: false });
   const [seekPreview, setSeekPreview] = useState<number | null>(null);
   const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
+  const positionAnchorRef = useRef<{ positionMs: number; at: number } | null>(null);
   const [dragging, setDragging] = useState(false);
   const progressRef = useRef<HTMLDivElement | null>(null);
 
@@ -120,18 +121,32 @@ function IslandApp() {
   }, []);
 
   useEffect(() => {
+    const applyMusic = (data: MusicState) => {
+      setMusic(data);
+      positionAnchorRef.current = {
+        positionMs: Number(data.positionMs) || 0,
+        at: Date.now(),
+      };
+    };
     const unsubscribe = window.electronAPI?.onIslandMusic?.((data: unknown) => {
-      if (data) setMusic(data as MusicState);
+      if (data) applyMusic(data as MusicState);
     });
     void window.electronAPI?.startMusicBridge?.();
     void window.electronAPI?.getMusicState?.().then((data: unknown) => {
-      if (data) setMusic(data as MusicState);
+      if (data) applyMusic(data as MusicState);
     });
     return unsubscribe;
   }, []);
 
   const lyrics = useMemo(() => parseLyrics(music.lyrics), [music.lyrics]);
-  const positionMs = seekPreview ?? music.positionMs ?? 0;
+  const anchor = positionAnchorRef.current;
+  const extrapolatedMs = anchor && music.isPlaying
+    ? anchor.positionMs + Math.max(0, Date.now() - anchor.at)
+    : (music.positionMs || 0);
+  const basePositionMs = music.durationMs
+    ? Math.max(0, Math.min(extrapolatedMs, music.durationMs))
+    : extrapolatedMs;
+  const positionMs = seekPreview ?? basePositionMs;
   const displayIndex = useMemo(() => {
     if (!lyrics.length) return -1;
     let index = -1;
@@ -190,6 +205,7 @@ function IslandApp() {
     if (seekPreview !== null) {
       void window.electronAPI?.seekMusic?.(seekPreview);
       setMusic((current) => ({ ...current, positionMs: seekPreview }));
+      positionAnchorRef.current = { positionMs: seekPreview, at: Date.now() };
       setSeekPreview(null);
     }
   };
@@ -205,39 +221,40 @@ function IslandApp() {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <div className="island-pill">
-        <div
-          className="island-drag-handle"
-          title="拖动灵动岛"
-          onPointerDown={onDragStart}
-          onPointerMove={onDragMove}
-          onPointerUp={onDragEnd}
-        />
-        {showMusic ? (
-          <>
-            {music.coverUrl ? (
-              <img
-                className={['island-pill-cover', music.isPlaying ? 'spinning' : 'paused'].join(' ')}
-                src={music.coverUrl}
-                alt=""
-                draggable={false}
-              />
-            ) : (
-              <div className={['island-pill-cover', 'island-pill-cover-fallback', music.isPlaying ? 'spinning' : 'paused'].join(' ')}>
-                <Music size={16} />
-              </div>
-            )}
-            <div className="island-pill-lyric">{currentLyric || music.title || '正在播放'}</div>
-          </>
-        ) : (
-          <>
-            <div className="island-time">{time}</div>
-            <div className="island-date">{dateText()}</div>
-          </>
-        )}
-        <div className="island-dot" />
-      </div>
-      <div className="island-panel">
+      <div className="island-shell">
+        <div className="island-compact">
+          <div
+            className="island-drag-handle"
+            title="拖动灵动岛"
+            onPointerDown={onDragStart}
+            onPointerMove={onDragMove}
+            onPointerUp={onDragEnd}
+          />
+          {showMusic ? (
+            <>
+              {music.coverUrl ? (
+                <img
+                  className={['island-pill-cover', music.isPlaying ? 'spinning' : 'paused'].join(' ')}
+                  src={music.coverUrl}
+                  alt=""
+                  draggable={false}
+                />
+              ) : (
+                <div className={['island-pill-cover', 'island-pill-cover-fallback', music.isPlaying ? 'spinning' : 'paused'].join(' ')}>
+                  <Music size={16} />
+                </div>
+              )}
+              <div className="island-pill-lyric">{currentLyric || music.title || '正在播放'}</div>
+            </>
+          ) : (
+            <>
+              <div className="island-time">{time}</div>
+              <div className="island-date">{dateText()}</div>
+            </>
+          )}
+          <div className="island-dot" />
+        </div>
+        <div className="island-panel-content">
         {showMusic ? (
           <>
             <div className="island-music-head">
@@ -305,6 +322,7 @@ function IslandApp() {
             <div className="island-panel-hint">暂无音乐播放，正在显示时间</div>
           </>
         )}
+        </div>
       </div>
     </div>
   );

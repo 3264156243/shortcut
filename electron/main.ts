@@ -194,7 +194,7 @@ async function downloadUpdate() {
     return { success: false, status: 'error', error: updateState.error };
   }
 }
-const ISLAND_SIZE = { width: 360, height: 330 };
+const ISLAND_SIZE = { width: 360, height: 340 };
 const ISLAND_COLLAPSED_HEIGHT = 70;
 const ISLAND_POSITIONS: Record<string, { x: number; y: number }> = {
   'top-center': { x: 0.5, y: 0.08 },

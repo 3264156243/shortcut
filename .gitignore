@@ -23,6 +23,7 @@ pnpm-debug.log*
 .asar-refresh/
 *.tsbuildinfo
 island-shot.png
+netease-*.png
 
 # Environment
 .env
