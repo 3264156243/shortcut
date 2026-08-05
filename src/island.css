@@ -119,6 +119,53 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
 .island-pill-lyric-track span { display: inline-block; padding-right: 48px; }
 .island-lyric-chars { display: inline-flex; white-space: nowrap; }
 .island-lyric-char { display: inline-block; animation: island-char-bounce 1.6s ease-in-out infinite; }
+.island-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  flex: none;
+  margin-left: auto;
+  height: 16px;
+}
+.island-bar {
+  width: 4px;
+  height: 14px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #ff5f6d 0%, #ffc371 35%, #36d1dc 70%, #a55eea 100%);
+  transform-origin: bottom;
+  animation: island-bar-a 1s ease-in-out infinite, island-hue 2.8s linear infinite;
+}
+.island-bar:nth-child(2) {
+  animation-name: island-bar-b, island-hue;
+  animation-delay: -0.32s, -0.9s;
+}
+.island-bar:nth-child(3) {
+  animation-name: island-bar-c, island-hue;
+  animation-delay: -0.65s, -1.8s;
+}
+.island-root.music-paused .island-bar { animation-play-state: paused; }
+@keyframes island-bar-a {
+  0%, 100% { transform: scaleY(.35); }
+  30% { transform: scaleY(.95); }
+  55% { transform: scaleY(.5); }
+  80% { transform: scaleY(.8); }
+}
+@keyframes island-bar-b {
+  0%, 100% { transform: scaleY(.8); }
+  25% { transform: scaleY(.4); }
+  50% { transform: scaleY(1); }
+  75% { transform: scaleY(.55); }
+}
+@keyframes island-bar-c {
+  0%, 100% { transform: scaleY(.55); }
+  35% { transform: scaleY(.95); }
+  60% { transform: scaleY(.35); }
+  85% { transform: scaleY(.75); }
+}
+@keyframes island-hue {
+  from { filter: hue-rotate(0deg); }
+  to { filter: hue-rotate(360deg); }
+}
 .island-time { font-size: 21px; font-weight: 600; letter-spacing: 0; font-variant-numeric: tabular-nums; }
 .island-date { font-size: 12px; color: rgba(255,255,255,.62); }
 

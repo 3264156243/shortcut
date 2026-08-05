@@ -246,6 +246,7 @@ function IslandApp() {
     arrival ? 'music-arrived' : '',
     showMusic && state.displayState === 'collapsed' && state.orbitGlow ? 'orbit-glow' : '',
     showMusic && state.displayState === 'collapsed' && state.orbitGlow && !music.isPlaying ? 'orbit-paused' : '',
+    showMusic && !music.isPlaying ? 'music-paused' : '',
   ].join(' ');
 
   return (
@@ -334,6 +335,11 @@ function IslandApp() {
                 ) : (
                   <span>{currentLyric || music.title || '正在播放'}</span>
                 )}
+              </div>
+              <div className="island-bars">
+                <div className="island-bar" />
+                <div className="island-bar" />
+                <div className="island-bar" />
               </div>
             </>
           ) : (
