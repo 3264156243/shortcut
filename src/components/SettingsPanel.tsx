@@ -29,7 +29,7 @@ export default function SettingsPanel() {
     { value: 'center', labelKey: 'settings.animation.center', icon: Maximize },
   ];
 
-  const island = config.island || { enabled: false, style: 'capsule' as IslandStyle, position: 'top-center' as IslandPosition, autoHideFullscreen: true, musicEnabled: true };
+  const island = config.island || { enabled: true, style: 'capsule' as IslandStyle, position: 'top-center' as IslandPosition, autoHideFullscreen: true, musicEnabled: true };
   const updateIsland = async (updates: Partial<typeof island>) => {
     const next = { ...island, ...updates };
     useStore.setState((s) => ({ config: { ...s.config, island: next } }));

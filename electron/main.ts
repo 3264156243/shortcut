@@ -207,15 +207,29 @@ const ISLAND_POSITIONS: Record<string, { x: number; y: number }> = {
 function getIslandPreferences(): any {
   try {
     const raw = readConfig();
-    if (!raw) return {};
-    return JSON.parse(raw)?.island || {};
+    const island = raw ? JSON.parse(raw)?.island : undefined;
+    return {
+      enabled: island?.enabled !== false,
+      style: island?.style || 'capsule',
+      position: island?.position || 'top-center',
+      autoHideFullscreen: island?.autoHideFullscreen !== false,
+      musicEnabled: island?.musicEnabled !== false,
+      ...(island?.x != null ? { x: island.x } : {}),
+      ...(island?.y != null ? { y: island.y } : {}),
+    };
   } catch {
-    return {};
+    return {
+      enabled: true,
+      style: 'capsule',
+      position: 'top-center',
+      autoHideFullscreen: true,
+      musicEnabled: true,
+    };
   }
 }
 
 function isIslandEnabled(prefs: any): boolean {
-  return prefs?.enabled === true;
+  return prefs?.enabled !== false;
 }
 
 function islandPositionBounds(prefs: any): { x: number; y: number; width: number; height: number } {
