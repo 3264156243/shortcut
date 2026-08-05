@@ -140,9 +140,10 @@ function IslandApp() {
     }
     return index;
   }, [lyrics, positionMs]);
-  const currentLyric = lyricIndex >= 0 ? lyrics[lyricIndex].text : (music.title || '');
-  const prevLyric = lyricIndex > 0 ? lyrics[lyricIndex - 1].text : '';
-  const nextLyric = lyricIndex >= 0 && lyricIndex < lyrics.length - 1 ? lyrics[lyricIndex + 1].text : '';
+  const displayIndex = lyrics.length ? Math.min(lyricIndex + 1, lyrics.length - 1) : -1;
+  const currentLyric = displayIndex >= 0 ? lyrics[displayIndex].text : (music.title || '');
+  const prevLyric = displayIndex > 0 ? lyrics[displayIndex - 1].text : '';
+  const nextLyric = displayIndex >= 0 && displayIndex < lyrics.length - 1 ? lyrics[displayIndex + 1].text : '';
   const progress = music.durationMs ? Math.max(0, Math.min(100, (positionMs / music.durationMs) * 100)) : 0;
 
   const onDragStart = (e: React.PointerEvent) => {
@@ -213,9 +214,14 @@ function IslandApp() {
         {showMusic ? (
           <>
             {music.coverUrl ? (
-              <img className="island-pill-cover" src={music.coverUrl} alt="" draggable={false} />
+              <img
+                className={['island-pill-cover', music.isPlaying ? 'spinning' : 'paused'].join(' ')}
+                src={music.coverUrl}
+                alt=""
+                draggable={false}
+              />
             ) : (
-              <div className="island-pill-cover island-pill-cover-fallback">
+              <div className={['island-pill-cover', 'island-pill-cover-fallback', music.isPlaying ? 'spinning' : 'paused'].join(' ')}>
                 <Music size={16} />
               </div>
             )}
@@ -234,10 +240,14 @@ function IslandApp() {
           <>
             <div className="island-music-head">
               {music.coverUrl ? (
-                <img className="island-music-cover" src={music.coverUrl} alt="" draggable={false} />
+                <div className={['island-music-disc', music.isPlaying ? 'spinning' : 'paused'].join(' ')}>
+                  <img className="island-music-cover" src={music.coverUrl} alt="" draggable={false} />
+                  <div className="island-music-spindle" />
+                </div>
               ) : (
-                <div className="island-music-cover island-music-cover-fallback">
+                <div className={['island-music-disc', 'island-music-cover-fallback', music.isPlaying ? 'spinning' : 'paused'].join(' ')}>
                   <Music size={28} />
+                  <div className="island-music-spindle" />
                 </div>
               )}
               <div className="island-music-meta">
