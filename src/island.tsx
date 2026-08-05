@@ -312,14 +312,16 @@ function IslandApp() {
       onMouseLeave={() => setHovered(false)}
     >
       {arrival ? <div className="island-drop-ball" /> : null}
-      <div className="island-shell">
+      <div
+        className="island-shell"
+        onPointerDown={onDragStart}
+        onPointerMove={onDragMove}
+        onPointerUp={onDragEnd}
+        onPointerCancel={onDragEnd}
+      >
         {showMusic ? (
           <div
             className="island-mini"
-            onPointerDown={onDragStart}
-            onPointerMove={onDragMove}
-            onPointerUp={onDragEnd}
-            onPointerCancel={onDragEnd}
           >
             {music.coverUrl ? (
               <img
@@ -338,10 +340,6 @@ function IslandApp() {
         <div
           className="island-compact"
           title="拖动移动灵动岛"
-          onPointerDown={onDragStart}
-          onPointerMove={onDragMove}
-          onPointerUp={onDragEnd}
-          onPointerCancel={onDragEnd}
         >
           {showMusic ? (
             <>
