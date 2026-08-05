@@ -21,6 +21,7 @@ export interface IslandPreferences {
   musicEnabled?: boolean;
   lyricBounce?: boolean;
   orbitGlow?: boolean;
+  barsEnabled?: boolean;
   displayState?: IslandDisplayState;
   x?: number;
   y?: number;

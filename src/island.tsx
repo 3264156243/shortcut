@@ -15,6 +15,7 @@ interface IslandState {
   musicEnabled: boolean;
   lyricBounce: boolean;
   orbitGlow: boolean;
+  barsEnabled: boolean;
   displayState: IslandDisplayState;
 }
 
@@ -31,6 +32,7 @@ const DEFAULT_STATE: IslandState = {
   musicEnabled: true,
   lyricBounce: true,
   orbitGlow: true,
+  barsEnabled: true,
   displayState: 'collapsed',
 };
 
@@ -105,6 +107,7 @@ function IslandApp() {
           musicEnabled: prefs.musicEnabled !== false,
           lyricBounce: prefs.lyricBounce !== false,
           orbitGlow: prefs.orbitGlow !== false,
+          barsEnabled: prefs.barsEnabled !== false,
           displayState: prefs.displayState || 'collapsed',
         });
       } catch {}
@@ -125,6 +128,7 @@ function IslandApp() {
         musicEnabled: next.musicEnabled ?? current.musicEnabled,
         lyricBounce: next.lyricBounce ?? current.lyricBounce,
         orbitGlow: next.orbitGlow ?? current.orbitGlow,
+        barsEnabled: next.barsEnabled ?? current.barsEnabled,
         displayState: (next.displayState as IslandDisplayState) ?? current.displayState,
       }));
     });
@@ -159,10 +163,7 @@ function IslandApp() {
   }, []);
 
   useEffect(() => {
-    if (!music.available) return;
-    setArrival(true);
-    const timer = window.setTimeout(() => setArrival(false), 1000);
-    return () => window.clearTimeout(timer);
+    setArrival(music.available);
   }, [music.available]);
 
   const lyrics = useMemo(() => parseLyrics(music.lyrics), [music.lyrics]);
@@ -254,7 +255,7 @@ function IslandApp() {
       className={rootClass}
       data-position={state.position}
     >
-      {arrival ? <div className="island-drop-ball" /> : null}
+      {arrival && showMusic && state.displayState === 'collapsed' && state.orbitGlow ? <div className="island-drop-ball" /> : null}
       {showMusic && state.displayState === 'collapsed' && state.orbitGlow ? (
         <div className="island-orbit">
           <svg className="island-glow-svg" viewBox="0 0 336 46" preserveAspectRatio="none">
@@ -336,7 +337,7 @@ function IslandApp() {
                   <span>{currentLyric || music.title || '正在播放'}</span>
                 )}
               </div>
-              <div className="island-bars">
+              <div className="island-bars" style={{ display: state.barsEnabled ? undefined : 'none' }}>
                 <div className="island-bar" />
                 <div className="island-bar" />
                 <div className="island-bar" />

@@ -12,13 +12,14 @@ export default function IslandPanel() {
     musicEnabled: true,
     lyricBounce: true,
     orbitGlow: true,
+    barsEnabled: true,
     displayState: 'collapsed' as IslandDisplayState,
   };
 
   const updateIsland = async (updates: Partial<typeof island>) => {
     const next = { ...island, ...updates };
     useStore.setState((s) => ({ config: { ...s.config, island: next } }));
-    const result = await window.electronAPI?.setIsland(next.enabled, next.style, next.position, next.autoHideFullscreen, next.musicEnabled !== false, next.lyricBounce !== false, next.displayState || 'collapsed', next.orbitGlow !== false);
+    const result = await window.electronAPI?.setIsland(next.enabled, next.style, next.position, next.autoHideFullscreen, next.musicEnabled !== false, next.lyricBounce !== false, next.displayState || 'collapsed', next.orbitGlow !== false, next.barsEnabled !== false);
     if (result && !result.success && result.error) {
       console.error(result.error);
     }
@@ -55,6 +56,10 @@ export default function IslandPanel() {
             <label className="flex items-center justify-between cursor-pointer">
               <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>播放时光效环绕</span>
               <input type="checkbox" checked={island.orbitGlow !== false} onChange={(e) => void updateIsland({ orbitGlow: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
+            </label>
+            <label className="flex items-center justify-between cursor-pointer">
+              <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>播放时柱条跳动</span>
+              <input type="checkbox" checked={island.barsEnabled !== false} onChange={(e) => void updateIsland({ barsEnabled: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
             </label>
             <label className="flex items-center justify-between cursor-pointer">
               <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>全屏时自动隐藏</span>

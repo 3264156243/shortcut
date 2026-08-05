@@ -216,6 +216,7 @@ function getIslandPreferences(): any {
       musicEnabled: island?.musicEnabled !== false,
       lyricBounce: island?.lyricBounce !== false,
       orbitGlow: island?.orbitGlow !== false,
+      barsEnabled: island?.barsEnabled !== false,
       displayState: island?.displayState || 'collapsed',
       ...(island?.x != null ? { x: island.x } : {}),
       ...(island?.y != null ? { y: island.y } : {}),
@@ -229,6 +230,7 @@ function getIslandPreferences(): any {
       musicEnabled: true,
       lyricBounce: true,
       orbitGlow: true,
+      barsEnabled: true,
       displayState: 'collapsed',
     };
   }
@@ -1018,7 +1020,7 @@ function createTray() {
 
 // Dynamic island IPC
 ipcMain.handle('island:getState', () => getIslandPreferences());
-ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string, orbitGlow: boolean) => {
+ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string, orbitGlow: boolean, barsEnabled: boolean) => {
   try {
     const raw = readConfig();
     const cfg = raw ? JSON.parse(raw) : {};
@@ -1031,6 +1033,7 @@ ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position
       musicEnabled: musicEnabled !== false,
       lyricBounce: lyricBounce !== false,
       orbitGlow: orbitGlow !== false,
+      barsEnabled: barsEnabled !== false,
       displayState: displayState || 'collapsed',
     };
     writeConfig(JSON.stringify({ ...cfg, island }, null, 2));

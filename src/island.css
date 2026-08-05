@@ -230,10 +230,11 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
   75% { transform: translateY(-1.5px); }
 }
 @keyframes island-drop {
-  0% { transform: translate(-50%, -56px) scale(.35); opacity: 0; }
-  18% { transform: translate(-50%, -10px) scale(.7); opacity: 1; }
-  58% { transform: translate(-50%, 16px) scale(1); opacity: 1; }
-  100% { transform: translate(-50%, 16px) scale(2.4); opacity: 0; }
+  0% { transform: translate(-50%, -56px) scale(.5); opacity: 0; }
+  22% { transform: translate(-50%, 0) scale(1); opacity: 1; }
+  55% { transform: translate(-50%, 1px) scale(.85); opacity: 1; }
+  78% { transform: translate(-50%, 1px) scale(.2); opacity: .7; }
+  100% { transform: translate(-50%, 1px) scale(.1); opacity: 0; }
 }
 .island-drop-ball {
   -webkit-app-region: no-drag;
@@ -286,6 +287,13 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
 }
 .island-root.orbit-paused .island-glow-line { animation-play-state: paused; }
 .island-root.music-arrived .island-shell { animation: island-pop .6s cubic-bezier(.22,1,.36,1); }
+.island-root.music-arrived .island-glow-line {
+  animation: island-line-reveal .65s cubic-bezier(.22,1,.36,1) forwards, island-line-flow 4s linear infinite .65s;
+}
+@keyframes island-line-reveal {
+  from { stroke-dasharray: 0 740; }
+  to { stroke-dasharray: 180 560; }
+}
 @keyframes island-pop {
   0% { transform: scale(.82); }
   55% { transform: scale(1.04); }
