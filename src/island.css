@@ -215,18 +215,29 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
   transition: opacity .5s;
 }
 .island-root.orbit-glow .island-orbit { opacity: 1; }
-.island-orbit-dot {
+.island-glow-svg {
   position: absolute;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  offset-path: path("M 21 1 H 315 A 20 20 0 0 1 335 21 V 25 A 20 20 0 0 1 315 45 H 21 A 20 20 0 0 1 1 25 V 21 A 20 20 0 0 1 21 1 Z");
-  offset-rotate: 0deg;
-  animation: island-perimeter 5s linear infinite;
-  filter: blur(1px);
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
-.island-orbit-dot.front { width: 12px; height: 12px; filter: blur(1.5px); }
-.island-root.orbit-paused .island-orbit-dot { animation-play-state: paused; }
+.island-glow-line {
+  fill: none;
+  stroke: url("#islandOrbitGradient");
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 180 560;
+  animation: island-line-flow 4s linear infinite;
+  filter: drop-shadow(0 0 5px rgba(99,102,241,.85));
+}
+.island-glow-line.halo {
+  stroke-width: 7;
+  stroke-dasharray: 210 530;
+  opacity: .45;
+  filter: blur(5px);
+}
+.island-root.orbit-paused .island-glow-line { animation-play-state: paused; }
 .island-root.music-arrived .island-shell { animation: island-pop .6s cubic-bezier(.22,1,.36,1); }
 @keyframes island-pop {
   0% { transform: scale(.82); }
@@ -237,7 +248,7 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
   0% { transform: translateX(0); }
   100% { transform: translateX(-50%); }
 }
-@keyframes island-perimeter {
-  from { offset-distance: 0%; }
-  to { offset-distance: 100%; }
+@keyframes island-line-flow {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -740; }
 }

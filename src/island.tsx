@@ -23,12 +23,6 @@ interface LyricLine {
   text: string;
 }
 
-const ORBIT_DOTS = Array.from({ length: 12 }, (_, index) => ({
-  delay: index * (4 / 12),
-  hue: Math.round((index / 12) * 360),
-  front: index === 0,
-}));
-
 const DEFAULT_STATE: IslandState = {
   enabled: true,
   style: 'capsule',
@@ -262,17 +256,26 @@ function IslandApp() {
       {arrival ? <div className="island-drop-ball" /> : null}
       {showMusic && state.displayState === 'collapsed' && state.orbitGlow ? (
         <div className="island-orbit">
-          {ORBIT_DOTS.map((dot) => (
-            <div
-              key={dot.delay}
-              className={['island-orbit-dot', dot.front ? 'front' : ''].join(' ')}
-              style={{
-                animationDelay: `${dot.delay}s`,
-                background: `hsl(${dot.hue} 95% 62%)`,
-                boxShadow: `0 0 10px hsl(${dot.hue} 95% 62% / .9)`,
-              }}
+          <svg className="island-glow-svg" viewBox="0 0 336 46" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="islandOrbitGradient" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="#ff5f6d" />
+                <stop offset="20%" stopColor="#ffc371" />
+                <stop offset="40%" stopColor="#36d1dc" />
+                <stop offset="60%" stopColor="#5b86e5" />
+                <stop offset="80%" stopColor="#a55eea" />
+                <stop offset="100%" stopColor="#ff5f6d" />
+              </linearGradient>
+            </defs>
+            <path
+              className="island-glow-line halo"
+              d="M 21 2 H 315 A 19 19 0 0 1 334 21 V 25 A 19 19 0 0 1 315 44 H 21 A 19 19 0 0 1 2 25 V 21 A 19 19 0 0 1 21 2 Z"
             />
-          ))}
+            <path
+              className="island-glow-line"
+              d="M 21 2 H 315 A 19 19 0 0 1 334 21 V 25 A 19 19 0 0 1 315 44 H 21 A 19 19 0 0 1 2 25 V 21 A 19 19 0 0 1 21 2 Z"
+            />
+          </svg>
         </div>
       ) : null}
       <div className="island-shell">
