@@ -2005,7 +2005,6 @@ if (!gotSingleInstanceLock) {
   });
 
   app.whenReady().then(async () => {
-    await applyAdminMode();
     restoreFromBackupIfNeeded();
   backupConfig();
   setupAutoUpdater();
