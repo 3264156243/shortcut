@@ -9,7 +9,7 @@ const modules: Array<{ id: ModuleId; label: string; icon: typeof Grid2X2 }> = [
   { id: 'tasks', label: '任务', icon: CheckSquare },
   { id: 'cockpit', label: '驾驶舱', icon: Gauge },
   { id: 'translate', label: '翻译', icon: Languages },
-  { id: 'island', label: '灵动岛', icon: Smartphone },
+  { id: 'island', label: 'SC球', icon: Smartphone },
 ];
 
 interface ModuleSidebarProps {

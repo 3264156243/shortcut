@@ -36,13 +36,13 @@ export default function IslandPanel() {
     <div className="flex h-full w-full flex-col overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-3">
         <Smartphone size={16} style={{ color: 'var(--color-accent)' }} />
-        <span className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>灵动岛设置</span>
+        <span className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>SC球设置</span>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-4">
         <div style={sectionStyle}>
           <div className="mb-3 flex flex-col gap-3">
             <label className="flex items-center justify-between cursor-pointer">
-              <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>启用灵动岛</span>
+              <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>启用SC球</span>
               <input type="checkbox" checked={island.enabled} onChange={(e) => void updateIsland({ enabled: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
             </label>
             <label className="flex items-center justify-between cursor-pointer">
@@ -113,7 +113,7 @@ export default function IslandPanel() {
         </div>
 
         <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-          <Film size={14} /> 直接按住灵动岛拖动即可移动位置，Alt+I 可显示或隐藏
+          <Film size={14} /> 直接按住SC球拖动即可移动位置，Alt+I 可显示或隐藏
         </div>
       </div>
     </div>

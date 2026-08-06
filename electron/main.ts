@@ -1674,7 +1674,19 @@ ipcMain.handle('window:maximize', () => {
 });
 
 // App lifecycle
-app.whenReady().then(() => {
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+
+  app.whenReady().then(() => {
   restoreFromBackupIfNeeded();
   backupConfig();
   setupAutoUpdater();
@@ -1724,14 +1736,15 @@ app.whenReady().then(() => {
   }
 });
 
-app.on('window-all-closed', () => {
-  // Keep running in tray
-});
+  app.on('window-all-closed', () => {
+    // Keep running in tray
+  });
 
-app.on('before-quit', () => {
-  if (islandWindow && !islandWindow.isDestroyed()) islandWindow.destroy();
-  stopMusicBridge();
-  stopHardwareMonitor();
-  if (captureOverlay && !captureOverlay.isDestroyed()) captureOverlay.destroy();
-  globalShortcut.unregisterAll();
-});
+  app.on('before-quit', () => {
+    if (islandWindow && !islandWindow.isDestroyed()) islandWindow.destroy();
+    stopMusicBridge();
+    stopHardwareMonitor();
+    if (captureOverlay && !captureOverlay.isDestroyed()) captureOverlay.destroy();
+    globalShortcut.unregisterAll();
+  });
+}

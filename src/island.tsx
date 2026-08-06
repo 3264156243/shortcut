@@ -299,7 +299,7 @@ function IslandApp() {
         ) : null}
         <div
           className="island-compact"
-          title="拖动移动灵动岛"
+          title="拖动移动SC球"
         >
           {showMusic ? (
             <>
@@ -408,7 +408,7 @@ function IslandApp() {
           </>
         ) : (
           <>
-            <div className="island-panel-title">ShortCut 灵动岛</div>
+            <div className="island-panel-title">ShortCut SC球</div>
             <div className="island-panel-clock">{time}</div>
             <div className="island-panel-date">{dateText()}</div>
             <div className="island-panel-hint">暂无音乐播放，正在显示时间</div>
