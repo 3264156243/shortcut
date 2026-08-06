@@ -56,6 +56,9 @@ let taskListWindow: any = null;
 let taskListHidden = false;
 let currentDragTask: { boardId: string; taskId: string } | null = null;
 let licenseGatePassed = false;
+let islandCockpitActive = false;
+let mainCockpitActive = false;
+let latestCockpitData: any = null;
 
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error' | 'unconfigured';
 
@@ -230,6 +233,8 @@ function getIslandPreferences(): any {
       position: island?.position || 'top-center',
       autoHideFullscreen: island?.autoHideFullscreen !== false,
       musicEnabled: island?.musicEnabled !== false,
+      tasksEnabled: island?.tasksEnabled !== false,
+      cockpitEnabled: island?.cockpitEnabled === true,
       lyricBounce: island?.lyricBounce !== false,
       orbitGlow: island?.orbitGlow !== false,
       barsEnabled: island?.barsEnabled !== false,
@@ -244,6 +249,8 @@ function getIslandPreferences(): any {
       position: 'top-center',
       autoHideFullscreen: true,
       musicEnabled: true,
+      tasksEnabled: true,
+      cockpitEnabled: false,
       lyricBounce: true,
       orbitGlow: true,
       barsEnabled: true,
@@ -350,6 +357,8 @@ function createIslandWindow() {
   if (prefs.musicEnabled !== false) {
     startMusicBridge();
   }
+  islandCockpitActive = prefs.cockpitEnabled === true;
+  syncHardwareMonitor();
   islandWindow.on('closed', () => { islandWindow = null; });
   islandWindow.on('moved', () => {
     if (!islandWindow || islandWindow.isDestroyed()) return;
@@ -543,6 +552,14 @@ function stopHardwareMonitor() {
   try { processToStop.kill(); } catch { }
 }
 
+function syncHardwareMonitor() {
+  if (islandCockpitActive || mainCockpitActive) {
+    startHardwareMonitor();
+  } else {
+    stopHardwareMonitor();
+  }
+}
+
 function startHardwareMonitor() {
   if (hardwareMonitorProcess) return { success: true };
   const executable = getHardwareMonitorPath();
@@ -563,7 +580,9 @@ function startHardwareMonitor() {
         if (!line.trim()) continue;
         try {
           const data = JSON.parse(line);
+          latestCockpitData = data;
           if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('cockpit:data', data);
+          if (islandWindow && !islandWindow.isDestroyed()) islandWindow.webContents.send('island:cockpit', data);
         } catch { }
       }
     });
@@ -573,6 +592,7 @@ function startHardwareMonitor() {
     });
     hardwareMonitorProcess.on('error', (error: Error) => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('cockpit:data', { error: error.message });
+      if (islandWindow && !islandWindow.isDestroyed()) islandWindow.webContents.send('island:cockpit', { error: error.message });
       stopHardwareMonitor();
     });
     return { success: true };
@@ -770,6 +790,8 @@ function taskListBounds() {
 
 function createTaskListWindow() {
   if (taskListHidden) return;
+  const cfg = readConfigObject();
+  if (cfg?.island?.tasksEnabled === false) return;
   if (taskListWindow && !taskListWindow.isDestroyed()) {
     sendTaskListData();
     return;
@@ -895,7 +917,7 @@ function toggleTaskDone(boardId: string, taskId: string) {
 
 function scanDueReminders() {
   const cfg = readConfigObject();
-  if (!cfg || !licenseGatePassed) return;
+  if (!cfg || !licenseGatePassed || cfg.island?.tasksEnabled === false) return;
   const now = Date.now();
   for (const board of cfg.taskBoards || []) {
     for (const note of board.notes || []) {
@@ -1383,7 +1405,7 @@ function createTray() {
 
 // Dynamic island IPC
 ipcMain.handle('island:getState', () => getIslandPreferences());
-ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string, orbitGlow: boolean, barsEnabled: boolean) => {
+ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string, orbitGlow: boolean, barsEnabled: boolean, tasksEnabled: boolean, cockpitEnabled: boolean) => {
   try {
     const raw = readConfig();
     const cfg = raw ? JSON.parse(raw) : {};
@@ -1394,6 +1416,8 @@ ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position
       position: position || 'top-center',
       autoHideFullscreen: autoHideFullscreen !== false,
       musicEnabled: musicEnabled !== false,
+      tasksEnabled: tasksEnabled !== false,
+      cockpitEnabled: cockpitEnabled === true,
       lyricBounce: lyricBounce !== false,
       orbitGlow: orbitGlow !== false,
       barsEnabled: barsEnabled !== false,
@@ -1403,13 +1427,26 @@ ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position
     if (island.enabled) {
       islandUserHidden = false;
       createIslandWindow();
+      islandCockpitActive = island.cockpitEnabled;
+      syncHardwareMonitor();
       if (island.musicEnabled) {
         startMusicBridge();
       } else {
         stopMusicBridge();
       }
+      if (!island.tasksEnabled) {
+        destroyTaskListWindow();
+        for (const win of reminderWindows.values()) {
+          if (!win.isDestroyed()) win.destroy();
+        }
+        reminderWindows.clear();
+      } else if (licenseGatePassed && resolveTaskList().length > 0 && !taskListHidden) {
+        createTaskListWindow();
+      }
     } else {
       islandUserHidden = true;
+      islandCockpitActive = false;
+      syncHardwareMonitor();
       stopMusicBridge();
       if (islandWindow && !islandWindow.isDestroyed()) islandWindow.hide();
     }
@@ -1481,6 +1518,7 @@ ipcMain.handle('island:music:stop', () => {
   return true;
 });
 ipcMain.handle('island:music:state', () => latestMusicState || { available: false });
+ipcMain.handle('island:cockpit:state', () => latestCockpitData || {});
 ipcMain.handle('island:music:control', (_e: any, action: string) => runMusicBridgeCommand(['-Control', String(action || '').toLowerCase()]));
 ipcMain.handle('island:music:seek', (_e: any, ms: number) => runMusicBridgeCommand(['-Seek', String(Math.round(Number(ms) || 0))]));
 
@@ -1515,8 +1553,15 @@ ipcMain.handle('shell:openExternal', async (_e: any, url: string) => {
 
 ipcMain.handle('web:getIcon', (_e: any, url: string) => getWebsiteIcon(url));
 
-ipcMain.handle('cockpit:start', () => startHardwareMonitor());
-ipcMain.handle('cockpit:stop', () => { stopHardwareMonitor(); return true; });
+ipcMain.handle('cockpit:start', () => {
+  mainCockpitActive = true;
+  return startHardwareMonitor();
+});
+ipcMain.handle('cockpit:stop', () => {
+  mainCockpitActive = false;
+  syncHardwareMonitor();
+  return true;
+});
 
 ipcMain.handle('translate:text', (_e: any, text: string, from: string, to: string) => translateText(text, from, to));
 
@@ -1665,7 +1710,7 @@ ipcMain.handle('license:gate', async () => {
 ipcMain.handle('license:gatePassed', () => {
   licenseGatePassed = true;
   scanDueReminders();
-  if (resolveTaskList().length > 0 && !taskListHidden) {
+  if (resolveTaskList().length > 0 && !taskListHidden && readConfigObject()?.island?.tasksEnabled !== false) {
     createTaskListWindow();
   }
   return true;
@@ -1780,6 +1825,7 @@ ipcMain.handle('reminder:view', (_e: any, boardId: string, taskId: string) => {
   return true;
 });
 ipcMain.handle('tasklist:addFromDrag', (_e: any, boardId: string, taskId: string) => {
+  if (readConfigObject()?.island?.tasksEnabled === false) return true;
   const list = readTaskList();
   if (!list.some((item: any) => item.boardId === boardId && item.taskId === taskId)) {
     list.push({ boardId, taskId, addedAt: new Date().toISOString() });
@@ -1824,6 +1870,7 @@ ipcMain.handle('tasklist:locate', (_e: any, boardId: string, taskId: string) => 
   return true;
 });
 ipcMain.handle('tasklist:overlap', (_e: any, screenX: number, screenY: number, boardId: string, taskId: string) => {
+  if (readConfigObject()?.island?.tasksEnabled === false) return true;
   if (pointInIsland(screenX, screenY)) {
     currentDragTask = { boardId, taskId };
     createTaskListWindow();
@@ -1831,6 +1878,7 @@ ipcMain.handle('tasklist:overlap', (_e: any, screenX: number, screenY: number, b
   return true;
 });
 ipcMain.handle('tasklist:drop', (_e: any, screenX: number, screenY: number, boardId: string, taskId: string) => {
+  if (readConfigObject()?.island?.tasksEnabled === false) return true;
   if (pointInIsland(screenX, screenY)) {
     const list = readTaskList();
     if (!list.some((item: any) => item.boardId === boardId && item.taskId === taskId)) {

@@ -91,7 +91,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Dynamic island
   getIslandState: () => ipcRenderer.invoke('island:getState'),
-  setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string, orbitGlow: boolean, barsEnabled: boolean) => ipcRenderer.invoke('island:set', enabled, style, position, autoHideFullscreen, musicEnabled, lyricBounce, displayState, orbitGlow, barsEnabled),
+  setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string, orbitGlow: boolean, barsEnabled: boolean, tasksEnabled: boolean, cockpitEnabled: boolean) => ipcRenderer.invoke('island:set', enabled, style, position, autoHideFullscreen, musicEnabled, lyricBounce, displayState, orbitGlow, barsEnabled, tasksEnabled, cockpitEnabled),
   moveIsland: (screenX: number, screenY: number, deltaX: number, deltaY: number) => ipcRenderer.invoke('island:move', screenX, screenY, deltaX, deltaY),
   getIslandBounds: () => ipcRenderer.invoke('island:getBounds'),
   moveIslandTo: (x: number, y: number) => ipcRenderer.invoke('island:moveTo', x, y),
@@ -105,12 +105,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   startMusicBridge: () => ipcRenderer.invoke('island:music:start'),
   stopMusicBridge: () => ipcRenderer.invoke('island:music:stop'),
   getMusicState: () => ipcRenderer.invoke('island:music:state'),
+  getIslandCockpitState: () => ipcRenderer.invoke('island:cockpit:state'),
   controlMusic: (action: string) => ipcRenderer.invoke('island:music:control', action),
   seekMusic: (ms: number) => ipcRenderer.invoke('island:music:seek', ms),
   onIslandMusic: (callback: (state: unknown) => void) => {
     const handler = (_event: unknown, state: unknown) => callback(state);
     ipcRenderer.on('island:music', handler);
     return () => ipcRenderer.removeListener('island:music', handler);
+  },
+  onIslandCockpit: (callback: (data: unknown) => void) => {
+    const handler = (_event: unknown, data: unknown) => callback(data);
+    ipcRenderer.on('island:cockpit', handler);
+    return () => ipcRenderer.removeListener('island:cockpit', handler);
   },
 
   // Theme

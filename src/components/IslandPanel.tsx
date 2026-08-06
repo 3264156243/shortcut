@@ -10,6 +10,8 @@ export default function IslandPanel() {
     position: 'top-center' as IslandPosition,
     autoHideFullscreen: true,
     musicEnabled: true,
+    tasksEnabled: true,
+    cockpitEnabled: false,
     lyricBounce: true,
     orbitGlow: true,
     barsEnabled: true,
@@ -19,7 +21,7 @@ export default function IslandPanel() {
   const updateIsland = async (updates: Partial<typeof island>) => {
     const next = { ...island, ...updates };
     useStore.setState((s) => ({ config: { ...s.config, island: next } }));
-    const result = await window.electronAPI?.setIsland(next.enabled, next.style, next.position, next.autoHideFullscreen, next.musicEnabled !== false, next.lyricBounce !== false, next.displayState || 'collapsed', next.orbitGlow !== false, next.barsEnabled !== false);
+    const result = await window.electronAPI?.setIsland(next.enabled, next.style, next.position, next.autoHideFullscreen, next.musicEnabled !== false, next.lyricBounce !== false, next.displayState || 'collapsed', next.orbitGlow !== false, next.barsEnabled !== false, next.tasksEnabled !== false, next.cockpitEnabled === true);
     if (result && !result.success && result.error) {
       console.error(result.error);
     }
@@ -48,6 +50,14 @@ export default function IslandPanel() {
             <label className="flex items-center justify-between cursor-pointer">
               <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>音乐模块</span>
               <input type="checkbox" checked={island.musicEnabled !== false} onChange={(e) => void updateIsland({ musicEnabled: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
+            </label>
+            <label className="flex items-center justify-between cursor-pointer">
+              <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>任务模块</span>
+              <input type="checkbox" checked={island.tasksEnabled !== false} onChange={(e) => void updateIsland({ tasksEnabled: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
+            </label>
+            <label className="flex items-center justify-between cursor-pointer">
+              <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>驾驶舱数据</span>
+              <input type="checkbox" checked={island.cockpitEnabled === true} onChange={(e) => void updateIsland({ cockpitEnabled: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
             </label>
             <label className="flex items-center justify-between cursor-pointer">
               <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>歌词逐字跳动</span>

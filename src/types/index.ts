@@ -19,6 +19,8 @@ export interface IslandPreferences {
   position: IslandPosition;
   autoHideFullscreen: boolean;
   musicEnabled?: boolean;
+  tasksEnabled?: boolean;
+  cockpitEnabled?: boolean;
   lyricBounce?: boolean;
   orbitGlow?: boolean;
   barsEnabled?: boolean;

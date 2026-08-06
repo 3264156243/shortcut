@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Music, Pause, Play, SkipBack, SkipForward } from 'lucide-react';
 import './island.css';
-import type { IslandDisplayState, MusicState } from './types';
+import type { CockpitData, IslandDisplayState, MusicState } from './types';
 
 type IslandStyle = 'capsule' | 'glass' | 'paper';
 type IslandPosition = 'top-center' | 'top-left' | 'top-right' | 'left-center' | 'right-center';
@@ -13,6 +13,8 @@ interface IslandState {
   position: IslandPosition;
   autoHideFullscreen: boolean;
   musicEnabled: boolean;
+  tasksEnabled: boolean;
+  cockpitEnabled: boolean;
   lyricBounce: boolean;
   orbitGlow: boolean;
   barsEnabled: boolean;
@@ -30,6 +32,8 @@ const DEFAULT_STATE: IslandState = {
   position: 'top-center',
   autoHideFullscreen: true,
   musicEnabled: true,
+  tasksEnabled: true,
+  cockpitEnabled: false,
   lyricBounce: true,
   orbitGlow: true,
   barsEnabled: true,
@@ -76,10 +80,15 @@ function formatTime(ms: number | undefined | null): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+function formatMetric(value: number | null | undefined, unit = '%'): string {
+  return value == null ? '?' : `${Math.round(value)}${unit}`;
+}
+
 function IslandApp() {
   const [state, setState] = useState<IslandState>(DEFAULT_STATE);
   const [time, setTime] = useState(nowText);
   const [music, setMusic] = useState<MusicState>({ available: false });
+  const [cockpit, setCockpit] = useState<CockpitData>({});
   const [seekPreview, setSeekPreview] = useState<number | null>(null);
   const [arrival, setArrival] = useState(false);
   const positionAnchorRef = useRef<{ positionMs: number; at: number } | null>(null);
@@ -105,6 +114,8 @@ function IslandApp() {
           position: prefs.position || 'top-center',
           autoHideFullscreen: prefs.autoHideFullscreen !== false,
           musicEnabled: prefs.musicEnabled !== false,
+          tasksEnabled: prefs.tasksEnabled !== false,
+          cockpitEnabled: prefs.cockpitEnabled === true,
           lyricBounce: prefs.lyricBounce !== false,
           orbitGlow: prefs.orbitGlow !== false,
           barsEnabled: prefs.barsEnabled !== false,
@@ -126,6 +137,8 @@ function IslandApp() {
         position: next.position ?? current.position,
         autoHideFullscreen: next.autoHideFullscreen ?? current.autoHideFullscreen,
         musicEnabled: next.musicEnabled ?? current.musicEnabled,
+        tasksEnabled: next.tasksEnabled ?? current.tasksEnabled,
+        cockpitEnabled: next.cockpitEnabled ?? current.cockpitEnabled,
         lyricBounce: next.lyricBounce ?? current.lyricBounce,
         orbitGlow: next.orbitGlow ?? current.orbitGlow,
         barsEnabled: next.barsEnabled ?? current.barsEnabled,
@@ -165,6 +178,16 @@ function IslandApp() {
   useEffect(() => {
     setArrival(music.available);
   }, [music.available]);
+
+  useEffect(() => {
+    const unsubscribe = window.electronAPI?.onIslandCockpit?.((data: unknown) => {
+      if (data) setCockpit(data as CockpitData);
+    });
+    void window.electronAPI?.getIslandCockpitState?.().then((data: unknown) => {
+      if (data) setCockpit(data as CockpitData);
+    });
+    return unsubscribe;
+  }, []);
 
   const lyrics = useMemo(() => parseLyrics(music.lyrics), [music.lyrics]);
   const anchor = positionAnchorRef.current;
@@ -240,6 +263,7 @@ function IslandApp() {
   const expanded = state.displayState === 'expanded';
   const mini = state.displayState === 'mini';
   const showMusic = state.musicEnabled && music.available;
+  const showCockpit = state.cockpitEnabled && !showMusic;
   const rootClass = [
     'island-root',
     state.style,
@@ -343,9 +367,15 @@ function IslandApp() {
                 <div className="island-bar" />
               </div>
             </>
-          ) : (
-            <>
-              <div className="island-time">{time}</div>
+        ) : showCockpit ? (
+          <div className="island-cockpit-mini">
+            <span>CPU {formatMetric(cockpit.cpu?.usage)} {formatMetric(cockpit.cpu?.temperature, '°C')}</span>
+            <span>GPU {formatMetric(cockpit.gpu?.usage)} {formatMetric(cockpit.gpu?.temperature, '°C')}</span>
+            <span>内存 {formatMetric(cockpit.memory?.usage)} {formatMetric(cockpit.memory?.temperature, '°C')}</span>
+          </div>
+        ) : (
+          <>
+            <div className="island-time">{time}</div>
               <div className="island-date">{dateText()}</div>
             </>
           )}
@@ -406,6 +436,23 @@ function IslandApp() {
               </button>
             </div>
           </>
+        ) : showCockpit ? (
+          <div className="island-cockpit-panel">
+            <div className="island-panel-title">驾驶舱数据</div>
+            <div className="island-cockpit-grid">
+              {[
+                { label: 'CPU', usage: cockpit.cpu?.usage, temp: cockpit.cpu?.temperature },
+                { label: 'GPU', usage: cockpit.gpu?.usage, temp: cockpit.gpu?.temperature },
+                { label: '内存', usage: cockpit.memory?.usage, temp: cockpit.memory?.temperature },
+              ].map((item) => (
+                <div key={item.label} className="island-cockpit-card">
+                  <div className="island-cockpit-label">{item.label}</div>
+                  <div className="island-cockpit-usage">{formatMetric(item.usage)}</div>
+                  <div className="island-cockpit-temp">{formatMetric(item.temp, '°C')}</div>
+                </div>
+              ))}
+            </div>
+          </div>
         ) : (
           <>
             <div className="island-panel-title">ShortCut SC球</div>
