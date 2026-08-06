@@ -275,6 +275,13 @@ export default function App() {
     });
     return unsubscribe;
   }, [api]);
+  useEffect(() => {
+    if (!api?.onConfigChanged) return;
+    const unsubscribe = api.onConfigChanged(() => {
+      void useStore.getState().loadConfig();
+    });
+    return unsubscribe;
+  }, [api]);
   // Check initial maximized state
   useEffect(() => {
     if (api?.isMaximized) {

@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   confirmReminder: (boardId: string, taskId: string) => ipcRenderer.invoke('reminder:confirm', boardId, taskId),
   viewReminder: (boardId: string, taskId: string) => ipcRenderer.invoke('reminder:view', boardId, taskId),
   getTaskList: () => ipcRenderer.invoke('tasklist:get'),
+  refreshTaskList: () => ipcRenderer.invoke('tasklist:refresh'),
   removeTaskFromList: (boardId: string, taskId: string) => ipcRenderer.invoke('tasklist:remove', boardId, taskId),
   completeTaskInList: (boardId: string, taskId: string) => ipcRenderer.invoke('tasklist:complete', boardId, taskId),
   locateTaskFromList: (boardId: string, taskId: string) => ipcRenderer.invoke('tasklist:locate', boardId, taskId),
@@ -48,6 +49,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_event: unknown, data: unknown) => callback(data);
     ipcRenderer.on('tasklist:data', handler);
     return () => ipcRenderer.removeListener('tasklist:data', handler);
+  },
+  onConfigChanged: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('config:changed', handler);
+    return () => ipcRenderer.removeListener('config:changed', handler);
   },
   onTaskLocate: (callback: (data: unknown) => void) => {
     const handler = (_event: unknown, data: unknown) => callback(data);

@@ -117,6 +117,7 @@ declare global {
       confirmReminder: (boardId: string, taskId: string) => Promise<unknown>;
       viewReminder: (boardId: string, taskId: string) => Promise<unknown>;
       getTaskList: () => Promise<unknown>;
+      refreshTaskList: () => Promise<unknown>;
       removeTaskFromList: (boardId: string, taskId: string) => Promise<unknown>;
       completeTaskInList: (boardId: string, taskId: string) => Promise<unknown>;
       locateTaskFromList: (boardId: string, taskId: string) => Promise<unknown>;
@@ -124,6 +125,7 @@ declare global {
       dropTaskOnList: (screenX: number, screenY: number, boardId: string, taskId: string) => Promise<unknown>;
       addTaskFromDrag: (boardId: string, taskId: string) => Promise<unknown>;
       onTaskListData: (callback: (data: unknown) => void) => () => void;
+      onConfigChanged: (callback: () => void) => () => void;
       onTaskLocate: (callback: (data: unknown) => void) => () => void;
       getOpenAtLogin: () => Promise<boolean>;
       setOpenAtLogin: (enabled: boolean) => Promise<boolean>;

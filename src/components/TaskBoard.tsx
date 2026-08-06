@@ -153,6 +153,7 @@ export default function TaskBoard() {
         reminderAt,
         remindedAt: reminderChanged ? undefined : editor.originalRemindedAt,
       });
+      void window.electronAPI?.refreshTaskList?.();
     } else {
       addTask(title, { longText: editor.longText, details, reminderAt });
     }
@@ -201,6 +202,7 @@ export default function TaskBoard() {
     setConfirmDeleteId(null);
     window.setTimeout(() => {
       deleteTask(taskId);
+      void window.electronAPI?.refreshTaskList?.();
       setDeletingId((current) => current === taskId ? null : current);
     }, 920);
   };
@@ -346,7 +348,10 @@ export default function TaskBoard() {
                 <div className="flex items-start gap-2">
                   <button
                     data-task-action="toggle"
-                    onClick={() => toggleTask(task.id)}
+                    onClick={() => {
+                      toggleTask(task.id);
+                      void window.electronAPI?.refreshTaskList?.();
+                    }}
                     className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-all duration-150 hover:scale-110"
                     style={{ border: `2px solid ${task.done ? '#27694a' : '#8a7e6c'}`, background: task.done ? '#27694a' : 'transparent', color: '#fff' }}
                     title="完成"

@@ -729,9 +729,33 @@ function resolveTaskList(): any[] {
     .filter((item: any) => !!item);
 }
 
+function pruneTaskList() {
+  const list = readTaskList();
+  const pruned = list.filter((item: any) => !!findTask(item.boardId, item.taskId));
+  if (pruned.length !== list.length) {
+    saveTaskList(pruned);
+  }
+  return pruned;
+}
+
+function notifyConfigChanged() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try {
+      mainWindow.webContents.send('config:changed');
+    } catch {}
+  }
+}
+
 function sendTaskListData() {
+  const items = resolveTaskList();
+  if (items.length === 0) {
+    destroyTaskListWindow();
+    return;
+  }
   if (!taskListWindow || taskListWindow.isDestroyed()) return;
-  taskListWindow.webContents.send('tasklist:data', resolveTaskList());
+  try {
+    taskListWindow.webContents.send('tasklist:data', items);
+  } catch {}
 }
 
 function taskListBounds() {
@@ -1762,7 +1786,15 @@ ipcMain.handle('tasklist:addFromDrag', (_e: any, boardId: string, taskId: string
   }
   return true;
 });
-ipcMain.handle('tasklist:get', () => resolveTaskList());
+ipcMain.handle('tasklist:get', () => {
+  pruneTaskList();
+  return resolveTaskList();
+});
+ipcMain.handle('tasklist:refresh', () => {
+  pruneTaskList();
+  sendTaskListData();
+  return true;
+});
 ipcMain.handle('tasklist:remove', (_e: any, boardId: string, taskId: string) => {
   const list = readTaskList().filter((item: any) => !(item.boardId === boardId && item.taskId === taskId));
   saveTaskList(list);
@@ -1775,6 +1807,7 @@ ipcMain.handle('tasklist:remove', (_e: any, boardId: string, taskId: string) => 
 });
 ipcMain.handle('tasklist:complete', (_e: any, boardId: string, taskId: string) => {
   toggleTaskDone(boardId, taskId);
+  notifyConfigChanged();
   sendTaskListData();
   return true;
 });
