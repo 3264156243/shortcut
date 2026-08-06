@@ -1682,11 +1682,13 @@ async function applyAdminMode() {
   if (elevated) return;
   app.releaseSingleInstanceLock();
   const command = `Start-Process -FilePath '${process.execPath}' -Verb RunAs`;
-  childProcess.spawn('powershell.exe', ['-NoProfile', '-Command', command], {
+  const elevatedProcess = childProcess.spawn('powershell.exe', ['-NoProfile', '-Command', command], {
+    detached: true,
     windowsHide: true,
     stdio: 'ignore',
   });
-  setTimeout(() => app.quit(), 1500);
+  elevatedProcess.unref();
+  setTimeout(() => app.exit(0), 2000);
 }
 
 ipcMain.handle('app:setAdminMode', async (_e: any, enabled: boolean) => {
@@ -1696,11 +1698,13 @@ ipcMain.handle('app:setAdminMode', async (_e: any, enabled: boolean) => {
     if (!elevated) {
       app.releaseSingleInstanceLock();
       const command = `Start-Process -FilePath '${process.execPath}' -Verb RunAs`;
-      childProcess.spawn('powershell.exe', ['-NoProfile', '-Command', command], {
+      const elevatedProcess = childProcess.spawn('powershell.exe', ['-NoProfile', '-Command', command], {
+        detached: true,
         windowsHide: true,
         stdio: 'ignore',
       });
-      setTimeout(() => app.quit(), 1500);
+      elevatedProcess.unref();
+      setTimeout(() => app.exit(0), 2000);
     }
   }
   return { success: true };
