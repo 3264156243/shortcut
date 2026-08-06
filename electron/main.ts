@@ -789,16 +789,17 @@ function createReminderWindow(boardId: string, taskId: string) {
   const task = findTask(boardId, taskId);
   if (!task) return;
   const bounds = taskListBounds();
+  const islandBounds = islandWindow && !islandWindow.isDestroyed() ? islandWindow.getBounds() : null;
   const win = new BrowserWindow({
-    x: bounds.x,
-    y: bounds.y + 36 + reminderWindows.size * 132,
+    x: islandBounds ? islandBounds.x + Math.round((islandBounds.width - 340) / 2) : bounds.x,
+    y: islandBounds ? islandBounds.y + 60 + reminderWindows.size * 132 : bounds.y + 36,
     width: 340,
     height: 128,
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
     resizable: false,
-    movable: false,
+    movable: true,
     alwaysOnTop: true,
     skipTaskbar: true,
     hasShadow: false,
@@ -1281,7 +1282,7 @@ function createWindow() {
       const raw = readConfig();
       if (raw) {
         const cfg = JSON.parse(raw);
-        if (cfg.closeOnBlur && mainWindow && !mainWindow.isDestroyed()) {
+        if (cfg.closeOnBlur !== false && mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.hide();
         }
       }
@@ -1724,6 +1725,9 @@ ipcMain.handle('reminder:view', (_e: any, boardId: string, taskId: string) => {
     mainWindow.focus();
     mainWindow.webContents.send('task:locate', { boardId, taskId });
   }
+  const key = `${boardId}:${taskId}`;
+  const win = reminderWindows.get(key);
+  if (win && !win.isDestroyed()) win.destroy();
   return true;
 });
 ipcMain.handle('tasklist:get', () => resolveTaskList());

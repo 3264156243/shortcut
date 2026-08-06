@@ -235,7 +235,6 @@ export default function TaskBoard() {
       document.removeEventListener('pointerup', onUp);
       setDraggingId(null);
       if (moved) {
-        moveTask(task.id, latestX, latestY);
         void window.electronAPI?.dropTaskOnList?.(lastScreenX, lastScreenY, activeBoard.id, task.id);
       }
     };
