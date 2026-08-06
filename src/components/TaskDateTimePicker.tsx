@@ -80,7 +80,19 @@ export default function TaskDateTimePicker({ value, onChange }: TaskDateTimePick
     if (unit === 'hour') {
       base.setHours(base.getHours() + amount);
     } else {
-      base.setMinutes(base.getMinutes() + amount * 5);
+      base.setMinutes(base.getMinutes() + amount);
+    }
+    updateDate(base);
+  };
+
+  const changeTimePart = (unit: 'hour' | 'minute', raw: string) => {
+    const base = selected ? new Date(selected) : parseLocalValue(createDefaultReminderValue()) || new Date();
+    const number = parseInt(raw, 10);
+    if (!Number.isFinite(number)) return;
+    if (unit === 'hour') {
+      base.setHours(Math.max(0, Math.min(23, number)));
+    } else {
+      base.setMinutes(Math.max(0, Math.min(59, number)));
     }
     updateDate(base);
   };
@@ -189,7 +201,15 @@ export default function TaskDateTimePicker({ value, onChange }: TaskDateTimePick
               >
                 <ChevronUp size={16} />
               </button>
-              <div className="w-12 py-1 text-center text-2xl font-semibold tabular-nums">{pad(selected?.getHours() ?? initial.getHours())}</div>
+              <input
+                type="number"
+                min={0}
+                max={23}
+                value={pad(selected?.getHours() ?? initial.getHours())}
+                onChange={(e) => changeTimePart('hour', e.target.value)}
+                className="w-14 py-1 text-center text-2xl font-semibold tabular-nums outline-none"
+                style={{ background: 'rgba(245,240,232,.08)', border: '1px solid rgba(245,240,232,.2)', borderRadius: 8, color: '#f5f0e8' }}
+              />
               <button
                 type="button"
                 onClick={() => adjustTime('hour', -1)}
@@ -209,7 +229,16 @@ export default function TaskDateTimePicker({ value, onChange }: TaskDateTimePick
               >
                 <ChevronUp size={16} />
               </button>
-              <div className="w-12 py-1 text-center text-2xl font-semibold tabular-nums">{pad(selected?.getMinutes() ?? initial.getMinutes())}</div>
+              <input
+                type="number"
+                min={0}
+                max={59}
+                step={1}
+                value={pad(selected?.getMinutes() ?? initial.getMinutes())}
+                onChange={(e) => changeTimePart('minute', e.target.value)}
+                className="w-14 py-1 text-center text-2xl font-semibold tabular-nums outline-none"
+                style={{ background: 'rgba(245,240,232,.08)', border: '1px solid rgba(245,240,232,.2)', borderRadius: 8, color: '#f5f0e8' }}
+              />
               <button
                 type="button"
                 onClick={() => adjustTime('minute', -1)}
