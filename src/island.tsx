@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Music, Pause, Play, SkipBack, SkipForward } from 'lucide-react';
+import { Copy, Music, Pause, Play, SkipBack, SkipForward } from 'lucide-react';
 import './island.css';
 import type { CockpitData, IslandDisplayState, MusicState } from './types';
 
@@ -15,6 +15,7 @@ interface IslandState {
   musicEnabled: boolean;
   tasksEnabled: boolean;
   cockpitEnabled: boolean;
+  dailyQuoteEnabled: boolean;
   lyricBounce: boolean;
   orbitGlow: boolean;
   barsEnabled: boolean;
@@ -34,6 +35,7 @@ const DEFAULT_STATE: IslandState = {
   musicEnabled: true,
   tasksEnabled: true,
   cockpitEnabled: false,
+  dailyQuoteEnabled: false,
   lyricBounce: true,
   orbitGlow: true,
   barsEnabled: true,
@@ -89,6 +91,9 @@ function IslandApp() {
   const [time, setTime] = useState(nowText);
   const [music, setMusic] = useState<MusicState>({ available: false });
   const [cockpit, setCockpit] = useState<CockpitData>({});
+  const [quote, setQuote] = useState<{ hitokoto: string; from: string } | null>(null);
+  const [quotePhase, setQuotePhase] = useState<'idle' | 'scrolling' | 'copy'>('idle');
+  const [quoteCopied, setQuoteCopied] = useState(false);
   const [seekPreview, setSeekPreview] = useState<number | null>(null);
   const [arrival, setArrival] = useState(false);
   const positionAnchorRef = useRef<{ positionMs: number; at: number } | null>(null);
@@ -116,6 +121,7 @@ function IslandApp() {
           musicEnabled: prefs.musicEnabled !== false,
           tasksEnabled: prefs.tasksEnabled !== false,
           cockpitEnabled: prefs.cockpitEnabled === true,
+          dailyQuoteEnabled: prefs.dailyQuoteEnabled === true,
           lyricBounce: prefs.lyricBounce !== false,
           orbitGlow: prefs.orbitGlow !== false,
           barsEnabled: prefs.barsEnabled !== false,
@@ -139,6 +145,7 @@ function IslandApp() {
         musicEnabled: next.musicEnabled ?? current.musicEnabled,
         tasksEnabled: next.tasksEnabled ?? current.tasksEnabled,
         cockpitEnabled: next.cockpitEnabled ?? current.cockpitEnabled,
+        dailyQuoteEnabled: next.dailyQuoteEnabled ?? current.dailyQuoteEnabled,
         lyricBounce: next.lyricBounce ?? current.lyricBounce,
         orbitGlow: next.orbitGlow ?? current.orbitGlow,
         barsEnabled: next.barsEnabled ?? current.barsEnabled,
@@ -188,6 +195,16 @@ function IslandApp() {
     });
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    if (!state.dailyQuoteEnabled) {
+      setQuotePhase('idle');
+      return;
+    }
+    void window.electronAPI?.getDailyQuote?.().then((data: unknown) => {
+      if (data) setQuote(data as { hitokoto: string; from: string });
+    });
+  }, [state.dailyQuoteEnabled]);
 
   const lyrics = useMemo(() => parseLyrics(music.lyrics), [music.lyrics]);
   const anchor = positionAnchorRef.current;
@@ -264,6 +281,32 @@ function IslandApp() {
   const mini = state.displayState === 'mini';
   const showMusic = state.musicEnabled && music.available;
   const showCockpit = state.cockpitEnabled && !showMusic;
+  const quoteActive = state.dailyQuoteEnabled && quote && (quotePhase === 'scrolling' || quotePhase === 'copy');
+
+  useEffect(() => {
+    if (!state.dailyQuoteEnabled || showMusic || showCockpit || !quote) {
+      setQuotePhase('idle');
+      return;
+    }
+    const timeouts: number[] = [];
+    const runCycle = () => {
+      setQuotePhase('scrolling');
+      timeouts.push(window.setTimeout(() => setQuotePhase('copy'), 3400));
+      timeouts.push(window.setTimeout(() => setQuotePhase('idle'), 4900));
+    };
+    const interval = window.setInterval(runCycle, 10000);
+    return () => {
+      window.clearInterval(interval);
+      timeouts.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [state.dailyQuoteEnabled, showMusic, showCockpit, !!quote]);
+
+  const copyQuote = () => {
+    if (!quote) return;
+    void window.electronAPI?.copyText?.(quote.hitokoto);
+    setQuoteCopied(true);
+    window.setTimeout(() => setQuoteCopied(false), 1500);
+  };
   const rootClass = [
     'island-root',
     state.style,
@@ -373,6 +416,19 @@ function IslandApp() {
             <span>GPU {formatMetric(cockpit.gpu?.usage)} {formatMetric(cockpit.gpu?.temperature, '°C')}</span>
             <span>内存 {formatMetric(cockpit.memory?.usage)} {formatMetric(cockpit.memory?.temperature, '°C')}</span>
           </div>
+        ) : quoteActive ? (
+          <div className="island-quote-mini">
+            {quotePhase === 'copy' ? (
+              <button className="island-quote-copy" onClick={copyQuote}>
+                {quoteCopied ? '已复制' : <Copy size={13} />}
+              </button>
+            ) : (
+              <div className="island-quote-scroll">
+                <span>{quote?.hitokoto}</span>
+                <span>{quote?.hitokoto}</span>
+              </div>
+            )}
+          </div>
         ) : (
           <>
             <div className="island-time">{time}</div>
@@ -452,6 +508,15 @@ function IslandApp() {
                 </div>
               ))}
             </div>
+          </div>
+        ) : state.dailyQuoteEnabled && quote ? (
+          <div className="island-quote-panel">
+            <div className="island-panel-title">每日一言</div>
+            <div className="island-quote-text">{quote.hitokoto}</div>
+            {quote.from ? <div className="island-quote-source">—— {quote.from}</div> : null}
+            <button className="island-quote-copy" onClick={copyQuote}>
+              {quoteCopied ? '已复制' : '复制'}
+            </button>
           </div>
         ) : (
           <>

@@ -91,7 +91,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Dynamic island
   getIslandState: () => ipcRenderer.invoke('island:getState'),
-  setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string, orbitGlow: boolean, barsEnabled: boolean, tasksEnabled: boolean, cockpitEnabled: boolean) => ipcRenderer.invoke('island:set', enabled, style, position, autoHideFullscreen, musicEnabled, lyricBounce, displayState, orbitGlow, barsEnabled, tasksEnabled, cockpitEnabled),
+  setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string, orbitGlow: boolean, barsEnabled: boolean, tasksEnabled: boolean, cockpitEnabled: boolean, dailyQuoteEnabled: boolean) => ipcRenderer.invoke('island:set', enabled, style, position, autoHideFullscreen, musicEnabled, lyricBounce, displayState, orbitGlow, barsEnabled, tasksEnabled, cockpitEnabled, dailyQuoteEnabled),
   moveIsland: (screenX: number, screenY: number, deltaX: number, deltaY: number) => ipcRenderer.invoke('island:move', screenX, screenY, deltaX, deltaY),
   getIslandBounds: () => ipcRenderer.invoke('island:getBounds'),
   moveIslandTo: (x: number, y: number) => ipcRenderer.invoke('island:moveTo', x, y),
@@ -106,6 +106,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   stopMusicBridge: () => ipcRenderer.invoke('island:music:stop'),
   getMusicState: () => ipcRenderer.invoke('island:music:state'),
   getIslandCockpitState: () => ipcRenderer.invoke('island:cockpit:state'),
+  getDailyQuote: () => ipcRenderer.invoke('island:quote:get'),
+  copyText: (text: string) => ipcRenderer.invoke('clipboard:write', text),
   controlMusic: (action: string) => ipcRenderer.invoke('island:music:control', action),
   seekMusic: (ms: number) => ipcRenderer.invoke('island:music:seek', ms),
   onIslandMusic: (callback: (state: unknown) => void) => {

@@ -21,6 +21,7 @@ export interface IslandPreferences {
   musicEnabled?: boolean;
   tasksEnabled?: boolean;
   cockpitEnabled?: boolean;
+  dailyQuoteEnabled?: boolean;
   lyricBounce?: boolean;
   orbitGlow?: boolean;
   barsEnabled?: boolean;

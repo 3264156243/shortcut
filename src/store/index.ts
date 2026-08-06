@@ -147,7 +147,7 @@ declare global {
       onUpdateState: (callback: (state: UpdateState) => void) => () => void;
       getTheme: () => Promise<'dark' | 'light'>;
       getIslandState: () => Promise<{ enabled: boolean; style: string; position: string; autoHideFullscreen: boolean; musicEnabled?: boolean }>;
-      setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string, orbitGlow: boolean, barsEnabled: boolean, tasksEnabled: boolean, cockpitEnabled: boolean) => Promise<{ success: boolean; error?: string }>;
+      setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string, orbitGlow: boolean, barsEnabled: boolean, tasksEnabled: boolean, cockpitEnabled: boolean, dailyQuoteEnabled: boolean) => Promise<{ success: boolean; error?: string }>;
       moveIsland: (screenX: number, screenY: number, deltaX: number, deltaY: number) => Promise<{ success: boolean; error?: string }>;
       getIslandBounds: () => Promise<{ x: number; y: number; width: number; height: number } | null>;
       moveIslandTo: (x: number, y: number) => Promise<{ success: boolean; error?: string }>;
@@ -158,6 +158,8 @@ declare global {
       stopMusicBridge: () => Promise<boolean>;
       getMusicState: () => Promise<unknown>;
       getIslandCockpitState: () => Promise<unknown>;
+      getDailyQuote: () => Promise<unknown>;
+      copyText: (text: string) => Promise<unknown>;
       controlMusic: (action: string) => Promise<unknown>;
       seekMusic: (ms: number) => Promise<unknown>;
       onIslandMusic: (callback: (state: unknown) => void) => () => void;
