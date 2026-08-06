@@ -23,6 +23,13 @@ const nodeCrypto = require('crypto');
 
 const APP_USER_MODEL_ID = 'com.wanan.shortcut';
 
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
+});
+
 if (process.platform === 'win32') {
   app.setAppUserModelId(APP_USER_MODEL_ID);
 }
@@ -820,7 +827,9 @@ function createReminderWindow(boardId: string, taskId: string) {
   }
   win.once('ready-to-show', () => {
     reminderDataByWindow.set(win.webContents.id, { boardId, taskId, title: task.text || '任务提醒' });
-    win.webContents.send('reminder:data', { boardId, taskId, title: task.text || '任务提醒' });
+    try {
+      win.webContents.send('reminder:data', { boardId, taskId, title: task.text || '任务提醒' });
+    } catch {}
     win.showInactive();
   });
   win.on('closed', () => {

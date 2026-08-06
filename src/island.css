@@ -37,11 +37,6 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
   border-radius: 50%;
   box-shadow: 0 12px 34px rgba(0,0,0,.45);
 }
-.island-root.drag-over .island-shell {
-  outline: 3px solid rgba(34,211,238,.95);
-  box-shadow: 0 0 36px rgba(34,211,238,.85);
-  transform: scale(1.03);
-}
 
 .island-compact {
   position: relative;

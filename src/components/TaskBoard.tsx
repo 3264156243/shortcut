@@ -49,7 +49,6 @@ export default function TaskBoard() {
   const [renamingBoardId, setRenamingBoardId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const taskBoards = config.taskBoards?.length ? config.taskBoards : [];
   const activeBoard = taskBoards.find((board) => board.id === config.activeTaskBoardId) || taskBoards[0];
@@ -187,14 +186,8 @@ export default function TaskBoard() {
     }
   };
 
-  const onTaskDragStart = (event: React.DragEvent, task: TaskNote) => {
-    event.dataTransfer.setData('application/x-shortcut-task', JSON.stringify({ boardId: activeBoard.id, taskId: task.id }));
-    event.dataTransfer.effectAllowed = 'copy';
-    setDraggingId(task.id);
-  };
-
-  const onTaskDragEnd = () => {
-    setDraggingId(null);
+  const addToList = (task: TaskNote) => {
+    void window.electronAPI?.addTaskFromDrag?.(activeBoard.id, task.id);
   };
 
   const removeTask = (taskId: string) => {
@@ -336,20 +329,14 @@ export default function TaskBoard() {
                   event.stopPropagation();
                   openTaskEditor(task);
                 }}
-                className={`task-note absolute cursor-default px-3 pb-3 pt-6 ${task.done ? 'done' : ''} ${draggingId === task.id ? 'dragging' : ''} ${deletingId === task.id ? 'tearing' : ''}`}
+                className={`task-note absolute cursor-default px-3 pb-3 pt-6 ${task.done ? 'done' : ''} ${deletingId === task.id ? 'tearing' : ''}`}
                 style={{
                   left: `${task.x}%`,
                   top: `${task.y}%`,
                   transform: `rotate(${task.rotation}deg)`,
                   ['--r' as string]: `${task.rotation}deg`,
-                  zIndex: draggingId === task.id ? 10000 : (task.zIndex || 1),
+                  zIndex: task.zIndex || 1,
                 }}
-              >
-              <div
-                draggable
-                onDragStart={(event) => onTaskDragStart(event, task)}
-                onDragEnd={onTaskDragEnd}
-                className="absolute inset-0"
               >
                 <div
                   className={`absolute -top-1 h-4 w-12 opacity-55 ${tapePosition === 'left' ? 'left-3 rotate-[-3deg]' : tapePosition === 'right' ? 'right-3 rotate-[2deg]' : 'left-1/2 -ml-6 rotate-[-1deg]'}`}
@@ -386,6 +373,15 @@ export default function TaskBoard() {
                     )}
                   </div>
                   <button
+                    data-task-action="add-list"
+                    onClick={() => addToList(task)}
+                    className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-all duration-150 hover:scale-110"
+                    style={{ color: '#52735d', background: 'rgba(82,115,93,.12)' }}
+                    title="添加到任务清单"
+                  >
+                    <Plus size={13} />
+                  </button>
+                  <button
                     data-task-action="delete"
                     onClick={() => setConfirmDeleteId((current) => current === task.id ? null : task.id)}
                     className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full opacity-30 transition-all duration-150 hover:rotate-90 hover:scale-125 hover:opacity-100"
@@ -414,7 +410,6 @@ export default function TaskBoard() {
                     </button>
                   </div>
                 )}
-              </div>
               </motion.div>
             );
           })}
