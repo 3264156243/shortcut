@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Copy, Music, Pause, Play, SkipBack, SkipForward } from 'lucide-react';
+import { Music, Pause, Play, SkipBack, SkipForward } from 'lucide-react';
 import './island.css';
 import type { CockpitData, IslandDisplayState, MusicState } from './types';
 
@@ -92,9 +92,10 @@ function IslandApp() {
   const [music, setMusic] = useState<MusicState>({ available: false });
   const [cockpit, setCockpit] = useState<CockpitData>({});
   const [quote, setQuote] = useState<{ hitokoto: string; from: string } | null>(null);
-  const [quotePhase, setQuotePhase] = useState<'idle' | 'typing' | 'scrolling' | 'copy'>('idle');
+  const [quotePhase, setQuotePhase] = useState<'idle' | 'typing' | 'scrolling'>('idle');
   const [typedQuote, setTypedQuote] = useState('');
-  const [quoteCopied, setQuoteCopied] = useState(false);
+  const quoteDisplayCountRef = useRef(0);
+  const hasDisplayedRef = useRef(false);
   const [seekPreview, setSeekPreview] = useState<number | null>(null);
   const [arrival, setArrival] = useState(false);
   const positionAnchorRef = useRef<{ positionMs: number; at: number } | null>(null);
@@ -282,7 +283,7 @@ function IslandApp() {
   const mini = state.displayState === 'mini';
   const showMusic = state.musicEnabled && music.available;
   const showCockpit = state.cockpitEnabled && !showMusic;
-  const quoteActive = state.dailyQuoteEnabled && quote && (quotePhase === 'typing' || quotePhase === 'scrolling' || quotePhase === 'copy');
+  const quoteActive = state.dailyQuoteEnabled && quote && (quotePhase === 'typing' || quotePhase === 'scrolling');
   const quoteLong = !!quote && (quote.hitokoto.length > 18 || quote.from.length > 14);
 
   useEffect(() => {
@@ -309,30 +310,35 @@ function IslandApp() {
       if (index >= full.length) {
         window.clearInterval(timer);
         window.setTimeout(() => {
-          setQuotePhase(quoteLong ? 'scrolling' : 'copy');
-        }, 350);
+          hasDisplayedRef.current = true;
+          setQuotePhase(quoteLong ? 'scrolling' : 'idle');
+        }, 300);
       }
-    }, 60);
+    }, 110);
     return () => window.clearInterval(timer);
   }, [quotePhase, quote, quoteLong]);
 
   useEffect(() => {
     if (quotePhase !== 'scrolling') return;
-    const timer = window.setTimeout(() => setQuotePhase('copy'), 6500);
+    const timer = window.setTimeout(() => setQuotePhase('idle'), 8000);
     return () => window.clearTimeout(timer);
   }, [quotePhase]);
 
   useEffect(() => {
-    if (quotePhase !== 'copy') return;
-    const timer = window.setTimeout(() => setQuotePhase('idle'), 1800);
-    return () => window.clearTimeout(timer);
-  }, [quotePhase]);
+    if (quotePhase !== 'idle' || !quote || !hasDisplayedRef.current) return;
+    hasDisplayedRef.current = false;
+    quoteDisplayCountRef.current += 1;
+    if (quoteDisplayCountRef.current >= 2) {
+      quoteDisplayCountRef.current = 0;
+      void window.electronAPI?.refreshDailyQuote?.().then((data: unknown) => {
+        if (data) setQuote(data as { hitokoto: string; from: string });
+      });
+    }
+  }, [quotePhase, quote]);
 
   const copyQuote = () => {
     if (!quote) return;
     void window.electronAPI?.copyText?.(quote.hitokoto);
-    setQuoteCopied(true);
-    window.setTimeout(() => setQuoteCopied(false), 1500);
   };
   const rootClass = [
     'island-root',
@@ -444,12 +450,8 @@ function IslandApp() {
             <span>内存 {formatMetric(cockpit.memory?.usage)} {formatMetric(cockpit.memory?.temperature, '°C')}</span>
           </div>
         ) : quoteActive ? (
-          <div className="island-quote-mini">
-            {quotePhase === 'copy' ? (
-              <button className="island-quote-copy" onClick={copyQuote}>
-                {quoteCopied ? '已复制' : <Copy size={13} />}
-              </button>
-            ) : quotePhase === 'scrolling' ? (
+          <div className="island-quote-mini" onDoubleClick={(e) => { e.stopPropagation(); copyQuote(); }}>
+            {quotePhase === 'scrolling' ? (
               <div className="island-quote-scroll">
                 <span>{quote?.hitokoto} —— {quote?.from}</span>
                 <span>{quote?.hitokoto} —— {quote?.from}</span>
@@ -542,13 +544,10 @@ function IslandApp() {
             </div>
           </div>
         ) : state.dailyQuoteEnabled && quote ? (
-          <div className="island-quote-panel">
+          <div className="island-quote-panel" onDoubleClick={(e) => { e.stopPropagation(); copyQuote(); }}>
             <div className="island-panel-title">每日一言</div>
             <div className="island-quote-text island-quote-type">{quote.hitokoto}</div>
             {quote.from ? <div className="island-quote-source island-quote-type delayed">—— {quote.from}</div> : null}
-            <button className="island-quote-copy" onClick={copyQuote}>
-              {quoteCopied ? '已复制' : '复制'}
-            </button>
           </div>
         ) : (
           <>

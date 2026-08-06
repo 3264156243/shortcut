@@ -153,7 +153,7 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
 .island-quote-scroll {
   display: inline-flex;
   white-space: nowrap;
-  animation: island-quote-marquee 6.5s linear 1;
+  animation: island-quote-marquee 8s linear 1;
 }
 .island-quote-scroll span {
   padding-right: 44px;

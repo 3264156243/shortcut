@@ -544,8 +544,8 @@ function checkLicenseOnStartup() {
 
 const DAILY_QUOTE_API = 'https://whyta.cn/api/yiyan?key=7e379d7f3330';
 
-async function getDailyQuote() {
-  if (latestQuote && Date.now() - latestQuoteAt < 3600000) {
+async function getDailyQuote(force = false) {
+  if (!force && latestQuote && Date.now() - latestQuoteAt < 3600000) {
     return latestQuote;
   }
   try {
@@ -1549,6 +1549,7 @@ ipcMain.handle('island:music:stop', () => {
 ipcMain.handle('island:music:state', () => latestMusicState || { available: false });
 ipcMain.handle('island:cockpit:state', () => latestCockpitData || {});
 ipcMain.handle('island:quote:get', () => getDailyQuote());
+ipcMain.handle('island:quote:refresh', () => getDailyQuote(true));
 ipcMain.handle('clipboard:write', (_e: any, text: string) => {
   clipboard.writeText(String(text || ''));
   return true;
