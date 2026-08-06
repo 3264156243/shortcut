@@ -734,6 +734,7 @@ function saveTaskList(list: any[]) {
 }
 
 function resolveTaskList(): any[] {
+  pruneTaskList();
   return readTaskList()
     .map((entry) => {
       const task = findTask(entry.boardId, entry.taskId);

@@ -49,6 +49,7 @@ export default function TaskBoard() {
   const [renamingBoardId, setRenamingBoardId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const taskBoards = config.taskBoards?.length ? config.taskBoards : [];
   const activeBoard = taskBoards.find((board) => board.id === config.activeTaskBoardId) || taskBoards[0];
@@ -191,6 +192,51 @@ export default function TaskBoard() {
     void window.electronAPI?.addTaskFromDrag?.(activeBoard.id, task.id);
   };
 
+  const startDrag = (task: TaskNote, event: React.PointerEvent<HTMLDivElement>) => {
+    const wall = wallRef.current;
+    if (!wall) return;
+    const target = event.target as HTMLElement;
+    if (target.closest('[data-task-action]')) return;
+
+    const rect = wall.getBoundingClientRect();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const originalX = task.x;
+    const originalY = task.y;
+    let latestX = task.x;
+    let latestY = task.y;
+    let moved = false;
+
+    setConfirmDeleteId(null);
+    setDraggingId(task.id);
+
+    const onMove = (moveEvent: PointerEvent) => {
+      const dx = ((moveEvent.clientX - startX) / rect.width) * 100;
+      const dy = ((moveEvent.clientY - startY) / rect.height) * 100;
+      if (!moved && Math.abs(dx) + Math.abs(dy) < 1) return;
+      moved = true;
+      latestX = Math.max(-6, Math.min(88, originalX + dx));
+      latestY = Math.max(-4, Math.min(84, originalY + dy));
+      const note = wall.querySelector<HTMLElement>(`[data-task-id="${task.id}"]`);
+      if (note) {
+        note.style.left = `${latestX}%`;
+        note.style.top = `${latestY}%`;
+      }
+    };
+
+    const onUp = () => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      setDraggingId(null);
+      if (moved) {
+        moveTask(task.id, latestX, latestY);
+      }
+    };
+
+    document.addEventListener('pointermove', onMove, { passive: false });
+    document.addEventListener('pointerup', onUp);
+  };
+
   const removeTask = (taskId: string) => {
     const note = wallRef.current?.querySelector<HTMLElement>(`[data-task-id="${taskId}"]`);
     if (note) {
@@ -325,19 +371,20 @@ export default function TaskBoard() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 60, scale: 0.6 }}
                 transition={{ type: 'spring', damping: 18, stiffness: 260 }}
+                onPointerDown={(event) => startDrag(task, event)}
                 onDoubleClick={(event) => {
                   const target = event.target as HTMLElement;
                   if (target.closest('[data-task-action]')) return;
                   event.stopPropagation();
                   openTaskEditor(task);
                 }}
-                className={`task-note absolute cursor-default px-3 pb-3 pt-6 ${task.done ? 'done' : ''} ${deletingId === task.id ? 'tearing' : ''}`}
+                className={`task-note absolute cursor-default px-3 pb-3 pt-6 ${task.done ? 'done' : ''} ${draggingId === task.id ? 'dragging' : ''} ${deletingId === task.id ? 'tearing' : ''}`}
                 style={{
                   left: `${task.x}%`,
                   top: `${task.y}%`,
                   transform: `rotate(${task.rotation}deg)`,
                   ['--r' as string]: `${task.rotation}deg`,
-                  zIndex: task.zIndex || 1,
+                  zIndex: draggingId === task.id ? 10000 : (task.zIndex || 1),
                 }}
               >
                 <div
