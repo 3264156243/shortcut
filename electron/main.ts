@@ -1452,6 +1452,53 @@ ipcMain.handle('app:setOpenAtLogin', (_e: any, enabled: boolean) => {
   return app.getLoginItemSettings().openAtLogin;
 });
 
+function isElevated(): Promise<boolean> {
+  return new Promise((resolve) => {
+    childProcess.exec(
+      'powershell -NoProfile -Command "([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)"',
+      (error: any, stdout: string) => {
+        resolve(!!stdout && stdout.trim() === 'True');
+      },
+    );
+  });
+}
+
+function setAdminMode(enabled: boolean) {
+  const cfg = readConfigObject();
+  if (!cfg) return false;
+  writeConfig(JSON.stringify({ ...cfg, adminMode: !!enabled }, null, 2));
+  return true;
+}
+
+async function applyAdminMode() {
+  const cfg = readConfigObject();
+  if (!cfg?.adminMode) return;
+  const elevated = await isElevated();
+  if (elevated) return;
+  const command = `Start-Process -FilePath '${process.execPath}' -Verb RunAs`;
+  childProcess.spawn('powershell.exe', ['-NoProfile', '-Command', command], {
+    windowsHide: true,
+    stdio: 'ignore',
+  });
+  app.quit();
+}
+
+ipcMain.handle('app:setAdminMode', async (_e: any, enabled: boolean) => {
+  setAdminMode(enabled);
+  if (enabled) {
+    const elevated = await isElevated();
+    if (!elevated) {
+      const command = `Start-Process -FilePath '${process.execPath}' -Verb RunAs`;
+      childProcess.spawn('powershell.exe', ['-NoProfile', '-Command', command], {
+        windowsHide: true,
+        stdio: 'ignore',
+      });
+      app.quit();
+    }
+  }
+  return { success: true };
+});
+
 // Read installed software from registry
 ipcMain.handle('system:getInstalledSoftware', async () => {
   const { exec } = require('child_process');
@@ -1686,8 +1733,9 @@ if (!gotSingleInstanceLock) {
     }
   });
 
-  app.whenReady().then(() => {
-  restoreFromBackupIfNeeded();
+  app.whenReady().then(async () => {
+    await applyAdminMode();
+    restoreFromBackupIfNeeded();
   backupConfig();
   setupAutoUpdater();
   createWindow();
