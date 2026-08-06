@@ -139,6 +139,9 @@ export default function App() {
     }).catch(() => undefined);
     api.getLicenseGate().then((gate) => {
       setLicenseGate(gate as any);
+      if (!(gate as any)?.required) {
+        void api.licenseGatePassed?.();
+      }
     }).catch(() => {
       setLicenseGate({ required: true, activated: false, checking: false, message: '无法连接激活服务器' });
     });
@@ -260,34 +263,18 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    let checking = false;
-
-    const checkReminders = async () => {
-      if (checking) return;
-      checking = true;
-      try {
-        const state = useStore.getState();
-        const now = Date.now();
-        for (const board of state.config.taskBoards || []) {
-          for (const task of board.notes || []) {
-            if (!task.reminderAt || task.remindedAt) continue;
-            const reminderTime = new Date(task.reminderAt).getTime();
-            if (!Number.isFinite(reminderTime) || reminderTime > now) continue;
-            const shown = await window.electronAPI?.showNotification('任务提醒', task.text);
-            if (shown) {
-              useStore.getState().markTaskReminded(board.id, task.id);
-            }
-          }
-        }
-      } finally {
-        checking = false;
-      }
-    };
-
-    void checkReminders();
-    const timer = window.setInterval(() => void checkReminders(), 30000);
-    return () => window.clearInterval(timer);
-  }, []);
+    if (!api?.onTaskLocate) return;
+    const unsubscribe = api.onTaskLocate((data) => {
+      const locate = data as { boardId?: string; taskId?: string };
+      if (!locate?.boardId || !locate.taskId) return;
+      useStore.getState().setActiveModule('tasks');
+      useStore.getState().setActiveTaskBoard(locate.boardId);
+      window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('task:locate-request', { detail: { taskId: locate.taskId } }));
+      }, 150);
+    });
+    return unsubscribe;
+  }, [api]);
   // Check initial maximized state
   useEffect(() => {
     if (api?.isMaximized) {
@@ -341,7 +328,10 @@ export default function App() {
         machineCode={licenseGate.machineCode}
         initialCode={initialLicenseCode}
         message={licenseGate.message}
-        onActivated={() => setLicenseGate({ required: false, activated: true, checking: false })}
+        onActivated={() => {
+          setLicenseGate({ required: false, activated: true, checking: false });
+          void api?.licenseGatePassed?.();
+        }}
       />
     );
   }

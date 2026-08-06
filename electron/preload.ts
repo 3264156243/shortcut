@@ -28,6 +28,31 @@ contextBridge.exposeInMainWorld('electronAPI', {
   activateLicense: (code: string) => ipcRenderer.invoke('license:activate', code),
   checkLicense: () => ipcRenderer.invoke('license:check'),
   getLicenseGate: () => ipcRenderer.invoke('license:gate'),
+  licenseGatePassed: () => ipcRenderer.invoke('license:gatePassed'),
+  getReminderData: () => ipcRenderer.invoke('reminder:getData'),
+  onReminderData: (callback: (data: unknown) => void) => {
+    const handler = (_event: unknown, data: unknown) => callback(data);
+    ipcRenderer.on('reminder:data', handler);
+    return () => ipcRenderer.removeListener('reminder:data', handler);
+  },
+  confirmReminder: (boardId: string, taskId: string) => ipcRenderer.invoke('reminder:confirm', boardId, taskId),
+  viewReminder: (boardId: string, taskId: string) => ipcRenderer.invoke('reminder:view', boardId, taskId),
+  getTaskList: () => ipcRenderer.invoke('tasklist:get'),
+  removeTaskFromList: (boardId: string, taskId: string) => ipcRenderer.invoke('tasklist:remove', boardId, taskId),
+  completeTaskInList: (boardId: string, taskId: string) => ipcRenderer.invoke('tasklist:complete', boardId, taskId),
+  locateTaskFromList: (boardId: string, taskId: string) => ipcRenderer.invoke('tasklist:locate', boardId, taskId),
+  overlapTaskDrag: (screenX: number, screenY: number, boardId: string, taskId: string) => ipcRenderer.invoke('tasklist:overlap', screenX, screenY, boardId, taskId),
+  dropTaskOnList: (screenX: number, screenY: number, boardId: string, taskId: string) => ipcRenderer.invoke('tasklist:drop', screenX, screenY, boardId, taskId),
+  onTaskListData: (callback: (data: unknown) => void) => {
+    const handler = (_event: unknown, data: unknown) => callback(data);
+    ipcRenderer.on('tasklist:data', handler);
+    return () => ipcRenderer.removeListener('tasklist:data', handler);
+  },
+  onTaskLocate: (callback: (data: unknown) => void) => {
+    const handler = (_event: unknown, data: unknown) => callback(data);
+    ipcRenderer.on('task:locate', handler);
+    return () => ipcRenderer.removeListener('task:locate', handler);
+  },
   getOpenAtLogin: () => ipcRenderer.invoke('app:getOpenAtLogin'),
   setOpenAtLogin: (enabled: boolean) => ipcRenderer.invoke('app:setOpenAtLogin', enabled),
   setAdminMode: (enabled: boolean) => ipcRenderer.invoke('app:setAdminMode', enabled),

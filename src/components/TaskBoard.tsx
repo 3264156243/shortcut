@@ -50,10 +50,24 @@ export default function TaskBoard() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const lastDragReportRef = useRef(0);
 
   const taskBoards = config.taskBoards?.length ? config.taskBoards : [];
   const activeBoard = taskBoards.find((board) => board.id === config.activeTaskBoardId) || taskBoards[0];
   const tasks = activeBoard?.notes || [];
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      const note = wallRef.current?.querySelector<HTMLElement>(`[data-task-id="${detail?.taskId}"]`);
+      if (!note) return;
+      note.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      note.classList.add('locate-highlight');
+      window.setTimeout(() => note.classList.remove('locate-highlight'), 2200);
+    };
+    window.addEventListener('task:locate-request', handler);
+    return () => window.removeEventListener('task:locate-request', handler);
+  }, []);
   const renamingBoard = taskBoards.find((board) => board.id === renamingBoardId);
   const editor = config.taskEditorDraft?.boardId === activeBoard?.id ? config.taskEditorDraft : null;
   const setEditor = (nextEditor: TaskEditorState | null) => {
@@ -189,6 +203,8 @@ export default function TaskBoard() {
     let latestX = task.x;
     let latestY = task.y;
     let moved = false;
+    let lastScreenX = 0;
+    let lastScreenY = 0;
 
     setConfirmDeleteId(null);
     setDraggingId(task.id);
@@ -198,8 +214,15 @@ export default function TaskBoard() {
       const dy = ((moveEvent.clientY - startY) / rect.height) * 100;
       if (!moved && Math.abs(dx) + Math.abs(dy) < 1) return;
       moved = true;
+      lastScreenX = moveEvent.screenX;
+      lastScreenY = moveEvent.screenY;
       latestX = Math.max(-6, Math.min(88, originalX + dx));
       latestY = Math.max(-4, Math.min(84, originalY + dy));
+      const now = Date.now();
+      if (now - lastDragReportRef.current > 100) {
+        lastDragReportRef.current = now;
+        void window.electronAPI?.overlapTaskDrag?.(lastScreenX, lastScreenY, activeBoard.id, task.id);
+      }
       const note = wall.querySelector<HTMLElement>(`[data-task-id="${task.id}"]`);
       if (note) {
         note.style.left = `${latestX}%`;
@@ -213,6 +236,7 @@ export default function TaskBoard() {
       setDraggingId(null);
       if (moved) {
         moveTask(task.id, latestX, latestY);
+        void window.electronAPI?.dropTaskOnList?.(lastScreenX, lastScreenY, activeBoard.id, task.id);
       }
     };
 
@@ -258,6 +282,7 @@ export default function TaskBoard() {
         }
         .task-note:hover { box-shadow: 3px 5px 16px rgba(0,0,0,.45); }
         .task-note.dragging { box-shadow: 6px 10px 30px rgba(0,0,0,.5); opacity: .94; cursor: grabbing; }
+        .task-note.locate-highlight { outline: 3px solid rgba(91,134,229,.95); box-shadow: 0 0 26px rgba(91,134,229,.85); }
         .task-note.tearing { animation: taskFeedShredder .92s cubic-bezier(.55,.02,.72,.42) forwards; pointer-events: none; z-index: 12000 !important; }
         @keyframes taskFeedShredder {
           0% { opacity: 1; transform: rotate(var(--r)) scale(1); }

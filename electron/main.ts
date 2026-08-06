@@ -43,6 +43,12 @@ let islandUserHidden = false;
 let musicBridgeProcess: any = null;
 let musicBridgeBuffer = '';
 let latestMusicState: any = null;
+let reminderWindows = new Map<string, any>();
+let reminderDataByWindow = new Map<number, any>();
+let taskListWindow: any = null;
+let taskListHidden = false;
+let currentDragTask: { boardId: string; taskId: string } | null = null;
+let licenseGatePassed = false;
 
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error' | 'unconfigured';
 
@@ -681,6 +687,197 @@ function writeIslandConfig(island: any) {
   if (!cfg) return false;
   writeConfig(JSON.stringify({ ...cfg, island: { ...(cfg.island || {}), ...island } }, null, 2));
   return true;
+}
+
+function findTask(boardId: string, taskId: string): any | null {
+  const cfg = readConfigObject();
+  const board = (cfg?.taskBoards || []).find((item: any) => item.id === boardId);
+  return board?.notes?.find((note: any) => note.id === taskId) || null;
+}
+
+function readTaskList(): any[] {
+  const cfg = readConfigObject();
+  return Array.isArray(cfg?.scTaskList) ? cfg.scTaskList : [];
+}
+
+function saveTaskList(list: any[]) {
+  const cfg = readConfigObject();
+  if (!cfg) return;
+  writeConfig(JSON.stringify({ ...cfg, scTaskList: list }, null, 2));
+}
+
+function resolveTaskList(): any[] {
+  return readTaskList()
+    .map((entry) => {
+      const task = findTask(entry.boardId, entry.taskId);
+      if (!task) return null;
+      return {
+        boardId: entry.boardId,
+        taskId: entry.taskId,
+        title: task.text || '无标题任务',
+        done: !!task.done,
+        addedAt: entry.addedAt,
+      };
+    })
+    .filter((item: any) => !!item);
+}
+
+function sendTaskListData() {
+  if (!taskListWindow || taskListWindow.isDestroyed()) return;
+  taskListWindow.webContents.send('tasklist:data', resolveTaskList());
+}
+
+function taskListBounds() {
+  const islandBounds = islandWindow && !islandWindow.isDestroyed() ? islandWindow.getBounds() : null;
+  return {
+    x: islandBounds ? islandBounds.x : 120,
+    y: islandBounds ? islandBounds.y + islandBounds.height + 6 : 120,
+    width: 340,
+    height: 430,
+  };
+}
+
+function createTaskListWindow() {
+  if (taskListHidden) return;
+  if (taskListWindow && !taskListWindow.isDestroyed()) {
+    sendTaskListData();
+    return;
+  }
+  const bounds = taskListBounds();
+  taskListWindow = new BrowserWindow({
+    ...bounds,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    resizable: false,
+    movable: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    focusable: false,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+    },
+  });
+  taskListWindow.setAlwaysOnTop(true, 'screen-saver');
+  if (process.env.VITE_DEV_SERVER_URL) {
+    taskListWindow.loadURL(process.env.VITE_DEV_SERVER_URL + '/tasklist.html');
+  } else {
+    taskListWindow.loadFile(path.join(__dirname, '../dist/tasklist.html'));
+  }
+  taskListWindow.once('ready-to-show', () => {
+    taskListWindow.showInactive();
+    sendTaskListData();
+  });
+  taskListWindow.on('closed', () => { taskListWindow = null; });
+}
+
+function destroyTaskListWindow() {
+  if (taskListWindow && !taskListWindow.isDestroyed()) {
+    taskListWindow.destroy();
+  }
+  taskListWindow = null;
+}
+
+function createReminderWindow(boardId: string, taskId: string) {
+  const key = `${boardId}:${taskId}`;
+  if (reminderWindows.has(key)) return;
+  const task = findTask(boardId, taskId);
+  if (!task) return;
+  const bounds = taskListBounds();
+  const win = new BrowserWindow({
+    x: bounds.x,
+    y: bounds.y + 36 + reminderWindows.size * 132,
+    width: 340,
+    height: 128,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    resizable: false,
+    movable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    focusable: false,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+    },
+  });
+  win.setAlwaysOnTop(true, 'screen-saver');
+  if (process.env.VITE_DEV_SERVER_URL) {
+    win.loadURL(process.env.VITE_DEV_SERVER_URL + '/reminder.html');
+  } else {
+    win.loadFile(path.join(__dirname, '../dist/reminder.html'));
+  }
+  win.once('ready-to-show', () => {
+    reminderDataByWindow.set(win.webContents.id, { boardId, taskId, title: task.text || '任务提醒' });
+    win.webContents.send('reminder:data', { boardId, taskId, title: task.text || '任务提醒' });
+    win.showInactive();
+  });
+  win.on('closed', () => {
+    reminderDataByWindow.delete(win.webContents.id);
+    reminderWindows.delete(key);
+  });
+  reminderWindows.set(key, win);
+}
+
+function markTaskReminded(boardId: string, taskId: string) {
+  const cfg = readConfigObject();
+  if (!cfg) return;
+  const boards = (cfg.taskBoards || []).map((board: any) => {
+    if (board.id !== boardId) return board;
+    return {
+      ...board,
+      notes: (board.notes || []).map((note: any) => note.id === taskId
+        ? { ...note, remindedAt: new Date().toISOString() }
+        : note),
+    };
+  });
+  writeConfig(JSON.stringify({ ...cfg, taskBoards: boards }, null, 2));
+}
+
+function toggleTaskDone(boardId: string, taskId: string) {
+  const cfg = readConfigObject();
+  if (!cfg) return;
+  const boards = (cfg.taskBoards || []).map((board: any) => {
+    if (board.id !== boardId) return board;
+    return {
+      ...board,
+      notes: (board.notes || []).map((note: any) => note.id === taskId
+        ? { ...note, done: !note.done, updatedAt: new Date().toISOString() }
+        : note),
+    };
+  });
+  writeConfig(JSON.stringify({ ...cfg, taskBoards: boards }, null, 2));
+}
+
+function scanDueReminders() {
+  const cfg = readConfigObject();
+  if (!cfg || !licenseGatePassed) return;
+  const now = Date.now();
+  for (const board of cfg.taskBoards || []) {
+    for (const note of board.notes || []) {
+      if (!note.reminderAt || note.remindedAt) continue;
+      const due = new Date(note.reminderAt).getTime();
+      if (!Number.isFinite(due) || due > now) continue;
+      createReminderWindow(board.id, note.id);
+    }
+  }
+}
+
+function pointInIsland(screenX: number, screenY: number): boolean {
+  if (!islandWindow || islandWindow.isDestroyed()) return false;
+  const bounds = islandWindow.getBounds();
+  return screenX >= bounds.x && screenX <= bounds.x + bounds.width
+    && screenY >= bounds.y && screenY <= bounds.y + bounds.height;
 }
 
 
@@ -1431,6 +1628,14 @@ ipcMain.handle('license:gate', async () => {
     return { required: true, activated: false, checking: false, machineCode, message: '无法连接激活服务器，请检查网络后重试' };
   }
 });
+ipcMain.handle('license:gatePassed', () => {
+  licenseGatePassed = true;
+  scanDueReminders();
+  if (resolveTaskList().length > 0 && !taskListHidden) {
+    createTaskListWindow();
+  }
+  return true;
+});
 
 ipcMain.handle('app:getPath', (_e: any, name: string) => {
   return app.getPath(name as any);
@@ -1475,12 +1680,13 @@ async function applyAdminMode() {
   if (!cfg?.adminMode) return;
   const elevated = await isElevated();
   if (elevated) return;
+  app.releaseSingleInstanceLock();
   const command = `Start-Process -FilePath '${process.execPath}' -Verb RunAs`;
   childProcess.spawn('powershell.exe', ['-NoProfile', '-Command', command], {
     windowsHide: true,
     stdio: 'ignore',
   });
-  app.quit();
+  setTimeout(() => app.quit(), 1500);
 }
 
 ipcMain.handle('app:setAdminMode', async (_e: any, enabled: boolean) => {
@@ -1488,15 +1694,76 @@ ipcMain.handle('app:setAdminMode', async (_e: any, enabled: boolean) => {
   if (enabled) {
     const elevated = await isElevated();
     if (!elevated) {
+      app.releaseSingleInstanceLock();
       const command = `Start-Process -FilePath '${process.execPath}' -Verb RunAs`;
       childProcess.spawn('powershell.exe', ['-NoProfile', '-Command', command], {
         windowsHide: true,
         stdio: 'ignore',
       });
-      app.quit();
+      setTimeout(() => app.quit(), 1500);
     }
   }
   return { success: true };
+});
+
+ipcMain.handle('reminder:getData', (_e: any) => reminderDataByWindow.get(_e.sender.id) || null);
+ipcMain.handle('reminder:confirm', (_e: any, boardId: string, taskId: string) => {
+  markTaskReminded(boardId, taskId);
+  const key = `${boardId}:${taskId}`;
+  const win = reminderWindows.get(key);
+  if (win && !win.isDestroyed()) win.destroy();
+  return true;
+});
+ipcMain.handle('reminder:view', (_e: any, boardId: string, taskId: string) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+    mainWindow.focus();
+    mainWindow.webContents.send('task:locate', { boardId, taskId });
+  }
+  return true;
+});
+ipcMain.handle('tasklist:get', () => resolveTaskList());
+ipcMain.handle('tasklist:remove', (_e: any, boardId: string, taskId: string) => {
+  const list = readTaskList().filter((item: any) => !(item.boardId === boardId && item.taskId === taskId));
+  saveTaskList(list);
+  if (list.length === 0) {
+    destroyTaskListWindow();
+  } else {
+    sendTaskListData();
+  }
+  return true;
+});
+ipcMain.handle('tasklist:complete', (_e: any, boardId: string, taskId: string) => {
+  toggleTaskDone(boardId, taskId);
+  sendTaskListData();
+  return true;
+});
+ipcMain.handle('tasklist:locate', (_e: any, boardId: string, taskId: string) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+    mainWindow.focus();
+    mainWindow.webContents.send('task:locate', { boardId, taskId });
+  }
+  return true;
+});
+ipcMain.handle('tasklist:overlap', (_e: any, screenX: number, screenY: number, boardId: string, taskId: string) => {
+  if (pointInIsland(screenX, screenY)) {
+    currentDragTask = { boardId, taskId };
+    createTaskListWindow();
+  }
+  return true;
+});
+ipcMain.handle('tasklist:drop', (_e: any, screenX: number, screenY: number, boardId: string, taskId: string) => {
+  if (pointInIsland(screenX, screenY)) {
+    const list = readTaskList();
+    if (!list.some((item: any) => item.boardId === boardId && item.taskId === taskId)) {
+      list.push({ boardId, taskId, addedAt: new Date().toISOString() });
+      saveTaskList(list);
+      createTaskListWindow();
+    }
+  }
+  currentDragTask = null;
+  return true;
 });
 
 // Read installed software from registry
@@ -1741,6 +2008,8 @@ if (!gotSingleInstanceLock) {
   createWindow();
   createTray();
   createIslandWindow();
+  scanDueReminders();
+  setInterval(() => scanDueReminders(), 20000);
   checkLicenseOnStartup();
   setInterval(() => applyIslandVisibility(), 1500);
 
@@ -1782,6 +2051,17 @@ if (!gotSingleInstanceLock) {
   if (!islandHotkey) {
     console.error('Failed to register Alt+I hotkey');
   }
+  const taskListHotkey = globalShortcut.register('Alt+U', () => {
+    taskListHidden = !taskListHidden;
+    if (taskListHidden) {
+      destroyTaskListWindow();
+    } else {
+      createTaskListWindow();
+    }
+  });
+  if (!taskListHotkey) {
+    console.error('Failed to register Alt+U hotkey');
+  }
 });
 
   app.on('window-all-closed', () => {
@@ -1790,6 +2070,11 @@ if (!gotSingleInstanceLock) {
 
   app.on('before-quit', () => {
     if (islandWindow && !islandWindow.isDestroyed()) islandWindow.destroy();
+    destroyTaskListWindow();
+    for (const win of reminderWindows.values()) {
+      if (!win.isDestroyed()) win.destroy();
+    }
+    reminderWindows.clear();
     stopMusicBridge();
     stopHardwareMonitor();
     if (captureOverlay && !captureOverlay.isDestroyed()) captureOverlay.destroy();

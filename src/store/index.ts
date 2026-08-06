@@ -111,6 +111,19 @@ declare global {
       activateLicense: (code: string) => Promise<unknown>;
       checkLicense: () => Promise<unknown>;
       getLicenseGate: () => Promise<unknown>;
+      licenseGatePassed: () => Promise<unknown>;
+      getReminderData: () => Promise<unknown>;
+      onReminderData: (callback: (data: unknown) => void) => () => void;
+      confirmReminder: (boardId: string, taskId: string) => Promise<unknown>;
+      viewReminder: (boardId: string, taskId: string) => Promise<unknown>;
+      getTaskList: () => Promise<unknown>;
+      removeTaskFromList: (boardId: string, taskId: string) => Promise<unknown>;
+      completeTaskInList: (boardId: string, taskId: string) => Promise<unknown>;
+      locateTaskFromList: (boardId: string, taskId: string) => Promise<unknown>;
+      overlapTaskDrag: (screenX: number, screenY: number, boardId: string, taskId: string) => Promise<unknown>;
+      dropTaskOnList: (screenX: number, screenY: number, boardId: string, taskId: string) => Promise<unknown>;
+      onTaskListData: (callback: (data: unknown) => void) => () => void;
+      onTaskLocate: (callback: (data: unknown) => void) => () => void;
       getOpenAtLogin: () => Promise<boolean>;
       setOpenAtLogin: (enabled: boolean) => Promise<boolean>;
       setAdminMode: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
@@ -236,7 +249,7 @@ export const useStore = create<AppState>((set, get) => ({
         const parsed = JSON.parse(raw) as AppConfig;
         const island: IslandPreferences = { ...DEFAULT_CONFIG.island!, ...(parsed.island || {}) };
         set({
-          config: { ...DEFAULT_CONFIG, ...parsed, island, locale: 'zh-CN', searchHistory: parsed.searchHistory || [], activeModule: parsed.activeModule || 'shortcuts', ...normalizeTaskBoards(parsed) },
+          config: { ...DEFAULT_CONFIG, ...parsed, island, scTaskList: parsed.scTaskList || [], locale: 'zh-CN', searchHistory: parsed.searchHistory || [], activeModule: parsed.activeModule || 'shortcuts', ...normalizeTaskBoards(parsed) },
           activeTabId: parsed.activeTabId || parsed.tabs[0]?.id || 'default',
           activeModule: parsed.activeModule || 'shortcuts',
         });

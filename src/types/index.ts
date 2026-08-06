@@ -77,6 +77,12 @@ export interface LicenseState {
   message?: string;
 }
 
+export interface ScTaskListItem {
+  boardId: string;
+  taskId: string;
+  addedAt: string;
+}
+
 export interface Shortcut {
   id: string;
   name: string;
@@ -165,6 +171,7 @@ export interface AppConfig {
   activeTabId?: string;
   island?: IslandPreferences;
   license?: LicenseState;
+  scTaskList: ScTaskListItem[];
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -207,6 +214,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     },
   ],
   activeTabId: 'default',
+  scTaskList: [],
   island: {
     enabled: true,
     style: 'capsule',

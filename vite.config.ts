@@ -16,6 +16,8 @@ export default defineConfig({
       input: {
         main: 'index.html',
         island: 'island.html',
+        reminder: 'reminder.html',
+        tasklist: 'tasklist.html',
       },
     },
   },
