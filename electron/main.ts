@@ -793,6 +793,7 @@ function createTaskListWindow() {
   if (taskListHidden) return;
   const cfg = readConfigObject();
   if (cfg?.island?.tasksEnabled === false) return;
+  pruneTaskList();
   if (taskListWindow && !taskListWindow.isDestroyed()) {
     sendTaskListData();
     return;
@@ -1711,6 +1712,7 @@ ipcMain.handle('license:gate', async () => {
 ipcMain.handle('license:gatePassed', () => {
   licenseGatePassed = true;
   scanDueReminders();
+  pruneTaskList();
   if (resolveTaskList().length > 0 && !taskListHidden && readConfigObject()?.island?.tasksEnabled !== false) {
     createTaskListWindow();
   }

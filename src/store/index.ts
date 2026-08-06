@@ -400,7 +400,15 @@ export const useStore = create<AppState>((set, get) => ({
       if (state.config.taskBoards.length <= 1) return state;
       const taskBoards = state.config.taskBoards.filter((board) => board.id !== boardId);
       const activeTaskBoardId = state.config.activeTaskBoardId === boardId ? taskBoards[0]?.id : state.config.activeTaskBoardId;
-      return { config: { ...state.config, taskBoards, activeTaskBoardId, tasks: [] } };
+      return {
+        config: {
+          ...state.config,
+          taskBoards,
+          activeTaskBoardId,
+          tasks: [],
+          scTaskList: (state.config.scTaskList || []).filter((item) => item.boardId !== boardId),
+        },
+      };
     });
     get().saveConfig();
   },
@@ -496,11 +504,14 @@ export const useStore = create<AppState>((set, get) => ({
   deleteTask: (taskId) => {
     const now = new Date().toISOString();
     set((state) => ({
-      config: updateActiveTaskBoard(state.config, (board) => ({
-        ...board,
-        notes: board.notes.filter((task) => task.id !== taskId),
-        updatedAt: now,
-      })),
+      config: {
+        ...updateActiveTaskBoard(state.config, (board) => ({
+          ...board,
+          notes: board.notes.filter((task) => task.id !== taskId),
+          updatedAt: now,
+        })),
+        scTaskList: (state.config.scTaskList || []).filter((item) => item.taskId !== taskId),
+      },
     }));
     get().saveConfig();
   },
