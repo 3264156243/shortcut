@@ -761,8 +761,8 @@ function sendTaskListData() {
 function taskListBounds() {
   const islandBounds = islandWindow && !islandWindow.isDestroyed() ? islandWindow.getBounds() : null;
   return {
-    x: islandBounds ? islandBounds.x : 120,
-    y: islandBounds ? islandBounds.y + islandBounds.height + 6 : 120,
+    x: islandBounds ? islandBounds.x + islandBounds.width + 8 : 120,
+    y: islandBounds ? islandBounds.y : 120,
     width: 340,
     height: 430,
   };
@@ -871,7 +871,7 @@ function markTaskReminded(boardId: string, taskId: string) {
     return {
       ...board,
       notes: (board.notes || []).map((note: any) => note.id === taskId
-        ? { ...note, remindedAt: new Date().toISOString() }
+        ? { ...note, remindedAt: new Date().toISOString(), done: true }
         : note),
     };
   });
@@ -1754,6 +1754,8 @@ ipcMain.handle('reminder:getData', (_e: any) => {
 ipcMain.handle('reminder:confirm', (_e: any, boardId: string, taskId: string) => {
   try {
     markTaskReminded(boardId, taskId);
+    notifyConfigChanged();
+    sendTaskListData();
     const key = `${boardId}:${taskId}`;
     const win = reminderWindows.get(key);
     if (win && !win.isDestroyed()) win.destroy();

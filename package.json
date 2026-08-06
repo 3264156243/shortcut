@@ -15,7 +15,8 @@
     "release:update": "powershell -ExecutionPolicy Bypass -File scripts/publish-update.ps1",
     "hardware:build": "powershell -ExecutionPolicy Bypass -File scripts/build-hardware-monitor.ps1",
     "music:bridge": "powershell -ExecutionPolicy Bypass -File scripts/build-music-bridge.ps1",
-    "media:validate": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/media-validate.ps1"
+    "media:validate": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/media-validate.ps1",
+    "notification:validate": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/notification-validate.ps1"
   },
   "keywords": [
     "electron",
