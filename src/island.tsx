@@ -82,6 +82,7 @@ function IslandApp() {
   const [music, setMusic] = useState<MusicState>({ available: false });
   const [seekPreview, setSeekPreview] = useState<number | null>(null);
   const [arrival, setArrival] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const positionAnchorRef = useRef<{ positionMs: number; at: number } | null>(null);
   const lastDisplayIndexRef = useRef(-1);
   const songKeyRef = useRef('');
@@ -248,12 +249,33 @@ function IslandApp() {
     showMusic && state.displayState === 'collapsed' && state.orbitGlow ? 'orbit-glow' : '',
     showMusic && state.displayState === 'collapsed' && state.orbitGlow && !music.isPlaying ? 'orbit-paused' : '',
     showMusic && !music.isPlaying ? 'music-paused' : '',
+    dragOver ? 'drag-over' : '',
   ].join(' ');
+
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setDragOver(true);
+  };
+  const onDragLeave = () => setDragOver(false);
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const raw = e.dataTransfer.getData('application/x-shortcut-task');
+    if (!raw) return;
+    try {
+      const data = JSON.parse(raw);
+      void window.electronAPI?.addTaskFromDrag?.(data.boardId, data.taskId);
+    } catch {}
+  };
 
   return (
     <div
       className={rootClass}
       data-position={state.position}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
     >
       {arrival && showMusic && state.displayState === 'collapsed' && state.orbitGlow ? <div className="island-drop-ball" /> : null}
       {showMusic && state.displayState === 'collapsed' && state.orbitGlow ? (

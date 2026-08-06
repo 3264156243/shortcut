@@ -50,7 +50,6 @@ export default function TaskBoard() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const lastDragReportRef = useRef(0);
 
   const taskBoards = config.taskBoards?.length ? config.taskBoards : [];
   const activeBoard = taskBoards.find((board) => board.id === config.activeTaskBoardId) || taskBoards[0];
@@ -188,59 +187,14 @@ export default function TaskBoard() {
     }
   };
 
-  const startDrag = (task: TaskNote, event: React.PointerEvent<HTMLDivElement>) => {
-    const wall = wallRef.current;
-    if (!wall) return;
-
-    const target = event.target as HTMLElement;
-    if (target.closest('[data-task-action]')) return;
-
-    const rect = wall.getBoundingClientRect();
-    const startX = event.clientX;
-    const startY = event.clientY;
-    const originalX = task.x;
-    const originalY = task.y;
-    let latestX = task.x;
-    let latestY = task.y;
-    let moved = false;
-    let lastScreenX = 0;
-    let lastScreenY = 0;
-
-    setConfirmDeleteId(null);
+  const onTaskDragStart = (event: React.DragEvent, task: TaskNote) => {
+    event.dataTransfer.setData('application/x-shortcut-task', JSON.stringify({ boardId: activeBoard.id, taskId: task.id }));
+    event.dataTransfer.effectAllowed = 'copy';
     setDraggingId(task.id);
+  };
 
-    const onMove = (moveEvent: PointerEvent) => {
-      const dx = ((moveEvent.clientX - startX) / rect.width) * 100;
-      const dy = ((moveEvent.clientY - startY) / rect.height) * 100;
-      if (!moved && Math.abs(dx) + Math.abs(dy) < 1) return;
-      moved = true;
-      lastScreenX = moveEvent.screenX;
-      lastScreenY = moveEvent.screenY;
-      latestX = Math.max(-6, Math.min(88, originalX + dx));
-      latestY = Math.max(-4, Math.min(84, originalY + dy));
-      const now = Date.now();
-      if (now - lastDragReportRef.current > 100) {
-        lastDragReportRef.current = now;
-        void window.electronAPI?.overlapTaskDrag?.(lastScreenX, lastScreenY, activeBoard.id, task.id);
-      }
-      const note = wall.querySelector<HTMLElement>(`[data-task-id="${task.id}"]`);
-      if (note) {
-        note.style.left = `${latestX}%`;
-        note.style.top = `${latestY}%`;
-      }
-    };
-
-    const onUp = () => {
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
-      setDraggingId(null);
-      if (moved) {
-        void window.electronAPI?.dropTaskOnList?.(lastScreenX, lastScreenY, activeBoard.id, task.id);
-      }
-    };
-
-    document.addEventListener('pointermove', onMove, { passive: false });
-    document.addEventListener('pointerup', onUp);
+  const onTaskDragEnd = () => {
+    setDraggingId(null);
   };
 
   const removeTask = (taskId: string) => {
@@ -376,7 +330,6 @@ export default function TaskBoard() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 60, scale: 0.6 }}
                 transition={{ type: 'spring', damping: 18, stiffness: 260 }}
-                onPointerDown={(event) => startDrag(task, event)}
                 onDoubleClick={(event) => {
                   const target = event.target as HTMLElement;
                   if (target.closest('[data-task-action]')) return;
@@ -391,6 +344,12 @@ export default function TaskBoard() {
                   ['--r' as string]: `${task.rotation}deg`,
                   zIndex: draggingId === task.id ? 10000 : (task.zIndex || 1),
                 }}
+              >
+              <div
+                draggable
+                onDragStart={(event) => onTaskDragStart(event, task)}
+                onDragEnd={onTaskDragEnd}
+                className="absolute inset-0"
               >
                 <div
                   className={`absolute -top-1 h-4 w-12 opacity-55 ${tapePosition === 'left' ? 'left-3 rotate-[-3deg]' : tapePosition === 'right' ? 'right-3 rotate-[2deg]' : 'left-1/2 -ml-6 rotate-[-1deg]'}`}
@@ -455,6 +414,7 @@ export default function TaskBoard() {
                     </button>
                   </div>
                 )}
+              </div>
               </motion.div>
             );
           })}

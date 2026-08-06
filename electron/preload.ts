@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   locateTaskFromList: (boardId: string, taskId: string) => ipcRenderer.invoke('tasklist:locate', boardId, taskId),
   overlapTaskDrag: (screenX: number, screenY: number, boardId: string, taskId: string) => ipcRenderer.invoke('tasklist:overlap', screenX, screenY, boardId, taskId),
   dropTaskOnList: (screenX: number, screenY: number, boardId: string, taskId: string) => ipcRenderer.invoke('tasklist:drop', screenX, screenY, boardId, taskId),
+  addTaskFromDrag: (boardId: string, taskId: string) => ipcRenderer.invoke('tasklist:addFromDrag', boardId, taskId),
   onTaskListData: (callback: (data: unknown) => void) => {
     const handler = (_event: unknown, data: unknown) => callback(data);
     ipcRenderer.on('tasklist:data', handler);

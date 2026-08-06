@@ -1711,23 +1711,46 @@ ipcMain.handle('app:setAdminMode', async (_e: any, enabled: boolean) => {
   return { success: true };
 });
 
-ipcMain.handle('reminder:getData', (_e: any) => reminderDataByWindow.get(_e.sender.id) || null);
+ipcMain.handle('reminder:getData', (_e: any) => {
+  try {
+    return reminderDataByWindow.get(_e.sender.id) || null;
+  } catch {
+    return null;
+  }
+});
 ipcMain.handle('reminder:confirm', (_e: any, boardId: string, taskId: string) => {
-  markTaskReminded(boardId, taskId);
-  const key = `${boardId}:${taskId}`;
-  const win = reminderWindows.get(key);
-  if (win && !win.isDestroyed()) win.destroy();
+  try {
+    markTaskReminded(boardId, taskId);
+    const key = `${boardId}:${taskId}`;
+    const win = reminderWindows.get(key);
+    if (win && !win.isDestroyed()) win.destroy();
+  } catch {}
   return true;
 });
 ipcMain.handle('reminder:view', (_e: any, boardId: string, taskId: string) => {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.show();
-    mainWindow.focus();
-    mainWindow.webContents.send('task:locate', { boardId, taskId });
-  }
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      mainWindow.focus();
+      mainWindow.webContents.send('task:locate', { boardId, taskId });
+    }
+  } catch {}
   const key = `${boardId}:${taskId}`;
-  const win = reminderWindows.get(key);
-  if (win && !win.isDestroyed()) win.destroy();
+  setTimeout(() => {
+    try {
+      const win = reminderWindows.get(key);
+      if (win && !win.isDestroyed()) win.destroy();
+    } catch {}
+  }, 150);
+  return true;
+});
+ipcMain.handle('tasklist:addFromDrag', (_e: any, boardId: string, taskId: string) => {
+  const list = readTaskList();
+  if (!list.some((item: any) => item.boardId === boardId && item.taskId === taskId)) {
+    list.push({ boardId, taskId, addedAt: new Date().toISOString() });
+    saveTaskList(list);
+    createTaskListWindow();
+  }
   return true;
 });
 ipcMain.handle('tasklist:get', () => resolveTaskList());
@@ -1747,11 +1770,13 @@ ipcMain.handle('tasklist:complete', (_e: any, boardId: string, taskId: string) =
   return true;
 });
 ipcMain.handle('tasklist:locate', (_e: any, boardId: string, taskId: string) => {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.show();
-    mainWindow.focus();
-    mainWindow.webContents.send('task:locate', { boardId, taskId });
-  }
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      mainWindow.focus();
+      mainWindow.webContents.send('task:locate', { boardId, taskId });
+    }
+  } catch {}
   return true;
 });
 ipcMain.handle('tasklist:overlap', (_e: any, screenX: number, screenY: number, boardId: string, taskId: string) => {

@@ -122,6 +122,7 @@ declare global {
       locateTaskFromList: (boardId: string, taskId: string) => Promise<unknown>;
       overlapTaskDrag: (screenX: number, screenY: number, boardId: string, taskId: string) => Promise<unknown>;
       dropTaskOnList: (screenX: number, screenY: number, boardId: string, taskId: string) => Promise<unknown>;
+      addTaskFromDrag: (boardId: string, taskId: string) => Promise<unknown>;
       onTaskListData: (callback: (data: unknown) => void) => () => void;
       onTaskLocate: (callback: (data: unknown) => void) => () => void;
       getOpenAtLogin: () => Promise<boolean>;
