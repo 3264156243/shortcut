@@ -153,7 +153,7 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
 .island-quote-scroll {
   display: inline-flex;
   white-space: nowrap;
-  animation: island-quote-marquee 8s linear 2;
+  animation: island-quote-marquee 6.5s linear 1;
 }
 .island-quote-scroll span {
   padding-right: 44px;
@@ -182,6 +182,20 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
 }
 .island-quote-type.delayed { animation-delay: .4s; opacity: 0; }
 .island-quote-mini .island-quote-type { white-space: nowrap; }
+.island-quote-typing {
+  white-space: nowrap;
+  font-size: 13px;
+  color: rgba(255,255,255,.92);
+}
+.island-quote-caret {
+  display: inline-block;
+  width: 1px;
+  height: 14px;
+  margin-left: 2px;
+  vertical-align: -2px;
+  background: rgba(255,255,255,.8);
+  animation: island-caret-blink 1s steps(1) infinite;
+}
 .island-quote-panel { width: 100%; }
 .island-quote-text {
   margin-top: 10px;
@@ -307,6 +321,7 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
 .island-root.paper .island-cockpit-card { background: rgba(151,124,88,.08); border-color: rgba(151,124,88,.22); }
 .island-root.paper .island-cockpit-usage { color: #4a3b2c; }
 .island-root.paper .island-quote-scroll span { color: #4a3b2c; }
+.island-root.paper .island-quote-typing { color: #4a3b2c; }
 .island-root.paper .island-quote-copy { background: rgba(151,124,88,.12); border-color: rgba(151,124,88,.35); color: #4a3b2c; }
 .island-root.paper .island-control { background: rgba(151,124,88,.12); border-color: rgba(151,124,88,.35); color: #4a3b2c; }
 .island-root.paper .island-control.main { background: #9b2335; color: #fff; box-shadow: 4px 5px 0 rgba(151,124,88,.25); }
@@ -400,6 +415,10 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
 @keyframes island-quote-type-in {
   from { clip-path: inset(0 100% 0 0); opacity: 0; }
   to { clip-path: inset(0 0 0 0); opacity: 1; }
+}
+@keyframes island-caret-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 @keyframes island-line-flow {
   from { stroke-dashoffset: 0; }

@@ -92,7 +92,8 @@ function IslandApp() {
   const [music, setMusic] = useState<MusicState>({ available: false });
   const [cockpit, setCockpit] = useState<CockpitData>({});
   const [quote, setQuote] = useState<{ hitokoto: string; from: string } | null>(null);
-  const [quotePhase, setQuotePhase] = useState<'idle' | 'scrolling' | 'copy'>('idle');
+  const [quotePhase, setQuotePhase] = useState<'idle' | 'typing' | 'scrolling' | 'copy'>('idle');
+  const [typedQuote, setTypedQuote] = useState('');
   const [quoteCopied, setQuoteCopied] = useState(false);
   const [seekPreview, setSeekPreview] = useState<number | null>(null);
   const [arrival, setArrival] = useState(false);
@@ -281,7 +282,7 @@ function IslandApp() {
   const mini = state.displayState === 'mini';
   const showMusic = state.musicEnabled && music.available;
   const showCockpit = state.cockpitEnabled && !showMusic;
-  const quoteActive = state.dailyQuoteEnabled && quote && (quotePhase === 'scrolling' || quotePhase === 'copy');
+  const quoteActive = state.dailyQuoteEnabled && quote && (quotePhase === 'typing' || quotePhase === 'scrolling' || quotePhase === 'copy');
   const quoteLong = !!quote && (quote.hitokoto.length > 18 || quote.from.length > 14);
 
   useEffect(() => {
@@ -289,19 +290,43 @@ function IslandApp() {
       setQuotePhase('idle');
       return;
     }
-    const timeouts: number[] = [];
-    const showDuration = quoteLong ? 7500 : 4000;
-    const runCycle = () => {
-      setQuotePhase('scrolling');
-      timeouts.push(window.setTimeout(() => setQuotePhase('copy'), showDuration));
-      timeouts.push(window.setTimeout(() => setQuotePhase('idle'), showDuration + 1500));
-    };
-    const interval = window.setInterval(runCycle, 10000);
+    const first = window.setTimeout(() => setQuotePhase('typing'), 1200);
+    const interval = window.setInterval(() => setQuotePhase('typing'), 10000);
     return () => {
+      window.clearTimeout(first);
       window.clearInterval(interval);
-      timeouts.forEach((timer) => window.clearTimeout(timer));
     };
   }, [state.dailyQuoteEnabled, showMusic, showCockpit, !!quote, quoteLong]);
+
+  useEffect(() => {
+    if (quotePhase !== 'typing' || !quote) return;
+    const full = `${quote.hitokoto} —— ${quote.from}`;
+    setTypedQuote('');
+    let index = 0;
+    const timer = window.setInterval(() => {
+      index += 1;
+      setTypedQuote(full.slice(0, index));
+      if (index >= full.length) {
+        window.clearInterval(timer);
+        window.setTimeout(() => {
+          setQuotePhase(quoteLong ? 'scrolling' : 'copy');
+        }, 350);
+      }
+    }, 60);
+    return () => window.clearInterval(timer);
+  }, [quotePhase, quote, quoteLong]);
+
+  useEffect(() => {
+    if (quotePhase !== 'scrolling') return;
+    const timer = window.setTimeout(() => setQuotePhase('copy'), 6500);
+    return () => window.clearTimeout(timer);
+  }, [quotePhase]);
+
+  useEffect(() => {
+    if (quotePhase !== 'copy') return;
+    const timer = window.setTimeout(() => setQuotePhase('idle'), 1800);
+    return () => window.clearTimeout(timer);
+  }, [quotePhase]);
 
   const copyQuote = () => {
     if (!quote) return;
@@ -424,13 +449,16 @@ function IslandApp() {
               <button className="island-quote-copy" onClick={copyQuote}>
                 {quoteCopied ? '已复制' : <Copy size={13} />}
               </button>
-            ) : quoteLong ? (
+            ) : quotePhase === 'scrolling' ? (
               <div className="island-quote-scroll">
                 <span>{quote?.hitokoto} —— {quote?.from}</span>
                 <span>{quote?.hitokoto} —— {quote?.from}</span>
               </div>
             ) : (
-              <span className="island-quote-type">{quote?.hitokoto} —— {quote?.from}</span>
+              <span className="island-quote-typing">
+                {typedQuote}
+                <span className="island-quote-caret" />
+              </span>
             )}
           </div>
         ) : (
