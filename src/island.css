@@ -153,7 +153,7 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
 .island-quote-scroll {
   display: inline-flex;
   white-space: nowrap;
-  animation: island-quote-marquee 3.2s linear 2;
+  animation: island-quote-marquee 8s linear 2;
 }
 .island-quote-scroll span {
   padding-right: 44px;
@@ -175,6 +175,13 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
   transition: background .15s, transform .15s;
 }
 .island-quote-copy:hover { background: rgba(255,255,255,.2); transform: scale(1.04); }
+.island-quote-type {
+  display: inline-block;
+  overflow: hidden;
+  animation: island-quote-type-in 3s steps(30, end) forwards;
+}
+.island-quote-type.delayed { animation-delay: .4s; opacity: 0; }
+.island-quote-mini .island-quote-type { white-space: nowrap; }
 .island-quote-panel { width: 100%; }
 .island-quote-text {
   margin-top: 10px;
@@ -389,6 +396,10 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
 @keyframes island-quote-marquee {
   from { transform: translateX(100%); }
   to { transform: translateX(-100%); }
+}
+@keyframes island-quote-type-in {
+  from { clip-path: inset(0 100% 0 0); opacity: 0; }
+  to { clip-path: inset(0 0 0 0); opacity: 1; }
 }
 @keyframes island-line-flow {
   from { stroke-dashoffset: 0; }

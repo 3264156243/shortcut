@@ -282,6 +282,7 @@ function IslandApp() {
   const showMusic = state.musicEnabled && music.available;
   const showCockpit = state.cockpitEnabled && !showMusic;
   const quoteActive = state.dailyQuoteEnabled && quote && (quotePhase === 'scrolling' || quotePhase === 'copy');
+  const quoteLong = !!quote && (quote.hitokoto.length > 18 || quote.from.length > 14);
 
   useEffect(() => {
     if (!state.dailyQuoteEnabled || showMusic || showCockpit || !quote) {
@@ -289,17 +290,18 @@ function IslandApp() {
       return;
     }
     const timeouts: number[] = [];
+    const showDuration = quoteLong ? 7500 : 4000;
     const runCycle = () => {
       setQuotePhase('scrolling');
-      timeouts.push(window.setTimeout(() => setQuotePhase('copy'), 3400));
-      timeouts.push(window.setTimeout(() => setQuotePhase('idle'), 4900));
+      timeouts.push(window.setTimeout(() => setQuotePhase('copy'), showDuration));
+      timeouts.push(window.setTimeout(() => setQuotePhase('idle'), showDuration + 1500));
     };
     const interval = window.setInterval(runCycle, 10000);
     return () => {
       window.clearInterval(interval);
       timeouts.forEach((timer) => window.clearTimeout(timer));
     };
-  }, [state.dailyQuoteEnabled, showMusic, showCockpit, !!quote]);
+  }, [state.dailyQuoteEnabled, showMusic, showCockpit, !!quote, quoteLong]);
 
   const copyQuote = () => {
     if (!quote) return;
@@ -422,11 +424,13 @@ function IslandApp() {
               <button className="island-quote-copy" onClick={copyQuote}>
                 {quoteCopied ? '已复制' : <Copy size={13} />}
               </button>
-            ) : (
+            ) : quoteLong ? (
               <div className="island-quote-scroll">
-                <span>{quote?.hitokoto}</span>
-                <span>{quote?.hitokoto}</span>
+                <span>{quote?.hitokoto} —— {quote?.from}</span>
+                <span>{quote?.hitokoto} —— {quote?.from}</span>
               </div>
+            ) : (
+              <span className="island-quote-type">{quote?.hitokoto} —— {quote?.from}</span>
             )}
           </div>
         ) : (
@@ -512,8 +516,8 @@ function IslandApp() {
         ) : state.dailyQuoteEnabled && quote ? (
           <div className="island-quote-panel">
             <div className="island-panel-title">每日一言</div>
-            <div className="island-quote-text">{quote.hitokoto}</div>
-            {quote.from ? <div className="island-quote-source">—— {quote.from}</div> : null}
+            <div className="island-quote-text island-quote-type">{quote.hitokoto}</div>
+            {quote.from ? <div className="island-quote-source island-quote-type delayed">—— {quote.from}</div> : null}
             <button className="island-quote-copy" onClick={copyQuote}>
               {quoteCopied ? '已复制' : '复制'}
             </button>
