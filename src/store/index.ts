@@ -159,6 +159,7 @@ declare global {
       getMusicState: () => Promise<unknown>;
       getIslandCockpitState: () => Promise<unknown>;
       getDeepseekBalance: () => Promise<unknown>;
+      setDeepseekKey: (key: string) => Promise<{ success: boolean; error?: string }>;
       copyText: (text: string) => Promise<unknown>;
       controlMusic: (action: string) => Promise<unknown>;
       seekMusic: (ms: number) => Promise<unknown>;

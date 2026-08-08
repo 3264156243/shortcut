@@ -91,7 +91,15 @@ function IslandApp() {
   const [time, setTime] = useState(nowText);
   const [music, setMusic] = useState<MusicState>({ available: false });
   const [cockpit, setCockpit] = useState<CockpitData>({});
-  const [deepseek, setDeepseek] = useState<{ currency: string; balance: number | null; available: boolean } | null>(null);
+  const [deepseek, setDeepseek] = useState<{
+    currency?: string;
+    balance?: number | null;
+    available?: boolean;
+    configured?: boolean;
+    error?: string;
+    granted?: number | null;
+    toppedUp?: number | null;
+  } | null>(null);
   const [seekPreview, setSeekPreview] = useState<number | null>(null);
   const [arrival, setArrival] = useState(false);
   const positionAnchorRef = useRef<{ positionMs: number; at: number } | null>(null);
@@ -196,9 +204,14 @@ function IslandApp() {
 
   useEffect(() => {
     if (!state.deepseekEnabled) return;
-    void window.electronAPI?.getDeepseekBalance?.().then((data: unknown) => {
-      if (data) setDeepseek(data as { currency: string; balance: number | null; available: boolean });
-    });
+    const fetchBalance = () => {
+      void window.electronAPI?.getDeepseekBalance?.().then((data: unknown) => {
+        if (data) setDeepseek(data as { currency: string; balance: number | null; available: boolean; configured?: boolean; error?: string });
+      });
+    };
+    fetchBalance();
+    const timer = window.setInterval(fetchBalance, 60000);
+    return () => window.clearInterval(timer);
   }, [state.deepseekEnabled]);
 
   const lyrics = useMemo(() => parseLyrics(music.lyrics), [music.lyrics]);
@@ -388,7 +401,7 @@ function IslandApp() {
           </div>
         ) : showDeepseek ? (
           <div className="island-deepseek-mini">
-            <span>DeepSeek {deepseek && deepseek.balance != null ? `${deepseek.balance} ${deepseek.currency}` : '?'}</span>
+            <span>DeepSeek {deepseek && deepseek.configured === false ? '未配置' : deepseek && deepseek.balance != null ? `${deepseek.balance} ${deepseek.currency}` : '?'}</span>
           </div>
         ) : (
           <>
@@ -474,10 +487,10 @@ function IslandApp() {
           <div className="island-deepseek-panel">
             <div className="island-panel-title">DeepSeek 余额</div>
             <div className="island-deepseek-balance">
-              {deepseek && deepseek.balance != null ? `${deepseek.balance} ${deepseek.currency}` : '?'}
+              {deepseek && deepseek.configured === false ? '未配置' : deepseek && deepseek.balance != null ? `${deepseek.balance} ${deepseek.currency}` : '?'}
             </div>
             <div className="island-deepseek-status">
-              {deepseek ? (deepseek.available ? '可用' : '不可用') : '获取中...'}
+              {deepseek && deepseek.configured === false ? '请在SC球设置中填写 API Key' : deepseek?.error ? deepseek.error : deepseek ? (deepseek.available ? '可用' : '不可用') : '获取中...'}
             </div>
           </div>
         ) : (

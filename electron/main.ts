@@ -321,6 +321,7 @@ function positionIslandWindow(force = false) {
 }
 
 function createIslandWindow() {
+  if (!licenseGatePassed) return;
   if (islandWindow && !islandWindow.isDestroyed()) {
     islandUserHidden = false;
     islandWindow.showInactive();
@@ -543,28 +544,34 @@ function checkLicenseOnStartup() {
 }
 
 const DEEPSEEK_BALANCE_API = 'https://api.deepseek.com/user/balance';
-const DEEPSEEK_API_KEY = 'sk-9ce40ccb7d534f4d8e7e2bea12639f63';
 
 async function getDeepseekBalance(force = false) {
-  if (!force && latestDeepseek && Date.now() - latestDeepseekAt < 600000) {
+  const apiKey = readConfigObject()?.island?.deepseekApiKey;
+  if (!apiKey) {
+    return { configured: false, error: '未配置 API Key' };
+  }
+  if (!force && latestDeepseek && Date.now() - latestDeepseekAt < 60000) {
     return latestDeepseek;
   }
   try {
     const response = await net.fetch(DEEPSEEK_BALANCE_API, {
       headers: {
-        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Accept': 'application/json',
       },
     });
     const data = await response.json();
     const info = Array.isArray(data?.balance_infos) ? data.balance_infos[0] : null;
     latestDeepseek = {
+      configured: true,
       currency: info?.currency || 'CNY',
       balance: info?.total_balance != null ? Number(info.total_balance) : null,
+      granted: info?.granted_balance != null ? Number(info.granted_balance) : null,
+      toppedUp: info?.topped_up_balance != null ? Number(info.topped_up_balance) : null,
       available: data?.is_available !== false,
     };
   } catch {
-    latestDeepseek = null;
+    latestDeepseek = { configured: true, error: '余额获取失败' };
   }
   latestDeepseekAt = Date.now();
   return latestDeepseek;
@@ -1555,6 +1562,16 @@ ipcMain.handle('island:music:stop', () => {
 ipcMain.handle('island:music:state', () => latestMusicState || { available: false });
 ipcMain.handle('island:cockpit:state', () => latestCockpitData || {});
 ipcMain.handle('island:deepseek:get', () => getDeepseekBalance());
+ipcMain.handle('island:deepseek:setKey', (_e: any, key: string) => {
+  const cfg = readConfigObject();
+  if (!cfg) return { success: false };
+  writeConfig(JSON.stringify({
+    ...cfg,
+    island: { ...(cfg.island || {}), deepseekApiKey: String(key || '').trim() },
+  }, null, 2));
+  latestDeepseek = null;
+  return { success: true };
+});
 ipcMain.handle('clipboard:write', (_e: any, text: string) => {
   clipboard.writeText(String(text || ''));
   return true;
@@ -1749,6 +1766,7 @@ ipcMain.handle('license:gate', async () => {
 });
 ipcMain.handle('license:gatePassed', () => {
   licenseGatePassed = true;
+  createIslandWindow();
   scanDueReminders();
   pruneTaskList();
   if (resolveTaskList().length > 0 && !taskListHidden && readConfigObject()?.island?.tasksEnabled !== false) {
@@ -2172,7 +2190,6 @@ if (!gotSingleInstanceLock) {
   setupAutoUpdater();
   createWindow();
   createTray();
-  createIslandWindow();
   scanDueReminders();
   setInterval(() => scanDueReminders(), 20000);
   checkLicenseOnStartup();

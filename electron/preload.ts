@@ -107,6 +107,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getMusicState: () => ipcRenderer.invoke('island:music:state'),
   getIslandCockpitState: () => ipcRenderer.invoke('island:cockpit:state'),
   getDeepseekBalance: () => ipcRenderer.invoke('island:deepseek:get'),
+  setDeepseekKey: (key: string) => ipcRenderer.invoke('island:deepseek:setKey', key),
   copyText: (text: string) => ipcRenderer.invoke('clipboard:write', text),
   controlMusic: (action: string) => ipcRenderer.invoke('island:music:control', action),
   seekMusic: (ms: number) => ipcRenderer.invoke('island:music:seek', ms),

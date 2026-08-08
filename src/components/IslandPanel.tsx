@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Film, Smartphone } from 'lucide-react';
 import { useStore } from '../store';
 import { IslandDisplayState, IslandStyle, IslandPosition } from '../types';
@@ -18,6 +19,11 @@ export default function IslandPanel() {
     barsEnabled: true,
     displayState: 'collapsed' as IslandDisplayState,
   };
+  const [deepseekKey, setDeepseekKey] = useState('');
+
+  useEffect(() => {
+    setDeepseekKey(island.deepseekApiKey || '');
+  }, [island.deepseekApiKey]);
 
   const updateIsland = async (updates: Partial<typeof island>) => {
     const next = { ...island, ...updates };
@@ -26,6 +32,11 @@ export default function IslandPanel() {
     if (result && !result.success && result.error) {
       console.error(result.error);
     }
+  };
+
+  const saveDeepseekKey = async () => {
+    await window.electronAPI?.setDeepseekKey(deepseekKey);
+    await useStore.getState().loadConfig();
   };
 
   const sectionStyle: React.CSSProperties = {
@@ -64,6 +75,27 @@ export default function IslandPanel() {
               <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>DeepSeek余额</span>
               <input type="checkbox" checked={island.deepseekEnabled === true} onChange={(e) => void updateIsland({ deepseekEnabled: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
             </label>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={deepseekKey}
+                onChange={(e) => setDeepseekKey(e.target.value)}
+                placeholder="填写 DeepSeek API Key"
+                className="flex-1 min-w-0 px-3 py-2 rounded-xl text-sm outline-none transition-all duration-150"
+                style={{
+                  background: 'var(--color-bg-card-hover)',
+                  border: '1px solid var(--color-border)',
+                  color: 'var(--color-text)',
+                }}
+              />
+              <button
+                onClick={() => void saveDeepseekKey()}
+                className="px-4 py-2 rounded-xl text-sm transition-all duration-150"
+                style={{ background: 'var(--color-accent)', color: 'white' }}
+              >
+                保存
+              </button>
+            </div>
             <label className="flex items-center justify-between cursor-pointer">
               <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>歌词逐字跳动</span>
               <input type="checkbox" checked={island.lyricBounce !== false} onChange={(e) => void updateIsland({ lyricBounce: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
