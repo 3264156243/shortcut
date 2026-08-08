@@ -12,7 +12,7 @@ export default function IslandPanel() {
     musicEnabled: true,
     tasksEnabled: true,
     cockpitEnabled: false,
-    dailyQuoteEnabled: false,
+    deepseekEnabled: false,
     lyricBounce: true,
     orbitGlow: true,
     barsEnabled: true,
@@ -22,7 +22,7 @@ export default function IslandPanel() {
   const updateIsland = async (updates: Partial<typeof island>) => {
     const next = { ...island, ...updates };
     useStore.setState((s) => ({ config: { ...s.config, island: next } }));
-    const result = await window.electronAPI?.setIsland(next.enabled, next.style, next.position, next.autoHideFullscreen, next.musicEnabled !== false, next.lyricBounce !== false, next.displayState || 'collapsed', next.orbitGlow !== false, next.barsEnabled !== false, next.tasksEnabled !== false, next.cockpitEnabled === true, next.dailyQuoteEnabled === true);
+    const result = await window.electronAPI?.setIsland(next.enabled, next.style, next.position, next.autoHideFullscreen, next.musicEnabled !== false, next.lyricBounce !== false, next.displayState || 'collapsed', next.orbitGlow !== false, next.barsEnabled !== false, next.tasksEnabled !== false, next.cockpitEnabled === true, next.deepseekEnabled === true);
     if (result && !result.success && result.error) {
       console.error(result.error);
     }
@@ -61,8 +61,8 @@ export default function IslandPanel() {
               <input type="checkbox" checked={island.cockpitEnabled === true} onChange={(e) => void updateIsland({ cockpitEnabled: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
             </label>
             <label className="flex items-center justify-between cursor-pointer">
-              <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>每日一言</span>
-              <input type="checkbox" checked={island.dailyQuoteEnabled === true} onChange={(e) => void updateIsland({ dailyQuoteEnabled: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
+              <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>DeepSeek余额</span>
+              <input type="checkbox" checked={island.deepseekEnabled === true} onChange={(e) => void updateIsland({ deepseekEnabled: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
             </label>
             <label className="flex items-center justify-between cursor-pointer">
               <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>歌词逐字跳动</span>

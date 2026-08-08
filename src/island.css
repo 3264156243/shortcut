@@ -6,7 +6,9 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
 .island-shell {
   position: relative;
   -webkit-app-region: drag;
-  width: 336px;
+  width: auto;
+  min-width: 120px;
+  max-width: 380px;
   height: 46px;
   padding: 0 16px;
   border-radius: 999px;
@@ -143,76 +145,23 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
 .island-cockpit-label { font-size: 11px; color: rgba(255,255,255,.55); }
 .island-cockpit-usage { margin-top: 6px; font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .island-cockpit-temp { margin-top: 4px; font-size: 12px; color: rgba(255,255,255,.65); font-variant-numeric: tabular-nums; }
-.island-quote-mini {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-}
-.island-quote-scroll {
-  display: inline-block;
-  white-space: nowrap;
-  max-width: 100%;
-  overflow: hidden;
-}
-.island-quote-scroll.reveal {
-  animation: island-quote-reveal var(--quote-duration, 3000ms) linear forwards;
-}
-.island-quote-scroll span {
+.island-deepseek-mini span {
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.1);
   font-size: 13px;
   color: rgba(255,255,255,.92);
+  font-variant-numeric: tabular-nums;
 }
-.island-quote-copy {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,.16);
-  background: rgba(255,255,255,.1);
-  color: rgba(255,255,255,.85);
-  font-size: 12px;
-  cursor: pointer;
-  -webkit-app-region: no-drag;
-  transition: background .15s, transform .15s;
-}
-.island-quote-copy:hover { background: rgba(255,255,255,.2); transform: scale(1.04); }
-.island-quote-type {
-  display: inline-block;
-  overflow: hidden;
-  animation: island-quote-type-in 3s steps(30, end) forwards;
-}
-.island-quote-type.delayed { animation-delay: .4s; opacity: 0; }
-.island-quote-mini .island-quote-type { white-space: nowrap; }
-.island-quote-typing {
-  white-space: nowrap;
-  font-size: 13px;
-  color: rgba(255,255,255,.92);
-}
-.island-quote-caret {
-  display: inline-block;
-  width: 1px;
-  height: 14px;
-  margin-left: 2px;
-  vertical-align: -2px;
-  background: rgba(255,255,255,.8);
-  animation: island-caret-blink 1s steps(1) infinite;
-}
-.island-quote-panel { width: 100%; }
-.island-quote-text {
+.island-deepseek-panel { width: 100%; }
+.island-deepseek-balance {
   margin-top: 10px;
-  font-size: 17px;
-  font-weight: 600;
-  line-height: 1.6;
-  word-break: break-all;
+  font-size: 30px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
-.island-quote-source {
-  margin-top: 8px;
-  font-size: 12px;
-  color: rgba(255,255,255,.55);
-}
-.island-quote-panel .island-quote-copy { margin-top: 14px; }
+.island-deepseek-status { margin-top: 6px; font-size: 12px; color: rgba(255,255,255,.55); }
 .island-pill-lyric.marquee .island-pill-lyric-track {
   display: inline-flex;
   white-space: nowrap;
@@ -323,9 +272,8 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
 .island-root.paper .island-cockpit-mini span { background: rgba(151,124,88,.1); border-color: rgba(151,124,88,.25); color: #4a3b2c; }
 .island-root.paper .island-cockpit-card { background: rgba(151,124,88,.08); border-color: rgba(151,124,88,.22); }
 .island-root.paper .island-cockpit-usage { color: #4a3b2c; }
-.island-root.paper .island-quote-scroll span { color: #4a3b2c; }
-.island-root.paper .island-quote-typing { color: #4a3b2c; }
-.island-root.paper .island-quote-copy { background: rgba(151,124,88,.12); border-color: rgba(151,124,88,.35); color: #4a3b2c; }
+.island-root.paper .island-deepseek-mini span { background: rgba(151,124,88,.1); border-color: rgba(151,124,88,.25); color: #4a3b2c; }
+.island-root.paper .island-deepseek-balance { color: #4a3b2c; }
 .island-root.paper .island-control { background: rgba(151,124,88,.12); border-color: rgba(151,124,88,.35); color: #4a3b2c; }
 .island-root.paper .island-control.main { background: #9b2335; color: #fff; box-shadow: 4px 5px 0 rgba(151,124,88,.25); }
 
@@ -410,18 +358,6 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
 @keyframes island-marquee {
   0% { transform: translateX(0); }
   100% { transform: translateX(-50%); }
-}
-@keyframes island-quote-reveal {
-  from { transform: translateX(0); }
-  to { transform: translateX(var(--quote-shift, 0px)); }
-}
-@keyframes island-quote-type-in {
-  from { clip-path: inset(0 100% 0 0); opacity: 0; }
-  to { clip-path: inset(0 0 0 0); opacity: 1; }
-}
-@keyframes island-caret-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
 }
 @keyframes island-line-flow {
   from { stroke-dashoffset: 0; }

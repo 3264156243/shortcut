@@ -59,8 +59,8 @@ let licenseGatePassed = false;
 let islandCockpitActive = false;
 let mainCockpitActive = false;
 let latestCockpitData: any = null;
-let latestQuote: any = null;
-let latestQuoteAt = 0;
+let latestDeepseek: any = null;
+let latestDeepseekAt = 0;
 
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error' | 'unconfigured';
 
@@ -237,7 +237,7 @@ function getIslandPreferences(): any {
       musicEnabled: island?.musicEnabled !== false,
       tasksEnabled: island?.tasksEnabled !== false,
       cockpitEnabled: island?.cockpitEnabled === true,
-      dailyQuoteEnabled: island?.dailyQuoteEnabled === true,
+      deepseekEnabled: island?.deepseekEnabled === true,
       lyricBounce: island?.lyricBounce !== false,
       orbitGlow: island?.orbitGlow !== false,
       barsEnabled: island?.barsEnabled !== false,
@@ -254,7 +254,7 @@ function getIslandPreferences(): any {
       musicEnabled: true,
       tasksEnabled: true,
       cockpitEnabled: false,
-      dailyQuoteEnabled: false,
+      deepseekEnabled: false,
       lyricBounce: true,
       orbitGlow: true,
       barsEnabled: true,
@@ -542,26 +542,32 @@ function checkLicenseOnStartup() {
   void checkLicense().catch(() => undefined);
 }
 
-const DAILY_QUOTE_API = 'https://whyta.cn/api/yiyan?key=7e379d7f3330';
+const DEEPSEEK_BALANCE_API = 'https://api.deepseek.com/user/balance';
+const DEEPSEEK_API_KEY = 'sk-9ce40ccb7d534f4d8e7e2bea12639f63';
 
-async function getDailyQuote(force = false) {
-  if (!force && latestQuote && Date.now() - latestQuoteAt < 3600000) {
-    return latestQuote;
+async function getDeepseekBalance(force = false) {
+  if (!force && latestDeepseek && Date.now() - latestDeepseekAt < 600000) {
+    return latestDeepseek;
   }
   try {
-    const response = await net.fetch(DAILY_QUOTE_API, {
-      headers: { 'User-Agent': 'ShortCut/2' },
+    const response = await net.fetch(DEEPSEEK_BALANCE_API, {
+      headers: {
+        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+        'Accept': 'application/json',
+      },
     });
     const data = await response.json();
-    latestQuote = {
-      hitokoto: String(data?.hitokoto || ''),
-      from: String(data?.from || ''),
+    const info = Array.isArray(data?.balance_infos) ? data.balance_infos[0] : null;
+    latestDeepseek = {
+      currency: info?.currency || 'CNY',
+      balance: info?.total_balance != null ? Number(info.total_balance) : null,
+      available: data?.is_available !== false,
     };
   } catch {
-    latestQuote = null;
+    latestDeepseek = null;
   }
-  latestQuoteAt = Date.now();
-  return latestQuote;
+  latestDeepseekAt = Date.now();
+  return latestDeepseek;
 }
 
 function getHardwareMonitorPath() {
@@ -1433,7 +1439,7 @@ function createTray() {
 
 // Dynamic island IPC
 ipcMain.handle('island:getState', () => getIslandPreferences());
-ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string, orbitGlow: boolean, barsEnabled: boolean, tasksEnabled: boolean, cockpitEnabled: boolean, dailyQuoteEnabled: boolean) => {
+ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string, orbitGlow: boolean, barsEnabled: boolean, tasksEnabled: boolean, cockpitEnabled: boolean, deepseekEnabled: boolean) => {
   try {
     const raw = readConfig();
     const cfg = raw ? JSON.parse(raw) : {};
@@ -1446,7 +1452,7 @@ ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position
       musicEnabled: musicEnabled !== false,
       tasksEnabled: tasksEnabled !== false,
       cockpitEnabled: cockpitEnabled === true,
-      dailyQuoteEnabled: dailyQuoteEnabled === true,
+      deepseekEnabled: deepseekEnabled === true,
       lyricBounce: lyricBounce !== false,
       orbitGlow: orbitGlow !== false,
       barsEnabled: barsEnabled !== false,
@@ -1548,8 +1554,7 @@ ipcMain.handle('island:music:stop', () => {
 });
 ipcMain.handle('island:music:state', () => latestMusicState || { available: false });
 ipcMain.handle('island:cockpit:state', () => latestCockpitData || {});
-ipcMain.handle('island:quote:get', () => getDailyQuote());
-ipcMain.handle('island:quote:refresh', () => getDailyQuote(true));
+ipcMain.handle('island:deepseek:get', () => getDeepseekBalance());
 ipcMain.handle('clipboard:write', (_e: any, text: string) => {
   clipboard.writeText(String(text || ''));
   return true;

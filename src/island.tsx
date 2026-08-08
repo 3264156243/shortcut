@@ -15,7 +15,7 @@ interface IslandState {
   musicEnabled: boolean;
   tasksEnabled: boolean;
   cockpitEnabled: boolean;
-  dailyQuoteEnabled: boolean;
+  deepseekEnabled: boolean;
   lyricBounce: boolean;
   orbitGlow: boolean;
   barsEnabled: boolean;
@@ -35,7 +35,7 @@ const DEFAULT_STATE: IslandState = {
   musicEnabled: true,
   tasksEnabled: true,
   cockpitEnabled: false,
-  dailyQuoteEnabled: false,
+  deepseekEnabled: false,
   lyricBounce: true,
   orbitGlow: true,
   barsEnabled: true,
@@ -91,18 +91,13 @@ function IslandApp() {
   const [time, setTime] = useState(nowText);
   const [music, setMusic] = useState<MusicState>({ available: false });
   const [cockpit, setCockpit] = useState<CockpitData>({});
-  const [quote, setQuote] = useState<{ hitokoto: string; from: string } | null>(null);
-  const [quotePhase, setQuotePhase] = useState<'idle' | 'typing' | 'scrolling'>('idle');
-  const [typedQuote, setTypedQuote] = useState('');
-  const quoteDisplayCountRef = useRef(0);
-  const hasDisplayedRef = useRef(false);
+  const [deepseek, setDeepseek] = useState<{ currency: string; balance: number | null; available: boolean } | null>(null);
   const [seekPreview, setSeekPreview] = useState<number | null>(null);
   const [arrival, setArrival] = useState(false);
   const positionAnchorRef = useRef<{ positionMs: number; at: number } | null>(null);
   const lastDisplayIndexRef = useRef(-1);
   const songKeyRef = useRef('');
   const progressRef = useRef<HTMLDivElement | null>(null);
-  const quoteScrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setTime(nowText()), 250);
@@ -124,7 +119,7 @@ function IslandApp() {
           musicEnabled: prefs.musicEnabled !== false,
           tasksEnabled: prefs.tasksEnabled !== false,
           cockpitEnabled: prefs.cockpitEnabled === true,
-          dailyQuoteEnabled: prefs.dailyQuoteEnabled === true,
+          deepseekEnabled: prefs.deepseekEnabled === true,
           lyricBounce: prefs.lyricBounce !== false,
           orbitGlow: prefs.orbitGlow !== false,
           barsEnabled: prefs.barsEnabled !== false,
@@ -148,7 +143,7 @@ function IslandApp() {
         musicEnabled: next.musicEnabled ?? current.musicEnabled,
         tasksEnabled: next.tasksEnabled ?? current.tasksEnabled,
         cockpitEnabled: next.cockpitEnabled ?? current.cockpitEnabled,
-        dailyQuoteEnabled: next.dailyQuoteEnabled ?? current.dailyQuoteEnabled,
+        deepseekEnabled: next.deepseekEnabled ?? current.deepseekEnabled,
         lyricBounce: next.lyricBounce ?? current.lyricBounce,
         orbitGlow: next.orbitGlow ?? current.orbitGlow,
         barsEnabled: next.barsEnabled ?? current.barsEnabled,
@@ -200,14 +195,11 @@ function IslandApp() {
   }, []);
 
   useEffect(() => {
-    if (!state.dailyQuoteEnabled) {
-      setQuotePhase('idle');
-      return;
-    }
-    void window.electronAPI?.getDailyQuote?.().then((data: unknown) => {
-      if (data) setQuote(data as { hitokoto: string; from: string });
+    if (!state.deepseekEnabled) return;
+    void window.electronAPI?.getDeepseekBalance?.().then((data: unknown) => {
+      if (data) setDeepseek(data as { currency: string; balance: number | null; available: boolean });
     });
-  }, [state.dailyQuoteEnabled]);
+  }, [state.deepseekEnabled]);
 
   const lyrics = useMemo(() => parseLyrics(music.lyrics), [music.lyrics]);
   const anchor = positionAnchorRef.current;
@@ -284,76 +276,7 @@ function IslandApp() {
   const mini = state.displayState === 'mini';
   const showMusic = state.musicEnabled && music.available;
   const showCockpit = state.cockpitEnabled && !showMusic;
-  const quoteActive = state.dailyQuoteEnabled && quote && (quotePhase === 'typing' || quotePhase === 'scrolling');
-
-  useEffect(() => {
-    if (!state.dailyQuoteEnabled || showMusic || showCockpit || !quote) {
-      setQuotePhase('idle');
-      return;
-    }
-    const first = window.setTimeout(() => setQuotePhase('typing'), 1200);
-    return () => window.clearTimeout(first);
-  }, [state.dailyQuoteEnabled, showMusic, showCockpit, !!quote]);
-
-  useEffect(() => {
-    if (quotePhase !== 'typing' || !quote) return;
-    const full = `${quote.hitokoto} —— ${quote.from}`;
-    setTypedQuote('');
-    let index = 0;
-    const timer = window.setInterval(() => {
-      index += 1;
-      setTypedQuote(full.slice(0, index));
-      if (index >= full.length) {
-        window.clearInterval(timer);
-        window.setTimeout(() => {
-          hasDisplayedRef.current = true;
-          setQuotePhase('scrolling');
-        }, 300);
-      }
-    }, 110);
-    return () => window.clearInterval(timer);
-  }, [quotePhase, quote]);
-
-  useEffect(() => {
-    if (quotePhase !== 'scrolling') return;
-    let duration = 0;
-    const element = quoteScrollRef.current;
-    if (element) {
-      const shift = Math.max(0, element.scrollWidth - element.clientWidth);
-      if (shift > 2) {
-        duration = Math.max(1500, Math.min(6000, Math.round(shift * 0.02)));
-        element.style.setProperty('--quote-shift', `-${shift}px`);
-        element.style.setProperty('--quote-duration', `${duration}ms`);
-        element.classList.add('reveal');
-      } else {
-        element.classList.remove('reveal');
-      }
-    }
-    const timer = window.setTimeout(() => setQuotePhase('idle'), duration + 300);
-    return () => window.clearTimeout(timer);
-  }, [quotePhase]);
-
-  useEffect(() => {
-    if (quotePhase !== 'idle' || !quote || !hasDisplayedRef.current) return;
-    hasDisplayedRef.current = false;
-    quoteDisplayCountRef.current += 1;
-    if (quoteDisplayCountRef.current >= 2) {
-      quoteDisplayCountRef.current = 0;
-      void window.electronAPI?.refreshDailyQuote?.().then((data: unknown) => {
-        if (data) setQuote(data as { hitokoto: string; from: string });
-      });
-    }
-    const timer = window.setTimeout(() => {
-      setTypedQuote('');
-      setQuotePhase('typing');
-    }, 5000);
-    return () => window.clearTimeout(timer);
-  }, [quotePhase, quote]);
-
-  const copyQuote = () => {
-    if (!quote) return;
-    void window.electronAPI?.copyText?.(quote.hitokoto);
-  };
+  const showDeepseek = state.deepseekEnabled && !showMusic && !showCockpit;
   const rootClass = [
     'island-root',
     state.style,
@@ -463,18 +386,9 @@ function IslandApp() {
             <span>GPU {formatMetric(cockpit.gpu?.usage)} {formatMetric(cockpit.gpu?.temperature, '°C')}</span>
             <span>内存 {formatMetric(cockpit.memory?.usage)} {formatMetric(cockpit.memory?.temperature, '°C')}</span>
           </div>
-        ) : quoteActive ? (
-          <div className="island-quote-mini" onDoubleClick={(e) => { e.stopPropagation(); copyQuote(); }}>
-            {quotePhase === 'scrolling' ? (
-              <div className="island-quote-scroll" ref={quoteScrollRef}>
-                <span>{quote?.hitokoto} —— {quote?.from}</span>
-              </div>
-            ) : (
-              <span className="island-quote-typing">
-                {typedQuote}
-                <span className="island-quote-caret" />
-              </span>
-            )}
+        ) : showDeepseek ? (
+          <div className="island-deepseek-mini">
+            <span>DeepSeek {deepseek && deepseek.balance != null ? `${deepseek.balance} ${deepseek.currency}` : '?'}</span>
           </div>
         ) : (
           <>
@@ -556,11 +470,15 @@ function IslandApp() {
               ))}
             </div>
           </div>
-        ) : state.dailyQuoteEnabled && quote ? (
-          <div className="island-quote-panel" onDoubleClick={(e) => { e.stopPropagation(); copyQuote(); }}>
-            <div className="island-panel-title">每日一言</div>
-            <div className="island-quote-text island-quote-type">{quote.hitokoto}</div>
-            {quote.from ? <div className="island-quote-source island-quote-type delayed">—— {quote.from}</div> : null}
+        ) : showDeepseek ? (
+          <div className="island-deepseek-panel">
+            <div className="island-panel-title">DeepSeek 余额</div>
+            <div className="island-deepseek-balance">
+              {deepseek && deepseek.balance != null ? `${deepseek.balance} ${deepseek.currency}` : '?'}
+            </div>
+            <div className="island-deepseek-status">
+              {deepseek ? (deepseek.available ? '可用' : '不可用') : '获取中...'}
+            </div>
           </div>
         ) : (
           <>
