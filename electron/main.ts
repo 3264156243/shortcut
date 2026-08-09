@@ -53,6 +53,7 @@ let latestMusicState: any = null;
 let reminderWindows = new Map<string, any>();
 let reminderDataByWindow = new Map<number, any>();
 let taskListWindow: any = null;
+let deepseekBallWindow: any = null;
 let taskListHidden = false;
 let currentDragTask: { boardId: string; taskId: string } | null = null;
 let licenseGatePassed = false;
@@ -370,6 +371,7 @@ function createIslandWindow() {
     if (islandProgrammaticMove || Date.now() < islandProgrammaticMoveUntil) return;
     const [x, y] = islandWindow.getPosition();
     writeIslandConfig({ position: 'custom', x, y });
+    positionDeepseekBall();
   });
 }
 
@@ -875,6 +877,75 @@ function destroyTaskListWindow() {
     taskListWindow.destroy();
   }
   taskListWindow = null;
+}
+
+function deepseekBallBounds() {
+  const islandBounds = islandWindow && !islandWindow.isDestroyed() ? islandWindow.getBounds() : null;
+  return {
+    x: islandBounds ? islandBounds.x + islandBounds.width + 8 : 120,
+    y: islandBounds ? islandBounds.y + 4 : 120,
+    width: 90,
+    height: 48,
+  };
+}
+
+function positionDeepseekBall() {
+  if (!deepseekBallWindow || deepseekBallWindow.isDestroyed()) return;
+  const bounds = deepseekBallBounds();
+  deepseekBallWindow.setBounds(bounds);
+}
+
+function createDeepseekBall() {
+  if (deepseekBallWindow && !deepseekBallWindow.isDestroyed()) {
+    positionDeepseekBall();
+    return;
+  }
+  const bounds = deepseekBallBounds();
+  deepseekBallWindow = new BrowserWindow({
+    ...bounds,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    resizable: false,
+    movable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    focusable: false,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+    },
+  });
+  deepseekBallWindow.setAlwaysOnTop(true, 'screen-saver');
+  if (process.env.VITE_DEV_SERVER_URL) {
+    deepseekBallWindow.loadURL(process.env.VITE_DEV_SERVER_URL + '/deepseekball.html');
+  } else {
+    deepseekBallWindow.loadFile(path.join(__dirname, '../dist/deepseekball.html'));
+  }
+  deepseekBallWindow.once('ready-to-show', () => {
+    if (deepseekBallWindow && !deepseekBallWindow.isDestroyed()) deepseekBallWindow.showInactive();
+  });
+  deepseekBallWindow.on('closed', () => { deepseekBallWindow = null; });
+}
+
+function destroyDeepseekBall(animate = false) {
+  if (!deepseekBallWindow || deepseekBallWindow.isDestroyed()) {
+    deepseekBallWindow = null;
+    return;
+  }
+  const win = deepseekBallWindow;
+  if (animate) {
+    try { win.webContents.send('deepseek:merge'); } catch {}
+    setTimeout(() => {
+      if (win && !win.isDestroyed()) win.destroy();
+    }, 350);
+  } else {
+    win.destroy();
+  }
 }
 
 function createReminderWindow(boardId: string, taskId: string) {
@@ -1485,10 +1556,14 @@ ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position
       } else if (licenseGatePassed && resolveTaskList().length > 0 && !taskListHidden) {
         createTaskListWindow();
       }
+      if (!island.deepseekEnabled) {
+        destroyDeepseekBall(false);
+      }
     } else {
       islandUserHidden = true;
       islandCockpitActive = false;
       syncHardwareMonitor();
+      destroyDeepseekBall(false);
       stopMusicBridge();
       if (islandWindow && !islandWindow.isDestroyed()) islandWindow.hide();
     }
@@ -1571,6 +1646,20 @@ ipcMain.handle('island:deepseek:setKey', (_e: any, key: string) => {
   }, null, 2));
   latestDeepseek = null;
   return { success: true };
+});
+ipcMain.handle('island:deepseek:musicPlaying', (_e: any, playing: boolean) => {
+  const cfg = readConfigObject();
+  const enabled = cfg?.island?.deepseekEnabled === true;
+  if (playing && enabled && licenseGatePassed) {
+    createDeepseekBall();
+  } else {
+    destroyDeepseekBall(true);
+  }
+  return true;
+});
+ipcMain.handle('island:deepseek:open', () => {
+  void shell.openExternal('https://platform.deepseek.com');
+  return true;
 });
 ipcMain.handle('clipboard:write', (_e: any, text: string) => {
   clipboard.writeText(String(text || ''));
@@ -1907,6 +1996,7 @@ ipcMain.handle('tasklist:remove', (_e: any, boardId: string, taskId: string) => 
   saveTaskList(list);
   if (list.length === 0) {
     destroyTaskListWindow();
+    destroyDeepseekBall(false);
   } else {
     sendTaskListData();
   }

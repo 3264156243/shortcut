@@ -108,6 +108,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getIslandCockpitState: () => ipcRenderer.invoke('island:cockpit:state'),
   getDeepseekBalance: () => ipcRenderer.invoke('island:deepseek:get'),
   setDeepseekKey: (key: string) => ipcRenderer.invoke('island:deepseek:setKey', key),
+  setDeepseekMusicPlaying: (playing: boolean) => ipcRenderer.invoke('island:deepseek:musicPlaying', playing),
+  openDeepseekPlatform: () => ipcRenderer.invoke('island:deepseek:open'),
+  onDeepseekMerge: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('deepseek:merge', handler);
+    return () => ipcRenderer.removeListener('deepseek:merge', handler);
+  },
   copyText: (text: string) => ipcRenderer.invoke('clipboard:write', text),
   controlMusic: (action: string) => ipcRenderer.invoke('island:music:control', action),
   seekMusic: (ms: number) => ipcRenderer.invoke('island:music:seek', ms),

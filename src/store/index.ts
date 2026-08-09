@@ -160,6 +160,9 @@ declare global {
       getIslandCockpitState: () => Promise<unknown>;
       getDeepseekBalance: () => Promise<unknown>;
       setDeepseekKey: (key: string) => Promise<{ success: boolean; error?: string }>;
+      setDeepseekMusicPlaying: (playing: boolean) => Promise<unknown>;
+      openDeepseekPlatform: () => Promise<unknown>;
+      onDeepseekMerge: (callback: () => void) => () => void;
       copyText: (text: string) => Promise<unknown>;
       controlMusic: (action: string) => Promise<unknown>;
       seekMusic: (ms: number) => Promise<unknown>;

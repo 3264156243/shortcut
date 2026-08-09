@@ -18,6 +18,7 @@ export default defineConfig({
         island: 'island.html',
         reminder: 'reminder.html',
         tasklist: 'tasklist.html',
+        deepseekball: 'deepseekball.html',
       },
     },
   },

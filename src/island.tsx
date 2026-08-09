@@ -290,6 +290,10 @@ function IslandApp() {
   const showMusic = state.musicEnabled && music.available;
   const showCockpit = state.cockpitEnabled && !showMusic;
   const showDeepseek = state.deepseekEnabled && !showMusic && !showCockpit;
+
+  useEffect(() => {
+    void window.electronAPI?.setDeepseekMusicPlaying?.(showMusic && state.deepseekEnabled);
+  }, [showMusic, state.deepseekEnabled]);
   const rootClass = [
     'island-root',
     state.style,
@@ -400,7 +404,7 @@ function IslandApp() {
             <span>内存 {formatMetric(cockpit.memory?.usage)} {formatMetric(cockpit.memory?.temperature, '°C')}</span>
           </div>
         ) : showDeepseek ? (
-          <div className="island-deepseek-mini">
+          <div className="island-deepseek-mini" onClick={() => void window.electronAPI?.openDeepseekPlatform?.()} title="打开 DeepSeek 平台">
             <span>DeepSeek {deepseek && deepseek.configured === false ? '未配置' : deepseek && deepseek.balance != null ? `${deepseek.balance} ${deepseek.currency}` : '?'}</span>
           </div>
         ) : (
@@ -484,7 +488,7 @@ function IslandApp() {
             </div>
           </div>
         ) : showDeepseek ? (
-          <div className="island-deepseek-panel">
+          <div className="island-deepseek-panel" onClick={() => void window.electronAPI?.openDeepseekPlatform?.()} title="打开 DeepSeek 平台">
             <div className="island-panel-title">DeepSeek 余额</div>
             <div className="island-deepseek-balance">
               {deepseek && deepseek.configured === false ? '未配置' : deepseek && deepseek.balance != null ? `${deepseek.balance} ${deepseek.currency}` : '?'}

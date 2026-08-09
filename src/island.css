@@ -154,7 +154,9 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
   color: rgba(255,255,255,.92);
   font-variant-numeric: tabular-nums;
 }
+.island-deepseek-mini { cursor: pointer; }
 .island-deepseek-panel { width: 100%; }
+.island-deepseek-panel { cursor: pointer; }
 .island-deepseek-balance {
   margin-top: 10px;
   font-size: 30px;
