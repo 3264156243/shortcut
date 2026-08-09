@@ -30,19 +30,20 @@ $loggedIn = !empty($_SESSION['admin']);
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; font-family: "Microsoft YaHei UI", system-ui, sans-serif; background: #10141c; color: #e6e9ef; }
-    .wrap { max-width: 920px; margin: 40px auto; padding: 0 16px; }
+    .wrap { max-width: 960px; margin: 40px auto; padding: 0 16px; }
     h1 { font-size: 20px; }
     .card { background: #181e2a; border: 1px solid #2a3348; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
     label { display: block; font-size: 13px; color: #9aa5b5; margin-bottom: 6px; }
-    input, button { padding: 8px 10px; border-radius: 8px; border: 1px solid #2a3348; background: #121722; color: #e6e9ef; font-size: 14px; }
+    input, button { padding: 8px 10px; border-radius: 8px; border: 1px solid #2a3348; background: #121722; color: #e6e9ef; font-size: 14px; pointer-events: auto !important; }
     input:focus { outline: none; border-color: #5b86e5; }
     button { cursor: pointer; background: #5b86e5; border-color: #5b86e5; }
     button.secondary { background: #232b3a; border-color: #2a3348; }
     button.danger { background: #c0392b; border-color: #c0392b; }
     .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
     .grow { flex: 1; min-width: 180px; }
-    .login { max-width: 360px; margin: 80px auto; }
+    .login { max-width: 360px; margin: 80px auto; position: relative; z-index: 1; }
     .login h1 { text-align: center; }
+    .login form { position: relative; z-index: 2; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #222b3d; word-break: break-all; }
     th { color: #9aa5b5; font-weight: 500; }
@@ -52,7 +53,13 @@ $loggedIn = !empty($_SESSION['admin']);
     #message { margin-bottom: 12px; font-size: 13px; }
     .actions { display: flex; gap: 6px; }
     .actions button { padding: 5px 8px; font-size: 12px; }
-    .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 10px; }
+    .modal-mask { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 1000; align-items: center; justify-content: center; }
+    .modal-mask.show { display: flex; }
+    .modal { width: 360px; max-width: 90vw; background: #181e2a; border: 1px solid #2a3348; border-radius: 12px; padding: 18px; }
+    .modal p { font-size: 14px; margin: 0 0 16px; word-break: break-all; }
+    .modal .actions { justify-content: flex-end; }
+    .modal button { min-width: 76px; }
   </style>
 </head>
 <body>
@@ -63,9 +70,9 @@ $loggedIn = !empty($_SESSION['admin']);
       <?php if (!empty($loginError)): ?>
         <div id="message" class="bad"><?php echo htmlspecialchars($loginError); ?></div>
       <?php endif; ?>
-      <form method="post">
+      <form id="loginForm" method="post">
         <label>管理员密码</label>
-        <input type="password" name="adminPassword" style="width:100%" autocomplete="current-password" required />
+        <input type="password" id="adminPassword" name="adminPassword" style="width:100%" autocomplete="current-password" required />
         <button type="submit" style="width:100%; margin-top:12px">登录</button>
       </form>
     </div>
@@ -74,7 +81,10 @@ $loggedIn = !empty($_SESSION['admin']);
   <div class="wrap">
     <div class="topbar">
       <h1>ShortCut 激活码管理</h1>
-      <a href="index.php?logout=1" style="color:#9aa5b5; font-size:13px;">退出登录</a>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <button onclick="refresh()">刷新列表</button>
+        <a href="index.php?logout=1" style="color:#9aa5b5; font-size:13px;">退出登录</a>
+      </div>
     </div>
     <div id="message" class="muted"></div>
     <div class="card">
@@ -103,7 +113,18 @@ $loggedIn = !empty($_SESSION['admin']);
       </table>
     </div>
   </div>
+  <div class="modal-mask" id="confirmMask">
+    <div class="modal">
+      <p id="confirmText"></p>
+      <div class="actions">
+        <button class="secondary" onclick="closeConfirm()">取消</button>
+        <button class="danger" id="confirmOk">确认</button>
+      </div>
+    </div>
+  </div>
   <script>
+    let confirmHandler = null;
+
     async function api(payload) {
       const response = await fetch('api.php', {
         method: 'POST',
@@ -112,11 +133,33 @@ $loggedIn = !empty($_SESSION['admin']);
       });
       return response.json();
     }
+
     function showMessage(text, ok) {
       const el = document.getElementById('message');
       el.textContent = text;
       el.className = ok ? 'ok' : 'bad';
     }
+
+    function askConfirm(text, onOk) {
+      document.getElementById('confirmText').textContent = text;
+      confirmHandler = onOk;
+      document.getElementById('confirmMask').classList.add('show');
+    }
+
+    function closeConfirm() {
+      document.getElementById('confirmMask').classList.remove('show');
+      confirmHandler = null;
+    }
+
+    document.getElementById('confirmOk').addEventListener('click', () => {
+      const handler = confirmHandler;
+      closeConfirm();
+      if (handler) handler();
+    });
+    document.getElementById('confirmMask').addEventListener('click', (event) => {
+      if (event.target.id === 'confirmMask') closeConfirm();
+    });
+
     async function refresh() {
       const result = await api({ action: 'list' });
       if (!result.success) {
@@ -134,6 +177,9 @@ $loggedIn = !empty($_SESSION['admin']);
         const actionButton = item.status === 'active'
           ? '<button class="secondary" onclick="setStatus(\'' + item.code + '\', \'disable\')">禁用</button>'
           : '<button class="secondary" onclick="setStatus(\'' + item.code + '\', \'enable\')">启用</button>';
+        const unbindButton = item.machine
+          ? '<button class="secondary" onclick="unbind(\'' + item.code + '\')">解除绑定</button>'
+          : '';
         tr.innerHTML =
           '<td>' + item.code + '</td>' +
           '<td class="' + statusClass + '">' + item.status + '</td>' +
@@ -141,11 +187,12 @@ $loggedIn = !empty($_SESSION['admin']);
           '<td>' + new Date(item.created_at).toLocaleString('zh-CN') + '</td>' +
           '<td>' + new Date(item.expires_at).toLocaleString('zh-CN') + '</td>' +
           '<td>' + lastCheck + '</td>' +
-          '<td><div class="actions">' + actionButton +
+          '<td><div class="actions">' + actionButton + unbindButton +
           '<button class="danger" onclick="removeCode(\'' + item.code + '\')">删除</button></div></td>';
         rows.appendChild(tr);
       }
     }
+
     async function generate() {
       const result = await api({
         action: 'generate',
@@ -158,17 +205,21 @@ $loggedIn = !empty($_SESSION['admin']);
         showMessage(result.message || '生成失败', false);
       }
     }
+
     async function setStatus(code, action) {
       const result = await api({ action, code });
-      showMessage(result.message || (action === 'disable' ? '禁用失败' : '启用失败'), result.success);
+      showMessage(result.message || '操作失败', result.success);
       if (result.success) await refresh();
     }
-    async function removeCode(code) {
-      if (!confirm('确定删除激活码 ' + code + ' 吗？')) return;
-      const result = await api({ action: 'delete', code });
-      showMessage(result.message || '删除失败', result.success);
-      if (result.success) await refresh();
+
+    function unbind(code) {
+      askConfirm('确定解除激活码 ' + code + ' 的绑定吗？', () => void setStatus(code, 'unbind'));
     }
+
+    function removeCode(code) {
+      askConfirm('确定删除激活码 ' + code + ' 吗？', () => void setStatus(code, 'delete'));
+    }
+
     refresh();
   </script>
 <?php endif; ?>

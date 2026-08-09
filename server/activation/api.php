@@ -140,6 +140,20 @@ switch ($action) {
         respond(['success' => false, 'message' => '激活码不存在']);
         break;
 
+    case 'unbind':
+        require_admin();
+        $code = isset($input['code']) ? strtoupper(trim($input['code'])) : '';
+        $codes = load_codes();
+        foreach ($codes as $index => $record) {
+            if (strtoupper(trim($record['code'])) === $code) {
+                $codes[$index]['machine'] = null;
+                save_codes($codes);
+                respond(['success' => true, 'message' => '已解除绑定']);
+            }
+        }
+        respond(['success' => false, 'message' => '激活码不存在']);
+        break;
+
     case 'delete':
         require_admin();
         $code = isset($input['code']) ? strtoupper(trim($input['code'])) : '';

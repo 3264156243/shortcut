@@ -1,6 +1,6 @@
 <?php
 
-$ADMIN_PASSWORD = 'ShortCutAdmin2026';
+$ADMIN_PASSWORD = '791214';
 $DATA_DIR = __DIR__ . '/data';
 $DATA_FILE = $DATA_DIR . '/codes.json';
 
