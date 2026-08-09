@@ -23,6 +23,19 @@ const nodeCrypto = require('crypto');
 
 const APP_USER_MODEL_ID = 'com.wanan.shortcut';
 
+function registerShortcut(accelerator: string, name: string, callback: () => void): boolean {
+  const ok = globalShortcut.register(accelerator, callback);
+  if (!ok) {
+    console.error(`Failed to register ${name} (${accelerator})`);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      try {
+        mainWindow.webContents.send('shortcut:failed', { accelerator, name });
+      } catch {}
+    }
+  }
+  return ok;
+}
+
 process.on('uncaughtException', (error) => {
   console.error('Uncaught exception:', error);
 });
@@ -2334,23 +2347,22 @@ if (!gotSingleInstanceLock) {
   if (!islandHotkey) {
     console.error('Failed to register Alt+I hotkey');
   }
-  const musicPrevHotkey = globalShortcut.register('Alt+Z', () => {
-    void runMusicBridgeCommand(['-Control', 'prev']);
-  });
-  if (!musicPrevHotkey) {
-    console.error('Failed to register Alt+Z hotkey');
-  }
-  const musicToggleHotkey = globalShortcut.register('Alt+X', () => {
-    void runMusicBridgeCommand(['-Control', 'toggle']);
-  });
-  if (!musicToggleHotkey) {
-    console.error('Failed to register Alt+X hotkey');
-  }
-  const musicNextHotkey = globalShortcut.register('Alt+C', () => {
-    void runMusicBridgeCommand(['-Control', 'next']);
-  });
-  if (!musicNextHotkey) {
-    console.error('Failed to register Alt+C hotkey');
+  const musicHotkeys = [
+    { accelerator: 'Alt+Z', name: '音乐上一首', action: 'prev' },
+    { accelerator: 'Alt+X', name: '音乐播放暂停', action: 'toggle' },
+    { accelerator: 'Alt+C', name: '音乐下一首', action: 'next' },
+  ];
+  for (const item of musicHotkeys) {
+    const ok = registerShortcut(item.accelerator, item.name, () => {
+      void runMusicBridgeCommand(['-Control', item.action]);
+    });
+    if (!ok) {
+      setTimeout(() => {
+        registerShortcut(item.accelerator, item.name, () => {
+          void runMusicBridgeCommand(['-Control', item.action]);
+        });
+      }, 1500);
+    }
   }
   const taskListHotkey = globalShortcut.register('Alt+U', () => {
     taskListHidden = !taskListHidden;

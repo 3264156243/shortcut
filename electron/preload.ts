@@ -88,6 +88,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('update:state', handler);
     return () => ipcRenderer.removeListener('update:state', handler);
   },
+  onShortcutFailed: (callback: (data: unknown) => void) => {
+    const handler = (_event: unknown, data: unknown) => callback(data);
+    ipcRenderer.on('shortcut:failed', handler);
+    return () => ipcRenderer.removeListener('shortcut:failed', handler);
+  },
 
   // Dynamic island
   getIslandState: () => ipcRenderer.invoke('island:getState'),

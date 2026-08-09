@@ -282,6 +282,14 @@ export default function App() {
     });
     return unsubscribe;
   }, [api]);
+  useEffect(() => {
+    if (!api?.onShortcutFailed) return;
+    const unsubscribe = api.onShortcutFailed((data) => {
+      const info = data as { accelerator?: string; name?: string };
+      addToast(`${info.name || '快捷键'} ${info.accelerator || ''} 注册失败，可能被其他软件占用`, 'error');
+    });
+    return unsubscribe;
+  }, [api, addToast]);
   // Check initial maximized state
   useEffect(() => {
     if (api?.isMaximized) {

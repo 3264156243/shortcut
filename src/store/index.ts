@@ -145,6 +145,7 @@ declare global {
       getUpdateState: () => Promise<UpdateState>;
       installUpdate: () => Promise<boolean>;
       onUpdateState: (callback: (state: UpdateState) => void) => () => void;
+      onShortcutFailed: (callback: (data: unknown) => void) => () => void;
       getTheme: () => Promise<'dark' | 'light'>;
       getIslandState: () => Promise<{ enabled: boolean; style: string; position: string; autoHideFullscreen: boolean; musicEnabled?: boolean }>;
       setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string, orbitGlow: boolean, barsEnabled: boolean, tasksEnabled: boolean, cockpitEnabled: boolean, deepseekEnabled: boolean) => Promise<{ success: boolean; error?: string }>;
