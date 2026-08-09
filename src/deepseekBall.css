@@ -7,19 +7,22 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  height: 56px;
+  width: 46px;
+  height: 46px;
   min-width: 0;
   padding: 0;
   border-radius: 50%;
   background: rgba(18,20,26,.94);
   border: 1px solid rgba(255,255,255,.16);
   color: #fff;
-  font-size: 17px;
+  font-size: 14px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  box-shadow: 0 10px 30px rgba(0,0,0,.35);
+  box-shadow: none;
   transition: opacity .3s, transform .3s cubic-bezier(.22,1,.36,1);
+}
+.deepseek-ball-root.expand {
+  animation: deepseek-ball-in .35s cubic-bezier(.22,1,.36,1);
 }
 .deepseek-ball-root.glass {
   background: rgba(255,255,255,.16);
@@ -30,10 +33,14 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
   background: #f5f0e8;
   border-color: #d6c9b8;
   color: #4a3b2c;
-  box-shadow: 4px 5px 0 rgba(151,124,88,.22);
+  box-shadow: none;
 }
 .deepseek-ball-root.merge {
   opacity: 0;
-  transform: scale(.2) translateX(-8px);
+  transform: scale(.15) translateX(-46px);
   pointer-events: none;
+}
+@keyframes deepseek-ball-in {
+  from { transform: scale(.15) translateX(-46px); opacity: 0; }
+  to { transform: scale(1) translateX(0); opacity: 1; }
 }

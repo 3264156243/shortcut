@@ -885,8 +885,8 @@ function deepseekBallBounds() {
   return {
     x: islandBounds ? islandBounds.x + islandBounds.width + 8 : 120,
     y: islandBounds ? islandBounds.y + 8 : 120,
-    width: 64,
-    height: 64,
+    width: 46,
+    height: 46,
   };
 }
 
@@ -901,9 +901,15 @@ function createDeepseekBall() {
     positionDeepseekBall();
     return;
   }
-  const bounds = deepseekBallBounds();
+  const islandBounds = islandWindow && !islandWindow.isDestroyed() ? islandWindow.getBounds() : null;
+  const startBounds = {
+    x: islandBounds ? islandBounds.x + Math.round((islandBounds.width - 46) / 2) : 120,
+    y: islandBounds ? islandBounds.y + 8 : 120,
+    width: 46,
+    height: 46,
+  };
   deepseekBallWindow = new BrowserWindow({
-    ...bounds,
+    ...startBounds,
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
@@ -928,7 +934,11 @@ function createDeepseekBall() {
     deepseekBallWindow.loadFile(path.join(__dirname, '../dist/deepseekball.html'));
   }
   deepseekBallWindow.once('ready-to-show', () => {
-    if (deepseekBallWindow && !deepseekBallWindow.isDestroyed()) deepseekBallWindow.showInactive();
+    if (deepseekBallWindow && !deepseekBallWindow.isDestroyed()) {
+      deepseekBallWindow.setBounds(startBounds);
+      deepseekBallWindow.showInactive();
+      setTimeout(() => positionDeepseekBall(), 40);
+    }
   });
   deepseekBallWindow.on('closed', () => { deepseekBallWindow = null; });
 }

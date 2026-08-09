@@ -42,7 +42,7 @@ function DeepseekBall() {
   };
 
   return (
-    <div className={['deepseek-ball-root', style].join(' ')} onClick={openPlatform} title="打开 DeepSeek 平台">
+    <div className={['deepseek-ball-root', style, 'expand'].join(' ')} onClick={openPlatform} title="打开 DeepSeek 平台">
       {balance}
     </div>
   );
