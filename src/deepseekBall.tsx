@@ -4,13 +4,21 @@ import './deepseekBall.css';
 
 function DeepseekBall() {
   const [balance, setBalance] = useState<string>('?');
+  const [style, setStyle] = useState('capsule');
 
   useEffect(() => {
+    void window.electronAPI?.readConfig?.().then((raw) => {
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw);
+        setStyle(parsed?.island?.style || 'capsule');
+      } catch {}
+    });
     const fetchBalance = () => {
       void window.electronAPI?.getDeepseekBalance?.().then((data: unknown) => {
         const value = data as { balance?: number | null; configured?: boolean; error?: string };
         if (value && value.balance != null) {
-          setBalance(String(value.balance));
+          setBalance(String(Math.round(Number(value.balance))));
         } else if (value?.configured === false || value?.error) {
           setBalance('未配置');
         } else {
@@ -34,7 +42,7 @@ function DeepseekBall() {
   };
 
   return (
-    <div className="deepseek-ball-root" onClick={openPlatform} title="打开 DeepSeek 平台">
+    <div className={['deepseek-ball-root', style].join(' ')} onClick={openPlatform} title="打开 DeepSeek 平台">
       {balance}
     </div>
   );

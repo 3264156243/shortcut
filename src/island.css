@@ -32,6 +32,9 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
   border-radius: 24px;
   box-shadow: 0 24px 70px rgba(0,0,0,.55);
 }
+.island-root.music-width .island-shell {
+  width: 336px;
+}
 .island-root.mini .island-shell {
   width: 78px;
   height: 78px;

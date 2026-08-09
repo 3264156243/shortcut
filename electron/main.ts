@@ -366,6 +366,7 @@ function createIslandWindow() {
   islandCockpitActive = prefs.cockpitEnabled === true;
   syncHardwareMonitor();
   islandWindow.on('closed', () => { islandWindow = null; });
+  islandWindow.on('move', () => positionDeepseekBall());
   islandWindow.on('moved', () => {
     if (!islandWindow || islandWindow.isDestroyed()) return;
     if (islandProgrammaticMove || Date.now() < islandProgrammaticMoveUntil) return;
@@ -883,9 +884,9 @@ function deepseekBallBounds() {
   const islandBounds = islandWindow && !islandWindow.isDestroyed() ? islandWindow.getBounds() : null;
   return {
     x: islandBounds ? islandBounds.x + islandBounds.width + 8 : 120,
-    y: islandBounds ? islandBounds.y + 4 : 120,
-    width: 90,
-    height: 48,
+    y: islandBounds ? islandBounds.y + 8 : 120,
+    width: 64,
+    height: 64,
   };
 }
 

@@ -302,6 +302,7 @@ function IslandApp() {
     showMusic && state.displayState === 'collapsed' && state.orbitGlow ? 'orbit-glow' : '',
     showMusic && state.displayState === 'collapsed' && state.orbitGlow && !music.isPlaying ? 'orbit-paused' : '',
     showMusic && !music.isPlaying ? 'music-paused' : '',
+    showMusic && state.displayState === 'collapsed' ? 'music-width' : '',
   ].join(' ');
 
   return (
