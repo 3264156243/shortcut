@@ -19,9 +19,17 @@ function save_codes($codes) {
     if (!is_dir($DATA_DIR)) {
         mkdir($DATA_DIR, 0755, true);
     }
-    $tmp = $DATA_FILE . '.tmp';
-    file_put_contents($tmp, json_encode($codes, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-    rename($tmp, $DATA_FILE);
+    $tmp = $DATA_FILE . '.' . getmypid() . '.' . uniqid() . '.tmp';
+    $payload = json_encode($codes, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    if (file_put_contents($tmp, $payload, LOCK_EX) === false) {
+        @unlink($tmp);
+        return false;
+    }
+    if (!rename($tmp, $DATA_FILE)) {
+        @unlink($tmp);
+        return false;
+    }
+    return true;
 }
 
 function generate_code() {

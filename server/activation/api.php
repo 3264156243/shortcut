@@ -1,5 +1,8 @@
 <?php
 
+error_reporting(0);
+ini_set('display_errors', '0');
+
 session_start();
 header('Content-Type: application/json; charset=utf-8');
 require __DIR__ . '/config.php';
@@ -93,7 +96,9 @@ switch ($action) {
         }
         $found['last_check_at'] = date('c');
         $codes[$foundIndex] = $found;
-        save_codes($codes);
+        if (!save_codes($codes)) {
+            respond(['success' => false, 'active' => false, 'message' => '激活记录保存失败']);
+        }
         respond([
             'success' => true,
             'active' => true,
