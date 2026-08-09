@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ShortCut — 快捷启动与桌面效率工具</title>
+<meta name="description" content="ShortCut 是一个集快捷启动、任务墙、翻译、驾驶舱和 SC球 灵动岛于一体的 Windows 桌面效率工具。集中管理常用软件、文件、文件夹和网页，通过键盘快速启动，并用任务墙记录待办、长文本和提醒事项。" />
+<style>
+  :root{
+    --bg:#0b0e14;
+    --bg-soft:#11151f;
+    --panel:#151a26;
+    --panel-2:#1b2130;
+    --line:#262d3f;
+    --text:#e6e9f2;
+    --muted:#9aa3b8;
+    --muted-2:#6b7488;
+    --accent:#4f8cff;
+    --accent-2:#7aa7ff;
+    --accent-soft:rgba(79,140,255,.14);
+    --accent-line:rgba(79,140,255,.45);
+    --good:#3dd68c;
+    --warn:#ffb454;
+    --radius:14px;
+    --shadow:0 18px 50px rgba(0,0,0,.45);
+    --maxw:1180px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    font-family:"Segoe UI",-apple-system,"Microsoft YaHei",system-ui,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    line-height:1.7;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+
+  /* ---------- 顶部导航 ---------- */
+  header.nav{
+    position:sticky;top:0;z-index:50;
+    backdrop-filter:blur(14px);
+    background:rgba(11,14,20,.72);
+    border-bottom:1px solid var(--line);
+  }
+  .nav-inner{display:flex;align-items:center;justify-content:space-between;height:62px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.5px}
+  .brand .logo{
+    width:30px;height:30px;border-radius:8px;
+    background:linear-gradient(135deg,var(--accent),#9b6bff);
+    display:grid;place-items:center;font-size:15px;color:#fff;font-weight:800;
+    box-shadow:0 6px 18px rgba(79,140,255,.4);
+  }
+  .nav-links{display:flex;gap:6px;align-items:center}
+  .nav-links a{
+    padding:8px 12px;border-radius:8px;color:var(--muted);font-size:14px;
+    transition:.18s;
+  }
+  .nav-links a:hover{color:var(--text);background:var(--panel)}
+  .nav-cta{
+    padding:8px 16px;border-radius:9px;background:var(--accent);color:#fff;font-weight:600;font-size:14px;
+    transition:.18s;
+  }
+  .nav-cta:hover{filter:brightness(1.08);transform:translateY(-1px)}
+  @media(max-width:880px){.nav-links{display:none}}
+
+  /* ---------- 通用按钮 ---------- */
+  .btn{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:13px 22px;border-radius:11px;font-weight:600;font-size:15px;
+    cursor:pointer;border:1px solid transparent;transition:.18s;
+  }
+  .btn.primary{background:var(--accent);color:#fff;box-shadow:0 10px 30px rgba(79,140,255,.35)}
+  .btn.primary:hover{filter:brightness(1.08);transform:translateY(-1px)}
+  .btn.ghost{background:var(--panel);border-color:var(--line);color:var(--text)}
+  .btn.ghost:hover{border-color:var(--accent-line);background:var(--panel-2)}
+
+  /* ---------- 章节通用 ---------- */
+  section{padding:88px 0;border-top:1px solid rgba(255,255,255,.03)}
+  .eyebrow{
+    color:var(--accent-2);font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+    display:inline-flex;align-items:center;gap:8px;margin-bottom:14px;
+  }
+  .eyebrow::before{content:"";width:22px;height:2px;background:var(--accent);border-radius:2px}
+  h2.title{font-size:34px;margin:0 0 14px;font-weight:800;letter-spacing:.5px}
+  h3.sub{font-size:21px;margin:0 0 10px;font-weight:700}
+  .lead{color:var(--muted);font-size:17px;max-width:680px}
+  .center{text-align:center}
+  .center .lead{margin-inline:auto}
+
+  /* ---------- 首屏 Hero ---------- */
+  .hero{position:relative;overflow:hidden;border-top:none;padding:120px 0 100px}
+  .hero::before{
+    content:"";position:absolute;inset:0;
+    background:
+      radial-gradient(700px 380px at 18% 0%,rgba(79,140,255,.20),transparent 60%),
+      radial-gradient(620px 360px at 85% 10%,rgba(155,107,255,.16),transparent 60%);
+    pointer-events:none;
+  }
+  .hero-grid{position:relative;z-index:1;display:grid;grid-template-columns:1.1fr .9fr;gap:56px;align-items:center}
+  @media(max-width:940px){.hero-grid{grid-template-columns:1fr;gap:40px}}
+  .hero h1{font-size:58px;line-height:1.08;margin:0 0 18px;font-weight:800;letter-spacing:1px}
+  .hero h1 .grad{
+    background:linear-gradient(120deg,var(--accent-2),#b89bff);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .hero p.lead{font-size:18px;margin-bottom:30px}
+  .hero-actions{display:flex;gap:14px;flex-wrap:wrap}
+  .hero-meta{margin-top:34px;display:flex;gap:26px;flex-wrap:wrap;color:var(--muted-2);font-size:13px}
+  .hero-meta b{color:var(--text);display:block;font-size:22px;font-weight:800;margin-bottom:2px}
+
+  /* 图片占位框（通用） */
+  .shot{
+    border:1px solid var(--line);border-radius:var(--radius);
+    background:
+      linear-gradient(var(--panel),var(--panel)) padding-box,
+      linear-gradient(135deg,rgba(79,140,255,.25),transparent 60%) border-box;
+    box-shadow:var(--shadow);
+    position:relative;overflow:hidden;
+    min-height:300px;display:grid;place-items:center;
+    background-color:var(--panel);
+  }
+  .shot .placeholder{
+    color:var(--muted-2);font-size:13px;text-align:center;padding:24px;
+  }
+  .shot .placeholder .ph-label{font-size:12px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:6px}
+  .shot::after{
+    content:"截图位置";position:absolute;top:12px;left:14px;font-size:11px;color:var(--muted-2);
+    background:rgba(0,0,0,.3);padding:3px 8px;border-radius:6px;letter-spacing:1px;
+  }
+  /* 使用方式：<div class="shot"><img src="..." alt="..."/></div> */
+
+  /* ---------- 产品简介 ---------- */
+  .intro-grid{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center}
+  @media(max-width:880px){.intro-grid{grid-template-columns:1fr}}
+  .intro-grid p{color:var(--muted);font-size:16px;margin:0 0 16px}
+
+  /* ---------- 核心功能 ---------- */
+  .feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:38px}
+  @media(max-width:880px){.feat-grid{grid-template-columns:1fr}}
+  .feat-card{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:24px 22px;transition:.2s;
+  }
+  .feat-card:hover{border-color:var(--accent-line);transform:translateY(-3px);box-shadow:var(--shadow)}
+  .feat-icon{
+    width:42px;height:42px;border-radius:11px;display:grid;place-items:center;margin-bottom:14px;
+    background:var(--accent-soft);color:var(--accent-2);font-size:20px;
+  }
+  .feat-card h3{font-size:17px;margin:0 0 8px}
+  .feat-card p{color:var(--muted);font-size:14px;margin:0}
+
+  /* ---------- 核心板块大区（快捷方式 / 任务墙） ---------- */
+  .core-block{
+    margin-top:40px;background:var(--bg-soft);border:1px solid var(--line);
+    border-radius:18px;padding:42px;display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;
+  }
+  @media(max-width:940px){.core-block{grid-template-columns:1fr;padding:28px}}
+  .core-block.reverse{direction:rtl}
+  .core-block.reverse>*{direction:ltr}
+  .core-block ul{list-style:none;padding:0;margin:18px 0 0;display:grid;gap:9px}
+  .core-block li{position:relative;padding-left:26px;color:var(--muted);font-size:14.5px}
+  .core-block li::before{
+    content:"";position:absolute;left:0;top:9px;width:8px;height:8px;border-radius:3px;
+    background:var(--accent);box-shadow:0 0 0 4px var(--accent-soft);
+  }
+  .badge{
+    display:inline-block;font-size:12px;font-weight:700;letter-spacing:1px;color:var(--accent-2);
+    background:var(--accent-soft);padding:4px 10px;border-radius:20px;margin-bottom:10px;text-transform:uppercase;
+  }
+
+  /* ---------- 快捷操作键位 ---------- */
+  .keys-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:38px}
+  @media(max-width:880px){.keys-grid{grid-template-columns:1fr}}
+  .key-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:24px 22px}
+  .key-card h3{font-size:16px;margin-bottom:16px;color:var(--accent-2)}
+  .key-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px dashed var(--line);font-size:14px}
+  .key-row:last-child{border-bottom:none}
+  .key-row .desc{color:var(--muted)}
+  kbd{
+    font-family:"Segoe UI",system-ui,sans-serif;font-size:12px;font-weight:600;
+    background:var(--panel-2);border:1px solid var(--line);border-bottom-width:2px;
+    border-radius:6px;padding:3px 9px;color:var(--text);white-space:nowrap;
+  }
+
+  /* ---------- 教程步骤 ---------- */
+  .steps{margin-top:38px;display:grid;gap:16px}
+  .step{
+    display:grid;grid-template-columns:54px 1fr;gap:20px;align-items:start;
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px 24px;
+  }
+  .step .num{
+    width:46px;height:46px;border-radius:12px;display:grid;place-items:center;
+    font-weight:800;font-size:18px;color:#fff;
+    background:linear-gradient(135deg,var(--accent),#7c5cff);
+  }
+  .step h3{font-size:17px;margin:2px 0 6px}
+  .step p{margin:0;color:var(--muted);font-size:14.5px}
+
+  /* ---------- 下载区 ---------- */
+  .download{
+    margin-top:40px;text-align:center;
+    background:linear-gradient(135deg,rgba(79,140,255,.10),rgba(124,92,255,.10));
+    border:1px solid var(--accent-line);border-radius:20px;padding:56px 32px;
+  }
+  .download h2{font-size:30px;margin:0 0 12px}
+  .download p.lead{margin:0 auto 28px}
+  .dl-tips{margin-top:26px;display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+  .dl-tip{font-size:13px;color:var(--muted);background:rgba(0,0,0,.2);border:1px solid var(--line);padding:8px 14px;border-radius:9px}
+
+  /* ---------- 更新记录 / 路线图 卡片 ---------- */
+  .cards-2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:38px}
+  @media(max-width:880px){.cards-2{grid-template-columns:1fr}}
+  .rel-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:26px}
+  .rel-card .ver{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .rel-card .ver .tag{font-size:12px;background:var(--accent-soft);color:var(--accent-2);padding:3px 10px;border-radius:20px;font-weight:700}
+  .rel-card .ver .when{color:var(--muted-2);font-size:13px}
+  .rel-card h3{font-size:18px;margin:0}
+  .rel-card ul{margin:0;padding-left:18px;color:var(--muted);font-size:14px;display:grid;gap:6px}
+
+  .roadmap-list{margin-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:680px){.roadmap-list{grid-template-columns:1fr}}
+  .road-item{display:flex;gap:12px;align-items:flex-start;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;font-size:14px;color:var(--muted)}
+  .road-item .dot{width:10px;height:10px;border-radius:50%;background:var(--warn);margin-top:6px;flex:none;box-shadow:0 0 0 4px rgba(255,180,84,.15)}
+
+  /* ---------- FAQ ---------- */
+  .faq{margin-top:38px;display:grid;gap:12px}
+  details.faq-item{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:4px 20px;transition:.2s}
+  details.faq-item[open]{border-color:var(--accent-line)}
+  details.faq-item summary{cursor:pointer;padding:16px 0;font-weight:600;font-size:15.5px;list-style:none;display:flex;justify-content:space-between;align-items:center}
+  details.faq-item summary::-webkit-details-marker{display:none}
+  details.faq-item summary::after{content:"+";color:var(--accent-2);font-size:20px;transition:.2s}
+  details.faq-item[open] summary::after{transform:rotate(45deg)}
+  details.faq-item p{margin:0 0 16px;color:var(--muted);font-size:14.5px}
+
+  /* ---------- 预留：未来板块 ---------- */
+  .future-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:38px}
+  @media(max-width:880px){.future-grid{grid-template-columns:1fr}}
+  .future-card{
+    border:1px dashed var(--line);border-radius:var(--radius);padding:30px 24px;text-align:center;
+    background:repeating-linear-gradient(45deg,transparent,transparent 14px,rgba(255,255,255,.015) 14px,rgba(255,255,255,.015) 28px);
+  }
+  .future-card .plus{
+    width:44px;height:44px;border-radius:12px;margin:0 auto 12px;display:grid;place-items:center;
+    border:1px dashed var(--accent-line);color:var(--accent-2);font-size:22px;
+  }
+  .future-card h3{font-size:15px;margin:0 0 6px;color:var(--muted)}
+  .future-card p{margin:0;font-size:13px;color:var(--muted-2)}
+
+  /* ---------- 仓库 / 页脚 ---------- */
+  .repo{text-align:center;padding-top:60px}
+  .repo .repo-link{
+    display:inline-flex;align-items:center;gap:12px;margin-top:18px;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 24px;
+    font-family:"Consolas",monospace;color:var(--accent-2);font-size:15px;transition:.2s;
+  }
+  .repo .repo-link:hover{border-color:var(--accent-line);transform:translateY(-2px)}
+  footer{border-top:1px solid var(--line);margin-top:80px;padding:34px 0;color:var(--muted-2);font-size:13px;text-align:center}
+  footer a{color:var(--muted)}
+
+  .pill-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .pill{font-size:12px;color:var(--muted);background:var(--bg-soft);border:1px solid var(--line);padding:4px 11px;border-radius:20px}
+</style>
+</head>
+<body>
+
+<!-- ===================== 顶部导航 ===================== -->
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top">
+      <span class="logo">S</span>
+      <span>ShortCut</span>
+    </a>
+    <nav class="nav-links">
+      <a href="#product">产品简介</a>
+      <a href="#features">核心功能</a>
+      <a href="#shortcut">快捷方式</a>
+      <a href="#taskwall">任务墙</a>
+      <a href="#scball">SC球</a>
+      <a href="#keys">快捷操作</a>
+      <a href="#tutorial">使用教程</a>
+      <a href="#download">下载</a>
+      <a href="#faq">常见问题</a>
+    </nav>
+    <a class="nav-cta" href="#download">下载 ShortCut</a>
+  </div>
+</header>
+
+<!-- ===================== 1. 首屏 ===================== -->
+<section class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="eyebrow">Windows 桌面效率工具</span>
+      <h1>集中启动，<span class="grad">一键直达</span><br/>SC球常驻，效率升级</h1>
+      <p class="lead">一个集快捷启动、任务墙、翻译、电脑驾驶舱和 SC球 灵动岛于一体的 Windows 桌面工具。集中管理常用软件、文件、文件夹和网页，通过键盘快速选择并启动；用可自由排列的任务墙记录待办、长文本和提醒事项。</p>
+      <div class="hero-actions">
+        <a class="btn primary" href="#download">⬇ 下载 ShortCut</a>
+        <a class="btn ghost" href="#features">查看功能</a>
+        <a class="btn ghost" href="https://gitee.com/wanan6/short-cut" target="_blank" rel="noopener">访问仓库</a>
+      </div>
+      <div class="hero-meta">
+        <div><b>2.4.0</b>当前版本</div>
+        <div><b>Windows</b>支持平台</div>
+        <div><b>本地保存</b>数据不上传</div>
+      </div>
+    </div>
+    <div>
+      <!-- 首屏主图：建议放软件主界面整体截图（含左侧导航 + 快捷方式/任务墙） -->
+      <div class="shot" style="min-height:360px">
+        <div class="placeholder">
+          <div class="ph-label">首屏主图</div>
+          放入 ShortCut 主界面整体截图<br/>（建议 1280×800 左右）
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 2. 产品简介 ===================== -->
+<section id="product">
+  <div class="wrap intro-grid">
+    <div>
+      <span class="eyebrow">产品简介</span>
+      <h2 class="title">从一个启动面板，长成桌面效率中枢</h2>
+      <p>ShortCut 最初是一个桌面快捷方式管理工具，用于减少在桌面、开始菜单和文件夹之间反复查找内容的时间。</p>
+      <p>随着功能扩展，ShortCut 已加入任务墙、长文本便签、待办提醒、翻译、电脑驾驶舱和 SC球 灵动岛，并将继续扩展更多实用工具板块。</p>
+      <p>用户可以通过左侧导航在不同板块之间切换，同时保留统一的窗口、主题和快捷操作体验；SC球 常驻桌面，可显示音乐、任务提醒、驾驶舱数据和 DeepSeek 余额。</p>
+      <div class="pill-row">
+        <span class="pill">快捷启动</span>
+        <span class="pill">任务墙</span>
+        <span class="pill">长文本便签</span>
+        <span class="pill">待办提醒</span>
+        <span class="pill">翻译</span>
+        <span class="pill">驾驶舱</span>
+        <span class="pill">SC球 灵动岛</span>
+        <span class="pill">DeepSeek 余额</span>
+        <span class="pill">自动更新</span>
+        <span class="pill">更多板块扩展中</span>
+      </div>
+    </div>
+    <div>
+      <!-- 产品简介配图：建议放软件左侧导航 + 板块切换示意 -->
+      <div class="shot" style="min-height:320px">
+        <div class="placeholder">
+          <div class="ph-label">产品简介配图</div>
+          放入左侧导航 / 板块切换截图
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 3. 核心功能 ===================== -->
+<section id="features">
+  <div class="wrap">
+    <div class="center">
+      <span class="eyebrow">核心功能</span>
+      <h2 class="title">十二项核心能力，覆盖日常桌面效率</h2>
+      <p class="lead">围绕「快速启动」与「任务管理」两条主线，提供从添加、整理到键盘操作的完整体验。</p>
+    </div>
+    <div class="feat-grid">
+      <div class="feat-card"><div class="feat-icon">⚡</div><h3>快捷启动</h3><p>统一添加和管理应用程序、文件、文件夹及网页地址，减少桌面图标和文件夹层级带来的查找成本。</p></div>
+      <div class="feat-card"><div class="feat-icon">📥</div><h3>软件导入</h3><p>从 Windows 已安装软件列表中选择需要的程序，批量导入到快捷方式页面。</p></div>
+      <div class="feat-card"><div class="feat-icon">🎨</div><h3>图标提取</h3><p>自动提取应用程序和文件图标。提取失败时使用系统默认图标，保证快捷方式仍可正常识别和使用。</p></div>
+      <div class="feat-card"><div class="feat-icon">⌨️</div><h3>键盘操作</h3><p>方向键移动选择光标，Enter 启动快捷方式，支持跨行、跨列循环选择。</p></div>
+      <div class="feat-card"><div class="feat-icon">🔍</div><h3>搜索记录</h3><p>搜索框保留最近五条搜索记录，可快速再次使用，也可删除不再需要的记录。</p></div>
+      <div class="feat-card"><div class="feat-icon">🗂️</div><h3>多任务墙</h3><p>支持创建多个任务墙，每个任务墙可以单独命名并保存自己的任务内容和布局。</p></div>
+      <div class="feat-card"><div class="feat-icon">📝</div><h3>多种任务类型</h3><p>任务条支持普通文本、长文本和待办提醒，也可以同时启用长文本与提醒。</p></div>
+      <div class="feat-card"><div class="feat-icon">💾</div><h3>本地保存</h3><p>快捷方式、任务墙、设置和搜索记录保存在本地，关闭软件后再次打开仍可继续使用。</p></div>
+      <div class="feat-card"><div class="feat-icon">🔄</div><h3>应用更新</h3><p>可检查新版本。发现更新后先展示版本号和更新内容，由用户决定是否下载和安装。</p></div>
+      <div class="feat-card"><div class="feat-icon">✨</div><h3>SC球 灵动岛</h3><p>桌面常驻悬浮球，支持收起、迷你、展开三种状态，可显示音乐、任务、驾驶舱和 DeepSeek 余额。</p></div>
+      <div class="feat-card"><div class="feat-icon">🌐</div><h3>翻译</h3><p>Alt+E 划词翻译，任意程序选中文字即可弹出翻译纸条；翻译板块支持双语对照和语言互换。</p></div>
+      <div class="feat-card"><div class="feat-icon">📊</div><h3>电脑驾驶舱</h3><p>实时显示 CPU、GPU、内存占用与温度；DeepSeek 余额每分钟刷新，点击可直达平台。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 4. 快捷方式管理（核心板块一） ===================== -->
+<section id="shortcut">
+  <div class="wrap">
+    <div class="core-block">
+      <div>
+        <span class="badge">核心板块一</span>
+        <h2 class="title">快捷方式管理</h2>
+        <p class="lead">集中管理你经常打开的内容。支持应用程序、文件、文件夹、网页地址四类，配以导入、图标提取与键盘启动。</p>
+        <ul>
+          <li>手动输入路径添加，或从已安装软件中导入。</li>
+          <li>自动识别网页地址并补全协议。</li>
+          <li>自动提取图标，失败时使用默认图标兜底。</li>
+          <li>创建多个快捷方式页面，自定义名称和分组。</li>
+          <li>方向键循环移动选择，Enter 启动。</li>
+          <li>搜索快捷方式并保留最近搜索记录。</li>
+          <li>删除快捷方式前进行二次确认。</li>
+        </ul>
+      </div>
+      <div>
+        <!-- 快捷方式板块截图：建议放快捷方式页面 + 键盘选中态 -->
+        <div class="shot" style="min-height:340px">
+          <div class="placeholder">
+            <div class="ph-label">快捷方式界面</div>
+            放入快捷方式页面截图<br/>（展示图标网格与键盘选中态）
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 5. 任务墙（核心板块二） ===================== -->
+<section id="taskwall">
+  <div class="wrap">
+    <div class="core-block reverse">
+      <div>
+        <!-- 任务墙截图：建议放任务墙 + 不同类型任务条 -->
+        <div class="shot" style="min-height:340px">
+          <div class="placeholder">
+            <div class="ph-label">任务墙界面</div>
+            放入任务墙截图<br/>（展示普通文本 / 长文本 / 待办提醒任务条）
+          </div>
+        </div>
+      </div>
+      <div>
+        <span class="badge">核心板块二</span>
+        <h2 class="title">任务墙</h2>
+        <p class="lead">记录临时事项、待办任务和较长的文本内容。任务条可自由拖动排列，多种类型自由组合。</p>
+        <ul>
+          <li>创建多个任务墙，每个可单独命名。</li>
+          <li>自由拖动任务条位置，拖动中的任务自动置顶。</li>
+          <li>创建普通文本任务、长文本便签、带时间的待办提醒。</li>
+          <li>可同时启用长文本与待办提醒。</li>
+          <li>双击任务条打开编辑弹窗，修改标题、正文、类型与提醒时间。</li>
+          <li>删除任务前二次确认；双击任务墙名称可重命名。</li>
+          <li>双击空格快速聚焦任务输入栏。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 5.5 SC球 灵动岛 ===================== -->
+<section id="scball">
+  <div class="wrap">
+    <div class="core-block">
+      <div>
+        <span class="badge">核心板块三</span>
+        <h2 class="title">SC球 灵动岛</h2>
+        <p class="lead">常驻桌面的悬浮效率球，聚合音乐、任务、驾驶舱和 DeepSeek 余额，让关键信息随时可见。</p>
+        <ul>
+          <li>收起、迷你、展开三种固定状态，宽度随内容自适应。</li>
+          <li>网易云音乐：封面、歌词、进度与播放控制，支持逐字歌词和长歌词轮播。</li>
+          <li>任务到时自动弹出提醒球，任务清单球支持完成、移除与跳转定位。</li>
+          <li>驾驶舱数据：CPU、GPU、内存占用与温度。</li>
+          <li>DeepSeek 余额：每分钟刷新，播放音乐时分离为右侧小圆球。</li>
+          <li>全局快捷键：Alt+Z 上一首、Alt+X 播放暂停、Alt+C 下一首、Alt+U 切换任务清单。</li>
+        </ul>
+      </div>
+      <div>
+        <!-- SC球 截图：建议放 SC球 展开状态与余额小球截图 -->
+        <div class="shot" style="min-height:340px">
+          <div class="placeholder">
+            <div class="ph-label">SC球 界面</div>
+            放入 SC球 展开状态截图<br/>（展示音乐 / 任务 / 驾驶舱 / DeepSeek）
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 6. 快捷操作 ===================== -->
+<section id="keys">
+  <div class="wrap">
+    <div class="center">
+      <span class="eyebrow">快捷操作</span>
+      <h2 class="title">键盘优先的桌面操作体验</h2>
+      <p class="lead">绝大多数操作都能用空格键和方向键完成，手不离键盘即可切换板块、搜索与启动。</p>
+    </div>
+    <div class="keys-grid">
+      <div class="key-card">
+        <h3>全局操作</h3>
+        <div class="key-row"><span class="desc">显示或隐藏主面板</span><kbd>Alt+Space</kbd></div>
+        <div class="key-row"><span class="desc">翻译当前选中的文字</span><kbd>Alt+E</kbd></div>
+        <div class="key-row"><span class="desc">截取整个屏幕到剪贴板</span><kbd>Alt+S</kbd></div>
+        <div class="key-row"><span class="desc">进入区域截屏模式</span><kbd>Alt+D</kbd></div>
+        <div class="key-row"><span class="desc">切换上一个 / 下一个板块</span><kbd>Z / X</kbd></div>
+      </div>
+      <div class="key-card">
+        <h3>快捷方式板块</h3>
+        <div class="key-row"><span class="desc">单击空格切换快捷方式页面</span><kbd>Space</kbd></div>
+        <div class="key-row"><span class="desc">双击空格聚焦搜索框</span><kbd>Space ×2</kbd></div>
+        <div class="key-row"><span class="desc">方向键移动快捷方式光标</span><kbd>↑ ↓ ← →</kbd></div>
+        <div class="key-row"><span class="desc">非输入状态 W/A/S/D 映射方向键</span><kbd>W A S D</kbd></div>
+        <div class="key-row"><span class="desc">启动选中的快捷方式</span><kbd>Enter</kbd></div>
+      </div>
+      <div class="key-card">
+        <h3>任务墙与 SC球</h3>
+        <div class="key-row"><span class="desc">单击空格切换任务墙</span><kbd>Space</kbd></div>
+        <div class="key-row"><span class="desc">双击空格聚焦底部任务输入栏</span><kbd>Space ×2</kbd></div>
+        <div class="key-row"><span class="desc">音乐上一首 / 播放暂停 / 下一首</span><kbd>Alt+Z/X/C</kbd></div>
+        <div class="key-row"><span class="desc">显示或隐藏 SC球</span><kbd>Alt+I</kbd></div>
+        <div class="key-row"><span class="desc">显示或隐藏任务清单球</span><kbd>Alt+U</kbd></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 7. 使用教程 ===================== -->
+<section id="tutorial">
+  <div class="wrap">
+    <div class="center">
+      <span class="eyebrow">使用教程</span>
+      <h2 class="title">七步上手 ShortCut</h2>
+      <p class="lead">从安装到检查更新，几分钟完成全部设置。</p>
+    </div>
+    <div class="steps">
+      <div class="step"><div class="num">1</div><div><h3>安装并启动</h3><p>下载 ShortCut 安装包，完成安装后启动软件。</p></div></div>
+      <div class="step"><div class="num">2</div><div><h3>添加快捷方式</h3><p>进入快捷方式板块，选择手动添加路径，或者从已安装软件中导入程序。</p></div></div>
+      <div class="step"><div class="num">3</div><div><h3>整理快捷页面</h3><p>根据使用场景创建多个快捷方式页面，例如工作、学习、设计或娱乐。</p></div></div>
+      <div class="step"><div class="num">4</div><div><h3>使用键盘启动</h3><p>通过方向键选择快捷方式，按 Enter 直接启动。</p></div></div>
+      <div class="step"><div class="num">5</div><div><h3>创建任务墙</h3><p>进入任务墙板块，新建任务墙并设置名称。</p></div></div>
+      <div class="step"><div class="num">6</div><div><h3>添加任务</h3><p>在底部输入栏输入任务标题，根据需要启用长文本或待办提醒。</p></div></div>
+      <div class="step"><div class="num">7</div><div><h3>检查更新</h3><p>点击左侧设置按钮上方的更新入口。发现新版本后，阅读更新内容并决定是否下载。</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 8. 下载 ===================== -->
+<section id="download">
+  <div class="wrap">
+    <div class="download">
+      <span class="eyebrow">下载</span>
+      <h2>下载 ShortCut</h2>
+      <p class="lead">下载适用于 Windows 的 ShortCut 安装程序，安装后即可开始管理快捷方式和任务墙。</p>
+      <div class="hero-actions" style="justify-content:center">
+        <!-- 下载链接：当前稳定版安装包 -->
+        <a class="btn primary" href="https://shortcut.326415.xyz/updates/ShortCut-2.4.0-Setup.exe" target="_blank" rel="noopener">⬇ 下载最新版 (2.4.0)</a>
+        <a class="btn ghost" href="#changelog">查看更新内容</a>
+      </div>
+      <div class="dl-tips">
+        <span class="dl-tip">✓ 安装新版时会保留原有本地配置</span>
+        <span class="dl-tip">✓ 下载更新前可先查看该版本更新内容</span>
+        <span class="dl-tip">✓ 首次安装和后续升级均使用安装程序</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 9. 更新记录 ===================== -->
+<section id="changelog">
+  <div class="wrap">
+    <div class="center">
+      <span class="eyebrow">更新记录</span>
+      <h2 class="title">版本更新内容</h2>
+    </div>
+    <div class="cards-2">
+      <div class="rel-card">
+        <div class="ver"><span class="tag">最新</span><h3>ShortCut 2.4.0</h3></div>
+        <ul>
+          <li>新增驾驶舱数据模块，显示 CPU / GPU / 内存占用与温度。</li>
+          <li>新增 DeepSeek 余额模块，每分钟刷新，API Key 由用户填写。</li>
+          <li>播放音乐时 DeepSeek 余额分离为右侧小圆球，实时跟随 SC球。</li>
+          <li>SC球 收起宽度随内容自适应，设置面板按模块分区。</li>
+          <li>新增音乐全局快捷键 Alt+Z / Alt+X / Alt+C。</li>
+        </ul>
+      </div>
+      <div class="rel-card">
+        <div class="ver"><h3>ShortCut 2.3.2</h3></div>
+        <ul>
+          <li>未激活的新安装会先进入激活页面。</li>
+          <li>激活码管理后台支持生成、禁用、启用、解除绑定和删除。</li>
+          <li>本地配置自动保留三份时间点备份。</li>
+          <li>任务清单与任务墙完成状态双向同步。</li>
+        </ul>
+      </div>
+      <div class="rel-card">
+        <div class="ver"><h3>ShortCut 2.1.0</h3></div>
+        <ul>
+          <li>新增翻译板块与 Alt+E 划词翻译。</li>
+          <li>新增电脑驾驶舱板块。</li>
+          <li>新增 SC球 灵动岛基础能力。</li>
+          <li>支持网易云音乐控制与歌词展示。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 10. 常见问题 ===================== -->
+<section id="faq">
+  <div class="wrap">
+    <div class="center">
+      <span class="eyebrow">常见问题</span>
+      <h2 class="title">你可能想问</h2>
+    </div>
+    <div class="faq">
+      <details class="faq-item"><summary>ShortCut 支持哪些系统？</summary><p>当前主要面向 Windows 系统。</p></details>
+      <details class="faq-item"><summary>可以添加网页地址吗？</summary><p>可以。输入网址时如果没有填写协议，ShortCut 会自动补全后使用浏览器打开。</p></details>
+      <details class="faq-item"><summary>为什么部分程序没有原始图标？</summary><p>部分程序的图标可能无法直接提取。ShortCut 会尝试其他提取方式，仍然失败时使用系统默认图标。</p></details>
+      <details class="faq-item"><summary>数据会上传到网络吗？</summary><p>当前快捷方式、任务墙和设置数据保存在本地。</p></details>
+      <details class="faq-item"><summary>安装新版本会丢失任务和快捷方式吗？</summary><p>正常覆盖安装不会删除用户配置。正式更新前仍建议保留重要配置的导出备份。</p></details>
+      <details class="faq-item"><summary>为什么旧版本不能自动更新？</summary><p>早期版本没有包含更新组件，需要先手动安装一次带更新功能的新版。</p></details>
+      <details class="faq-item"><summary>如何检查更新？</summary><p>点击主页面左下角、设置按钮上方的更新入口。</p></details>
+      <details class="faq-item"><summary>检查到更新后会自动下载吗？</summary><p>不会。软件会先展示版本号和更新内容，用户确认后才开始下载。</p></details>
+      <details class="faq-item"><summary>SC球 需要激活才能使用吗？</summary><p>需要。未激活时程序会先进入激活页面，激活通过后 SC球 才会显示。</p></details>
+      <details class="faq-item"><summary>DeepSeek 余额如何配置？</summary><p>在 SC球 设置的 DeepSeek 板块填写自己的 API Key，余额每分钟刷新，点击余额可打开 DeepSeek 平台。</p></details>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 11. 项目路线图 ===================== -->
+<section id="roadmap">
+  <div class="wrap">
+    <div class="center">
+      <span class="eyebrow">项目路线图</span>
+      <h2 class="title">后续规划</h2>
+      <p class="lead">围绕「多功能桌面效率工具」继续扩展。路线图中的内容可能根据实际开发情况调整。</p>
+    </div>
+    <div class="roadmap-list">
+      <div class="road-item"><span class="dot"></span>增加更多独立工具板块</div>
+      <div class="road-item"><span class="dot"></span>完善任务提醒方式</div>
+      <div class="road-item"><span class="dot"></span>增强任务分类、筛选和状态管理</div>
+      <div class="road-item"><span class="dot"></span>完善本地数据备份与恢复</div>
+      <div class="road-item"><span class="dot"></span>优化快捷方式整理和批量管理</div>
+      <div class="road-item"><span class="dot"></span>持续完善键盘操作体验</div>
+      <div class="road-item"><span class="dot"></span>完善版本更新和更新记录展示</div>
+    </div>
+
+    <!-- 预留：未来新板块展示位 -->
+    <div style="margin-top:54px">
+      <div class="center" style="margin-bottom:6px">
+        <span class="eyebrow">预留位置</span>
+        <h2 class="title" style="font-size:24px">更多工具板块，敬请期待</h2>
+        <p class="lead">目前 ShortCut 以「快捷方式管理」和「任务墙」两大核心板块为主，后续新增的工具板块将在此展示。</p>
+      </div>
+      <div class="future-grid">
+        <div class="future-card"><div class="plus">+</div><h3>新板块占位</h3><p>未来新增工具板块一</p></div>
+        <div class="future-card"><div class="plus">+</div><h3>新板块占位</h3><p>未来新增工具板块二</p></div>
+        <div class="future-card"><div class="plus">+</div><h3>新板块占位</h3><p>未来新增工具板块三</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 12. 仓库地址 ===================== -->
+<section class="repo" id="repo">
+  <div class="wrap">
+    <span class="eyebrow">仓库地址</span>
+    <h2 class="title">源码与发布</h2>
+    <p class="lead" style="margin-inline:auto">项目基于 MIT License 开源，欢迎访问 Gitee 仓库查看源码、提交 issue 与发布记录。</p>
+    <a class="repo-link" href="https://gitee.com/wanan6/short-cut" target="_blank" rel="noopener">
+      🐱 gitee.com/wanan6/short-cut
+    </a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>© ShortCut · MIT License · <a href="https://gitee.com/wanan6/short-cut" target="_blank" rel="noopener">Gitee 仓库</a></div>
+    <div style="margin-top:6px">面向 Windows 的桌面快捷启动与任务墙效率工具</div>
+  </div>
+</footer>
+
+</body>
+</html>
