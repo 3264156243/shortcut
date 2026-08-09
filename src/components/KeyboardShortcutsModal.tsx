@@ -15,6 +15,16 @@ const sections = [
     ],
   },
   {
+    title: 'SC球与音乐',
+    items: [
+      { keys: ['Alt', 'I'], description: '显示或隐藏 SC球' },
+      { keys: ['Alt', 'Z'], description: '音乐上一首' },
+      { keys: ['Alt', 'X'], description: '音乐播放或暂停' },
+      { keys: ['Alt', 'C'], description: '音乐下一首' },
+      { keys: ['Alt', 'U'], description: '显示或隐藏任务清单球' },
+    ],
+  },
+  {
     title: '快捷板块',
     items: [
       { keys: ['Space'], description: '切换到下一个快捷页面' },

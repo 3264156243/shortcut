@@ -2334,6 +2334,24 @@ if (!gotSingleInstanceLock) {
   if (!islandHotkey) {
     console.error('Failed to register Alt+I hotkey');
   }
+  const musicPrevHotkey = globalShortcut.register('Alt+Z', () => {
+    void runMusicBridgeCommand(['-Control', 'prev']);
+  });
+  if (!musicPrevHotkey) {
+    console.error('Failed to register Alt+Z hotkey');
+  }
+  const musicToggleHotkey = globalShortcut.register('Alt+X', () => {
+    void runMusicBridgeCommand(['-Control', 'toggle']);
+  });
+  if (!musicToggleHotkey) {
+    console.error('Failed to register Alt+X hotkey');
+  }
+  const musicNextHotkey = globalShortcut.register('Alt+C', () => {
+    void runMusicBridgeCommand(['-Control', 'next']);
+  });
+  if (!musicNextHotkey) {
+    console.error('Failed to register Alt+C hotkey');
+  }
   const taskListHotkey = globalShortcut.register('Alt+U', () => {
     taskListHidden = !taskListHidden;
     if (taskListHidden) {

@@ -45,6 +45,18 @@ export default function IslandPanel() {
     borderRadius: 12,
     padding: '14px 16px',
   };
+  const titleStyle: React.CSSProperties = {
+    fontSize: 13,
+    fontWeight: 600,
+    color: 'var(--color-text)',
+    marginBottom: 10,
+  };
+  const toggleRow = (label: string, checked: boolean, onChange: (value: boolean) => void) => (
+    <label className="flex items-center justify-between cursor-pointer">
+      <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>{label}</span>
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="w-4 h-4 accent-indigo-500" />
+    </label>
+  );
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
@@ -53,28 +65,98 @@ export default function IslandPanel() {
         <span className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>SC球设置</span>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-4">
+        {/* SC球设置 */}
         <div style={sectionStyle}>
-          <div className="mb-3 flex flex-col gap-3">
-            <label className="flex items-center justify-between cursor-pointer">
-              <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>启用SC球</span>
-              <input type="checkbox" checked={island.enabled} onChange={(e) => void updateIsland({ enabled: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
-            </label>
-            <label className="flex items-center justify-between cursor-pointer">
-              <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>音乐模块</span>
-              <input type="checkbox" checked={island.musicEnabled !== false} onChange={(e) => void updateIsland({ musicEnabled: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
-            </label>
-            <label className="flex items-center justify-between cursor-pointer">
-              <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>任务模块</span>
-              <input type="checkbox" checked={island.tasksEnabled !== false} onChange={(e) => void updateIsland({ tasksEnabled: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
-            </label>
-            <label className="flex items-center justify-between cursor-pointer">
-              <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>驾驶舱数据</span>
-              <input type="checkbox" checked={island.cockpitEnabled === true} onChange={(e) => void updateIsland({ cockpitEnabled: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
-            </label>
-            <label className="flex items-center justify-between cursor-pointer">
-              <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>DeepSeek余额</span>
-              <input type="checkbox" checked={island.deepseekEnabled === true} onChange={(e) => void updateIsland({ deepseekEnabled: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
-            </label>
+          <div style={titleStyle}>SC球设置</div>
+          <div className="flex flex-col gap-3">
+            {toggleRow('启用SC球', island.enabled, (v) => void updateIsland({ enabled: v }))}
+            {toggleRow('全屏时自动隐藏', island.autoHideFullscreen, (v) => void updateIsland({ autoHideFullscreen: v }))}
+            <div>
+              <div className="mb-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>展示样式</div>
+              <div className="grid grid-cols-3 gap-2">
+                {(['capsule', 'glass', 'paper'] as IslandStyle[]).map((style) => (
+                  <button
+                    key={style}
+                    onClick={() => void updateIsland({ style })}
+                    className="flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs transition-all duration-150"
+                    style={{
+                      background: island.style === style ? 'var(--color-accent)' : 'var(--color-bg-card-hover)',
+                      border: '1px solid ' + (island.style === style ? 'var(--color-accent)' : 'var(--color-border)'),
+                      color: island.style === style ? 'white' : 'var(--color-text-secondary)',
+                    }}
+                  >
+                    <Smartphone size={14} /> {style === 'capsule' ? '胶囊' : style === 'glass' ? '玻璃' : '纸张'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="mb-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>显示状态</div>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  ['collapsed', '收起'],
+                  ['mini', '迷你'],
+                  ['expanded', '展开'],
+                ] as Array<[IslandDisplayState, string]>).map(([displayState, label]) => (
+                  <button
+                    key={displayState}
+                    onClick={() => void updateIsland({ displayState })}
+                    className="flex items-center justify-center py-2 rounded-xl text-xs transition-all duration-150"
+                    style={{
+                      background: (island.displayState || 'collapsed') === displayState ? 'var(--color-accent)' : 'var(--color-bg-card-hover)',
+                      border: '1px solid ' + ((island.displayState || 'collapsed') === displayState ? 'var(--color-accent)' : 'var(--color-border)'),
+                      color: (island.displayState || 'collapsed') === displayState ? 'white' : 'var(--color-text-secondary)',
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
+              <Film size={14} /> 按住SC球拖动移动位置，Alt+I 显示或隐藏
+            </div>
+          </div>
+        </div>
+
+        {/* 音乐板块设置 */}
+        <div style={sectionStyle}>
+          <div style={titleStyle}>音乐板块设置</div>
+          <div className="flex flex-col gap-3">
+            {toggleRow('音乐模块', island.musicEnabled !== false, (v) => void updateIsland({ musicEnabled: v }))}
+            {toggleRow('歌词逐字跳动', island.lyricBounce !== false, (v) => void updateIsland({ lyricBounce: v }))}
+            {toggleRow('播放时光效环绕', island.orbitGlow !== false, (v) => void updateIsland({ orbitGlow: v }))}
+            {toggleRow('播放时柱条跳动', island.barsEnabled !== false, (v) => void updateIsland({ barsEnabled: v }))}
+          </div>
+        </div>
+
+        {/* 任务板块设置 */}
+        <div style={sectionStyle}>
+          <div style={titleStyle}>任务板块设置</div>
+          <div className="flex flex-col gap-3">
+            {toggleRow('任务模块', island.tasksEnabled !== false, (v) => void updateIsland({ tasksEnabled: v }))}
+            <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
+              <Film size={14} /> Alt+U 可隐藏或显示任务清单球
+            </div>
+          </div>
+        </div>
+
+        {/* 驾驶舱板块设置 */}
+        <div style={sectionStyle}>
+          <div style={titleStyle}>驾驶舱板块设置</div>
+          <div className="flex flex-col gap-3">
+            {toggleRow('驾驶舱数据', island.cockpitEnabled === true, (v) => void updateIsland({ cockpitEnabled: v }))}
+            <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
+              <Film size={14} /> 显示 CPU / GPU / 内存占用与温度
+            </div>
+          </div>
+        </div>
+
+        {/* DeepSeek 板块设置 */}
+        <div style={sectionStyle}>
+          <div style={titleStyle}>DeepSeek 板块设置</div>
+          <div className="flex flex-col gap-3">
+            {toggleRow('DeepSeek余额', island.deepseekEnabled === true, (v) => void updateIsland({ deepseekEnabled: v }))}
             <div className="flex gap-2">
               <input
                 type="password"
@@ -96,71 +178,10 @@ export default function IslandPanel() {
                 保存
               </button>
             </div>
-            <label className="flex items-center justify-between cursor-pointer">
-              <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>歌词逐字跳动</span>
-              <input type="checkbox" checked={island.lyricBounce !== false} onChange={(e) => void updateIsland({ lyricBounce: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
-            </label>
-            <label className="flex items-center justify-between cursor-pointer">
-              <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>播放时光效环绕</span>
-              <input type="checkbox" checked={island.orbitGlow !== false} onChange={(e) => void updateIsland({ orbitGlow: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
-            </label>
-            <label className="flex items-center justify-between cursor-pointer">
-              <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>播放时柱条跳动</span>
-              <input type="checkbox" checked={island.barsEnabled !== false} onChange={(e) => void updateIsland({ barsEnabled: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
-            </label>
-            <label className="flex items-center justify-between cursor-pointer">
-              <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>全屏时自动隐藏</span>
-              <input type="checkbox" checked={island.autoHideFullscreen} onChange={(e) => void updateIsland({ autoHideFullscreen: e.target.checked })} className="w-4 h-4 accent-indigo-500" />
-            </label>
+            <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
+              <Film size={14} /> 每分钟自动刷新，播放音乐时右侧分离小球
+            </div>
           </div>
-        </div>
-
-        <div style={sectionStyle}>
-          <div className="mb-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>展示样式</div>
-          <div className="grid grid-cols-3 gap-2">
-            {(['capsule', 'glass', 'paper'] as IslandStyle[]).map((style) => (
-              <button
-                key={style}
-                onClick={() => void updateIsland({ style })}
-                className="flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs transition-all duration-150"
-                style={{
-                  background: island.style === style ? 'var(--color-accent)' : 'var(--color-bg-card-hover)',
-                  border: '1px solid ' + (island.style === style ? 'var(--color-accent)' : 'var(--color-border)'),
-                  color: island.style === style ? 'white' : 'var(--color-text-secondary)',
-                }}
-              >
-                <Smartphone size={14} /> {style === 'capsule' ? '胶囊' : style === 'glass' ? '玻璃' : '纸张'}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div style={sectionStyle}>
-          <div className="mb-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>显示状态</div>
-          <div className="grid grid-cols-3 gap-2">
-            {([
-              ['collapsed', '收起'],
-              ['mini', '迷你'],
-              ['expanded', '展开'],
-            ] as Array<[IslandDisplayState, string]>).map(([displayState, label]) => (
-              <button
-                key={displayState}
-                onClick={() => void updateIsland({ displayState })}
-                className="flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs transition-all duration-150"
-                style={{
-                  background: (island.displayState || 'collapsed') === displayState ? 'var(--color-accent)' : 'var(--color-bg-card-hover)',
-                  border: '1px solid ' + ((island.displayState || 'collapsed') === displayState ? 'var(--color-accent)' : 'var(--color-border)'),
-                  color: (island.displayState || 'collapsed') === displayState ? 'white' : 'var(--color-text-secondary)',
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-          <Film size={14} /> 直接按住SC球拖动即可移动位置，Alt+I 可显示或隐藏
         </div>
       </div>
     </div>
