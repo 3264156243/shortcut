@@ -17,6 +17,7 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
   color: #fff;
   font-size: 14px;
   font-weight: 700;
+  font-family: "KaiTi", "STKaiti", "Kaiti SC", "楷体", serif;
   font-variant-numeric: tabular-nums;
   box-shadow: none;
   transition: opacity .3s, transform .3s cubic-bezier(.22,1,.36,1);
