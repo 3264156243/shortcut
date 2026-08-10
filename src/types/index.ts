@@ -45,7 +45,7 @@ export interface MusicState {
   durationMs?: number;
 }
 
-export type ModuleId = 'shortcuts' | 'tasks' | 'cockpit' | 'usage' | 'translate' | 'island';
+export type ModuleId = 'shortcuts' | 'tasks' | 'cockpit' | 'usage' | 'usageManage' | 'translate' | 'island';
 
 export interface CockpitData {
   timestamp?: number;
@@ -83,6 +83,7 @@ export interface UsageCurrent {
 export interface UsageData {
   enabled: boolean;
   ignored: string[];
+  backgroundApps: string[];
   day: UsageDayData;
   current: UsageCurrent | null;
 }

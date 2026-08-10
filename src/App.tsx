@@ -17,6 +17,7 @@ import TranslatePanel from './components/TranslatePanel';
 import CockpitPanel from './components/CockpitPanel';
 import IslandPanel from './components/IslandPanel';
 import UsagePanel from './components/UsagePanel';
+import UsageManagePanel from './components/UsageManagePanel';
 import ActivationGate from './components/ActivationGate';
 import { PanelAnimation, UpdateState } from './types';
 import { useTranslation } from './hooks/useTranslation';
@@ -49,7 +50,7 @@ const getAnimationVariants = (direction: PanelAnimation) => {
   return variants[direction] || variants.bottom;
 };
 
-const moduleOrder = ['shortcuts', 'tasks', 'cockpit', 'usage', 'translate', 'island'] as const;
+const moduleOrder = ['shortcuts', 'tasks', 'cockpit', 'usage', 'usageManage', 'translate', 'island'] as const;
 
 export default function App() {
   const config = useStore((s) => s.config);
@@ -427,6 +428,8 @@ export default function App() {
               <CockpitPanel />
             ) : activeModule === 'usage' ? (
               <UsagePanel />
+            ) : activeModule === 'usageManage' ? (
+              <UsageManagePanel />
             ) : activeModule === 'island' ? (
               <IslandPanel />
             ) : (

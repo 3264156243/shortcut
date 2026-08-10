@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AppWindow, BarChart3, ChevronLeft, ChevronRight, Globe, Monitor, Pause, Play, Plus, Trash2, X } from 'lucide-react';
+import { AppWindow, BarChart3, ChevronLeft, ChevronRight, Globe, ListFilter, Monitor, Pause, Play, Trash2 } from 'lucide-react';
 import { useStore } from '../store';
 import type { UsageData, UsageEntry } from '../types';
 import EmptyState from './EmptyState';
@@ -153,9 +153,9 @@ function EntryRow({ entry, total, view }: { entry: UsageEntry; total: number; vi
 
 export default function UsagePanel() {
   const addToast = useStore((state) => state.addToast);
+  const setActiveModule = useStore((state) => state.setActiveModule);
   const [data, setData] = useState<UsageData | null>(null);
   const [view, setView] = useState<'apps' | 'sites'>('apps');
-  const [ignoreInput, setIgnoreInput] = useState('');
   const [confirmClear, setConfirmClear] = useState(false);
   const todayKey = localDateKey();
   const [selectedDate, setSelectedDate] = useState(todayKey);
@@ -208,20 +208,6 @@ export default function UsagePanel() {
     addToast('使用记录已清空', 'success');
   };
 
-  const addIgnore = async () => {
-    const key = ignoreInput.trim().toLowerCase();
-    if (!key) return;
-    const next = await window.electronAPI?.addUsageIgnored?.(key);
-    if (next) setData(next as UsageData);
-    setIgnoreInput('');
-    addToast(`已忽略 ${key}`, 'success');
-  };
-
-  const removeIgnore = async (key: string) => {
-    const next = await window.electronAPI?.removeUsageIgnored?.(key);
-    if (next) setData(next as UsageData);
-  };
-
   const deleteDay = async () => {
     const next = await window.electronAPI?.deleteUsageDay?.(selectedDate);
     if (next) setData(next as UsageData);
@@ -253,6 +239,15 @@ export default function UsagePanel() {
             </span>
           </div>
         </div>
+        <button
+          type="button"
+          onClick={() => setActiveModule('usageManage')}
+          className="flex h-8 items-center gap-2 rounded-lg px-3 text-xs font-medium transition-all duration-150 hover:opacity-85"
+          style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
+        >
+          <ListFilter size={13} />
+          <span>名单</span>
+        </button>
         <button
           type="button"
           onClick={() => void toggleEnabled()}
@@ -412,42 +407,6 @@ export default function UsagePanel() {
             ) : entries.map((entry) => (
               <EntryRow key={entry.key} entry={entry} total={viewTotal} view={view} />
             ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="shrink-0 border-t px-5 py-3" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-secondary)' }}>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>忽略</span>
-          {(data?.ignored || []).map((key) => (
-            <span
-              key={key}
-              className="flex h-6 items-center gap-1.5 rounded-md px-2 text-[11px]"
-              style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
-            >
-              {key}
-              <button type="button" onClick={() => void removeIgnore(key)} className="opacity-60 transition-opacity hover:opacity-100" title="移除">
-                <X size={11} />
-              </button>
-            </span>
-          ))}
-          <div className="flex h-7 min-w-[140px] flex-1 items-center gap-1.5 rounded-lg px-2" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
-            <input
-              value={ignoreInput}
-              onChange={(event) => setIgnoreInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  void addIgnore();
-                }
-              }}
-              placeholder={view === 'apps' ? '进程名' : '域名'}
-              className="h-full min-w-0 flex-1 bg-transparent text-xs outline-none"
-              style={{ color: 'var(--color-text)' }}
-            />
-            <button type="button" onClick={() => void addIgnore()} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-opacity hover:opacity-80" style={{ color: 'var(--color-accent)' }} title="添加">
-              <Plus size={13} />
-            </button>
           </div>
         </div>
       </div>

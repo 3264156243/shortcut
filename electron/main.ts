@@ -834,11 +834,12 @@ function loadUsageRecord(): any {
       return {
         enabled: parsed.enabled !== false,
         ignored: Array.isArray(parsed.ignored) ? parsed.ignored.filter((item: unknown) => typeof item === 'string') : [],
+        backgroundApps: Array.isArray(parsed.backgroundApps) ? parsed.backgroundApps.filter((item: unknown) => typeof item === 'string') : [],
         days: parsed.days && typeof parsed.days === 'object' ? parsed.days : {},
       };
     }
   } catch {}
-  return { enabled: true, ignored: [], days: {} };
+  return { enabled: true, ignored: [], backgroundApps: [], days: {} };
 }
 
 function saveUsageRecord() {
@@ -936,6 +937,7 @@ function getUsageDataPayload(dateKey?: string) {
   return {
     enabled: usageRecord?.enabled !== false,
     ignored: usageRecord?.ignored || [],
+    backgroundApps: usageRecord?.backgroundApps || [],
     day,
     current,
   };
@@ -954,6 +956,22 @@ function handleUsageSnapshot(snapshot: any) {
   const windowClass = String(snapshot?.class || '').toLowerCase();
   const idleMs = Number(snapshot?.idleMs) || 0;
 
+  const dateKey = usageDateKey();
+  const day = ensureUsageDay(dateKey);
+  if (!Array.isArray(day.hourly) || day.hourly.length !== 24) day.hourly = Array(24).fill(0);
+  const hour = new Date(now).getHours();
+
+  const background = Array.isArray(snapshot?.background) ? snapshot.background : [];
+  for (const item of background) {
+    const bgName = String(item?.name || '').trim().toLowerCase();
+    const bgPath = String(item?.path || '');
+    if (!bgName || bgName === exe) continue;
+    if ((usageRecord.ignored || []).includes(bgName)) continue;
+    day.hourly[hour] += seconds;
+    upsertUsageEntry(day.apps, bgName, usageDisplayName(bgName), 'app', seconds, bgPath);
+    if (bgPath) void cacheUsageIcon(bgPath);
+  }
+
   const previousCurrent = usageCurrent;
   usageCurrent = null;
   if (!exe || USAGE_SYSTEM_PROCESSES.has(exe) || isUsageSystemPath(processPath)) return;
@@ -965,10 +983,7 @@ function handleUsageSnapshot(snapshot: any) {
     : { exe, name: usageDisplayName(exe), title, startedAt: now };
   usageCurrent = nextCurrent;
 
-  const dateKey = usageDateKey();
-  const day = ensureUsageDay(dateKey);
-  if (!Array.isArray(day.hourly) || day.hourly.length !== 24) day.hourly = Array(24).fill(0);
-  day.hourly[new Date(now).getHours()] += seconds;
+  day.hourly[hour] += seconds;
 
   if ((usageRecord.ignored || []).includes(exe)) return;
   upsertUsageEntry(day.apps, exe, usageDisplayName(exe), 'app', seconds, processPath);
@@ -989,9 +1004,14 @@ function startUsageMonitor() {
     : path.join(__dirname, '../resources/usage-monitor/usage-monitor.ps1');
   if (!fs.existsSync(script)) return;
   usageMonitorBuffer = '';
-  usageMonitorProcess = childProcess.spawn('powershell.exe', [
-    '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script,
-  ], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  const backgroundNames = (usageRecord?.backgroundApps || [])
+    .map((name: string) => String(name || '').trim().toLowerCase())
+    .filter(Boolean);
+  const spawnArgs = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script];
+  if (backgroundNames.length > 0) {
+    spawnArgs.push('-BackgroundApps', backgroundNames.join(','));
+  }
+  usageMonitorProcess = childProcess.spawn('powershell.exe', spawnArgs, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   usageMonitorProcess.stdout?.on('data', (chunk: Buffer) => {
     usageMonitorBuffer += chunk.toString('utf8');
     let newlineIndex = usageMonitorBuffer.indexOf('\n');
@@ -1017,6 +1037,12 @@ function stopUsageMonitor() {
   }
   usageRecordLastTick = 0;
   saveUsageRecord();
+}
+
+function restartUsageMonitor() {
+  const wasRunning = !!usageMonitorProcess;
+  stopUsageMonitor();
+  if (wasRunning && licenseGatePassed) startUsageMonitor();
 }
 
 function writeIslandConfig(island: any) {
@@ -2176,6 +2202,24 @@ ipcMain.handle('usage:removeIgnored', (_e: any, key: string) => {
   if (usageRecord) {
     usageRecord.ignored = (usageRecord.ignored || []).filter((item: string) => item !== normalized);
     saveUsageRecord();
+  }
+  return getUsageDataPayload();
+});
+ipcMain.handle('usage:addBackgroundApp', (_e: any, key: string) => {
+  const normalized = String(key || '').trim().toLowerCase();
+  if (usageRecord && normalized && !usageRecord.backgroundApps.includes(normalized)) {
+    usageRecord.backgroundApps.push(normalized);
+    saveUsageRecord();
+    restartUsageMonitor();
+  }
+  return getUsageDataPayload();
+});
+ipcMain.handle('usage:removeBackgroundApp', (_e: any, key: string) => {
+  const normalized = String(key || '').trim().toLowerCase();
+  if (usageRecord) {
+    usageRecord.backgroundApps = (usageRecord.backgroundApps || []).filter((item: string) => item !== normalized);
+    saveUsageRecord();
+    restartUsageMonitor();
   }
   return getUsageDataPayload();
 });

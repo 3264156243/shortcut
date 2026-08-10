@@ -1,3 +1,5 @@
+param([string]$BackgroundApps = '')
+
 $ErrorActionPreference = 'SilentlyContinue'
 
 Add-Type -TypeDefinition @"
@@ -20,6 +22,24 @@ public static class UsageNative {
 "@
 
 while ($true) {
+  $backgroundNames = @($BackgroundApps -split ',' |
+    ForEach-Object { $_.Trim().ToLower() } |
+    Where-Object { $_ } |
+    ForEach-Object { $_ -replace '\.exe$', '' } |
+    Select-Object -Unique)
+  $background = @()
+  foreach ($bgName in $backgroundNames) {
+    $bgProc = Get-Process -Name $bgName -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($bgProc) {
+      $bgPath = ''
+      try { $bgPath = [string]$bgProc.Path } catch {}
+      $background += [pscustomobject]@{
+        name = $bgName
+        path = $bgPath
+      }
+    }
+  }
+
   $processId = [uint32]0
   $title = ''
   $windowClass = ''
@@ -63,6 +83,7 @@ while ($true) {
     class = $windowClass
     idleMs = $idleMs
     hwnd = ('0x{0:X}' -f $hwnd.ToInt64())
+    background = @($background)
   }
   try {
     [Console]::Out.WriteLine(($payload | ConvertTo-Json -Compress))

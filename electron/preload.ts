@@ -141,6 +141,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getUsageData: (date?: string) => ipcRenderer.invoke('usage:get', date),
   setUsageEnabled: (enabled: boolean) => ipcRenderer.invoke('usage:setEnabled', enabled),
   deleteUsageDay: (date: string) => ipcRenderer.invoke('usage:deleteDay', date),
+  addUsageBackgroundApp: (key: string) => ipcRenderer.invoke('usage:addBackgroundApp', key),
+  removeUsageBackgroundApp: (key: string) => ipcRenderer.invoke('usage:removeBackgroundApp', key),
   clearUsageData: () => ipcRenderer.invoke('usage:clear'),
   addUsageIgnored: (key: string) => ipcRenderer.invoke('usage:addIgnored', key),
   removeUsageIgnored: (key: string) => ipcRenderer.invoke('usage:removeIgnored', key),

@@ -150,6 +150,8 @@ declare global {
       getUsageData: (date?: string) => Promise<UsageData>;
       setUsageEnabled: (enabled: boolean) => Promise<UsageData>;
       deleteUsageDay: (date: string) => Promise<UsageData>;
+      addUsageBackgroundApp: (key: string) => Promise<UsageData>;
+      removeUsageBackgroundApp: (key: string) => Promise<UsageData>;
       clearUsageData: () => Promise<UsageData>;
       addUsageIgnored: (key: string) => Promise<UsageData>;
       removeUsageIgnored: (key: string) => Promise<UsageData>;
