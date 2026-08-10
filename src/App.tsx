@@ -50,7 +50,7 @@ const getAnimationVariants = (direction: PanelAnimation) => {
   return variants[direction] || variants.bottom;
 };
 
-const moduleOrder = ['shortcuts', 'tasks', 'cockpit', 'usage', 'usageManage', 'translate', 'island'] as const;
+const moduleOrder = ['shortcuts', 'tasks', 'cockpit', 'translate', 'usage', 'island'] as const;
 
 export default function App() {
   const config = useStore((s) => s.config);
@@ -184,7 +184,8 @@ export default function App() {
       const key = event.key.toLowerCase();
       if (key === 'z' || key === 'x') {
         event.preventDefault();
-        const currentIndex = Math.max(0, moduleOrder.indexOf(state.activeModule));
+        const currentModule = state.activeModule === 'usageManage' ? 'usage' : state.activeModule;
+        const currentIndex = Math.max(0, moduleOrder.indexOf(currentModule));
         const direction = key === 'z' ? -1 : 1;
         state.setActiveModule(moduleOrder[(currentIndex + direction + moduleOrder.length) % moduleOrder.length]);
         return;
@@ -198,7 +199,8 @@ export default function App() {
       clearLongPress();
       longSpaceTimer.current = window.setTimeout(() => {
         const latest = useStore.getState();
-        const currentIndex = Math.max(0, moduleOrder.indexOf(latest.activeModule));
+        const currentModule = latest.activeModule === 'usageManage' ? 'usage' : latest.activeModule;
+        const currentIndex = Math.max(0, moduleOrder.indexOf(currentModule));
         latest.setActiveModule(moduleOrder[(currentIndex + 1) % moduleOrder.length]);
         longSpaceTriggered.current = true;
         shortSpaceTimer.current && window.clearTimeout(shortSpaceTimer.current);

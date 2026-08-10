@@ -1,6 +1,6 @@
 ﻿import { CheckCircle2, CheckSquare, Download, Gauge, Grid2X2, RefreshCw, Settings, Keyboard, Languages } from 'lucide-react';
 import { useStore } from '../store';
-import { BarChart3, ListFilter, Smartphone } from 'lucide-react';
+import { BarChart3, Smartphone } from 'lucide-react';
 import { ModuleId, UpdateState } from '../types';
 import { useTranslation } from '../hooks/useTranslation';
 
@@ -9,7 +9,6 @@ const modules: Array<{ id: ModuleId; label: string; icon: typeof Grid2X2 }> = [
   { id: 'tasks', label: '任务', icon: CheckSquare },
   { id: 'cockpit', label: '驾驶舱', icon: Gauge },
   { id: 'usage', label: '统计', icon: BarChart3 },
-  { id: 'usageManage', label: '名单', icon: ListFilter },
   { id: 'translate', label: '翻译', icon: Languages },
   { id: 'island', label: 'SC球', icon: Smartphone },
 ];

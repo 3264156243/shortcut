@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Ban, Headphones, ListFilter, Plus, X } from 'lucide-react';
+import { ArrowLeft, Ban, Headphones, ListFilter, Plus, X } from 'lucide-react';
 import { useStore } from '../store';
 import type { UsageData } from '../types';
 
@@ -95,6 +95,7 @@ function KeyList({
 
 export default function UsageManagePanel() {
   const addToast = useStore((state) => state.addToast);
+  const setActiveModule = useStore((state) => state.setActiveModule);
   const [data, setData] = useState<UsageData | null>(null);
 
   const refresh = useCallback(async () => {
@@ -135,6 +136,15 @@ export default function UsageManagePanel() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-14 shrink-0 items-center gap-3 border-b px-5" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-secondary)' }}>
+        <button
+          type="button"
+          onClick={() => setActiveModule('usage')}
+          className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:opacity-80"
+          style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
+          title="返回统计"
+        >
+          <ArrowLeft size={16} />
+        </button>
         <div
           className="flex h-8 w-8 items-center justify-center rounded-lg"
           style={{ background: 'var(--color-accent)', color: '#fff', boxShadow: '0 4px 14px var(--color-accent-glow)' }}
@@ -147,8 +157,8 @@ export default function UsageManagePanel() {
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5 md:flex-row">
-        <div className="flex min-h-[260px] flex-1 md:min-h-0">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 p-5 md:flex-row">
+        <div className="flex min-h-0 flex-1">
           <KeyList
             title="后台常驻"
             icon={<Headphones size={16} />}
@@ -158,7 +168,7 @@ export default function UsageManagePanel() {
             onRemove={(key) => void removeBackground(key)}
           />
         </div>
-        <div className="flex min-h-[260px] flex-1 md:min-h-0">
+        <div className="flex min-h-0 flex-1">
           <KeyList
             title="忽略名单"
             icon={<Ban size={16} />}
