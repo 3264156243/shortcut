@@ -29,7 +29,7 @@ function KeyList({
 
   return (
     <section
-      className="flex min-h-0 flex-col rounded-xl p-5"
+      className="flex min-h-0 flex-1 flex-col rounded-xl p-5"
       style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', boxShadow: '0 4px 18px rgba(0,0,0,.14)' }}
     >
       <div className="mb-4 flex shrink-0 items-center gap-2">
@@ -157,8 +157,8 @@ export default function UsageManagePanel() {
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 p-5 md:flex-row">
-        <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 gap-4 p-5">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <KeyList
             title="后台常驻"
             icon={<Headphones size={16} />}
@@ -168,7 +168,7 @@ export default function UsageManagePanel() {
             onRemove={(key) => void removeBackground(key)}
           />
         </div>
-        <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <KeyList
             title="忽略名单"
             icon={<Ban size={16} />}
