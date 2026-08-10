@@ -233,9 +233,13 @@ export default function UsagePanel() {
               style={{ background: data?.current ? '#34d399' : 'var(--color-text-muted)' }}
             />
             <span className="truncate">
-              {selectedDate === todayKey && data?.current
-                ? `正在记录 ${data.current.name} · ${formatDuration(data.current.seconds)}`
-                : `${selectedDate} · ${selectedDate === todayKey ? '未在计时' : '历史数据'}`}
+              {selectedDate === todayKey
+                ? (enabled
+                  ? (data?.current
+                    ? `正在记录 ${data.current.name} · ${formatDuration(data.current.seconds)}`
+                    : `${selectedDate} · 未在计时`)
+                  : `${selectedDate} · 已暂停`)
+                : `${selectedDate} · 历史数据`}
             </span>
           </div>
         </div>

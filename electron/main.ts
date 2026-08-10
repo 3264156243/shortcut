@@ -926,7 +926,7 @@ function getUsageDayPayload(dateKey: string) {
 function getUsageDataPayload(dateKey?: string) {
   const normalized = String(dateKey || usageDateKey()).trim();
   const day = getUsageDayPayload(normalized);
-  const current = normalized === usageDateKey() && usageCurrent
+  const current = usageRecord?.enabled !== false && normalized === usageDateKey() && usageCurrent
     ? {
         exe: usageCurrent.exe,
         name: usageCurrent.name,
