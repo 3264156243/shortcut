@@ -45,7 +45,7 @@ export interface MusicState {
   durationMs?: number;
 }
 
-export type ModuleId = 'shortcuts' | 'tasks' | 'cockpit' | 'translate' | 'island';
+export type ModuleId = 'shortcuts' | 'tasks' | 'cockpit' | 'usage' | 'translate' | 'island';
 
 export interface CockpitData {
   timestamp?: number;
@@ -54,6 +54,28 @@ export interface CockpitData {
   gpu?: { name?: string; temperature?: number | null; usage?: number | null };
   memory?: { name?: string; temperature?: number | null; usage?: number | null };
   battery?: { level?: number | null; status?: string; voltage?: number | null; health?: number | null };
+}
+
+export interface UsageEntry {
+  key: string;
+  name: string;
+  kind: 'app' | 'site';
+  seconds: number;
+  count: number;
+  path?: string;
+  icon?: string | null;
+}
+
+export interface UsageDayData {
+  date: string;
+  apps: UsageEntry[];
+  sites: UsageEntry[];
+}
+
+export interface UsageData {
+  enabled: boolean;
+  ignored: string[];
+  today: UsageDayData;
 }
 
 export type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error' | 'unconfigured';

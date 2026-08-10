@@ -16,6 +16,7 @@ import KeyboardShortcutsModal from './components/KeyboardShortcutsModal';
 import TranslatePanel from './components/TranslatePanel';
 import CockpitPanel from './components/CockpitPanel';
 import IslandPanel from './components/IslandPanel';
+import UsagePanel from './components/UsagePanel';
 import ActivationGate from './components/ActivationGate';
 import { PanelAnimation, UpdateState } from './types';
 import { useTranslation } from './hooks/useTranslation';
@@ -48,7 +49,7 @@ const getAnimationVariants = (direction: PanelAnimation) => {
   return variants[direction] || variants.bottom;
 };
 
-const moduleOrder = ['shortcuts', 'tasks', 'cockpit', 'translate', 'island'] as const;
+const moduleOrder = ['shortcuts', 'tasks', 'cockpit', 'usage', 'translate', 'island'] as const;
 
 export default function App() {
   const config = useStore((s) => s.config);
@@ -227,6 +228,8 @@ export default function App() {
           window.dispatchEvent(new Event('task:focus-input'));
         } else if (latest.activeModule === 'translate') {
           window.dispatchEvent(new Event('translate:toggle-input'));
+        } else if (latest.activeModule === 'usage') {
+          window.dispatchEvent(new Event('usage:toggle-view'));
         }
         return;
       }
@@ -422,6 +425,8 @@ export default function App() {
               <TaskBoard />
             ) : activeModule === 'cockpit' ? (
               <CockpitPanel />
+            ) : activeModule === 'usage' ? (
+              <UsagePanel />
             ) : activeModule === 'island' ? (
               <IslandPanel />
             ) : (

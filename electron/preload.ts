@@ -137,6 +137,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Theme
   getTheme: () => ipcRenderer.invoke('app:getTheme'),
 
+  // Usage record
+  getUsageData: () => ipcRenderer.invoke('usage:get'),
+  setUsageEnabled: (enabled: boolean) => ipcRenderer.invoke('usage:setEnabled', enabled),
+  clearUsageData: () => ipcRenderer.invoke('usage:clear'),
+  addUsageIgnored: (key: string) => ipcRenderer.invoke('usage:addIgnored', key),
+  removeUsageIgnored: (key: string) => ipcRenderer.invoke('usage:removeIgnored', key),
+
   // Window
   closeWindow: () => ipcRenderer.invoke('window:close'),
   minimizeWindow: () => ipcRenderer.invoke('window:minimize'),

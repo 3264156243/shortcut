@@ -75,6 +75,12 @@ let mainCockpitActive = false;
 let latestCockpitData: any = null;
 let latestDeepseek: any = null;
 let latestDeepseekAt = 0;
+let usageMonitorProcess: any = null;
+let usageMonitorBuffer = '';
+let usageRecord: any = null;
+let usageRecordLastTick = 0;
+let usageIconCache = new Map<string, string | null>();
+let usageFlushTimer: ReturnType<typeof setInterval> | null = null;
 
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error' | 'unconfigured';
 
@@ -771,6 +777,217 @@ function readConfigObject(): any | null {
   } catch {
     return null;
   }
+}
+
+// Usage record tracker
+const USAGE_SYSTEM_PROCESSES = new Set([
+  'system', 'idle', 'svchost', 'dwm', 'csrss', 'lsass', 'services', 'wininit',
+  'winlogon', 'fontdrvhost', 'smss', 'spoolsv', 'explorer', 'searchindexer',
+  'sihost', 'taskhostw', 'startmenuexperiencehost', 'shellexperiencehost',
+  'runtimebroker', 'securityhealthservice', 'ctfmon', 'backgroundtaskhost',
+]);
+const USAGE_WINDOWS_PATHS = [
+  path.join(process.env.windir || 'C:\\Windows', 'System32').toLowerCase(),
+  path.join(process.env.windir || 'C:\\Windows', 'SysWOW64').toLowerCase(),
+  path.join(process.env.windir || 'C:\\Windows', 'SystemApps').toLowerCase(),
+];
+const USAGE_BROWSER_NAMES = new Set(['msedge', 'chrome']);
+const USAGE_SITE_RULES: Array<{ domain: string; name: string; keywords: string[] }> = [
+  { domain: 'bilibili.com', name: '哔哩哔哩', keywords: ['bilibili', '哔哩哔哩'] },
+  { domain: 'youtube.com', name: 'YouTube', keywords: ['youtube'] },
+  { domain: 'github.com', name: 'GitHub', keywords: ['github'] },
+  { domain: 'gitee.com', name: 'Gitee', keywords: ['gitee', '码云'] },
+  { domain: 'zhihu.com', name: '知乎', keywords: ['知乎'] },
+  { domain: 'csdn.net', name: 'CSDN', keywords: ['csdn'] },
+  { domain: 'juejin.cn', name: '掘金', keywords: ['掘金'] },
+  { domain: 'baidu.com', name: '百度', keywords: ['百度', 'baidu'] },
+  { domain: 'google.com', name: 'Google', keywords: ['google'] },
+  { domain: 'bing.com', name: 'Bing', keywords: ['bing'] },
+  { domain: 'douyin.com', name: '抖音', keywords: ['抖音', 'douyin'] },
+  { domain: 'weibo.com', name: '微博', keywords: ['微博', 'weibo'] },
+  { domain: 'taobao.com', name: '淘宝', keywords: ['淘宝', 'taobao'] },
+  { domain: 'jd.com', name: '京东', keywords: ['京东', 'jd.com'] },
+  { domain: '163.com', name: '网易', keywords: ['网易', '163.com'] },
+  { domain: 'qq.com', name: '腾讯网', keywords: ['腾讯', 'qq.com'] },
+  { domain: 'deepseek.com', name: 'DeepSeek', keywords: ['deepseek'] },
+  { domain: 'openai.com', name: 'OpenAI', keywords: ['openai', 'chatgpt'] },
+  { domain: 'stackoverflow.com', name: 'Stack Overflow', keywords: ['stack overflow'] },
+  { domain: 'xiaohongshu.com', name: '小红书', keywords: ['小红书', 'xiaohongshu'] },
+];
+const USAGE_OTHER_SITE = '__other__';
+
+function getUsageRecordPath(): string {
+  return path.join(app.getPath('userData'), 'usage-record.json');
+}
+
+function loadUsageRecord(): any {
+  try {
+    const raw = fs.readFileSync(getUsageRecordPath(), 'utf8');
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      return {
+        enabled: parsed.enabled !== false,
+        ignored: Array.isArray(parsed.ignored) ? parsed.ignored.filter((item: unknown) => typeof item === 'string') : [],
+        days: parsed.days && typeof parsed.days === 'object' ? parsed.days : {},
+      };
+    }
+  } catch {}
+  return { enabled: true, ignored: [], days: {} };
+}
+
+function saveUsageRecord() {
+  try {
+    if (!usageRecord) return;
+    const file = getUsageRecordPath();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const tmp = file + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(usageRecord, null, 2), 'utf8');
+    fs.renameSync(tmp, file);
+  } catch {}
+}
+
+function usageDateKey(date = new Date()): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function ensureUsageDay(dateKey: string) {
+  if (!usageRecord.days[dateKey]) {
+    usageRecord.days[dateKey] = { date: dateKey, apps: [], sites: [] };
+  }
+  return usageRecord.days[dateKey];
+}
+
+function upsertUsageEntry(list: any[], key: string, name: string, kind: string, seconds: number, itemPath?: string) {
+  let entry = list.find((item: any) => item.key === key);
+  if (!entry) {
+    entry = { key, name, kind, seconds: 0, count: 0 };
+    if (itemPath) entry.path = itemPath;
+    list.push(entry);
+  }
+  entry.seconds = Math.round((entry.seconds + seconds) * 10) / 10;
+  entry.count += 1;
+  return entry;
+}
+
+function getUsageDomainFromTitle(rawTitle: string): string {
+  const title = String(rawTitle || '').toLowerCase();
+  if (!title) return USAGE_OTHER_SITE;
+  for (const rule of USAGE_SITE_RULES) {
+    if (rule.keywords.some((keyword) => title.includes(keyword.toLowerCase()))) {
+      return rule.domain;
+    }
+  }
+  return USAGE_OTHER_SITE;
+}
+
+function usageDisplayName(key: string): string {
+  if (key === USAGE_OTHER_SITE) return '其他网页';
+  if (key.endsWith('.exe')) return key.slice(0, -4);
+  return key;
+}
+
+function isUsageSystemPath(processPath: string): boolean {
+  const lower = String(processPath || '').toLowerCase();
+  return USAGE_WINDOWS_PATHS.some((prefix) => lower.startsWith(prefix));
+}
+
+async function cacheUsageIcon(processPath: string) {
+  if (!processPath || usageIconCache.has(processPath)) return;
+  const icon = await getIconDataUrl(processPath);
+  usageIconCache.set(processPath, icon);
+}
+
+function attachUsageIcons(day: any) {
+  const apps = Array.isArray(day?.apps) ? day.apps : [];
+  for (const entry of apps) {
+    entry.icon = entry.path ? (usageIconCache.get(entry.path) ?? null) : null;
+  }
+  return day;
+}
+
+function getUsageDataPayload() {
+  const dateKey = usageDateKey();
+  const today = attachUsageIcons(ensureUsageDay(dateKey));
+  return {
+    enabled: usageRecord?.enabled !== false,
+    ignored: usageRecord?.ignored || [],
+    today,
+  };
+}
+
+function handleUsageSnapshot(snapshot: any) {
+  if (!usageRecord || usageRecord.enabled === false || !Array.isArray(snapshot?.processes)) return;
+  const now = Date.now();
+  let seconds = usageRecordLastTick ? (now - usageRecordLastTick) / 1000 : 0;
+  usageRecordLastTick = now;
+  if (seconds <= 0 || seconds > 10) return;
+
+  const dateKey = usageDateKey();
+  const day = ensureUsageDay(dateKey);
+  const seenApps = new Set<string>();
+  const browserTitles = new Map<string, string>();
+
+  for (const proc of snapshot.processes) {
+    const name = String(proc?.name || '').trim().toLowerCase();
+    if (!name || USAGE_SYSTEM_PROCESSES.has(name)) continue;
+    const processPath = String(proc?.path || '');
+    if (USAGE_BROWSER_NAMES.has(name)) {
+      if (!browserTitles.has(name)) browserTitles.set(name, String(proc?.title || ''));
+    } else if (isUsageSystemPath(processPath)) {
+      continue;
+    }
+    if (seenApps.has(name)) continue;
+    seenApps.add(name);
+    if ((usageRecord.ignored || []).includes(name)) continue;
+    upsertUsageEntry(day.apps, name, usageDisplayName(name), 'app', seconds, processPath);
+    if (processPath) void cacheUsageIcon(processPath);
+  }
+
+  for (const [browserName, title] of browserTitles) {
+    const domain = getUsageDomainFromTitle(title);
+    if ((usageRecord.ignored || []).includes(domain)) continue;
+    upsertUsageEntry(day.sites, domain, usageDisplayName(domain), 'site', seconds);
+  }
+}
+
+function startUsageMonitor() {
+  if (!licenseGatePassed || usageMonitorProcess) return;
+  const script = app.isPackaged
+    ? path.join((process as any).resourcesPath || '', 'usage-monitor', 'usage-monitor.ps1')
+    : path.join(__dirname, '../resources/usage-monitor/usage-monitor.ps1');
+  if (!fs.existsSync(script)) return;
+  usageMonitorBuffer = '';
+  usageMonitorProcess = childProcess.spawn('powershell.exe', [
+    '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script,
+  ], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  usageMonitorProcess.stdout?.on('data', (chunk: Buffer) => {
+    usageMonitorBuffer += chunk.toString('utf8');
+    let newlineIndex = usageMonitorBuffer.indexOf('\n');
+    while (newlineIndex >= 0) {
+      const line = usageMonitorBuffer.slice(0, newlineIndex).trim();
+      usageMonitorBuffer = usageMonitorBuffer.slice(newlineIndex + 1);
+      if (line) {
+        try {
+          handleUsageSnapshot(JSON.parse(line));
+        } catch {}
+      }
+      newlineIndex = usageMonitorBuffer.indexOf('\n');
+    }
+  });
+  usageMonitorProcess.once('error', () => { usageMonitorProcess = null; });
+  usageMonitorProcess.once('exit', () => { usageMonitorProcess = null; });
+}
+
+function stopUsageMonitor() {
+  if (usageMonitorProcess) {
+    try { usageMonitorProcess.kill(); } catch {}
+    usageMonitorProcess = null;
+  }
+  usageRecordLastTick = 0;
+  saveUsageRecord();
 }
 
 function writeIslandConfig(island: any) {
@@ -1888,6 +2105,7 @@ ipcMain.handle('license:gate', async () => {
 });
 ipcMain.handle('license:gatePassed', () => {
   licenseGatePassed = true;
+  startUsageMonitor();
   createIslandWindow();
   scanDueReminders();
   pruneTaskList();
@@ -1895,6 +2113,34 @@ ipcMain.handle('license:gatePassed', () => {
     createTaskListWindow();
   }
   return true;
+});
+
+ipcMain.handle('usage:get', () => getUsageDataPayload());
+ipcMain.handle('usage:setEnabled', (_e: any, enabled: boolean) => {
+  if (usageRecord) usageRecord.enabled = !!enabled;
+  saveUsageRecord();
+  return getUsageDataPayload();
+});
+ipcMain.handle('usage:clear', () => {
+  if (usageRecord) usageRecord.days = {};
+  saveUsageRecord();
+  return getUsageDataPayload();
+});
+ipcMain.handle('usage:addIgnored', (_e: any, key: string) => {
+  const normalized = String(key || '').trim().toLowerCase();
+  if (usageRecord && normalized && !usageRecord.ignored.includes(normalized)) {
+    usageRecord.ignored.push(normalized);
+    saveUsageRecord();
+  }
+  return getUsageDataPayload();
+});
+ipcMain.handle('usage:removeIgnored', (_e: any, key: string) => {
+  const normalized = String(key || '').trim().toLowerCase();
+  if (usageRecord) {
+    usageRecord.ignored = (usageRecord.ignored || []).filter((item: string) => item !== normalized);
+    saveUsageRecord();
+  }
+  return getUsageDataPayload();
 });
 
 ipcMain.handle('app:getPath', (_e: any, name: string) => {
@@ -2310,6 +2556,8 @@ if (!gotSingleInstanceLock) {
   app.whenReady().then(async () => {
     restoreFromBackupIfNeeded();
   backupConfig();
+  usageRecord = loadUsageRecord();
+  usageFlushTimer = setInterval(() => saveUsageRecord(), 60000);
   setupAutoUpdater();
   createWindow();
   createTray();
@@ -2399,6 +2647,8 @@ if (!gotSingleInstanceLock) {
     reminderWindows.clear();
     stopMusicBridge();
     stopHardwareMonitor();
+    if (usageFlushTimer) clearInterval(usageFlushTimer);
+    stopUsageMonitor();
     if (captureOverlay && !captureOverlay.isDestroyed()) captureOverlay.destroy();
     globalShortcut.unregisterAll();
   });

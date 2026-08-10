@@ -30,6 +30,10 @@
     {
       "from": "resources/music-bridge",
       "to": "music-bridge"
+    },
+    {
+      "from": "resources/usage-monitor",
+      "to": "usage-monitor"
     }
   ],
   "publish": [
