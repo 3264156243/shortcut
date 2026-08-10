@@ -781,7 +781,7 @@ function readConfigObject(): any | null {
 
 // Usage record tracker
 const USAGE_SYSTEM_PROCESSES = new Set([
-  'system', 'idle', 'svchost', 'dwm', 'csrss', 'lsass', 'services', 'wininit',
+  'system', 'shortcut', 'idle', 'svchost', 'dwm', 'csrss', 'lsass', 'services', 'wininit',
   'winlogon', 'fontdrvhost', 'smss', 'spoolsv', 'explorer', 'searchindexer',
   'sihost', 'taskhostw', 'startmenuexperiencehost', 'shellexperiencehost',
   'runtimebroker', 'securityhealthservice', 'ctfmon', 'backgroundtaskhost',
@@ -792,14 +792,6 @@ const USAGE_WINDOWS_PATHS = [
   path.join(process.env.windir || 'C:\\Windows', 'SystemApps').toLowerCase(),
 ];
 const USAGE_BROWSER_NAMES = new Set(['msedge', 'chrome']);
-const USAGE_BACKGROUND_APPS = new Set([
-  'steam', 'steamwebhelper', 'wechat', 'weixin', 'qq', 'tim', 'discord',
-  'telegram', 'cloudmusic', 'neteasecloudmusic', 'clash', 'clashverge',
-  'mihomo', 'v2ray', 'obs64', 'obs', 'dropbox', 'onedrive', 'baidunetdisk',
-  'xunlei', 'thunder', 'qbit torrent', 'qbittorrent', 'transmission',
-  'bt', 'aria2c', 'syncthing', 'kuro', 'mihomo', 'singbox', 'wemeet',
-  'feishu', 'lark', 'dingtalk', '钉钉', 'wps', 'kingsoft', 'dandanplay',
-]);
 const USAGE_SITE_RULES: Array<{ domain: string; name: string; keywords: string[] }> = [
   { domain: 'bilibili.com', name: '哔哩哔哩', keywords: ['bilibili', '哔哩哔哩'] },
   { domain: 'youtube.com', name: 'YouTube', keywords: ['youtube'] },
@@ -823,6 +815,11 @@ const USAGE_SITE_RULES: Array<{ domain: string; name: string; keywords: string[]
   { domain: 'xiaohongshu.com', name: '小红书', keywords: ['小红书', 'xiaohongshu'] },
 ];
 const USAGE_OTHER_SITE = '__other__';
+const USAGE_AFK_THRESHOLD_MS = 180_000;
+const USAGE_INACTIVE_WINDOW_CLASSES = new Set([
+  'progman', 'workw', 'shelldll_defview', 'sysshadow', 'wndclass_desktop_generic',
+  'dwm', 'multitaskingviewframe', 'xamlmetro',
+]);
 
 function getUsageRecordPath(): string {
   return path.join(app.getPath('userData'), 'usage-record.json');
@@ -863,7 +860,7 @@ function usageDateKey(date = new Date()): string {
 
 function ensureUsageDay(dateKey: string) {
   if (!usageRecord.days[dateKey]) {
-    usageRecord.days[dateKey] = { date: dateKey, apps: [], sites: [] };
+    usageRecord.days[dateKey] = { date: dateKey, apps: [], sites: [], hourly: Array(24).fill(0) };
   }
   return usageRecord.days[dateKey];
 }
@@ -920,6 +917,7 @@ function attachUsageIcons(day: any) {
 function getUsageDataPayload() {
   const dateKey = usageDateKey();
   const today = attachUsageIcons(ensureUsageDay(dateKey));
+  if (!Array.isArray(today.hourly) || today.hourly.length !== 24) today.hourly = Array(24).fill(0);
   return {
     enabled: usageRecord?.enabled !== false,
     ignored: usageRecord?.ignored || [],
@@ -928,40 +926,36 @@ function getUsageDataPayload() {
 }
 
 function handleUsageSnapshot(snapshot: any) {
-  if (!usageRecord || usageRecord.enabled === false || !Array.isArray(snapshot?.processes)) return;
+  if (!usageRecord || usageRecord.enabled === false) return;
   const now = Date.now();
   let seconds = usageRecordLastTick ? (now - usageRecordLastTick) / 1000 : 0;
   usageRecordLastTick = now;
   if (seconds <= 0 || seconds > 10) return;
 
+  const exe = String(snapshot?.exe || '').trim().toLowerCase();
+  const processPath = String(snapshot?.path || '');
+  const title = String(snapshot?.title || '');
+  const windowClass = String(snapshot?.class || '').toLowerCase();
+  const idleMs = Number(snapshot?.idleMs) || 0;
+
+  if (!exe || USAGE_SYSTEM_PROCESSES.has(exe) || isUsageSystemPath(processPath)) return;
+  if (USAGE_INACTIVE_WINDOW_CLASSES.has(windowClass)) return;
+  if (idleMs > USAGE_AFK_THRESHOLD_MS) return;
+
   const dateKey = usageDateKey();
   const day = ensureUsageDay(dateKey);
-  const seenApps = new Set<string>();
-  const browserTitles = new Map<string, string>();
+  if (!Array.isArray(day.hourly) || day.hourly.length !== 24) day.hourly = Array(24).fill(0);
+  day.hourly[new Date(now).getHours()] += seconds;
 
-  for (const proc of snapshot.processes) {
-    const name = String(proc?.name || '').trim().toLowerCase();
-    if (!name || USAGE_SYSTEM_PROCESSES.has(name)) continue;
-    const processPath = String(proc?.path || '');
-    if (USAGE_BROWSER_NAMES.has(name)) {
-      if (!browserTitles.has(name)) browserTitles.set(name, String(proc?.title || ''));
-    } else if (isUsageSystemPath(processPath)) {
-      continue;
-    } else {
-      const hasWindow = Number(proc?.handle) > 0;
-      if (!hasWindow && !USAGE_BACKGROUND_APPS.has(name)) continue;
-    }
-    if (seenApps.has(name)) continue;
-    seenApps.add(name);
-    if ((usageRecord.ignored || []).includes(name)) continue;
-    upsertUsageEntry(day.apps, name, usageDisplayName(name), 'app', seconds, processPath);
-    if (processPath) void cacheUsageIcon(processPath);
-  }
+  if ((usageRecord.ignored || []).includes(exe)) return;
+  upsertUsageEntry(day.apps, exe, usageDisplayName(exe), 'app', seconds, processPath);
+  if (processPath) void cacheUsageIcon(processPath);
 
-  for (const [browserName, title] of browserTitles) {
+  if (USAGE_BROWSER_NAMES.has(exe)) {
     const domain = getUsageDomainFromTitle(title);
-    if ((usageRecord.ignored || []).includes(domain)) continue;
-    upsertUsageEntry(day.sites, domain, usageDisplayName(domain), 'site', seconds);
+    if (!(usageRecord.ignored || []).includes(domain)) {
+      upsertUsageEntry(day.sites, domain, usageDisplayName(domain), 'site', seconds);
+    }
   }
 }
 

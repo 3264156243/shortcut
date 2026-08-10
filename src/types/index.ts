@@ -70,6 +70,7 @@ export interface UsageDayData {
   date: string;
   apps: UsageEntry[];
   sites: UsageEntry[];
+  hourly: number[];
 }
 
 export interface UsageData {

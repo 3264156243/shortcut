@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AppWindow, BarChart3, Globe, Pause, Play, Plus, Trash2, X } from 'lucide-react';
+import { AppWindow, BarChart3, Globe, Monitor, Pause, Play, Plus, Trash2, X } from 'lucide-react';
 import { useStore } from '../store';
 import type { UsageData, UsageEntry } from '../types';
 import EmptyState from './EmptyState';
@@ -22,44 +22,115 @@ function formatDuration(seconds: number) {
   return mins > 0 ? `${hours} 小时 ${mins} 分` : `${hours} 小时`;
 }
 
+function UsageDonut({ appPercent, totalSeconds }: { appPercent: number; totalSeconds: number }) {
+  const radius = 42;
+  const circumference = 2 * Math.PI * radius;
+  const gap = circumference * 4 / 360;
+  const appLength = Math.max(0, circumference * appPercent / 100 - gap);
+  const siteLength = totalSeconds > 0 ? Math.max(0, circumference * (100 - appPercent) / 100 - gap) : 0;
+
+  return (
+    <svg viewBox="0 0 112 112" className="block h-full w-full" role="img">
+      <circle cx="56" cy="56" r={radius} fill="none" stroke="var(--color-bg-card-hover)" strokeWidth="16" />
+      {totalSeconds > 0 && appLength > 0 ? (
+        <circle
+          cx="56"
+          cy="56"
+          r={radius}
+          fill="none"
+          stroke="#6366f1"
+          strokeDasharray={`${appLength} ${circumference - appLength}`}
+          strokeDashoffset={-circumference / 4}
+          strokeWidth="16"
+          transform="rotate(-90 56 56)"
+          strokeLinecap="round"
+        />
+      ) : null}
+      {totalSeconds > 0 && siteLength > 0 ? (
+        <circle
+          cx="56"
+          cy="56"
+          r={radius}
+          fill="none"
+          stroke="#3b82f6"
+          strokeDasharray={`${siteLength} ${circumference - siteLength}`}
+          strokeDashoffset={-circumference / 4 - appLength}
+          strokeWidth="16"
+          transform="rotate(-90 56 56)"
+          strokeLinecap="round"
+        />
+      ) : null}
+    </svg>
+  );
+}
+
+function HourlyBars({ hourly }: { hourly: number[] }) {
+  const max = Math.max(1, ...hourly);
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 items-end gap-[3px]">
+        {hourly.map((value, hour) => {
+          const height = value > 0 ? Math.max(8, (value / max) * 100) : 2;
+          return (
+            <div
+              key={hour}
+              className="min-w-0 flex-1 rounded-t-sm transition-[height] duration-300"
+              title={`${String(hour).padStart(2, '0')}:00 · ${formatDuration(value)}`}
+              style={{
+                height: `${height}%`,
+                background: value > 0 ? 'linear-gradient(180deg, #6366f1, #8b5cf6)' : 'var(--color-bg-card-hover)',
+              }}
+            />
+          );
+        })}
+      </div>
+      <div className="mt-1.5 flex justify-between text-[10px] tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
+        <span>0</span><span>6</span><span>12</span><span>18</span><span>23</span>
+      </div>
+    </div>
+  );
+}
+
 function EntryRow({ entry, total, view }: { entry: UsageEntry; total: number; view: 'apps' | 'sites' }) {
   const ratio = total > 0 ? Math.min(100, (entry.seconds / total) * 100) : 0;
   const color = view === 'apps' ? fallbackColor(entry.key) : '#3b82f6';
   const realIcon = view === 'apps' && entry.icon ? (
-    <img src={entry.icon} alt="" className="h-6 w-6 object-contain" draggable={false} />
+    <img src={entry.icon} alt="" className="h-full w-full object-contain" draggable={false} />
   ) : view === 'sites' ? (
     <Globe size={20} />
   ) : null;
 
   return (
     <div
-      className="flex min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 transition-all duration-150"
+      className="flex items-center justify-between rounded-[10px] border px-3.5 py-3 transition-colors duration-150"
       style={{
-        background: 'var(--color-bg-card)',
-        border: '1px solid var(--color-border)',
-        boxShadow: '0 2px 10px rgba(0,0,0,.12)',
+        background: 'var(--color-bg-elevated, var(--color-bg-card))',
+        borderColor: 'var(--color-border)',
       }}
     >
-      <div
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
-        style={{
-          background: realIcon ? 'var(--color-bg-card-hover)' : `linear-gradient(135deg, ${color}30, ${color}18)`,
-          border: `1px solid ${color}35`,
-          color,
-        }}
-      >
-        {realIcon || <span className="text-sm font-bold">{entry.name.slice(0, 1).toUpperCase()}</span>}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-3">
-          <span className="truncate text-sm font-medium" style={{ color: 'var(--color-text)' }}>{entry.name}</span>
-          <span className="shrink-0 text-sm font-semibold tabular-nums" style={{ color: 'var(--color-text)' }}>{formatDuration(entry.seconds)}</span>
+      <div className="flex min-w-0 flex-1 items-center gap-4">
+        <div
+          className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border p-2"
+          style={{
+            background: 'var(--color-bg-card-hover)',
+            borderColor: `${color}35`,
+            boxShadow: `0 0 0 2px ${color}22`,
+            color,
+          }}
+        >
+          {realIcon || <span className="text-xs font-bold">{entry.name.slice(0, 1).toUpperCase()}</span>}
         </div>
-        <div className="mt-2 flex items-center gap-2">
-          <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full" style={{ background: 'var(--color-bg-card-hover)' }}>
-            <div className="h-full rounded-full transition-[width] duration-700" style={{ width: `${ratio}%`, background: color }} />
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold" style={{ color: 'var(--color-text)' }}>{entry.name}</div>
+          <div className="mt-0.5 text-[10px] font-medium tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
+            {ratio.toFixed(0)}% · {entry.count} 次
           </div>
-          <span className="shrink-0 text-[11px] tabular-nums" style={{ color: 'var(--color-text-muted)' }}>{entry.count} 次 · {ratio.toFixed(0)}%</span>
+        </div>
+      </div>
+      <div className="ml-4 shrink-0 text-right">
+        <div className="text-sm font-semibold tabular-nums" style={{ color: 'var(--color-text)' }}>{formatDuration(entry.seconds)}</div>
+        <div className="mt-2 h-1.5 w-20 overflow-hidden rounded-full" style={{ background: 'var(--color-bg-card-hover)' }}>
+          <div className="h-full rounded-full" style={{ width: `${ratio}%`, background: color }} />
         </div>
       </div>
     </div>
@@ -95,6 +166,7 @@ export default function UsagePanel() {
   const siteSeconds = useMemo(() => (data?.today?.sites || []).reduce((sum, entry) => sum + entry.seconds, 0), [data]);
   const totalSeconds = appSeconds + siteSeconds;
   const appPercent = totalSeconds > 0 ? (appSeconds / totalSeconds) * 100 : 0;
+  const hourly = useMemo(() => Array.isArray(data?.today?.hourly) ? data.today!.hourly : Array(24).fill(0), [data]);
 
   const entries = useMemo(() => {
     const list = data?.today?.[view] || [];
@@ -133,128 +205,143 @@ export default function UsagePanel() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-y-auto px-5 py-4">
-      <div
-        className="mb-4 flex shrink-0 flex-wrap items-center gap-5 rounded-xl px-5 py-4"
-        style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', boxShadow: '0 4px 18px rgba(0,0,0,.14)' }}
-      >
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="flex h-14 shrink-0 items-center gap-3 border-b px-5" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-secondary)' }}>
+        <div
+          className="flex h-8 w-8 items-center justify-center rounded-lg"
+          style={{ background: 'var(--color-accent)', color: '#fff', boxShadow: '0 4px 14px var(--color-accent-glow)' }}
+        >
+          <BarChart3 size={16} />
+        </div>
         <div className="min-w-0 flex-1">
-          <div className="text-[11px] font-medium uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>
-            {data?.today?.date || '--'} · {enabled ? '记录中' : '已暂停'}
-          </div>
-          <div className="mt-1 text-4xl font-bold tabular-nums" style={{ color: 'var(--color-text)', letterSpacing: 0 }}>
-            {formatDuration(totalSeconds)}
-          </div>
-          <div className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>今日总使用</div>
+          <div className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>应用使用记录</div>
+          <div className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{data?.today?.date || '--'}</div>
         </div>
-
-        <div className="flex items-center gap-4">
-          <div className="relative h-24 w-24 shrink-0 rounded-full" style={{ background: `conic-gradient(#6366f1 0% ${appPercent}%, #3b82f6 ${appPercent}% 100%)` }}>
-            <div className="absolute inset-[7px] rounded-full" style={{ background: 'var(--color-bg-card)' }} />
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-sm font-bold tabular-nums" style={{ color: 'var(--color-text)' }}>{appPercent.toFixed(0)}%</span>
-              <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>程序</span>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full" style={{ background: '#6366f1' }} />
-              <span style={{ color: 'var(--color-text-secondary)' }}>程序 {formatDuration(appSeconds)}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full" style={{ background: '#3b82f6' }} />
-              <span style={{ color: 'var(--color-text-secondary)' }}>网站 {formatDuration(siteSeconds)}</span>
-            </div>
-          </div>
-        </div>
-
         <button
           type="button"
           onClick={() => void toggleEnabled()}
-          className="flex h-9 items-center gap-2 rounded-lg px-3 text-xs font-medium transition-all duration-150 hover:opacity-85"
+          className="flex h-8 items-center gap-2 rounded-lg px-3 text-xs font-medium transition-all duration-150 hover:opacity-85"
           style={{
-            background: enabled ? 'var(--color-bg-card-hover)' : 'var(--color-accent)',
+            background: enabled ? 'var(--color-bg-card)' : 'var(--color-accent)',
             border: '1px solid ' + (enabled ? 'var(--color-border)' : 'var(--color-accent)'),
             color: enabled ? 'var(--color-text-secondary)' : '#fff',
           }}
-          title={enabled ? '暂停记录' : '恢复记录'}
         >
-          {enabled ? <Pause size={14} /> : <Play size={14} />}
+          {enabled ? <Pause size={13} /> : <Play size={13} />}
           <span>{enabled ? '记录中' : '已暂停'}</span>
         </button>
       </div>
 
-      <div className="mb-3 flex shrink-0 items-center gap-2">
-        <div className="flex rounded-lg p-1" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
-          {(['apps', 'sites'] as const).map((item) => (
+      <div className="flex min-h-0 flex-1 gap-4 px-5 pb-4 pt-4">
+        <div className="flex w-2/5 min-w-[230px] min-h-0 flex-col gap-4">
+          <div className="shrink-0 rounded-xl p-5" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', boxShadow: '0 4px 18px rgba(0,0,0,.14)' }}>
+            <div className="mb-4 flex items-center gap-2">
+              <Monitor size={15} />
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>今日占比</h3>
+            </div>
+            <div className="flex items-center gap-5">
+              <div className="relative h-[132px] w-[132px] shrink-0">
+                <UsageDonut appPercent={appPercent} totalSeconds={totalSeconds} />
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-lg font-semibold tabular-nums" style={{ color: 'var(--color-text)' }}>{formatDuration(totalSeconds)}</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>总时长</span>
+                </div>
+              </div>
+              <div className="min-w-0 flex-1 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: '#6366f1' }} />
+                  <span className="truncate text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>程序</span>
+                  <span className="ml-auto text-xs font-semibold tabular-nums" style={{ color: 'var(--color-text)' }}>{formatDuration(appSeconds)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: '#3b82f6' }} />
+                  <span className="truncate text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>网站</span>
+                  <span className="ml-auto text-xs font-semibold tabular-nums" style={{ color: 'var(--color-text)' }}>{formatDuration(siteSeconds)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col rounded-xl p-5" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', boxShadow: '0 4px 18px rgba(0,0,0,.14)' }}>
+            <div className="mb-3 flex items-center gap-2">
+              <Monitor size={15} />
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>每小时活动</h3>
+            </div>
+            <HourlyBars hourly={hourly} />
+          </div>
+        </div>
+
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-xl p-5" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', boxShadow: '0 4px 18px rgba(0,0,0,.14)' }}>
+          <header className="mb-4 flex shrink-0 items-center gap-3">
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>排行</h3>
+            <div className="flex rounded-lg p-0.5" style={{ background: 'var(--color-bg-card-hover)' }}>
+              {(['apps', 'sites'] as const).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setView(item)}
+                  className="h-7 rounded-md px-3 text-xs font-medium transition-all duration-150"
+                  style={{
+                    background: view === item ? 'var(--color-accent)' : 'transparent',
+                    color: view === item ? '#fff' : 'var(--color-text-secondary)',
+                  }}
+                >
+                  {item === 'apps' ? '程序' : '网站'}
+                </button>
+              ))}
+            </div>
+            <div className="flex-1" />
             <button
-              key={item}
               type="button"
-              onClick={() => setView(item)}
-              className="h-8 rounded-md px-4 text-xs font-medium transition-all duration-150"
+              onClick={() => {
+                if (confirmClear) void clearAll();
+                else {
+                  setConfirmClear(true);
+                  window.setTimeout(() => setConfirmClear(false), 3000);
+                }
+              }}
+              className="flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-xs transition-all duration-150 hover:opacity-85"
               style={{
-                background: view === item ? 'var(--color-accent)' : 'transparent',
-                color: view === item ? '#fff' : 'var(--color-text-secondary)',
+                background: confirmClear ? '#e5484d' : 'var(--color-bg-card-hover)',
+                border: '1px solid ' + (confirmClear ? '#e5484d' : 'var(--color-border)'),
+                color: confirmClear ? '#fff' : 'var(--color-text-secondary)',
               }}
             >
-              {item === 'apps' ? '程序' : '网站'}
+              <Trash2 size={12} />
+              <span>{confirmClear ? '确认清空' : '清空'}</span>
             </button>
-          ))}
+          </header>
+
+          <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto pr-1 custom-scrollbar">
+            {entries.length === 0 ? (
+              <EmptyState
+                icon={view === 'apps' ? 'shortcut' : 'search'}
+                title={view === 'apps' ? '还没有程序记录' : '还没有网站记录'}
+                description={enabled ? '前台使用后会在这里累计' : '当前记录已暂停'}
+              />
+            ) : entries.map((entry) => (
+              <EntryRow key={entry.key} entry={entry} total={viewTotal} view={view} />
+            ))}
+          </div>
         </div>
-        <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{view === 'apps' ? '按程序统计' : '按网站统计'}</span>
-        <div className="flex-1" />
-        <button
-          type="button"
-          onClick={() => {
-            if (confirmClear) void clearAll();
-            else {
-              setConfirmClear(true);
-              window.setTimeout(() => setConfirmClear(false), 3000);
-            }
-          }}
-          className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs transition-all duration-150 hover:opacity-85"
-          style={{
-            background: confirmClear ? '#e5484d' : 'var(--color-bg-card)',
-            border: '1px solid ' + (confirmClear ? '#e5484d' : 'var(--color-border)'),
-            color: confirmClear ? '#fff' : 'var(--color-text-secondary)',
-          }}
-        >
-          <Trash2 size={13} />
-          <span>{confirmClear ? '确认清空' : '清空记录'}</span>
-        </button>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2">
-        {entries.length === 0 ? (
-          <EmptyState
-            icon={view === 'apps' ? 'shortcut' : 'search'}
-            title={view === 'apps' ? '还没有程序记录' : '还没有网站记录'}
-            description={enabled ? '程序运行后会在这里累计时长' : '当前记录已暂停，恢复后继续累计'}
-          />
-        ) : entries.map((entry) => (
-          <EntryRow key={entry.key} entry={entry} total={viewTotal} view={view} />
-        ))}
-      </div>
-
-      <div className="mt-4 shrink-0">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>忽略名单</span>
-          <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>输入进程名或网站域名</span>
-        </div>
+      <div className="shrink-0 border-t px-5 py-3" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-secondary)' }}>
         <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>忽略</span>
           {(data?.ignored || []).map((key) => (
             <span
               key={key}
-              className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs"
+              className="flex h-6 items-center gap-1.5 rounded-md px-2 text-[11px]"
               style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
             >
               {key}
-              <button type="button" onClick={() => void removeIgnore(key)} className="opacity-60 transition-opacity hover:opacity-100" title="移除忽略">
-                <X size={12} />
+              <button type="button" onClick={() => void removeIgnore(key)} className="opacity-60 transition-opacity hover:opacity-100" title="移除">
+                <X size={11} />
               </button>
             </span>
           ))}
-          <div className="flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
+          <div className="flex h-7 min-w-[140px] flex-1 items-center gap-1.5 rounded-lg px-2" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
             <input
               value={ignoreInput}
               onChange={(event) => setIgnoreInput(event.target.value)}
@@ -264,12 +351,12 @@ export default function UsagePanel() {
                   void addIgnore();
                 }
               }}
-              placeholder={view === 'apps' ? '例如 steam.exe' : '例如 bilibili.com'}
+              placeholder={view === 'apps' ? '进程名' : '域名'}
               className="h-full min-w-0 flex-1 bg-transparent text-xs outline-none"
               style={{ color: 'var(--color-text)' }}
             />
-            <button type="button" onClick={() => void addIgnore()} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-opacity hover:opacity-80" style={{ color: 'var(--color-accent)' }} title="添加忽略">
-              <Plus size={14} />
+            <button type="button" onClick={() => void addIgnore()} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-opacity hover:opacity-80" style={{ color: 'var(--color-accent)' }} title="添加">
+              <Plus size={13} />
             </button>
           </div>
         </div>
