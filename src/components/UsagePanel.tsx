@@ -4,6 +4,14 @@ import { useStore } from '../store';
 import type { UsageData, UsageEntry } from '../types';
 import EmptyState from './EmptyState';
 
+const FALLBACK_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
+
+function fallbackColor(key: string) {
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  return FALLBACK_COLORS[hash % FALLBACK_COLORS.length];
+}
+
 function formatDuration(seconds: number) {
   const s = Math.max(0, Math.floor(seconds));
   if (s < 60) return `${s} 秒`;
@@ -16,33 +24,42 @@ function formatDuration(seconds: number) {
 
 function EntryRow({ entry, total, view }: { entry: UsageEntry; total: number; view: 'apps' | 'sites' }) {
   const ratio = total > 0 ? Math.min(100, (entry.seconds / total) * 100) : 0;
-  const icon = view === 'apps'
-    ? (entry.icon ? <img src={entry.icon} alt="" className="h-5 w-5 object-contain" draggable={false} /> : <AppWindow size={18} />)
-    : <Globe size={18} />;
+  const color = view === 'apps' ? fallbackColor(entry.key) : '#3b82f6';
+  const realIcon = view === 'apps' && entry.icon ? (
+    <img src={entry.icon} alt="" className="h-6 w-6 object-contain" draggable={false} />
+  ) : view === 'sites' ? (
+    <Globe size={20} />
+  ) : null;
+
   return (
     <div
-      className="flex min-w-0 items-center gap-3 rounded-lg px-4 py-3 transition-colors duration-150"
-      style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
+      className="flex min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 transition-all duration-150"
+      style={{
+        background: 'var(--color-bg-card)',
+        border: '1px solid var(--color-border)',
+        boxShadow: '0 2px 10px rgba(0,0,0,.12)',
+      }}
     >
       <div
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
-        style={{ background: 'var(--color-bg-card-hover)', color: 'var(--color-text-secondary)' }}
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+        style={{
+          background: realIcon ? 'var(--color-bg-card-hover)' : `linear-gradient(135deg, ${color}30, ${color}18)`,
+          border: `1px solid ${color}35`,
+          color,
+        }}
       >
-        {icon}
+        {realIcon || <span className="text-sm font-bold">{entry.name.slice(0, 1).toUpperCase()}</span>}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-3">
           <span className="truncate text-sm font-medium" style={{ color: 'var(--color-text)' }}>{entry.name}</span>
-          <span className="shrink-0 text-sm font-semibold" style={{ color: 'var(--color-accent)' }}>{formatDuration(entry.seconds)}</span>
+          <span className="shrink-0 text-sm font-semibold tabular-nums" style={{ color: 'var(--color-text)' }}>{formatDuration(entry.seconds)}</span>
         </div>
         <div className="mt-2 flex items-center gap-2">
           <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full" style={{ background: 'var(--color-bg-card-hover)' }}>
-            <div
-              className="h-full rounded-full transition-[width] duration-700"
-              style={{ width: `${ratio}%`, background: view === 'apps' ? 'var(--color-accent)' : '#3b82f6' }}
-            />
+            <div className="h-full rounded-full transition-[width] duration-700" style={{ width: `${ratio}%`, background: color }} />
           </div>
-          <span className="shrink-0 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{ratio.toFixed(0)}% · {entry.count} 次</span>
+          <span className="shrink-0 text-[11px] tabular-nums" style={{ color: 'var(--color-text-muted)' }}>{entry.count} 次 · {ratio.toFixed(0)}%</span>
         </div>
       </div>
     </div>
@@ -74,12 +91,17 @@ export default function UsagePanel() {
     };
   }, [refresh]);
 
+  const appSeconds = useMemo(() => (data?.today?.apps || []).reduce((sum, entry) => sum + entry.seconds, 0), [data]);
+  const siteSeconds = useMemo(() => (data?.today?.sites || []).reduce((sum, entry) => sum + entry.seconds, 0), [data]);
+  const totalSeconds = appSeconds + siteSeconds;
+  const appPercent = totalSeconds > 0 ? (appSeconds / totalSeconds) * 100 : 0;
+
   const entries = useMemo(() => {
     const list = data?.today?.[view] || [];
     return [...list].sort((a, b) => b.seconds - a.seconds);
   }, [data, view]);
 
-  const totalSeconds = useMemo(() => entries.reduce((sum, entry) => sum + entry.seconds, 0), [entries]);
+  const viewTotal = useMemo(() => entries.reduce((sum, entry) => sum + entry.seconds, 0), [entries]);
   const enabled = data?.enabled !== false;
 
   const toggleEnabled = async () => {
@@ -112,27 +134,46 @@ export default function UsagePanel() {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-y-auto px-5 py-4">
-      <div className="mb-4 flex shrink-0 flex-wrap items-center gap-3">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div
-            className="flex h-10 w-10 items-center justify-center rounded-lg"
-            style={{ background: 'var(--color-accent)', color: '#fff', boxShadow: '0 4px 14px var(--color-accent-glow)' }}
-          >
-            <BarChart3 size={20} />
+      <div
+        className="mb-4 flex shrink-0 flex-wrap items-center gap-5 rounded-xl px-5 py-4"
+        style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', boxShadow: '0 4px 18px rgba(0,0,0,.14)' }}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="text-[11px] font-medium uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>
+            {data?.today?.date || '--'} · {enabled ? '记录中' : '已暂停'}
           </div>
-          <div className="min-w-0">
-            <h1 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>应用使用记录</h1>
-            <p className="mt-0.5 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
-              {data?.today?.date || '--'} · 今日 {formatDuration(totalSeconds)}
-            </p>
+          <div className="mt-1 text-4xl font-bold tabular-nums" style={{ color: 'var(--color-text)', letterSpacing: 0 }}>
+            {formatDuration(totalSeconds)}
+          </div>
+          <div className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>今日总使用</div>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="relative h-24 w-24 shrink-0 rounded-full" style={{ background: `conic-gradient(#6366f1 0% ${appPercent}%, #3b82f6 ${appPercent}% 100%)` }}>
+            <div className="absolute inset-[7px] rounded-full" style={{ background: 'var(--color-bg-card)' }} />
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-sm font-bold tabular-nums" style={{ color: 'var(--color-text)' }}>{appPercent.toFixed(0)}%</span>
+              <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>程序</span>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full" style={{ background: '#6366f1' }} />
+              <span style={{ color: 'var(--color-text-secondary)' }}>程序 {formatDuration(appSeconds)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full" style={{ background: '#3b82f6' }} />
+              <span style={{ color: 'var(--color-text-secondary)' }}>网站 {formatDuration(siteSeconds)}</span>
+            </div>
           </div>
         </div>
+
         <button
           type="button"
           onClick={() => void toggleEnabled()}
           className="flex h-9 items-center gap-2 rounded-lg px-3 text-xs font-medium transition-all duration-150 hover:opacity-85"
           style={{
-            background: enabled ? 'var(--color-bg-card)' : 'var(--color-accent)',
+            background: enabled ? 'var(--color-bg-card-hover)' : 'var(--color-accent)',
             border: '1px solid ' + (enabled ? 'var(--color-border)' : 'var(--color-accent)'),
             color: enabled ? 'var(--color-text-secondary)' : '#fff',
           }}
@@ -160,6 +201,7 @@ export default function UsagePanel() {
             </button>
           ))}
         </div>
+        <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{view === 'apps' ? '按程序统计' : '按网站统计'}</span>
         <div className="flex-1" />
         <button
           type="button"
@@ -190,7 +232,7 @@ export default function UsagePanel() {
             description={enabled ? '程序运行后会在这里累计时长' : '当前记录已暂停，恢复后继续累计'}
           />
         ) : entries.map((entry) => (
-          <EntryRow key={entry.key} entry={entry} total={totalSeconds} view={view} />
+          <EntryRow key={entry.key} entry={entry} total={viewTotal} view={view} />
         ))}
       </div>
 

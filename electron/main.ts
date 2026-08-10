@@ -792,6 +792,14 @@ const USAGE_WINDOWS_PATHS = [
   path.join(process.env.windir || 'C:\\Windows', 'SystemApps').toLowerCase(),
 ];
 const USAGE_BROWSER_NAMES = new Set(['msedge', 'chrome']);
+const USAGE_BACKGROUND_APPS = new Set([
+  'steam', 'steamwebhelper', 'wechat', 'weixin', 'qq', 'tim', 'discord',
+  'telegram', 'cloudmusic', 'neteasecloudmusic', 'clash', 'clashverge',
+  'mihomo', 'v2ray', 'obs64', 'obs', 'dropbox', 'onedrive', 'baidunetdisk',
+  'xunlei', 'thunder', 'qbit torrent', 'qbittorrent', 'transmission',
+  'bt', 'aria2c', 'syncthing', 'kuro', 'mihomo', 'singbox', 'wemeet',
+  'feishu', 'lark', 'dingtalk', '钉钉', 'wps', 'kingsoft', 'dandanplay',
+]);
 const USAGE_SITE_RULES: Array<{ domain: string; name: string; keywords: string[] }> = [
   { domain: 'bilibili.com', name: '哔哩哔哩', keywords: ['bilibili', '哔哩哔哩'] },
   { domain: 'youtube.com', name: 'YouTube', keywords: ['youtube'] },
@@ -904,6 +912,7 @@ function attachUsageIcons(day: any) {
   const apps = Array.isArray(day?.apps) ? day.apps : [];
   for (const entry of apps) {
     entry.icon = entry.path ? (usageIconCache.get(entry.path) ?? null) : null;
+    if (entry.path && !usageIconCache.has(entry.path)) void cacheUsageIcon(entry.path);
   }
   return day;
 }
@@ -938,6 +947,9 @@ function handleUsageSnapshot(snapshot: any) {
       if (!browserTitles.has(name)) browserTitles.set(name, String(proc?.title || ''));
     } else if (isUsageSystemPath(processPath)) {
       continue;
+    } else {
+      const hasWindow = Number(proc?.handle) > 0;
+      if (!hasWindow && !USAGE_BACKGROUND_APPS.has(name)) continue;
     }
     if (seenApps.has(name)) continue;
     seenApps.add(name);

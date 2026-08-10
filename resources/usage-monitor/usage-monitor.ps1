@@ -21,14 +21,17 @@ while ($true) {
     if ($null -eq $p -or $p.SessionId -ne $sessionId) { continue }
     $itemPath = $null
     $itemTitle = ''
+    $itemHandle = [IntPtr]::Zero
     try { $itemPath = $p.Path } catch {}
     if ([string]::IsNullOrWhiteSpace($itemPath)) { continue }
     try { $itemTitle = $p.MainWindowTitle } catch {}
+    try { $itemHandle = $p.MainWindowHandle } catch {}
     $rows += [pscustomobject]@{
       name = [string]$p.ProcessName
       id = $p.Id
       path = $itemPath
       title = [string]$itemTitle
+      handle = $itemHandle.ToInt64()
     }
   }
 
