@@ -83,7 +83,7 @@ export interface UsageCurrent {
 export interface UsageData {
   enabled: boolean;
   ignored: string[];
-  today: UsageDayData;
+  day: UsageDayData;
   current: UsageCurrent | null;
 }
 

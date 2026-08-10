@@ -147,8 +147,9 @@ declare global {
       onUpdateState: (callback: (state: UpdateState) => void) => () => void;
       onShortcutFailed: (callback: (data: unknown) => void) => () => void;
       getTheme: () => Promise<'dark' | 'light'>;
-      getUsageData: () => Promise<UsageData>;
+      getUsageData: (date?: string) => Promise<UsageData>;
       setUsageEnabled: (enabled: boolean) => Promise<UsageData>;
+      deleteUsageDay: (date: string) => Promise<UsageData>;
       clearUsageData: () => Promise<UsageData>;
       addUsageIgnored: (key: string) => Promise<UsageData>;
       removeUsageIgnored: (key: string) => Promise<UsageData>;

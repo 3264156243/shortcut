@@ -915,11 +915,17 @@ function attachUsageIcons(day: any) {
   return day;
 }
 
-function getUsageDataPayload() {
-  const dateKey = usageDateKey();
-  const today = attachUsageIcons(ensureUsageDay(dateKey));
-  if (!Array.isArray(today.hourly) || today.hourly.length !== 24) today.hourly = Array(24).fill(0);
-  const current = usageCurrent
+function getUsageDayPayload(dateKey: string) {
+  const existing = usageRecord?.days?.[dateKey];
+  const day = existing || { date: dateKey, apps: [], sites: [], hourly: Array(24).fill(0) };
+  if (!Array.isArray(day.hourly) || day.hourly.length !== 24) day.hourly = Array(24).fill(0);
+  return attachUsageIcons(day);
+}
+
+function getUsageDataPayload(dateKey?: string) {
+  const normalized = String(dateKey || usageDateKey()).trim();
+  const day = getUsageDayPayload(normalized);
+  const current = normalized === usageDateKey() && usageCurrent
     ? {
         exe: usageCurrent.exe,
         name: usageCurrent.name,
@@ -930,7 +936,7 @@ function getUsageDataPayload() {
   return {
     enabled: usageRecord?.enabled !== false,
     ignored: usageRecord?.ignored || [],
-    today,
+    day,
     current,
   };
 }
@@ -2138,11 +2144,19 @@ ipcMain.handle('license:gatePassed', () => {
   return true;
 });
 
-ipcMain.handle('usage:get', () => getUsageDataPayload());
+ipcMain.handle('usage:get', (_e: any, dateKey?: string) => getUsageDataPayload(dateKey));
 ipcMain.handle('usage:setEnabled', (_e: any, enabled: boolean) => {
   if (usageRecord) usageRecord.enabled = !!enabled;
   saveUsageRecord();
   return getUsageDataPayload();
+});
+ipcMain.handle('usage:deleteDay', (_e: any, dateKey: string) => {
+  const normalized = String(dateKey || '').trim();
+  if (normalized && usageRecord?.days?.[normalized]) {
+    delete usageRecord.days[normalized];
+    saveUsageRecord();
+  }
+  return getUsageDataPayload(normalized || undefined);
 });
 ipcMain.handle('usage:clear', () => {
   if (usageRecord) usageRecord.days = {};

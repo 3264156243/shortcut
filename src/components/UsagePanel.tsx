@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AppWindow, BarChart3, Globe, Monitor, Pause, Play, Plus, Trash2, X } from 'lucide-react';
+import { AppWindow, BarChart3, ChevronLeft, ChevronRight, Globe, Monitor, Pause, Play, Plus, Trash2, X } from 'lucide-react';
 import { useStore } from '../store';
 import type { UsageData, UsageEntry } from '../types';
 import EmptyState from './EmptyState';
@@ -20,6 +20,20 @@ function formatDuration(seconds: number) {
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
   return mins > 0 ? `${hours} 小时 ${mins} 分` : `${hours} 小时`;
+}
+
+function localDateKey(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function addDays(dateKey: string, offset: number) {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  date.setDate(date.getDate() + offset);
+  return localDateKey(date);
 }
 
 function UsageDonut({ appPercent, totalSeconds }: { appPercent: number; totalSeconds: number }) {
@@ -143,18 +157,22 @@ export default function UsagePanel() {
   const [view, setView] = useState<'apps' | 'sites'>('apps');
   const [ignoreInput, setIgnoreInput] = useState('');
   const [confirmClear, setConfirmClear] = useState(false);
+  const todayKey = localDateKey();
+  const [selectedDate, setSelectedDate] = useState(todayKey);
+  const [confirmDeleteDay, setConfirmDeleteDay] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
-      const next = await window.electronAPI?.getUsageData?.();
+      const next = await window.electronAPI?.getUsageData?.(selectedDate);
       if (next) setData(next as UsageData);
     } catch {}
-  }, []);
+  }, [selectedDate]);
 
   useEffect(() => {
     void refresh();
     const timer = window.setInterval(() => void refresh(), 5000);
     const toggleView = () => setView((current) => current === 'apps' ? 'sites' : 'apps');
+    setConfirmDeleteDay(false);
     window.addEventListener('usage:toggle-view', toggleView);
     return () => {
       window.clearInterval(timer);
@@ -162,14 +180,14 @@ export default function UsagePanel() {
     };
   }, [refresh]);
 
-  const appSeconds = useMemo(() => (data?.today?.apps || []).reduce((sum, entry) => sum + entry.seconds, 0), [data]);
-  const siteSeconds = useMemo(() => (data?.today?.sites || []).reduce((sum, entry) => sum + entry.seconds, 0), [data]);
+  const appSeconds = useMemo(() => (data?.day?.apps || []).reduce((sum, entry) => sum + entry.seconds, 0), [data]);
+  const siteSeconds = useMemo(() => (data?.day?.sites || []).reduce((sum, entry) => sum + entry.seconds, 0), [data]);
   const totalSeconds = appSeconds + siteSeconds;
   const appPercent = totalSeconds > 0 ? (appSeconds / totalSeconds) * 100 : 0;
-  const hourly = useMemo(() => Array.isArray(data?.today?.hourly) ? data.today!.hourly : Array(24).fill(0), [data]);
+  const hourly = useMemo(() => Array.isArray(data?.day?.hourly) ? data.day!.hourly : Array(24).fill(0), [data]);
 
   const entries = useMemo(() => {
-    const list = data?.today?.[view] || [];
+    const list = data?.day?.[view] || [];
     return [...list].sort((a, b) => b.seconds - a.seconds);
   }, [data, view]);
 
@@ -204,6 +222,14 @@ export default function UsagePanel() {
     if (next) setData(next as UsageData);
   };
 
+  const deleteDay = async () => {
+    const next = await window.electronAPI?.deleteUsageDay?.(selectedDate);
+    if (next) setData(next as UsageData);
+    setConfirmDeleteDay(false);
+    if (selectedDate !== todayKey) setSelectedDate(todayKey);
+    addToast(`已删除 ${selectedDate} 的记录`, 'success');
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <div className="flex h-14 shrink-0 items-center gap-3 border-b px-5" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-secondary)' }}>
@@ -221,9 +247,9 @@ export default function UsagePanel() {
               style={{ background: data?.current ? '#34d399' : 'var(--color-text-muted)' }}
             />
             <span className="truncate">
-              {data?.current
+              {selectedDate === todayKey && data?.current
                 ? `正在记录 ${data.current.name} · ${formatDuration(data.current.seconds)}`
-                : `${data?.today?.date || '--'} · 未在计时`}
+                : `${selectedDate} · ${selectedDate === todayKey ? '未在计时' : '历史数据'}`}
             </span>
           </div>
         </div>
@@ -247,7 +273,61 @@ export default function UsagePanel() {
           <div className="shrink-0 rounded-xl p-5" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', boxShadow: '0 4px 18px rgba(0,0,0,.14)' }}>
             <div className="mb-4 flex items-center gap-2">
               <Monitor size={15} />
-              <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>今日占比</h3>
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>占比</h3>
+              <div className="flex-1" />
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectedDate(addDays(selectedDate, -1))}
+                  className="flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:opacity-80"
+                  style={{ color: 'var(--color-text-secondary)', background: 'var(--color-bg-card-hover)' }}
+                  title="前一天"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <span className="min-w-[76px] text-center text-[11px] font-medium tabular-nums" style={{ color: 'var(--color-text-secondary)' }}>
+                  {selectedDate}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedDate(addDays(selectedDate, 1))}
+                  disabled={selectedDate >= todayKey}
+                  className="flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:opacity-80 disabled:opacity-30"
+                  style={{ color: 'var(--color-text-secondary)', background: 'var(--color-bg-card-hover)' }}
+                  title="后一天"
+                >
+                  <ChevronRight size={14} />
+                </button>
+                {selectedDate !== todayKey ? (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDate(todayKey)}
+                    className="ml-1 h-6 rounded-md px-2 text-[11px] font-medium transition-colors hover:opacity-80"
+                    style={{ color: 'var(--color-accent)', background: 'var(--color-bg-card-hover)' }}
+                  >
+                    今天
+                  </button>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirmDeleteDay) void deleteDay();
+                  else {
+                    setConfirmDeleteDay(true);
+                    window.setTimeout(() => setConfirmDeleteDay(false), 3000);
+                  }
+                }}
+                className="ml-2 flex h-6 items-center gap-1 rounded-md px-2 text-[11px] transition-colors hover:opacity-80"
+                style={{
+                  background: confirmDeleteDay ? '#e5484d' : 'var(--color-bg-card-hover)',
+                  color: confirmDeleteDay ? '#fff' : 'var(--color-text-secondary)',
+                }}
+                title="删除这一天"
+              >
+                <Trash2 size={11} />
+                <span>{confirmDeleteDay ? '确认删除' : '删除'}</span>
+              </button>
             </div>
             <div className="flex items-center gap-5">
               <div className="relative h-[132px] w-[132px] shrink-0">
