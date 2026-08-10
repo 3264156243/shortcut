@@ -81,6 +81,7 @@ let usageRecord: any = null;
 let usageRecordLastTick = 0;
 let usageIconCache = new Map<string, string | null>();
 let usageFlushTimer: ReturnType<typeof setInterval> | null = null;
+let usageCurrent: { exe: string; name: string; title: string; startedAt: number } | null = null;
 
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error' | 'unconfigured';
 
@@ -781,7 +782,7 @@ function readConfigObject(): any | null {
 
 // Usage record tracker
 const USAGE_SYSTEM_PROCESSES = new Set([
-  'system', 'shortcut', 'idle', 'svchost', 'dwm', 'csrss', 'lsass', 'services', 'wininit',
+  'system', 'idle', 'svchost', 'dwm', 'csrss', 'lsass', 'services', 'wininit',
   'winlogon', 'fontdrvhost', 'smss', 'spoolsv', 'explorer', 'searchindexer',
   'sihost', 'taskhostw', 'startmenuexperiencehost', 'shellexperiencehost',
   'runtimebroker', 'securityhealthservice', 'ctfmon', 'backgroundtaskhost',
@@ -815,7 +816,7 @@ const USAGE_SITE_RULES: Array<{ domain: string; name: string; keywords: string[]
   { domain: 'xiaohongshu.com', name: '小红书', keywords: ['小红书', 'xiaohongshu'] },
 ];
 const USAGE_OTHER_SITE = '__other__';
-const USAGE_AFK_THRESHOLD_MS = 180_000;
+const USAGE_AFK_THRESHOLD_MS = 600_000;
 const USAGE_INACTIVE_WINDOW_CLASSES = new Set([
   'progman', 'workw', 'shelldll_defview', 'sysshadow', 'wndclass_desktop_generic',
   'dwm', 'multitaskingviewframe', 'xamlmetro',
@@ -918,10 +919,19 @@ function getUsageDataPayload() {
   const dateKey = usageDateKey();
   const today = attachUsageIcons(ensureUsageDay(dateKey));
   if (!Array.isArray(today.hourly) || today.hourly.length !== 24) today.hourly = Array(24).fill(0);
+  const current = usageCurrent
+    ? {
+        exe: usageCurrent.exe,
+        name: usageCurrent.name,
+        title: usageCurrent.title,
+        seconds: Math.max(0, (Date.now() - usageCurrent.startedAt) / 1000),
+      }
+    : null;
   return {
     enabled: usageRecord?.enabled !== false,
     ignored: usageRecord?.ignored || [],
     today,
+    current,
   };
 }
 
@@ -938,9 +948,16 @@ function handleUsageSnapshot(snapshot: any) {
   const windowClass = String(snapshot?.class || '').toLowerCase();
   const idleMs = Number(snapshot?.idleMs) || 0;
 
+  const previousCurrent = usageCurrent;
+  usageCurrent = null;
   if (!exe || USAGE_SYSTEM_PROCESSES.has(exe) || isUsageSystemPath(processPath)) return;
   if (USAGE_INACTIVE_WINDOW_CLASSES.has(windowClass)) return;
   if (idleMs > USAGE_AFK_THRESHOLD_MS) return;
+
+  const nextCurrent = previousCurrent?.exe === exe
+    ? previousCurrent
+    : { exe, name: usageDisplayName(exe), title, startedAt: now };
+  usageCurrent = nextCurrent;
 
   const dateKey = usageDateKey();
   const day = ensureUsageDay(dateKey);

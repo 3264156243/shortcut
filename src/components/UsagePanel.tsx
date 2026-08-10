@@ -215,7 +215,17 @@ export default function UsagePanel() {
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>应用使用记录</div>
-          <div className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{data?.today?.date || '--'}</div>
+          <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+            <span
+              className="inline-block h-1.5 w-1.5 rounded-full"
+              style={{ background: data?.current ? '#34d399' : 'var(--color-text-muted)' }}
+            />
+            <span className="truncate">
+              {data?.current
+                ? `正在记录 ${data.current.name} · ${formatDuration(data.current.seconds)}`
+                : `${data?.today?.date || '--'} · 未在计时`}
+            </span>
+          </div>
         </div>
         <button
           type="button"

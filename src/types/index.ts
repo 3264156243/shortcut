@@ -73,10 +73,18 @@ export interface UsageDayData {
   hourly: number[];
 }
 
+export interface UsageCurrent {
+  exe: string;
+  name: string;
+  title: string;
+  seconds: number;
+}
+
 export interface UsageData {
   enabled: boolean;
   ignored: string[];
   today: UsageDayData;
+  current: UsageCurrent | null;
 }
 
 export type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error' | 'unconfigured';
