@@ -316,12 +316,20 @@ function anyFullscreenWindow(): boolean {
 
 function applyIslandVisibility() {
   if (!islandWindow || islandWindow.isDestroyed()) return;
+  applyIslandMousePassthrough();
   const prefs = getIslandPreferences();
   if (prefs.autoHideFullscreen !== false && anyFullscreenWindow()) {
     islandWindow.hide();
   } else if (isIslandEnabled(prefs) && !islandUserHidden) {
     islandWindow.showInactive();
   }
+}
+
+function applyIslandMousePassthrough() {
+  if (!islandWindow || islandWindow.isDestroyed()) return;
+  const prefs = getIslandPreferences();
+  const expanded = prefs.displayState === 'expanded';
+  islandWindow.setIgnoreMouseEvents(!expanded, { forward: true });
 }
 
 function positionIslandWindow(force = false) {
@@ -365,6 +373,7 @@ function createIslandWindow() {
   });
   islandWindow.setAlwaysOnTop(true, 'screen-saver');
   islandWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  applyIslandMousePassthrough();
   if (process.env.VITE_DEV_SERVER_URL) {
     islandWindow.loadURL(process.env.VITE_DEV_SERVER_URL + '/island.html');
   } else {
