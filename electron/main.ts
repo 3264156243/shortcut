@@ -2275,7 +2275,7 @@ async function applyAdminMode() {
     stdio: 'ignore',
   });
   elevatedProcess.unref();
-  setTimeout(() => app.exit(0), 2000);
+  setTimeout(() => app.exit(0), 800);
 }
 
 ipcMain.handle('app:setAdminMode', async (_e: any, enabled: boolean) => {
@@ -2291,7 +2291,7 @@ ipcMain.handle('app:setAdminMode', async (_e: any, enabled: boolean) => {
         stdio: 'ignore',
       });
       elevatedProcess.unref();
-      setTimeout(() => app.exit(0), 2000);
+      setTimeout(() => app.exit(0), 800);
     }
   }
   return { success: true };
@@ -2637,6 +2637,7 @@ if (!gotSingleInstanceLock) {
   app.whenReady().then(async () => {
     restoreFromBackupIfNeeded();
   backupConfig();
+  void applyAdminMode();
   usageRecord = loadUsageRecord();
   usageFlushTimer = setInterval(() => saveUsageRecord(), 60000);
   setupAutoUpdater();

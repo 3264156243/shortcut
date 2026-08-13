@@ -8,8 +8,8 @@ const modules: Array<{ id: ModuleId; label: string; icon: typeof Grid2X2 }> = [
   { id: 'shortcuts', label: '快捷', icon: Grid2X2 },
   { id: 'tasks', label: '任务', icon: CheckSquare },
   { id: 'cockpit', label: '驾驶舱', icon: Gauge },
-  { id: 'usage', label: '统计', icon: BarChart3 },
   { id: 'translate', label: '翻译', icon: Languages },
+  { id: 'usage', label: '统计', icon: BarChart3 },
   { id: 'island', label: 'SC球', icon: Smartphone },
 ];
 
