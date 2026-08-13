@@ -2262,20 +2262,20 @@ function setAdminMode(enabled: boolean) {
   return true;
 }
 
-async function applyAdminMode() {
+async function applyAdminMode(): Promise<boolean> {
   const cfg = readConfigObject();
-  if (!cfg?.adminMode) return;
+  if (!cfg?.adminMode) return true;
   const elevated = await isElevated();
-  if (elevated) return;
+  if (elevated) return true;
   app.releaseSingleInstanceLock();
   const command = `Start-Process -FilePath '${process.execPath}' -Verb RunAs`;
-  const elevatedProcess = childProcess.spawn('powershell.exe', ['-NoProfile', '-Command', command], {
+  childProcess.spawn('powershell.exe', ['-NoProfile', '-Command', command], {
     detached: true,
     windowsHide: true,
     stdio: 'ignore',
-  });
-  elevatedProcess.unref();
-  setTimeout(() => app.exit(0), 800);
+  }).unref();
+  app.exit(0);
+  return false;
 }
 
 ipcMain.handle('app:setAdminMode', async (_e: any, enabled: boolean) => {
@@ -2637,7 +2637,8 @@ if (!gotSingleInstanceLock) {
   app.whenReady().then(async () => {
     restoreFromBackupIfNeeded();
   backupConfig();
-  void applyAdminMode();
+  const shouldStart = await applyAdminMode();
+  if (!shouldStart) return;
   usageRecord = loadUsageRecord();
   usageFlushTimer = setInterval(() => saveUsageRecord(), 60000);
   setupAutoUpdater();
