@@ -62,7 +62,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   getOpenAtLogin: () => ipcRenderer.invoke('app:getOpenAtLogin'),
   setOpenAtLogin: (enabled: boolean) => ipcRenderer.invoke('app:setOpenAtLogin', enabled),
-  setAdminMode: (enabled: boolean) => ipcRenderer.invoke('app:setAdminMode', enabled),
 
   // System
   getInstalledSoftware: () => ipcRenderer.invoke('system:getInstalledSoftware'),

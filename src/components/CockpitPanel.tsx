@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from 'react';
-import { Battery, BatteryCharging, CircleGauge } from 'lucide-react';
+import { Battery, BatteryCharging, CircleGauge, ShieldAlert } from 'lucide-react';
 import { CockpitData } from '../types';
 
 const missing = '未获取到数据';
@@ -63,11 +63,21 @@ export default function CockpitPanel() {
   const battery = data?.battery;
   const level = typeof battery?.level === 'number' ? Math.max(0, Math.min(100, battery.level)) : 0;
   const updated = data?.timestamp ? new Date(data.timestamp).toLocaleTimeString('zh-CN', { hour12: false }) : '--:--:--';
+  const hasMissing = !data || ['cpu', 'gpu', 'memory'].some((key) => {
+    const item = (data as any)?.[key];
+    return item?.usage == null || item?.temperature == null;
+  });
   return <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[#0b0e12] px-5 pb-5 pt-3 text-zinc-100">
     <header className="flex shrink-0 items-center justify-between border-b border-white/10 pb-3">
       <div className="flex items-center gap-3"><CircleGauge size={20} className="text-orange-400" /><div><h1 className="text-sm font-semibold">电脑驾驶舱</h1><p className="mt-0.5 text-[11px] text-zinc-500">实时硬件状态</p></div></div>
       <div className="flex items-center gap-2 text-xs text-zinc-500"><span className={`h-2 w-2 rounded-full ${error ? 'bg-red-500' : data ? 'bg-emerald-400' : 'bg-amber-400'}`} />{error || (data ? `更新于 ${updated}` : '正在连接传感器')}</div>
     </header>
+    {hasMissing ? (
+      <div className="mt-3 flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-xs" style={{ borderColor: 'rgba(245,158,11,.35)', background: 'rgba(245,158,11,.12)', color: '#fbbf24' }}>
+        <ShieldAlert size={14} />
+        <span>未获取到数据，请以管理员方式运行 ShortCut</span>
+      </div>
+    ) : null}
     <div className="grid min-h-[310px] flex-1 grid-cols-2 items-center justify-items-center gap-3 py-2 md:grid-cols-[minmax(180px,1fr)_minmax(120px,170px)_minmax(180px,1fr)]">
       <Dial label="CPU" name={data?.cpu?.name} temperature={data?.cpu?.temperature} usage={data?.cpu?.usage} color="#29b6f6" />
       <div className="col-span-2 row-start-1 max-w-[150px] self-start pt-3 md:col-span-1 md:col-start-2 md:max-w-none"><Dial small label="内存" name={data?.memory?.name} temperature={data?.memory?.temperature} usage={data?.memory?.usage} color="#ffb74d" /></div>

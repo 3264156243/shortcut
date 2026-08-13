@@ -106,22 +106,6 @@ export default function SettingsPanel() {
                     className="w-4 h-4 accent-indigo-500"
                   />
                 </label>
-                <label className="flex items-center justify-between cursor-pointer">
-                  <span className="flex items-center gap-2 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                    <Power size={15} style={{ color: 'var(--color-text-muted)' }} />
-                    管理员模式
-                  </span>
-                  <input
-                    type="checkbox"
-                    checked={config.adminMode === true}
-                    onChange={(e) => {
-                      const enabled = e.target.checked;
-                      useStore.setState((s) => ({ config: { ...s.config, adminMode: enabled } }));
-                      void window.electronAPI?.setAdminMode?.(enabled);
-                    }}
-                    className="w-4 h-4 accent-indigo-500"
-                  />
-                </label>
               </div>
             </div>
 

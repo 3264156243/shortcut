@@ -2244,78 +2244,6 @@ ipcMain.handle('app:setOpenAtLogin', (_e: any, enabled: boolean) => {
   return app.getLoginItemSettings().openAtLogin;
 });
 
-function isElevated(): Promise<boolean> {
-  return new Promise((resolve) => {
-    childProcess.exec(
-      'powershell -NoProfile -Command "([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)"',
-      (error: any, stdout: string) => {
-        resolve(!!stdout && stdout.trim() === 'True');
-      },
-    );
-  });
-}
-
-function setAdminMode(enabled: boolean) {
-  const cfg = readConfigObject();
-  if (!cfg) return false;
-  writeConfig(JSON.stringify({ ...cfg, adminMode: !!enabled }, null, 2));
-  return true;
-}
-
-async function applyAdminMode(): Promise<boolean> {
-  const adminLog = (message: string) => {
-    try {
-      const file = path.join(app.getPath('userData'), 'shortcut', 'admin-debug.log');
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.appendFileSync(file, `${new Date().toISOString()} ${message}\n`);
-    } catch {}
-  };
-  const cfg = readConfigObject();
-  adminLog(`adminMode=${cfg?.adminMode ? 'true' : 'false'} exe=${process.execPath}`);
-  if (!cfg?.adminMode) return true;
-  const elevated = await isElevated();
-  adminLog(`elevated=${elevated}`);
-  if (elevated) return true;
-  app.releaseSingleInstanceLock();
-  const command = `Start-Process -FilePath '${process.execPath}' -Verb RunAs`;
-  adminLog(`spawn ${command}`);
-  const elevatedProcess = childProcess.spawn('powershell.exe', ['-NoProfile', '-Command', command], {
-    detached: true,
-    windowsHide: true,
-    stdio: ['ignore', 'ignore', 'pipe'],
-  });
-  elevatedProcess.once('error', (error: Error) => adminLog(`spawn error: ${error.message}`));
-  elevatedProcess.stderr?.on('data', (chunk: Buffer) => adminLog(`spawn stderr: ${chunk.toString().trim()}`));
-  elevatedProcess.unref();
-  await new Promise((resolve) => setTimeout(resolve, 10000));
-  const acquired = app.requestSingleInstanceLock();
-  adminLog(`lock acquired after wait=${acquired}`);
-  if (!acquired) {
-    app.exit(0);
-    return false;
-  }
-  return true;
-}
-
-ipcMain.handle('app:setAdminMode', async (_e: any, enabled: boolean) => {
-  setAdminMode(enabled);
-  if (enabled) {
-    const elevated = await isElevated();
-    if (!elevated) {
-      app.releaseSingleInstanceLock();
-      const command = `Start-Process -FilePath '${process.execPath}' -Verb RunAs`;
-      const elevatedProcess = childProcess.spawn('powershell.exe', ['-NoProfile', '-Command', command], {
-        detached: true,
-        windowsHide: true,
-        stdio: 'ignore',
-      });
-      elevatedProcess.unref();
-      setTimeout(() => app.exit(0), 800);
-    }
-  }
-  return { success: true };
-});
-
 ipcMain.handle('reminder:getData', (_e: any) => {
   try {
     return reminderDataByWindow.get(_e.sender.id) || null;
@@ -2656,8 +2584,6 @@ if (!gotSingleInstanceLock) {
   app.whenReady().then(async () => {
     restoreFromBackupIfNeeded();
   backupConfig();
-  const shouldStart = await applyAdminMode();
-  if (!shouldStart) return;
   usageRecord = loadUsageRecord();
   usageFlushTimer = setInterval(() => saveUsageRecord(), 60000);
   setupAutoUpdater();

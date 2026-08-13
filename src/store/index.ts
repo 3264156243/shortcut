@@ -129,7 +129,6 @@ declare global {
       onTaskLocate: (callback: (data: unknown) => void) => () => void;
       getOpenAtLogin: () => Promise<boolean>;
       setOpenAtLogin: (enabled: boolean) => Promise<boolean>;
-      setAdminMode: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
       getInstalledSoftware: () => Promise<Array<{ name: string; path: string; icon: string }>>;
       getFileInfo: (filePath: string) => Promise<{ name: string; path: string; type: 'app' | 'folder' | 'file' } | null>;
       getFileIcon: (filePath: string) => Promise<string | null>;

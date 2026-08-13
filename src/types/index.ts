@@ -194,7 +194,6 @@ export interface AppConfig {
   panelAnimation: PanelAnimation;
   globalHotkey: string;
   openOnStartup: boolean;
-  adminMode?: boolean;
   rememberWindowSize: boolean;
   closeOnBlur: boolean;
   searchHistory: string[];
@@ -217,7 +216,6 @@ export const DEFAULT_CONFIG: AppConfig = {
   panelAnimation: 'bottom',
   globalHotkey: 'Alt+Space',
   openOnStartup: false,
-  adminMode: false,
   rememberWindowSize: true,
   closeOnBlur: true,
   searchHistory: [],
