@@ -2274,8 +2274,13 @@ async function applyAdminMode(): Promise<boolean> {
     windowsHide: true,
     stdio: 'ignore',
   }).unref();
-  setTimeout(() => app.exit(0), 1200);
-  return false;
+  await new Promise((resolve) => setTimeout(resolve, 2500));
+  const acquired = app.requestSingleInstanceLock();
+  if (!acquired) {
+    app.exit(0);
+    return false;
+  }
+  return true;
 }
 
 ipcMain.handle('app:setAdminMode', async (_e: any, enabled: boolean) => {
