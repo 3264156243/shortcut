@@ -2263,19 +2263,33 @@ function setAdminMode(enabled: boolean) {
 }
 
 async function applyAdminMode(): Promise<boolean> {
+  const adminLog = (message: string) => {
+    try {
+      const file = path.join(app.getPath('userData'), 'shortcut', 'admin-debug.log');
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.appendFileSync(file, `${new Date().toISOString()} ${message}\n`);
+    } catch {}
+  };
   const cfg = readConfigObject();
+  adminLog(`adminMode=${cfg?.adminMode ? 'true' : 'false'} exe=${process.execPath}`);
   if (!cfg?.adminMode) return true;
   const elevated = await isElevated();
+  adminLog(`elevated=${elevated}`);
   if (elevated) return true;
   app.releaseSingleInstanceLock();
   const command = `Start-Process -FilePath '${process.execPath}' -Verb RunAs`;
-  childProcess.spawn('powershell.exe', ['-NoProfile', '-Command', command], {
+  adminLog(`spawn ${command}`);
+  const elevatedProcess = childProcess.spawn('powershell.exe', ['-NoProfile', '-Command', command], {
     detached: true,
     windowsHide: true,
-    stdio: 'ignore',
-  }).unref();
-  await new Promise((resolve) => setTimeout(resolve, 2500));
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  elevatedProcess.once('error', (error: Error) => adminLog(`spawn error: ${error.message}`));
+  elevatedProcess.stderr?.on('data', (chunk: Buffer) => adminLog(`spawn stderr: ${chunk.toString().trim()}`));
+  elevatedProcess.unref();
+  await new Promise((resolve) => setTimeout(resolve, 10000));
   const acquired = app.requestSingleInstanceLock();
+  adminLog(`lock acquired after wait=${acquired}`);
   if (!acquired) {
     app.exit(0);
     return false;
