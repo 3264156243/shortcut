@@ -2274,7 +2274,7 @@ async function applyAdminMode(): Promise<boolean> {
     windowsHide: true,
     stdio: 'ignore',
   }).unref();
-  app.exit(0);
+  setTimeout(() => app.exit(0), 1200);
   return false;
 }
 
