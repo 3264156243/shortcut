@@ -1143,11 +1143,17 @@ function ensureDefaultCodexPreset() {
       wireApi: current.wireApi || 'chat',
       model: current.model,
       apiKey: current.apiKey || undefined,
+      isDefault: true,
       createdAt: now,
       updatedAt: now,
     };
     presets.push(preset);
     saveCodexPresets(presets);
+    const backupConfig = path.join(getCodexBackupDir(), 'config.toml');
+    const backupModels = path.join(getCodexBackupDir(), 'models.json');
+    const configText = fs.existsSync(backupConfig) ? fs.readFileSync(backupConfig, 'utf8') : readLiveCodexConfigText();
+    const modelsText = fs.existsSync(backupModels) ? fs.readFileSync(backupModels, 'utf8') : readLiveCodexModelsText();
+    writeCodexPresetSnapshot(preset, configText, modelsText);
     refreshCodexPresetIcon(preset);
   } catch {}
 }
@@ -1181,6 +1187,7 @@ function normalizeCodexPreset(data: any, existing?: any): any {
 
 function readCodexCurrentState(): any {
   ensureDefaultCodexPreset();
+  ensureCodexPresetSnapshots();
   const current = parseCurrentCodexProvider();
   return {
     presets: loadCodexPresets(),
@@ -1345,21 +1352,22 @@ function ensureCodexModelInCatalog(modelSlug: string) {
 
 function applyCodexPreset(preset: any): { success: boolean; error?: string } {
   try {
+    const snapshot = readCodexPresetSnapshot(preset);
+    if (!snapshot.config) return { success: false, error: '方案配置文件缺失' };
     backupCodexConfig();
     const configPath = getCodexConfigPath();
-    const configText = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
-    const currentProvider = (configText.match(/^model_provider\s*=\s*"([^"]+)"/m) || [])[1] || '';
-    const targetProvider = currentProvider || preset.providerId;
-    const nextConfig = applyPresetToToml(
-      configText,
-      { ...preset, providerId: targetProvider, displayProviderId: preset.providerId },
-      !!currentProvider,
-    );
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
     const tmp = configPath + '.tmp';
-    fs.writeFileSync(tmp, nextConfig, 'utf8');
+    fs.writeFileSync(tmp, snapshot.config, 'utf8');
     fs.renameSync(tmp, configPath);
-    ensureCodexModelInCatalog(preset.model);
+    if (snapshot.models) {
+      const modelsPath = getCodexModelsPath();
+      const modelsTmp = modelsPath + '.tmp';
+      fs.writeFileSync(modelsTmp, snapshot.models, 'utf8');
+      fs.renameSync(modelsTmp, modelsPath);
+    } else {
+      ensureCodexModelInCatalog(preset.model);
+    }
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error?.message || '切换失败' };
@@ -1377,6 +1385,110 @@ function refreshCodexPresetIcon(preset: any) {
       saveCodexPresets(presets);
     }
   }).catch(() => undefined);
+}
+
+function getCodexPresetDir(presetId: string): string {
+  return path.join(getCodexHomeDir(), 'shortcut-presets', presetId);
+}
+
+function getCodexPresetConfigPath(presetId: string): string {
+  return path.join(getCodexPresetDir(presetId), 'config.toml');
+}
+
+function getCodexPresetModelsPath(presetId: string): string {
+  return path.join(getCodexPresetDir(presetId), 'models.json');
+}
+
+function readLiveCodexConfigText(): string {
+  const file = getCodexConfigPath();
+  return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+}
+
+function readLiveCodexModelsText(): string | null {
+  const file = getCodexModelsPath();
+  return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
+}
+
+function writeCodexPresetSnapshot(preset: any, configText: string, modelsText?: string | null) {
+  const dir = getCodexPresetDir(preset.id);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'config.toml'), configText, 'utf8');
+  if (modelsText) fs.writeFileSync(path.join(dir, 'models.json'), modelsText, 'utf8');
+}
+
+function readCodexPresetSnapshot(preset: any): { config: string; models: string | null } {
+  const config = fs.existsSync(getCodexPresetConfigPath(preset.id))
+    ? fs.readFileSync(getCodexPresetConfigPath(preset.id), 'utf8')
+    : '';
+  const modelsPath = getCodexPresetModelsPath(preset.id);
+  const models = fs.existsSync(modelsPath) ? fs.readFileSync(modelsPath, 'utf8') : null;
+  return { config, models };
+}
+
+function buildCodexPresetSnapshot(
+  preset: any,
+  templateConfig: string,
+  templateModels: string | null,
+): { config: string; models: string | null } {
+  const currentProvider = (templateConfig.match(/^model_provider\s*=\s*"([^"]+)"/m) || [])[1] || preset.providerId;
+  const config = applyPresetToToml(
+    templateConfig,
+    { ...preset, providerId: currentProvider, displayProviderId: preset.providerId },
+    !!currentProvider,
+  );
+  let models = templateModels;
+  try {
+    if (models) {
+      const catalog = JSON.parse(models);
+      if (!catalog.models.some((item: any) => item?.slug === preset.model)) {
+        const template = catalog.models.length
+          ? JSON.parse(JSON.stringify(catalog.models[0]))
+          : { ...CODEX_DEFAULT_MODEL };
+        template.slug = preset.model;
+        if (typeof template.name === 'string') template.name = preset.model;
+        catalog.models.push(template);
+        models = JSON.stringify(catalog, null, 2);
+      }
+    } else {
+      models = JSON.stringify({
+        models: [{ ...CODEX_DEFAULT_MODEL, slug: preset.model, name: preset.model }],
+      }, null, 2);
+    }
+  } catch {
+    models = JSON.stringify({
+      models: [{ ...CODEX_DEFAULT_MODEL, slug: preset.model, name: preset.model }],
+    }, null, 2);
+  }
+  return { config, models };
+}
+
+function getDefaultCodexPreset(presets: any[]): any {
+  return presets.find((item: any) => item.isDefault || String(item.id || '').startsWith('default-')) || null;
+}
+
+function ensureCodexPresetSnapshots() {
+  const presets = loadCodexPresets();
+  for (const preset of presets) {
+    if (fs.existsSync(getCodexPresetConfigPath(preset.id))) continue;
+    const isDefault = preset.isDefault || String(preset.id || '').startsWith('default-');
+    if (isDefault) {
+      const backupConfig = path.join(getCodexBackupDir(), 'config.toml');
+      const backupModels = path.join(getCodexBackupDir(), 'models.json');
+      const configText = fs.existsSync(backupConfig) ? fs.readFileSync(backupConfig, 'utf8') : readLiveCodexConfigText();
+      const modelsText = fs.existsSync(backupModels) ? fs.readFileSync(backupModels, 'utf8') : readLiveCodexModelsText();
+      writeCodexPresetSnapshot(preset, configText, modelsText);
+      continue;
+    }
+    const defaultPreset = getDefaultCodexPreset(presets);
+    let templateConfig = defaultPreset && fs.existsSync(getCodexPresetConfigPath(defaultPreset.id))
+      ? fs.readFileSync(getCodexPresetConfigPath(defaultPreset.id), 'utf8')
+      : readLiveCodexConfigText();
+    let templateModels = defaultPreset && fs.existsSync(getCodexPresetModelsPath(defaultPreset.id))
+      ? fs.readFileSync(getCodexPresetModelsPath(defaultPreset.id), 'utf8')
+      : readLiveCodexModelsText();
+    const snapshot = buildCodexPresetSnapshot(preset, templateConfig, templateModels);
+    writeCodexPresetSnapshot(preset, snapshot.config, snapshot.models);
+  }
 }
 
 function writeIslandConfig(island: any) {
@@ -2571,12 +2683,26 @@ ipcMain.handle('codex:savePreset', (_e: any, data: any) => {
     presets.push(preset);
   }
   saveCodexPresets(presets);
+  const template = (() => {
+    if (existing && fs.existsSync(getCodexPresetConfigPath(preset.id))) {
+      return readCodexPresetSnapshot(preset);
+    }
+    const defaultPreset = getDefaultCodexPreset(presets);
+    if (defaultPreset && fs.existsSync(getCodexPresetConfigPath(defaultPreset.id))) {
+      return readCodexPresetSnapshot(defaultPreset);
+    }
+    return { config: readLiveCodexConfigText(), models: readLiveCodexModelsText() };
+  })();
+  const snapshot = buildCodexPresetSnapshot(preset, template.config, template.models);
+  writeCodexPresetSnapshot(preset, snapshot.config, snapshot.models);
   refreshCodexPresetIcon(preset);
   return { success: true, state: readCodexCurrentState() };
 });
 ipcMain.handle('codex:deletePreset', (_e: any, id: string) => {
   const presets = loadCodexPresets().filter((item: any) => item.id !== id);
   saveCodexPresets(presets);
+  const dir = getCodexPresetDir(id);
+  if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
   return { success: true, state: readCodexCurrentState() };
 });
 ipcMain.handle('codex:applyPreset', (_e: any, id: string) => {
