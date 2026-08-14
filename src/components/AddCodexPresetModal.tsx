@@ -106,12 +106,12 @@ export default function AddCodexPresetModal({
           </label>
           <label className="block">
             <span className={labelClass} style={labelStyle}>协议类型</span>
-            <div className="relative">
+            <div className="relative flex h-10 items-center rounded-md border px-3" style={{ background: 'var(--color-bg-card)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }}>
               <select
                 value={wireApi}
                 onChange={(event) => setWireApi(event.target.value as CodexWireApi)}
-                className={`${inputClass} appearance-none pr-9`}
-                style={{ ...inputStyle, appearance: 'none' }}
+                className="h-full w-full appearance-none bg-transparent pr-8 text-sm outline-none"
+                style={{ background: 'transparent', color: 'var(--color-text)', WebkitAppearance: 'none', appearance: 'none' }}
               >
                 {wireOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
               </select>

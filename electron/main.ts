@@ -1253,6 +1253,7 @@ function applyPresetToToml(configText: string, preset: any): string {
   let modelKeyReplaced = false;
   let reviewKeyReplaced = false;
   let catalogKeyReplaced = false;
+  let providerInsertIndex = -1;
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -1260,6 +1261,7 @@ function applyPresetToToml(configText: string, preset: any): string {
     if (sectionMatch) {
       currentSection = sectionMatch[1];
       skipProviderSection = false;
+      if (providerInsertIndex < 0) providerInsertIndex = output.length;
       if (currentSection === `model_providers.${preset.providerId}`) {
         output.push(...buildCodexProviderSection(preset));
         providerSectionReplaced = true;
@@ -1312,7 +1314,9 @@ function applyPresetToToml(configText: string, preset: any): string {
   ].filter(Boolean);
   if (missingTop.length) output.unshift(...missingTop);
   if (!providerSectionReplaced) {
-    output.push('', ...buildCodexProviderSection(preset));
+    const sectionLines = ['', ...buildCodexProviderSection(preset)];
+    if (providerInsertIndex >= 0) output.splice(providerInsertIndex, 0, ...sectionLines);
+    else output.push(...sectionLines);
   }
   return output.join('\n') + '\n';
 }

@@ -32,7 +32,9 @@ export default function CodexProviderPanel() {
       const result = await window.electronAPI?.applyCodexPreset?.(id);
       if (result?.state) setState(result.state);
       addToast(
-        result?.success ? `已切换为「${preset?.name || '该'}」方案，重启 Codex 后生效` : `切换失败：${result?.error || '未知错误'}`,
+        result?.success
+          ? `已切换为「${preset?.name || '该'}」方案，重启 Codex 后生效（聊天记录按供应商隔离，切回原方案即恢复）`
+          : `切换失败：${result?.error || '未知错误'}`,
         result?.success ? 'success' : 'error',
       );
     } finally {
