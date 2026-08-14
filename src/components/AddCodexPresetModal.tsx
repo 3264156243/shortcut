@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronDown, KeyRound, X } from 'lucide-react';
+import { Check, ChevronDown, KeyRound, X } from 'lucide-react';
 import { useStore } from '../store';
 import { CodexPreset, CodexWireApi } from '../types';
 
@@ -27,6 +27,7 @@ export default function AddCodexPresetModal({
   const [model, setModel] = useState(preset?.model || '');
   const [apiKey, setApiKey] = useState('');
   const [saving, setSaving] = useState(false);
+  const [wireMenuOpen, setWireMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!preset && !providerId && name.trim()) {
@@ -106,16 +107,41 @@ export default function AddCodexPresetModal({
           </label>
           <label className="block">
             <span className={labelClass} style={labelStyle}>协议类型</span>
-            <div className="relative flex h-10 items-center rounded-md border px-3" style={{ background: 'var(--color-bg-card)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }}>
-              <select
-                value={wireApi}
-                onChange={(event) => setWireApi(event.target.value as CodexWireApi)}
-                className="h-full w-full appearance-none bg-transparent pr-8 text-sm outline-none"
-                style={{ background: 'transparent', color: 'var(--color-text)', WebkitAppearance: 'none', appearance: 'none' }}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setWireMenuOpen((open) => !open)}
+                className="flex h-10 w-full items-center justify-between rounded-md border px-3 text-sm"
+                style={{ background: 'var(--color-bg-card)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
               >
-                {wireOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-              </select>
-              <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-muted)' }} />
+                <span className="truncate">{wireOptions.find((item) => item.value === wireApi)?.label || wireApi}</span>
+                <ChevronDown size={14} className="shrink-0" style={{ color: 'var(--color-text-muted)' }} />
+              </button>
+              {wireMenuOpen ? (
+                <>
+                  <div className="fixed inset-0 z-[210]" onClick={() => setWireMenuOpen(false)} />
+                  <div
+                    className="absolute left-0 right-0 top-[calc(100%+4px)] z-[211] overflow-hidden rounded-md border py-1"
+                    style={{ background: 'var(--color-bg-secondary)', borderColor: 'var(--color-border)', boxShadow: '0 14px 40px var(--color-shadow)' }}
+                  >
+                    {wireOptions.map((item) => {
+                      const active = item.value === wireApi;
+                      return (
+                        <button
+                          key={item.value}
+                          type="button"
+                          onClick={() => { setWireApi(item.value); setWireMenuOpen(false); }}
+                          className="flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:opacity-85"
+                          style={{ background: active ? 'var(--color-accent-soft, var(--color-bg-card-hover))' : 'transparent', color: 'var(--color-text)' }}
+                        >
+                          <span className="truncate">{item.label}</span>
+                          {active ? <Check size={14} style={{ color: 'var(--color-accent)' }} /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : null}
             </div>
           </label>
           <label className="block">
