@@ -62,7 +62,7 @@ export default function CodexProviderPanel() {
   };
 
   const isCurrent = (preset: CodexPreset) =>
-    state?.currentProvider === preset.providerId && state.currentModel === preset.model;
+    state?.currentBaseUrl === preset.baseUrl && state.currentModel === preset.model;
 
   const fileButtons: Array<{ which: 'config' | 'auth' | 'models'; label: string; icon: typeof FileText }> = [
     { which: 'config', label: 'config.toml', icon: FileText },

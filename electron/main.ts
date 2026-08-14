@@ -1181,19 +1181,13 @@ function normalizeCodexPreset(data: any, existing?: any): any {
 
 function readCodexCurrentState(): any {
   ensureDefaultCodexPreset();
-  let currentProvider = '';
-  let currentModel = '';
-  try {
-    const raw = fs.readFileSync(getCodexConfigPath(), 'utf8');
-    const providerMatch = raw.match(/^model_provider\s*=\s*"([^"]+)"/m);
-    const modelMatch = raw.match(/^model\s*=\s*"([^"]+)"/m);
-    currentProvider = providerMatch?.[1] || '';
-    currentModel = modelMatch?.[1] || '';
-  } catch {}
+  const current = parseCurrentCodexProvider();
   return {
     presets: loadCodexPresets(),
-    currentProvider,
-    currentModel,
+    currentProvider: current?.providerId || '',
+    currentModel: current?.model || '',
+    currentBaseUrl: current?.baseUrl || '',
+    currentWireApi: current?.wireApi || 'chat',
     backupExists: fs.existsSync(path.join(getCodexBackupDir(), 'config.toml')),
   };
 }
@@ -1230,7 +1224,7 @@ function restoreCodexConfig(): { success: boolean; error?: string } {
 function buildCodexProviderSection(preset: any): string[] {
   const lines = [
     `[model_providers.${preset.providerId}]`,
-    `name = "${preset.providerId}"`,
+    `name = "${preset.displayProviderId || preset.providerId}"`,
     `base_url = "${preset.baseUrl}"`,
     `wire_api = "${preset.wireApi || 'chat'}"`,
   ];
@@ -1242,7 +1236,7 @@ function buildCodexProviderSection(preset: any): string[] {
   return lines;
 }
 
-function applyPresetToToml(configText: string, preset: any): string {
+function applyPresetToToml(configText: string, preset: any, keepProviderKey = false): string {
   const catalogValue = getCodexModelsPath().replace(/\\/g, '/');
   const lines = configText.split(/\r?\n/);
   const output: string[] = [];
@@ -1274,6 +1268,10 @@ function applyPresetToToml(configText: string, preset: any): string {
     if (skipProviderSection) continue;
     if (!currentSection) {
       if (/^model_provider\s*=/.test(trimmed)) {
+        if (keepProviderKey) {
+          output.push(line);
+          continue;
+        }
         if (!providerKeyReplaced) {
           output.push(`model_provider = "${preset.providerId}"`);
           providerKeyReplaced = true;
@@ -1350,7 +1348,13 @@ function applyCodexPreset(preset: any): { success: boolean; error?: string } {
     backupCodexConfig();
     const configPath = getCodexConfigPath();
     const configText = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
-    const nextConfig = applyPresetToToml(configText, preset);
+    const currentProvider = (configText.match(/^model_provider\s*=\s*"([^"]+)"/m) || [])[1] || '';
+    const targetProvider = currentProvider || preset.providerId;
+    const nextConfig = applyPresetToToml(
+      configText,
+      { ...preset, providerId: targetProvider, displayProviderId: preset.providerId },
+      !!currentProvider,
+    );
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
     const tmp = configPath + '.tmp';
     fs.writeFileSync(tmp, nextConfig, 'utf8');

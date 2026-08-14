@@ -107,6 +107,8 @@ export interface CodexPresetState {
   presets: CodexPreset[];
   currentProvider: string;
   currentModel: string;
+  currentBaseUrl: string;
+  currentWireApi: string;
   backupExists: boolean;
 }
 

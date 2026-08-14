@@ -111,7 +111,7 @@ export default function AddCodexPresetModal({
               <button
                 type="button"
                 onClick={() => setWireMenuOpen((open) => !open)}
-                className="flex h-10 w-full items-center justify-between rounded-md border px-3 text-sm"
+                className="relative z-[212] flex h-10 w-full items-center justify-between rounded-md border px-3 text-sm"
                 style={{ background: 'var(--color-bg-card)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
               >
                 <span className="truncate">{wireOptions.find((item) => item.value === wireApi)?.label || wireApi}</span>
