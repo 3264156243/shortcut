@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { KeyRound, X } from 'lucide-react';
+import { ChevronDown, KeyRound, X } from 'lucide-react';
 import { useStore } from '../store';
 import { CodexPreset, CodexWireApi } from '../types';
 
@@ -106,9 +106,17 @@ export default function AddCodexPresetModal({
           </label>
           <label className="block">
             <span className={labelClass} style={labelStyle}>协议类型</span>
-            <select value={wireApi} onChange={(event) => setWireApi(event.target.value as CodexWireApi)} className={inputClass} style={inputStyle}>
-              {wireOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-            </select>
+            <div className="relative">
+              <select
+                value={wireApi}
+                onChange={(event) => setWireApi(event.target.value as CodexWireApi)}
+                className={`${inputClass} appearance-none pr-9`}
+                style={{ ...inputStyle, appearance: 'none' }}
+              >
+                {wireOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </select>
+              <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-muted)' }} />
+            </div>
           </label>
           <label className="block">
             <span className={labelClass} style={labelStyle}>模型名</span>

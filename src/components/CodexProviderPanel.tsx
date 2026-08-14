@@ -26,11 +26,15 @@ export default function CodexProviderPanel() {
   }, [refresh]);
 
   const apply = async (id: string) => {
+    const preset = state?.presets.find((item) => item.id === id);
     setApplyingId(id);
     try {
       const result = await window.electronAPI?.applyCodexPreset?.(id);
       if (result?.state) setState(result.state);
-      addToast(result?.success ? '已切换，重启 Codex 后生效' : `切换失败：${result?.error || '未知错误'}`, result?.success ? 'success' : 'error');
+      addToast(
+        result?.success ? `已切换为「${preset?.name || '该'}」方案，重启 Codex 后生效` : `切换失败：${result?.error || '未知错误'}`,
+        result?.success ? 'success' : 'error',
+      );
     } finally {
       setApplyingId(null);
     }

@@ -1094,6 +1094,64 @@ function loadCodexPresets(): any[] {
   }
 }
 
+function parseCurrentCodexProvider(): any | null {
+  try {
+    const configPath = getCodexConfigPath();
+    if (!fs.existsSync(configPath)) return null;
+    const raw = fs.readFileSync(configPath, 'utf8');
+    const providerMatch = raw.match(/^model_provider\s*=\s*"([^"]+)"/m);
+    const modelMatch = raw.match(/^model\s*=\s*"([^"]+)"/m);
+    if (!providerMatch) return null;
+    const providerId = providerMatch[1];
+    let inSection = false;
+    const section: any = { providerId, model: modelMatch?.[1] || '' };
+    for (const line of raw.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      const sectionMatch = trimmed.match(/^\[([^\]]+)\]$/);
+      if (sectionMatch) {
+        inSection = sectionMatch[1] === `model_providers.${providerId}`;
+        continue;
+      }
+      if (!inSection) continue;
+      const kv = trimmed.match(/^([a-zA-Z0-9_]+)\s*=\s*"([^"]*)"$/);
+      if (!kv) continue;
+      const key = kv[1];
+      const value = kv[2];
+      if (key === 'name') section.name = value;
+      else if (key === 'base_url') section.baseUrl = value;
+      else if (key === 'wire_api') section.wireApi = value;
+      else if (key === 'experimental_bearer_token') section.apiKey = value;
+    }
+    return section.baseUrl ? section : null;
+  } catch {
+    return null;
+  }
+}
+
+function ensureDefaultCodexPreset() {
+  try {
+    const presets = loadCodexPresets();
+    if (presets.length > 0) return;
+    const current = parseCurrentCodexProvider();
+    if (!current || !current.baseUrl || !current.model) return;
+    const now = new Date().toISOString();
+    const preset = {
+      id: `default-${current.providerId}`,
+      name: current.name || current.providerId,
+      providerId: current.providerId,
+      baseUrl: current.baseUrl,
+      wireApi: current.wireApi || 'chat',
+      model: current.model,
+      apiKey: current.apiKey || undefined,
+      createdAt: now,
+      updatedAt: now,
+    };
+    presets.push(preset);
+    saveCodexPresets(presets);
+    refreshCodexPresetIcon(preset);
+  } catch {}
+}
+
 function saveCodexPresets(presets: any[]) {
   try {
     const file = getCodexPresetFile();
@@ -1122,6 +1180,7 @@ function normalizeCodexPreset(data: any, existing?: any): any {
 }
 
 function readCodexCurrentState(): any {
+  ensureDefaultCodexPreset();
   let currentProvider = '';
   let currentModel = '';
   try {

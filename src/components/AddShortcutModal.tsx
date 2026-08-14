@@ -38,7 +38,13 @@ export default function AddShortcutModal() {
   useEffect(() => {
     if (manualIcon || !targetPath.trim() || type === 'group' || type === 'bat') return;
     if (type === 'url') {
-      const timer = window.setTimeout(() => window.electronAPI?.getWebsiteIcon(normalizeUrl(targetPath)).then((value) => value && setIcon(value)).catch(() => undefined), 350);
+      const timer = window.setTimeout(() => {
+        const normalized = normalizeUrl(targetPath);
+        const iconUrl = (() => {
+          try { return new URL(normalized).origin; } catch { return normalized; }
+        })();
+        window.electronAPI?.getWebsiteIcon(iconUrl).then((value) => value && setIcon(value)).catch(() => undefined);
+      }, 350);
       return () => window.clearTimeout(timer);
     }
     window.electronAPI?.getFileIcon(targetPath.trim()).then((value) => value && setIcon(value)).catch(() => undefined);
