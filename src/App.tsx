@@ -18,6 +18,7 @@ import CockpitPanel from './components/CockpitPanel';
 import IslandPanel from './components/IslandPanel';
 import UsagePanel from './components/UsagePanel';
 import UsageManagePanel from './components/UsageManagePanel';
+import CodexProviderPanel from './components/CodexProviderPanel';
 import ActivationGate from './components/ActivationGate';
 import { PanelAnimation, UpdateState } from './types';
 import { useTranslation } from './hooks/useTranslation';
@@ -50,7 +51,7 @@ const getAnimationVariants = (direction: PanelAnimation) => {
   return variants[direction] || variants.bottom;
 };
 
-const moduleOrder = ['shortcuts', 'tasks', 'cockpit', 'translate', 'usage', 'island'] as const;
+const moduleOrder = ['shortcuts', 'tasks', 'cockpit', 'translate', 'usage', 'island', 'codexProvider'] as const;
 
 export default function App() {
   const config = useStore((s) => s.config);
@@ -434,6 +435,8 @@ export default function App() {
               <UsageManagePanel />
             ) : activeModule === 'island' ? (
               <IslandPanel />
+            ) : activeModule === 'codexProvider' ? (
+              <CodexProviderPanel />
             ) : (
               <TranslatePanel />
             )}

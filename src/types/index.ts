@@ -45,7 +45,7 @@ export interface MusicState {
   durationMs?: number;
 }
 
-export type ModuleId = 'shortcuts' | 'tasks' | 'cockpit' | 'usage' | 'usageManage' | 'translate' | 'island';
+export type ModuleId = 'shortcuts' | 'tasks' | 'cockpit' | 'usage' | 'usageManage' | 'translate' | 'island' | 'codexProvider';
 
 export interface CockpitData {
   timestamp?: number;
@@ -86,6 +86,28 @@ export interface UsageData {
   backgroundApps: string[];
   day: UsageDayData;
   current: UsageCurrent | null;
+}
+
+export type CodexWireApi = 'chat' | 'responses' | 'anthropic';
+
+export interface CodexPreset {
+  id: string;
+  name: string;
+  providerId: string;
+  baseUrl: string;
+  wireApi: CodexWireApi;
+  model: string;
+  apiKey?: string;
+  icon?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CodexPresetState {
+  presets: CodexPreset[];
+  currentProvider: string;
+  currentModel: string;
+  backupExists: boolean;
 }
 
 export type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error' | 'unconfigured';

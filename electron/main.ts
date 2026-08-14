@@ -1045,6 +1045,273 @@ function restartUsageMonitor() {
   if (wasRunning && licenseGatePassed) startUsageMonitor();
 }
 
+// Codex provider presets
+const CODEX_BACKUP_DIRNAME = 'backup-shortcut';
+const CODEX_DEFAULT_MODEL = {
+  prefer_websockets: false,
+  support_verbosity: true,
+  default_verbosity: 'low',
+  apply_patch_tool_type: 'freeform',
+  web_search_tool_type: 'text',
+  input_modalities: ['text'],
+  supports_image_detail_original: false,
+  truncation_policy: { mode: 'tokens', limit: 10000 },
+  supports_parallel_tool_calls: true,
+  use_responses_lite: false,
+};
+
+function getCodexHomeDir(): string {
+  return process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
+}
+
+function getCodexPresetFile(): string {
+  return path.join(app.getPath('userData'), 'shortcut', 'codex-presets.json');
+}
+
+function getCodexConfigPath(): string {
+  return path.join(getCodexHomeDir(), 'config.toml');
+}
+
+function getCodexAuthPath(): string {
+  return path.join(getCodexHomeDir(), 'auth.json');
+}
+
+function getCodexModelsPath(): string {
+  return path.join(getCodexHomeDir(), 'models.json');
+}
+
+function getCodexBackupDir(): string {
+  return path.join(getCodexHomeDir(), CODEX_BACKUP_DIRNAME);
+}
+
+function loadCodexPresets(): any[] {
+  try {
+    const raw = fs.readFileSync(getCodexPresetFile(), 'utf8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed?.presets) ? parsed.presets : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCodexPresets(presets: any[]) {
+  try {
+    const file = getCodexPresetFile();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const tmp = file + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify({ presets }, null, 2), 'utf8');
+    fs.renameSync(tmp, file);
+  } catch {}
+}
+
+function normalizeCodexPreset(data: any, existing?: any): any {
+  const now = new Date().toISOString();
+  const preset = {
+    id: existing?.id || data.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: String(data.name || '').trim(),
+    providerId: String(data.providerId || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, ''),
+    baseUrl: String(data.baseUrl || '').trim(),
+    wireApi: ['chat', 'responses', 'anthropic'].includes(data.wireApi) ? data.wireApi : 'chat',
+    model: String(data.model || '').trim(),
+    apiKey: data.apiKey ? String(data.apiKey).trim() : undefined,
+    icon: existing?.icon || data.icon || undefined,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+  };
+  return preset;
+}
+
+function readCodexCurrentState(): any {
+  let currentProvider = '';
+  let currentModel = '';
+  try {
+    const raw = fs.readFileSync(getCodexConfigPath(), 'utf8');
+    const providerMatch = raw.match(/^model_provider\s*=\s*"([^"]+)"/m);
+    const modelMatch = raw.match(/^model\s*=\s*"([^"]+)"/m);
+    currentProvider = providerMatch?.[1] || '';
+    currentModel = modelMatch?.[1] || '';
+  } catch {}
+  return {
+    presets: loadCodexPresets(),
+    currentProvider,
+    currentModel,
+    backupExists: fs.existsSync(path.join(getCodexBackupDir(), 'config.toml')),
+  };
+}
+
+function backupCodexConfig() {
+  const backupDir = getCodexBackupDir();
+  fs.mkdirSync(backupDir, { recursive: true });
+  for (const name of ['config.toml', 'models.json']) {
+    const source = path.join(getCodexHomeDir(), name);
+    if (fs.existsSync(source)) {
+      fs.copyFileSync(source, path.join(backupDir, name));
+    }
+  }
+  fs.writeFileSync(path.join(backupDir, 'manifest.txt'), `backup_at=${new Date().toISOString()}\n`, 'utf8');
+}
+
+function restoreCodexConfig(): { success: boolean; error?: string } {
+  try {
+    const backupDir = getCodexBackupDir();
+    if (!fs.existsSync(path.join(backupDir, 'config.toml'))) {
+      return { success: false, error: '没有可还原的备份' };
+    }
+    fs.copyFileSync(path.join(backupDir, 'config.toml'), getCodexConfigPath());
+    const modelsBackup = path.join(backupDir, 'models.json');
+    if (fs.existsSync(modelsBackup)) {
+      fs.copyFileSync(modelsBackup, getCodexModelsPath());
+    }
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error?.message || '还原失败' };
+  }
+}
+
+function buildCodexProviderSection(preset: any): string[] {
+  const lines = [
+    `[model_providers.${preset.providerId}]`,
+    `name = "${preset.providerId}"`,
+    `base_url = "${preset.baseUrl}"`,
+    `wire_api = "${preset.wireApi || 'chat'}"`,
+  ];
+  if (preset.apiKey) {
+    lines.push(`experimental_bearer_token = "${preset.apiKey}"`);
+  } else {
+    lines.push(`env_key = "OPENAI_API_KEY"`);
+  }
+  return lines;
+}
+
+function applyPresetToToml(configText: string, preset: any): string {
+  const catalogValue = getCodexModelsPath().replace(/\\/g, '/');
+  const lines = configText.split(/\r?\n/);
+  const output: string[] = [];
+  let currentSection = '';
+  let skipProviderSection = false;
+  let providerSectionReplaced = false;
+  let providerKeyReplaced = false;
+  let modelKeyReplaced = false;
+  let reviewKeyReplaced = false;
+  let catalogKeyReplaced = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const sectionMatch = trimmed.match(/^\[([^\]]+)\]$/);
+    if (sectionMatch) {
+      currentSection = sectionMatch[1];
+      skipProviderSection = false;
+      if (currentSection === `model_providers.${preset.providerId}`) {
+        output.push(...buildCodexProviderSection(preset));
+        providerSectionReplaced = true;
+        skipProviderSection = true;
+        continue;
+      }
+      output.push(line);
+      continue;
+    }
+    if (skipProviderSection) continue;
+    if (!currentSection) {
+      if (/^model_provider\s*=/.test(trimmed)) {
+        if (!providerKeyReplaced) {
+          output.push(`model_provider = "${preset.providerId}"`);
+          providerKeyReplaced = true;
+        }
+        continue;
+      }
+      if (/^model\s*=/.test(trimmed)) {
+        if (!modelKeyReplaced) {
+          output.push(`model = "${preset.model}"`);
+          modelKeyReplaced = true;
+        }
+        continue;
+      }
+      if (/^review_model\s*=/.test(trimmed)) {
+        if (!reviewKeyReplaced) {
+          output.push(`review_model = "${preset.model}"`);
+          reviewKeyReplaced = true;
+        }
+        continue;
+      }
+      if (/^model_catalog_json\s*=/.test(trimmed)) {
+        if (!catalogKeyReplaced) {
+          output.push(`model_catalog_json = "${catalogValue}"`);
+          catalogKeyReplaced = true;
+        }
+        continue;
+      }
+      output.push(line);
+      continue;
+    }
+    output.push(line);
+  }
+
+  const missingTop = [
+    !providerKeyReplaced ? `model_provider = "${preset.providerId}"` : '',
+    !modelKeyReplaced ? `model = "${preset.model}"` : '',
+    !catalogKeyReplaced ? `model_catalog_json = "${catalogValue}"` : '',
+  ].filter(Boolean);
+  if (missingTop.length) output.unshift(...missingTop);
+  if (!providerSectionReplaced) {
+    output.push('', ...buildCodexProviderSection(preset));
+  }
+  return output.join('\n') + '\n';
+}
+
+function ensureCodexModelInCatalog(modelSlug: string) {
+  const modelsPath = getCodexModelsPath();
+  let catalog: any = { models: [] };
+  try {
+    if (fs.existsSync(modelsPath)) {
+      const parsed = JSON.parse(fs.readFileSync(modelsPath, 'utf8'));
+      if (parsed && Array.isArray(parsed.models)) catalog = parsed;
+    }
+  } catch {
+    catalog = { models: [] };
+  }
+  if (catalog.models.some((item: any) => item?.slug === modelSlug)) return;
+  const template = catalog.models.length
+    ? JSON.parse(JSON.stringify(catalog.models[0]))
+    : { ...CODEX_DEFAULT_MODEL };
+  template.slug = modelSlug;
+  if (typeof template.name === 'string') template.name = modelSlug;
+  catalog.models.push(template);
+  fs.mkdirSync(path.dirname(modelsPath), { recursive: true });
+  const tmp = modelsPath + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(catalog, null, 2), 'utf8');
+  fs.renameSync(tmp, modelsPath);
+}
+
+function applyCodexPreset(preset: any): { success: boolean; error?: string } {
+  try {
+    backupCodexConfig();
+    const configPath = getCodexConfigPath();
+    const configText = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
+    const nextConfig = applyPresetToToml(configText, preset);
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    const tmp = configPath + '.tmp';
+    fs.writeFileSync(tmp, nextConfig, 'utf8');
+    fs.renameSync(tmp, configPath);
+    ensureCodexModelInCatalog(preset.model);
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error?.message || '切换失败' };
+  }
+}
+
+function refreshCodexPresetIcon(preset: any) {
+  if (!preset?.baseUrl) return;
+  void getWebsiteIcon(preset.baseUrl).then((icon: string | null) => {
+    if (!icon) return;
+    const presets = loadCodexPresets();
+    const target = presets.find((item: any) => item.id === preset.id);
+    if (target) {
+      target.icon = icon;
+      saveCodexPresets(presets);
+    }
+  }).catch(() => undefined);
+}
+
 function writeIslandConfig(island: any) {
   const cfg = readConfigObject();
   if (!cfg) return false;
@@ -2222,6 +2489,49 @@ ipcMain.handle('usage:removeBackgroundApp', (_e: any, key: string) => {
     restartUsageMonitor();
   }
   return getUsageDataPayload();
+});
+ipcMain.handle('codex:getState', () => readCodexCurrentState());
+ipcMain.handle('codex:savePreset', (_e: any, data: any) => {
+  const presets = loadCodexPresets();
+  const existing = presets.find((item: any) => item.id === data?.id);
+  const preset = normalizeCodexPreset(data || {}, existing);
+  if (!preset.name || !preset.providerId || !preset.baseUrl || !preset.model) {
+    return { success: false, error: '请填写名称、请求地址、供应商ID和模型名' };
+  }
+  if (existing) {
+    Object.assign(existing, preset);
+  } else {
+    presets.push(preset);
+  }
+  saveCodexPresets(presets);
+  refreshCodexPresetIcon(preset);
+  return { success: true, state: readCodexCurrentState() };
+});
+ipcMain.handle('codex:deletePreset', (_e: any, id: string) => {
+  const presets = loadCodexPresets().filter((item: any) => item.id !== id);
+  saveCodexPresets(presets);
+  return { success: true, state: readCodexCurrentState() };
+});
+ipcMain.handle('codex:applyPreset', (_e: any, id: string) => {
+  const preset = loadCodexPresets().find((item: any) => item.id === id);
+  if (!preset) return { success: false, error: '预设不存在' };
+  const result = applyCodexPreset(preset);
+  return { ...result, state: readCodexCurrentState() };
+});
+ipcMain.handle('codex:restore', () => {
+  const result = restoreCodexConfig();
+  return { ...result, state: readCodexCurrentState() };
+});
+ipcMain.handle('codex:openFile', async (_e: any, which: string) => {
+  const map: Record<string, string> = {
+    config: getCodexConfigPath(),
+    auth: getCodexAuthPath(),
+    models: getCodexModelsPath(),
+  };
+  const file = map[which];
+  if (!file || !fs.existsSync(file)) return { success: false, error: '文件不存在' };
+  const error = await shell.openPath(file);
+  return { success: !error, error: error || undefined };
 });
 
 ipcMain.handle('app:getPath', (_e: any, name: string) => {

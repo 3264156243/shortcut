@@ -1,6 +1,6 @@
 ﻿import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import { AppConfig, DEFAULT_CONFIG, Tab, Group, Shortcut, Locale, PanelAnimation, ModuleId, TaskNote, TaskBoardConfig, TaskEditorDraft, UpdateState, IslandPreferences, UsageData } from '../types';
+import { AppConfig, DEFAULT_CONFIG, Tab, Group, Shortcut, Locale, PanelAnimation, ModuleId, TaskNote, TaskBoardConfig, TaskEditorDraft, UpdateState, IslandPreferences, UsageData, CodexPresetState } from '../types';
 import { t } from '../i18n';
 
 interface AppState {
@@ -154,6 +154,12 @@ declare global {
       clearUsageData: () => Promise<UsageData>;
       addUsageIgnored: (key: string) => Promise<UsageData>;
       removeUsageIgnored: (key: string) => Promise<UsageData>;
+      getCodexPresetState: () => Promise<CodexPresetState>;
+      saveCodexPreset: (preset: unknown) => Promise<{ success: boolean; error?: string; state?: CodexPresetState }>;
+      deleteCodexPreset: (id: string) => Promise<{ success: boolean; error?: string; state?: CodexPresetState }>;
+      applyCodexPreset: (id: string) => Promise<{ success: boolean; error?: string; state?: CodexPresetState }>;
+      restoreCodexPreset: () => Promise<{ success: boolean; error?: string; state?: CodexPresetState }>;
+      openCodexFile: (which: string) => Promise<{ success: boolean; error?: string }>;
       getIslandState: () => Promise<{ enabled: boolean; style: string; position: string; autoHideFullscreen: boolean; musicEnabled?: boolean }>;
       setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string, orbitGlow: boolean, barsEnabled: boolean, tasksEnabled: boolean, cockpitEnabled: boolean, deepseekEnabled: boolean) => Promise<{ success: boolean; error?: string }>;
       moveIsland: (screenX: number, screenY: number, deltaX: number, deltaY: number) => Promise<{ success: boolean; error?: string }>;

@@ -1,6 +1,6 @@
 ﻿import { CheckCircle2, CheckSquare, Download, Gauge, Grid2X2, RefreshCw, Settings, Keyboard, Languages } from 'lucide-react';
 import { useStore } from '../store';
-import { BarChart3, Smartphone } from 'lucide-react';
+import { BarChart3, Bot, Smartphone } from 'lucide-react';
 import { ModuleId, UpdateState } from '../types';
 import { useTranslation } from '../hooks/useTranslation';
 
@@ -11,6 +11,7 @@ const modules: Array<{ id: ModuleId; label: string; icon: typeof Grid2X2 }> = [
   { id: 'translate', label: '翻译', icon: Languages },
   { id: 'usage', label: '统计', icon: BarChart3 },
   { id: 'island', label: 'SC球', icon: Smartphone },
+  { id: 'codexProvider', label: '供应商', icon: Bot },
 ];
 
 interface ModuleSidebarProps {
