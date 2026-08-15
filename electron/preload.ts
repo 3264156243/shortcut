@@ -148,11 +148,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Codex provider presets
   getCodexPresetState: () => ipcRenderer.invoke('codex:getState'),
+  saveCurrentCodexPreset: (data: unknown) => ipcRenderer.invoke('codex:saveCurrentPreset', data),
   saveCodexPreset: (preset: unknown) => ipcRenderer.invoke('codex:savePreset', preset),
   deleteCodexPreset: (id: string) => ipcRenderer.invoke('codex:deletePreset', id),
   applyCodexPreset: (id: string) => ipcRenderer.invoke('codex:applyPreset', id),
   restoreCodexPreset: () => ipcRenderer.invoke('codex:restore'),
   openCodexFile: (which: string) => ipcRenderer.invoke('codex:openFile', which),
+  openCodexPresetDir: (id: string) => ipcRenderer.invoke('codex:openPresetDir', id),
 
   // Window
   closeWindow: () => ipcRenderer.invoke('window:close'),

@@ -1149,6 +1149,7 @@ function ensureDefaultCodexPreset() {
     };
     presets.push(preset);
     saveCodexPresets(presets);
+    if (!getCodexSharedProviderId()) setCodexSharedProviderId(current.providerId);
     const backupConfig = path.join(getCodexBackupDir(), 'config.toml');
     const backupModels = path.join(getCodexBackupDir(), 'models.json');
     const configText = fs.existsSync(backupConfig) ? fs.readFileSync(backupConfig, 'utf8') : readLiveCodexConfigText();
@@ -1161,11 +1162,82 @@ function ensureDefaultCodexPreset() {
 function saveCodexPresets(presets: any[]) {
   try {
     const file = getCodexPresetFile();
+    const store = loadCodexPresetStore();
+    store.presets = presets;
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const tmp = file + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify({ presets }, null, 2), 'utf8');
+    fs.writeFileSync(tmp, JSON.stringify(store, null, 2), 'utf8');
     fs.renameSync(tmp, file);
   } catch {}
+}
+
+function loadCodexPresetStore(): any {
+  try {
+    const raw = fs.readFileSync(getCodexPresetFile(), 'utf8');
+    return JSON.parse(raw) || {};
+  } catch {
+    return {};
+  }
+}
+
+function getCodexSharedProviderId(): string {
+  return String(loadCodexPresetStore().sharedProviderId || '');
+}
+
+function setCodexSharedProviderId(id: string) {
+  try {
+    const file = getCodexPresetFile();
+    const store = loadCodexPresetStore();
+    store.sharedProviderId = id;
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const tmp = file + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(store, null, 2), 'utf8');
+    fs.renameSync(tmp, file);
+  } catch {}
+}
+
+function normalizeSnapshotConfig(configText: string, sharedProviderId: string): string {
+  const sourceProvider = (configText.match(/^model_provider\s*=\s*"([^"]+)"/m) || [])[1] || '';
+  if (!sourceProvider) return configText;
+  const lines = configText.split(/\r?\n/);
+  const output: string[] = [];
+  let currentSection = '';
+  let skipSection = '';
+  let providerKeyReplaced = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const sectionMatch = trimmed.match(/^\[([^\]]+)\]$/);
+    if (sectionMatch) {
+      currentSection = sectionMatch[1];
+      if (currentSection === `model_providers.${sourceProvider}`) {
+        output.push(`[model_providers.${sharedProviderId}]`);
+        skipSection = '';
+        continue;
+      }
+      if (sourceProvider !== sharedProviderId && currentSection === `model_providers.${sharedProviderId}`) {
+        skipSection = currentSection;
+        continue;
+      }
+      skipSection = '';
+      output.push(line);
+      continue;
+    }
+    if (skipSection) continue;
+    if (!currentSection) {
+      if (/^model_provider\s*=/.test(trimmed)) {
+        if (!providerKeyReplaced) {
+          output.push(`model_provider = "${sharedProviderId}"`);
+          providerKeyReplaced = true;
+        }
+        continue;
+      }
+      output.push(line);
+      continue;
+    }
+    output.push(line);
+  }
+  if (!providerKeyReplaced) output.unshift(`model_provider = "${sharedProviderId}"`);
+  return output.join('\n') + '\n';
 }
 
 function normalizeCodexPreset(data: any, existing?: any): any {
@@ -1352,14 +1424,21 @@ function ensureCodexModelInCatalog(modelSlug: string) {
 
 function applyCodexPreset(preset: any): { success: boolean; error?: string } {
   try {
-    const snapshot = readCodexPresetSnapshot(preset);
+    const snapshot = readCodexPresetFiles(preset);
     if (!snapshot.config) return { success: false, error: '方案配置文件缺失' };
     backupCodexConfig();
     const configPath = getCodexConfigPath();
+    const authPath = getCodexAuthPath();
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
     const tmp = configPath + '.tmp';
     fs.writeFileSync(tmp, snapshot.config, 'utf8');
     fs.renameSync(tmp, configPath);
+    if (snapshot.auth) {
+      fs.mkdirSync(path.dirname(authPath), { recursive: true });
+      const authTmp = authPath + '.tmp';
+      fs.writeFileSync(authTmp, snapshot.auth, 'utf8');
+      fs.renameSync(authTmp, authPath);
+    }
     if (snapshot.models) {
       const modelsPath = getCodexModelsPath();
       const modelsTmp = modelsPath + '.tmp';
@@ -1399,6 +1478,10 @@ function getCodexPresetModelsPath(presetId: string): string {
   return path.join(getCodexPresetDir(presetId), 'models.json');
 }
 
+function getCodexPresetAuthPath(presetId: string): string {
+  return path.join(getCodexPresetDir(presetId), 'auth.json');
+}
+
 function readLiveCodexConfigText(): string {
   const file = getCodexConfigPath();
   return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
@@ -1409,11 +1492,29 @@ function readLiveCodexModelsText(): string | null {
   return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
 }
 
+function readLiveCodexAuthText(): string | null {
+  const file = getCodexAuthPath();
+  return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
+}
+
 function writeCodexPresetSnapshot(preset: any, configText: string, modelsText?: string | null) {
   const dir = getCodexPresetDir(preset.id);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'config.toml'), configText, 'utf8');
   if (modelsText) fs.writeFileSync(path.join(dir, 'models.json'), modelsText, 'utf8');
+}
+
+function writeCodexPresetFiles(
+  preset: any,
+  configText: string,
+  modelsText?: string | null,
+  authText?: string | null,
+) {
+  const dir = getCodexPresetDir(preset.id);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'config.toml'), configText, 'utf8');
+  if (modelsText) fs.writeFileSync(path.join(dir, 'models.json'), modelsText, 'utf8');
+  if (authText) fs.writeFileSync(path.join(dir, 'auth.json'), authText, 'utf8');
 }
 
 function readCodexPresetSnapshot(preset: any): { config: string; models: string | null } {
@@ -1423,6 +1524,13 @@ function readCodexPresetSnapshot(preset: any): { config: string; models: string 
   const modelsPath = getCodexPresetModelsPath(preset.id);
   const models = fs.existsSync(modelsPath) ? fs.readFileSync(modelsPath, 'utf8') : null;
   return { config, models };
+}
+
+function readCodexPresetFiles(preset: any): { config: string; models: string | null; auth: string | null } {
+  const snapshot = readCodexPresetSnapshot(preset);
+  const authPath = getCodexPresetAuthPath(preset.id);
+  const auth = fs.existsSync(authPath) ? fs.readFileSync(authPath, 'utf8') : null;
+  return { ...snapshot, auth };
 }
 
 function buildCodexPresetSnapshot(
@@ -1469,14 +1577,35 @@ function getDefaultCodexPreset(presets: any[]): any {
 function ensureCodexPresetSnapshots() {
   const presets = loadCodexPresets();
   for (const preset of presets) {
-    if (fs.existsSync(getCodexPresetConfigPath(preset.id))) continue;
     const isDefault = preset.isDefault || String(preset.id || '').startsWith('default-');
+    if (fs.existsSync(getCodexPresetConfigPath(preset.id))) {
+      if (!fs.existsSync(getCodexPresetAuthPath(preset.id))) {
+        const authText = readLiveCodexAuthText();
+        if (authText) fs.writeFileSync(getCodexPresetAuthPath(preset.id), authText, 'utf8');
+      }
+      if (!fs.existsSync(getCodexPresetModelsPath(preset.id))) {
+        const modelsText = readLiveCodexModelsText();
+        if (modelsText) fs.writeFileSync(getCodexPresetModelsPath(preset.id), modelsText, 'utf8');
+      }
+      const shared = getCodexSharedProviderId();
+      if (shared && !isDefault) {
+        const configPath = getCodexPresetConfigPath(preset.id);
+        const raw = fs.readFileSync(configPath, 'utf8');
+        const currentProvider = (raw.match(/^model_provider\s*=\s*"([^"]+)"/m) || [])[1] || '';
+        if (currentProvider && currentProvider !== shared) {
+          fs.writeFileSync(configPath, normalizeSnapshotConfig(raw, shared), 'utf8');
+        }
+      }
+      continue;
+    }
     if (isDefault) {
       const backupConfig = path.join(getCodexBackupDir(), 'config.toml');
       const backupModels = path.join(getCodexBackupDir(), 'models.json');
+      const backupAuth = path.join(getCodexBackupDir(), 'auth.json');
       const configText = fs.existsSync(backupConfig) ? fs.readFileSync(backupConfig, 'utf8') : readLiveCodexConfigText();
       const modelsText = fs.existsSync(backupModels) ? fs.readFileSync(backupModels, 'utf8') : readLiveCodexModelsText();
-      writeCodexPresetSnapshot(preset, configText, modelsText);
+      const authText = fs.existsSync(backupAuth) ? fs.readFileSync(backupAuth, 'utf8') : readLiveCodexAuthText();
+      writeCodexPresetFiles(preset, configText, modelsText, authText);
       continue;
     }
     const defaultPreset = getDefaultCodexPreset(presets);
@@ -1487,7 +1616,7 @@ function ensureCodexPresetSnapshots() {
       ? fs.readFileSync(getCodexPresetModelsPath(defaultPreset.id), 'utf8')
       : readLiveCodexModelsText();
     const snapshot = buildCodexPresetSnapshot(preset, templateConfig, templateModels);
-    writeCodexPresetSnapshot(preset, snapshot.config, snapshot.models);
+    writeCodexPresetFiles(preset, snapshot.config, snapshot.models, readLiveCodexAuthText());
   }
 }
 
@@ -2670,6 +2799,49 @@ ipcMain.handle('usage:removeBackgroundApp', (_e: any, key: string) => {
   return getUsageDataPayload();
 });
 ipcMain.handle('codex:getState', () => readCodexCurrentState());
+ipcMain.handle('codex:saveCurrentPreset', (_e: any, data: any) => {
+  const name = String(data?.name || '').trim();
+  const existingId = String(data?.id || '');
+  const configText = readLiveCodexConfigText();
+  if (!configText) return { success: false, error: '当前 Codex 配置不存在' };
+  const current = parseCurrentCodexProvider();
+  if (!current) return { success: false, error: '无法解析当前 Codex 配置' };
+  const presets = loadCodexPresets();
+  const existing = existingId ? presets.find((item: any) => item.id === existingId) : null;
+  const now = new Date().toISOString();
+  if (existing) {
+    Object.assign(existing, {
+      name: name || existing.name,
+      providerId: current.providerId,
+      baseUrl: current.baseUrl,
+      wireApi: current.wireApi || 'chat',
+      model: current.model,
+      apiKey: current.apiKey || existing.apiKey,
+      updatedAt: now,
+    });
+  } else {
+    presets.push({
+      id: `preset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name: name || current.name || current.providerId,
+      providerId: current.providerId,
+      baseUrl: current.baseUrl,
+      wireApi: current.wireApi || 'chat',
+      model: current.model,
+      apiKey: current.apiKey,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+  const preset = existing || presets[presets.length - 1];
+  const shared = getCodexSharedProviderId() || current.providerId;
+  if (!getCodexSharedProviderId()) setCodexSharedProviderId(shared);
+  const isDefault = preset.isDefault || String(preset.id || '').startsWith('default-');
+  const presetConfigText = isDefault ? configText : normalizeSnapshotConfig(configText, shared);
+  writeCodexPresetFiles(preset, presetConfigText, readLiveCodexModelsText(), readLiveCodexAuthText());
+  saveCodexPresets(presets);
+  refreshCodexPresetIcon(preset);
+  return { success: true, state: readCodexCurrentState() };
+});
 ipcMain.handle('codex:savePreset', (_e: any, data: any) => {
   const presets = loadCodexPresets();
   const existing = presets.find((item: any) => item.id === data?.id);
@@ -2725,6 +2897,12 @@ ipcMain.handle('codex:openFile', async (_e: any, which: string) => {
   if (!file || !fs.existsSync(file)) return { success: false, error: '文件不存在' };
   const error = await shell.openPath(file);
   return { success: !error, error: error || undefined };
+});
+ipcMain.handle('codex:openPresetDir', (_e: any, id: string) => {
+  const dir = getCodexPresetDir(id);
+  if (!fs.existsSync(dir)) return { success: false, error: '方案目录不存在' };
+  shell.openPath(dir);
+  return { success: true };
 });
 
 ipcMain.handle('app:getPath', (_e: any, name: string) => {

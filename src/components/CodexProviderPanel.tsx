@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Bot, Check, FileJson, FileText, KeyRound, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Bot, Check, FileJson, FileText, FolderOpen, KeyRound, Pencil, RotateCcw, Save, Trash2 } from 'lucide-react';
 import { useStore } from '../store';
 import { CodexPreset, CodexPresetState } from '../types';
 import AddCodexPresetModal from './AddCodexPresetModal';
@@ -58,6 +58,11 @@ export default function CodexProviderPanel() {
 
   const openFile = async (which: 'config' | 'auth' | 'models') => {
     const result = await window.electronAPI?.openCodexFile?.(which);
+    if (!result?.success) addToast(result?.error || '打开失败', 'error');
+  };
+
+  const openPresetDir = async (id: string) => {
+    const result = await window.electronAPI?.openCodexPresetDir?.(id);
     if (!result?.success) addToast(result?.error || '打开失败', 'error');
   };
 
@@ -123,14 +128,14 @@ export default function CodexProviderPanel() {
           className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-white transition-opacity hover:opacity-85"
           style={{ background: 'var(--color-accent)' }}
         >
-          <Plus size={14} />
-          <span>新增方案</span>
+          <Save size={14} />
+          <span>保存当前配置</span>
         </button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
         {!state?.presets?.length ? (
-          <EmptyState icon="shortcut" title="还没有供应商方案" description="新增一套方案后即可一键切换" />
+          <EmptyState icon="shortcut" title="还没有供应商方案" description="保存当前配置后即可一键切换" />
         ) : (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {state.presets.map((preset) => {
@@ -176,10 +181,19 @@ export default function CodexProviderPanel() {
                     </button>
                     <button
                       type="button"
+                      onClick={() => void openPresetDir(preset.id)}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg transition-opacity hover:opacity-80"
+                      style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
+                      title="打开方案文件"
+                    >
+                      <FolderOpen size={13} />
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => { setEditing(preset); setModalOpen(true); }}
                       className="flex h-8 w-8 items-center justify-center rounded-lg transition-opacity hover:opacity-80"
                       style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
-                      title="编辑"
+                      title="重命名"
                     >
                       <Pencil size={13} />
                     </button>
