@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import { Bot, Check, FileJson, FileText, FolderOpen, KeyRound, Pencil, RotateCcw, Save, Trash2 } from 'lucide-react';
 import { useStore } from '../store';
 import { CodexPreset, CodexPresetState } from '../types';
@@ -10,7 +11,7 @@ export default function CodexProviderPanel() {
   const [state, setState] = useState<CodexPresetState | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<CodexPreset | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingPreset, setDeletingPreset] = useState<CodexPreset | null>(null);
   const [confirmRestore, setConfirmRestore] = useState(false);
   const [applyingId, setApplyingId] = useState<string | null>(null);
 
@@ -52,7 +53,7 @@ export default function CodexProviderPanel() {
   const remove = async (id: string) => {
     const result = await window.electronAPI?.deleteCodexPreset?.(id);
     if (result?.state) setState(result.state);
-    setConfirmDeleteId(null);
+    setDeletingPreset(null);
     addToast('方案已删除', 'success');
   };
 
@@ -140,7 +141,7 @@ export default function CodexProviderPanel() {
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {state.presets.map((preset) => {
               const current = isCurrent(preset);
-              const confirmDelete = confirmDeleteId === preset.id;
+              const confirmDelete = deletingPreset?.id === preset.id;
               return (
                 <div
                   key={preset.id}
@@ -199,20 +200,14 @@ export default function CodexProviderPanel() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        if (confirmDelete) void remove(preset.id);
-                        else {
-                          setConfirmDeleteId(preset.id);
-                          window.setTimeout(() => setConfirmDeleteId(null), 3000);
-                        }
-                      }}
+                      onClick={() => setDeletingPreset(preset)}
                       className="flex h-8 w-8 items-center justify-center rounded-lg transition-opacity hover:opacity-80"
                       style={{
                         background: confirmDelete ? '#e5484d' : 'var(--color-bg-card-hover)',
                         border: '1px solid ' + (confirmDelete ? '#e5484d' : 'var(--color-border)'),
                         color: confirmDelete ? '#fff' : 'var(--color-text-secondary)',
                       }}
-                      title={confirmDelete ? '确认删除' : '删除'}
+                      title="删除"
                     >
                       <Trash2 size={13} />
                     </button>
@@ -233,6 +228,31 @@ export default function CodexProviderPanel() {
             void refresh();
           }}
         />
+      ) : null}
+
+      {deletingPreset ? (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ background: 'var(--color-overlay)' }} onClick={() => setDeletingPreset(null)}>
+          <motion.section
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-sm overflow-hidden rounded-lg"
+            style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', boxShadow: '0 24px 70px var(--color-shadow)' }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="border-b px-5 py-4" style={{ borderColor: 'var(--color-border)' }}>
+              <h2 className="text-base font-semibold" style={{ color: 'var(--color-text)' }}>删除方案</h2>
+            </header>
+            <div className="p-5">
+              <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                确定删除「{deletingPreset.name}」吗？该方案快照将被移除。
+              </p>
+            </div>
+            <footer className="flex justify-end gap-2 border-t px-5 py-4" style={{ borderColor: 'var(--color-border)' }}>
+              <button onClick={() => setDeletingPreset(null)} className="rounded-md px-4 py-2 text-sm" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>取消</button>
+              <button onClick={() => void remove(deletingPreset.id)} className="rounded-md px-5 py-2 text-sm text-white" style={{ background: '#e5484d' }}>删除</button>
+            </footer>
+          </motion.section>
+        </div>
       ) : null}
     </div>
   );
