@@ -20,8 +20,9 @@ import UsagePanel from './components/UsagePanel';
 import UsageManagePanel from './components/UsageManagePanel';
 import CodexProviderPanel from './components/CodexProviderPanel';
 import ActivationGate from './components/ActivationGate';
-import { PanelAnimation, UpdateState } from './types';
+import { ModuleId, PanelAnimation, UpdateState } from './types';
 import { useTranslation } from './hooks/useTranslation';
+import { getAvailableModuleIds } from './moduleRegistry';
 import appIcon from './assets/app-icon.png';
 
 // Animation variants based on direction
@@ -51,10 +52,9 @@ const getAnimationVariants = (direction: PanelAnimation) => {
   return variants[direction] || variants.bottom;
 };
 
-const moduleOrder = ['shortcuts', 'tasks', 'cockpit', 'translate', 'usage', 'island', 'codexProvider'] as const;
-
 export default function App() {
   const config = useStore((s) => s.config);
+  const licenseModuleAccess = useStore((s) => s.licenseModuleAccess);
   const loadConfig = useStore((s) => s.loadConfig);
   const showAddModal = useStore((s) => s.showAddModal);
   const showSettings = useStore((s) => s.showSettings);
@@ -79,10 +79,19 @@ export default function App() {
   const longSpaceTimer = useRef<number | null>(null);
   const shortSpaceTimer = useRef<number | null>(null);
   const longSpaceTriggered = useRef(false);
+  const moduleIdsRef = useRef<Array<ModuleId>>([]);
 
   const { t } = useTranslation();
   const animationDirection = config.panelAnimation || 'bottom';
   const variants = useMemo(() => getAnimationVariants(animationDirection), [animationDirection]);
+  const availableModuleIds = useMemo(
+    () => getAvailableModuleIds(config).filter((id) => licenseModuleAccess[id] !== false),
+    [config, licenseModuleAccess],
+  );
+
+  useEffect(() => {
+    moduleIdsRef.current = availableModuleIds;
+  }, [availableModuleIds]);
 
   const api = window.electronAPI;
 
@@ -142,11 +151,29 @@ export default function App() {
     }).catch(() => undefined);
     api.getLicenseGate().then((gate) => {
       setLicenseGate(gate as any);
-      if (!(gate as any)?.required) {
+      const gateInfo = gate as any;
+      if (gateInfo && (gateInfo.success === true || gateInfo.activationPolicy || gateInfo.moduleAccess)) {
+        useStore.getState().setLicenseAccess({
+          activationPolicy: gateInfo.activationPolicy,
+          moduleAccess: gateInfo.moduleAccess,
+          tier: gateInfo.tier,
+        });
+      }
+      if (!gateInfo?.required) {
         void api.licenseGatePassed?.();
       }
     }).catch(() => {
-      setLicenseGate({ required: true, activated: false, checking: false, message: '无法连接激活服务器' });
+      const stored = useStore.getState().config.license;
+      const policy = stored?.activationPolicy || 'none';
+      setLicenseGate({
+        required: policy !== 'none',
+        activated: false,
+        checking: false,
+        message: '无法连接激活服务器，请检查网络后重试',
+      });
+      if (policy === 'none') {
+        void api?.licenseGatePassed?.();
+      }
     });
   }, [api]);
   useEffect(() => {
@@ -185,10 +212,12 @@ export default function App() {
       const key = event.key.toLowerCase();
       if (key === 'z' || key === 'x') {
         event.preventDefault();
+        const moduleIds = moduleIdsRef.current;
+        if (moduleIds.length === 0) return;
         const currentModule = state.activeModule === 'usageManage' ? 'usage' : state.activeModule;
-        const currentIndex = Math.max(0, moduleOrder.indexOf(currentModule));
+        const currentIndex = Math.max(0, moduleIds.indexOf(currentModule));
         const direction = key === 'z' ? -1 : 1;
-        state.setActiveModule(moduleOrder[(currentIndex + direction + moduleOrder.length) % moduleOrder.length]);
+        state.setActiveModule(moduleIds[(currentIndex + direction + moduleIds.length) % moduleIds.length]);
         return;
       }
 
@@ -200,9 +229,11 @@ export default function App() {
       clearLongPress();
       longSpaceTimer.current = window.setTimeout(() => {
         const latest = useStore.getState();
+        const moduleIds = moduleIdsRef.current;
+        if (moduleIds.length === 0) return;
         const currentModule = latest.activeModule === 'usageManage' ? 'usage' : latest.activeModule;
-        const currentIndex = Math.max(0, moduleOrder.indexOf(currentModule));
-        latest.setActiveModule(moduleOrder[(currentIndex + 1) % moduleOrder.length]);
+        const currentIndex = Math.max(0, moduleIds.indexOf(currentModule));
+        latest.setActiveModule(moduleIds[(currentIndex + 1) % moduleIds.length]);
         longSpaceTriggered.current = true;
         shortSpaceTimer.current && window.clearTimeout(shortSpaceTimer.current);
         shortSpaceTimer.current = null;
@@ -350,8 +381,14 @@ export default function App() {
         machineCode={licenseGate.machineCode}
         initialCode={initialLicenseCode}
         message={licenseGate.message}
-        onActivated={() => {
+        onActivated={(result) => {
+          const license = (result || {}) as any;
           setLicenseGate({ required: false, activated: true, checking: false });
+          useStore.getState().setLicenseAccess({
+            activationPolicy: license?.activationPolicy,
+            moduleAccess: license?.moduleAccess,
+            tier: license?.tier,
+          });
           void api?.licenseGatePassed?.();
         }}
       />

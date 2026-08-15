@@ -24,6 +24,21 @@ function require_admin() {
     }
 }
 
+function module_rules($config, $tier = 'free') {
+    $levels = ['free' => 0, 'member' => 1, 'super' => 2];
+    $tier = in_array($tier, ['free', 'member', 'super'], true) ? $tier : 'free';
+    $userLevel = $levels[$tier];
+    $rules = [];
+    foreach ($config['moduleList'] as $id => $label) {
+        $rule = ['id' => $id, 'level' => 'free'];
+        if ($label === '会员') $rule['level'] = 'member';
+        if ($label === '超级会员') $rule['level'] = 'super';
+        $rule['allowed'] = $levels[$rule['level']] <= $userLevel;
+        $rules[] = $rule;
+    }
+    return $rules;
+}
+
 switch ($action) {
     case 'ping':
         respond(['success' => true, 'service' => 'shortcut-activation', 'time' => date('c')]);
@@ -47,12 +62,14 @@ switch ($action) {
     case 'generate':
         require_admin();
         $days = isset($input['days']) ? max(1, min(3650, intval($input['days']))) : 365;
+        $tier = in_array($input['tier'] ?? 'free', ['free', 'member', 'super'], true) ? $input['tier'] : 'free';
         $codes = load_codes();
         $code = generate_code();
         $now = time();
         $record = [
             'code' => $code,
             'days' => $days,
+            'tier' => $tier,
             'status' => 'active',
             'machine' => null,
             'created_at' => date('c', $now),
@@ -64,12 +81,41 @@ switch ($action) {
         respond(['success' => true, 'code' => $code, 'record' => $record]);
         break;
 
+    case 'getPolicy':
+        require_admin();
+        respond(array_merge(['success' => true], load_activation_config()));
+        break;
+
+    case 'savePolicy':
+        require_admin();
+        $policy = in_array($input['activationPolicy'] ?? 'none', ['none', 'premium_only', 'all'], true)
+            ? $input['activationPolicy']
+            : 'none';
+        $moduleList = [];
+        foreach (load_activation_config()['moduleList'] as $id => $defaultLabel) {
+            $label = isset($input['moduleList'][$id]) ? $input['moduleList'][$id] : $defaultLabel;
+            $moduleList[$id] = in_array($label, ['免费', '会员', '超级会员'], true) ? $label : $defaultLabel;
+        }
+        if (save_activation_config(['activationPolicy' => $policy, 'moduleList' => $moduleList])) {
+            respond(['success' => true, 'message' => '授权策略已保存']);
+        }
+        respond(['success' => false, 'message' => '授权策略保存失败']);
+        break;
+
     case 'check':
         $code = isset($input['code']) ? strtoupper(trim($input['code'])) : '';
         $machine = isset($input['machineCode']) ? trim($input['machineCode']) : '';
         if ($code === '' || $machine === '') {
-            respond(['success' => false, 'active' => false, 'message' => '激活码或机器码为空']);
+            $config = load_activation_config();
+            respond([
+                'success' => false,
+                'active' => false,
+                'message' => '激活码或机器码为空',
+                'activationPolicy' => $config['activationPolicy'],
+                'moduleAccess' => module_rules($config),
+            ]);
         }
+        $config = load_activation_config();
         $codes = load_codes();
         $found = null;
         $foundIndex = -1;
@@ -92,7 +138,7 @@ switch ($action) {
         if (empty($found['machine'])) {
             $found['machine'] = $machine;
         } elseif ($found['machine'] !== $machine) {
-            respond(['success' => false, 'active' => false, 'message' => '激活码已绑定其他设备']);
+            respond(['success' => false, 'active' => false, 'message' => '激活码已绑定其他设备', 'activationPolicy' => $config['activationPolicy'], 'moduleAccess' => module_rules($config, $found['tier'] ?? 'free')]);
         }
         $found['last_check_at'] = date('c');
         $codes[$foundIndex] = $found;
@@ -105,6 +151,9 @@ switch ($action) {
             'expiresAt' => $found['expires_at'],
             'machineCode' => $machine,
             'message' => '激活成功',
+            'tier' => $found['tier'] ?? 'free',
+            'activationPolicy' => $config['activationPolicy'],
+            'moduleAccess' => module_rules($config, $found['tier'] ?? 'free'),
         ]);
         break;
 

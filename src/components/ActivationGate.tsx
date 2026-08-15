@@ -7,7 +7,7 @@ interface ActivationGateProps {
   machineCode?: string;
   initialCode?: string;
   message?: string;
-  onActivated: () => void;
+  onActivated?: (result?: unknown) => void;
 }
 
 export default function ActivationGate({ checking, machineCode, initialCode, message, onActivated }: ActivationGateProps) {
@@ -26,7 +26,7 @@ export default function ActivationGate({ checking, machineCode, initialCode, mes
     try {
       const result = await window.electronAPI?.activateLicense(code.trim());
       if (result && (result as any).success) {
-        onActivated();
+        onActivated?.(result);
       } else {
         setError((result as any)?.message || '激活失败，请检查激活码');
       }

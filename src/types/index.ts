@@ -46,6 +46,20 @@ export interface MusicState {
 }
 
 export type ModuleId = 'shortcuts' | 'tasks' | 'cockpit' | 'usage' | 'usageManage' | 'translate' | 'island' | 'codexProvider';
+export type ModuleAccessLevel = 'free' | 'member' | 'super';
+export type ActivationPolicy = 'all' | 'premium_only' | 'none';
+
+export interface ModuleConfigItem {
+  id: ModuleId;
+  enabled: boolean;
+  visible: boolean;
+}
+
+export interface ModuleAccessRule {
+  id: ModuleId;
+  level: ModuleAccessLevel;
+  allowed?: boolean;
+}
 
 export interface CockpitData {
   timestamp?: number;
@@ -132,6 +146,9 @@ export interface LicenseState {
   code?: string;
   machineCode?: string;
   plan?: string;
+  tier?: ModuleAccessLevel;
+  activationPolicy?: ActivationPolicy;
+  moduleAccess?: ModuleAccessRule[];
   status?: string;
   expiresAt?: string;
   lastCheckAt?: string;
@@ -232,6 +249,7 @@ export interface AppConfig {
   island?: IslandPreferences;
   license?: LicenseState;
   scTaskList: ScTaskListItem[];
+  modules: ModuleConfigItem[];
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -274,6 +292,16 @@ export const DEFAULT_CONFIG: AppConfig = {
   ],
   activeTabId: 'default',
   scTaskList: [],
+  modules: [
+    { id: 'shortcuts', enabled: true, visible: true },
+    { id: 'tasks', enabled: true, visible: true },
+    { id: 'cockpit', enabled: true, visible: true },
+    { id: 'translate', enabled: true, visible: true },
+    { id: 'usage', enabled: true, visible: true },
+    { id: 'island', enabled: true, visible: true },
+    { id: 'codexProvider', enabled: true, visible: true },
+    { id: 'usageManage', enabled: true, visible: true },
+  ],
   island: {
     enabled: true,
     style: 'capsule',

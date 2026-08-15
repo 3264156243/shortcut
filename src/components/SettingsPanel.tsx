@@ -1,7 +1,8 @@
 import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Moon, Sun, Monitor, Download, Upload, Power } from 'lucide-react';
+import { X, Moon, Sun, Monitor, Download, Upload, Power, ChevronUp, ChevronDown, Eye, EyeOff } from 'lucide-react';
+import { CORE_MODULE_IDS, MODULE_REGISTRY } from '../moduleRegistry';
 
 export default function SettingsPanel() {
   const closeSettings = useStore((s) => s.closeSettings);
@@ -10,13 +11,32 @@ export default function SettingsPanel() {
   const setOpenOnStartup = useStore((s) => s.setOpenOnStartup);
   const exportConfig = useStore((s) => s.exportConfig);
   const importConfig = useStore((s) => s.importConfig);
+  const setModuleEnabled = useStore((s) => s.setModuleEnabled);
+  const setModuleVisible = useStore((s) => s.setModuleVisible);
+  const setModuleOrder = useStore((s) => s.setModuleOrder);
+  const licenseModuleAccess = useStore((s) => s.licenseModuleAccess);
   const { t } = useTranslation();
   const themes: { value: 'dark' | 'light' | 'system'; labelKey: string; icon: typeof Moon }[] = [
     { value: 'dark', labelKey: 'settings.theme.dark', icon: Moon },
     { value: 'light', labelKey: 'settings.theme.light', icon: Sun },
     { value: 'system', labelKey: 'settings.theme.system', icon: Monitor },
   ];
-
+  const moduleItems = (config.modules || [])
+    .filter((item) => licenseModuleAccess[item.id] !== false)
+    .map((item) => {
+      const meta = MODULE_REGISTRY.find((entry) => entry.id === item.id);
+      return meta ? { meta, item } : null;
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => !!entry);
+  const moveModule = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= moduleItems.length) return;
+    const ids = moduleItems.map((item) => item.meta.id);
+    const moved = [...ids];
+    const [removed] = moved.splice(index, 1);
+    moved.splice(target, 0, removed);
+    setModuleOrder(moved);
+  };
 
   const sectionStyle: React.CSSProperties = {
     background: 'var(--color-bg-card)',
@@ -119,6 +139,81 @@ export default function SettingsPanel() {
                 <button onClick={importConfig} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm transition-all duration-150 hover:opacity-80" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
                   <Upload size={16} /> {t('settings.import')}
                 </button>
+              </div>
+            </div>
+
+            {/* Module management */}
+            <div style={sectionStyle}>
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>板块管理</h3>
+                <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>显示 / 启用 / 顺序</span>
+              </div>
+              <p className="mb-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                隐藏后不显示入口，禁用后会停止对应后台服务以节省内存。
+              </p>
+              <div className="flex flex-col gap-2">
+                {moduleItems.map(({ meta, item }, index) => {
+                  const isCore = CORE_MODULE_IDS.includes(meta.id);
+                  const Icon = meta.icon;
+                  return (
+                    <div
+                      key={meta.id}
+                      className="flex items-center gap-2 rounded-xl px-3 py-2.5"
+                      style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)' }}
+                    >
+                      <Icon size={15} style={{ color: item.enabled === false ? 'var(--color-text-muted)' : 'var(--color-accent)' }} />
+                      <span className="min-w-0 flex-1 text-sm font-medium" style={{ color: 'var(--color-text)' }}>
+                        {meta.label}
+                        {isCore && <span className="ml-1.5 text-[10px]" style={{ color: 'var(--color-text-muted)' }}>核心</span>}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={index === 0}
+                        onClick={() => moveModule(index, -1)}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg transition-opacity hover:opacity-75 disabled:opacity-30"
+                        style={{ background: 'var(--color-bg-card)', color: 'var(--color-text-secondary)' }}
+                        title="上移"
+                      >
+                        <ChevronUp size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={index === moduleItems.length - 1}
+                        onClick={() => moveModule(index, 1)}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg transition-opacity hover:opacity-75 disabled:opacity-30"
+                        style={{ background: 'var(--color-bg-card)', color: 'var(--color-text-secondary)' }}
+                        title="下移"
+                      >
+                        <ChevronDown size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setModuleVisible(meta.id, item.visible !== false ? false : true)}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg transition-opacity hover:opacity-75"
+                        style={{
+                          background: 'var(--color-bg-card)',
+                          color: item.visible === false ? 'var(--color-text-muted)' : 'var(--color-accent)',
+                        }}
+                        title={item.visible === false ? '显示该板块' : '隐藏该板块'}
+                      >
+                        {item.visible === false ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isCore}
+                        onClick={() => setModuleEnabled(meta.id, item.enabled !== false ? false : true)}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg transition-opacity hover:opacity-75 disabled:opacity-40"
+                        style={{
+                          background: 'var(--color-bg-card)',
+                          color: item.enabled === false ? 'var(--color-text-muted)' : '#63d391',
+                        }}
+                        title={isCore ? '快捷、任务是基础板块，不能禁用' : (item.enabled === false ? '启用该板块' : '禁用该板块并停止后台服务')}
+                      >
+                        <Power size={14} />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

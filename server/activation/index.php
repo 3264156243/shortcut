@@ -83,15 +83,36 @@ $loggedIn = !empty($_SESSION['admin']);
       <h1>ShortCut 激活码管理</h1>
       <div style="display:flex; align-items:center; gap:10px;">
         <button onclick="refresh()">刷新列表</button>
+        <button class="secondary" onclick="refreshPolicy()">读取授权策略</button>
         <a href="index.php?logout=1" style="color:#9aa5b5; font-size:13px;">退出登录</a>
       </div>
     </div>
     <div id="message" class="muted"></div>
     <div class="card">
+      <h3 style="margin:0 0 12px; font-size:15px;">授权策略</h3>
+      <label>激活要求</label>
+      <select id="activationPolicy" style="width:100%; margin-bottom:12px">
+        <option value="none">免费可用，激活可解锁付费板块</option>
+        <option value="premium_only">未激活仅可使用免费板块</option>
+        <option value="all">必须激活才能使用</option>
+      </select>
+      <label>板块权限</label>
+      <div id="moduleLevels" style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;"></div>
+      <button onclick="savePolicy()">保存授权策略</button>
+    </div>
+    <div class="card">
       <div class="row">
         <div>
           <label>有效期（天）</label>
           <input id="days" type="number" value="365" min="1" max="3650" style="width:140px" />
+        </div>
+        <div>
+          <label>授权等级</label>
+          <select id="genTier">
+            <option value="free">免费</option>
+            <option value="member" selected>会员</option>
+            <option value="super">超级会员</option>
+          </select>
         </div>
         <button onclick="generate()">一键生成激活码</button>
       </div>
@@ -101,6 +122,7 @@ $loggedIn = !empty($_SESSION['admin']);
         <thead>
           <tr>
             <th>激活码</th>
+            <th>等级</th>
             <th>状态</th>
             <th>机器码</th>
             <th>生成时间</th>
@@ -182,6 +204,7 @@ $loggedIn = !empty($_SESSION['admin']);
           : '';
         tr.innerHTML =
           '<td>' + item.code + '</td>' +
+          '<td>' + (item.tier === 'super' ? '超级会员' : (item.tier === 'member' ? '会员' : '免费')) + '</td>' +
           '<td class="' + statusClass + '">' + item.status + '</td>' +
           '<td class="muted">' + machine + '</td>' +
           '<td>' + new Date(item.created_at).toLocaleString('zh-CN') + '</td>' +
@@ -197,6 +220,7 @@ $loggedIn = !empty($_SESSION['admin']);
       const result = await api({
         action: 'generate',
         days: parseInt(document.getElementById('days').value, 10) || 365,
+        tier: document.getElementById('genTier').value,
       });
       if (result.success) {
         showMessage('已生成：' + result.code, true);
@@ -220,7 +244,65 @@ $loggedIn = !empty($_SESSION['admin']);
       askConfirm('确定删除激活码 ' + code + ' 吗？', () => void setStatus(code, 'delete'));
     }
 
+    const MODULE_LABELS = {
+      shortcuts: '快捷方式',
+      tasks: '任务墙',
+      cockpit: '驾驶舱',
+      translate: '翻译',
+      usage: '应用使用统计',
+      island: 'SC球',
+      codexProvider: 'Codex 供应商',
+    };
+
+    async function refreshPolicy() {
+      const result = await api({ action: 'getPolicy' });
+      if (!result.success) {
+        showMessage(result.message || '读取策略失败', false);
+        return;
+      }
+      document.getElementById('activationPolicy').value = result.activationPolicy || 'none';
+      const box = document.getElementById('moduleLevels');
+      box.innerHTML = '';
+      for (const id of Object.keys(result.moduleList || {})) {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; align-items:center; gap:10px;';
+        const name = document.createElement('span');
+        name.style.cssText = 'flex:1; font-size:13px;';
+        name.textContent = MODULE_LABELS[id] || id;
+        const select = document.createElement('select');
+        const value = result.moduleList[id];
+        select.style.flex = '0 0 130px';
+        for (const option of ['免费', '会员', '超级会员']) {
+          const el = document.createElement('option');
+          el.value = option;
+          el.textContent = option;
+          if (option === value) el.selected = true;
+          select.appendChild(el);
+        }
+        select.dataset.id = id;
+        row.appendChild(name);
+        row.appendChild(select);
+        box.appendChild(row);
+      }
+      showMessage('已读取授权策略', true);
+    }
+
+    async function savePolicy() {
+      const moduleList = {};
+      for (const select of document.querySelectorAll('#moduleLevels select')) {
+        moduleList[select.dataset.id] = select.value;
+      }
+      const result = await api({
+        action: 'savePolicy',
+        activationPolicy: document.getElementById('activationPolicy').value,
+        moduleList,
+      });
+      showMessage(result.message || '保存失败', result.success);
+      if (result.success) await refreshPolicy();
+    }
+
     refresh();
+    refreshPolicy();
   </script>
 <?php endif; ?>
 </body>

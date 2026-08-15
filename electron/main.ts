@@ -36,6 +36,13 @@ function registerShortcut(accelerator: string, name: string, callback: () => voi
   return ok;
 }
 
+function ensureGlobalShortcut(accelerator: string, name: string, callback: () => void): boolean {
+  try {
+    if (globalShortcut.isRegistered(accelerator)) globalShortcut.unregister(accelerator);
+  } catch {}
+  return registerShortcut(accelerator, name, callback);
+}
+
 process.on('uncaughtException', (error) => {
   console.error('Uncaught exception:', error);
 });
@@ -351,6 +358,7 @@ function positionIslandWindow(force = false) {
 
 function createIslandWindow() {
   if (!licenseGatePassed) return;
+  if (!readModuleEnabled('island')) return;
   if (islandWindow && !islandWindow.isDestroyed()) {
     islandUserHidden = false;
     islandWindow.showInactive();
@@ -555,10 +563,7 @@ async function checkLicense(code?: string) {
   const machineCode = getMachineCode();
   const current = readLicense();
   const activeCode = code || current.code;
-  if (!activeCode) {
-    return { success: true, active: false, message: '未激活', machineCode };
-  }
-  const result = await licenseRequest('check', { code: activeCode, machineCode });
+  const result = await licenseRequest('check', { code: activeCode || '', machineCode });
   writeLicense({
     code: activeCode,
     machineCode,
@@ -567,6 +572,9 @@ async function checkLicense(code?: string) {
     expiresAt: result.expiresAt,
     lastCheckAt: new Date().toISOString(),
     message: result.message,
+    tier: result.tier,
+    activationPolicy: result.activationPolicy,
+    moduleAccess: result.moduleAccess,
   });
   return { ...result, machineCode };
 }
@@ -777,6 +785,81 @@ function readConfigObject(): any | null {
     return JSON.parse(raw);
   } catch {
     return null;
+  }
+}
+
+function readModuleEnabled(id: string): boolean {
+  try {
+    const list = readConfigObject()?.modules || [];
+    const item = (Array.isArray(list) ? list : []).find((entry: any) => entry?.id === id);
+    return item ? item.enabled !== false : true;
+  } catch {
+    return true;
+  }
+}
+
+function syncModuleServices() {
+  if (!licenseGatePassed) return;
+
+  if (readModuleEnabled('translate')) {
+    ensureGlobalShortcut('Alt+E', '翻译选中文字', () => {
+      void translateCurrentSelection();
+    });
+  } else {
+    globalShortcut.unregister('Alt+E');
+    if (translationBubble && !translationBubble.isDestroyed()) {
+      translationBubble.destroy();
+    }
+    translationBubble = null;
+    translationBubblePinned = false;
+    if (translationBubbleCloseTimer) clearTimeout(translationBubbleCloseTimer);
+    translationBubbleCloseTimer = null;
+  }
+
+  if (readModuleEnabled('usage')) {
+    startUsageMonitor();
+  } else {
+    stopUsageMonitor();
+  }
+
+  const islandEnabled = readModuleEnabled('island');
+  if (islandEnabled) {
+    createIslandWindow();
+  } else {
+    islandUserHidden = true;
+    islandCockpitActive = false;
+    syncHardwareMonitor();
+    if (islandWindow && !islandWindow.isDestroyed()) islandWindow.hide();
+    stopMusicBridge();
+    destroyTaskListWindow();
+    destroyDeepseekBall(false);
+    for (const win of reminderWindows.values()) {
+      if (!win.isDestroyed()) win.destroy();
+    }
+    reminderWindows.clear();
+  }
+
+  if (!readModuleEnabled('cockpit')) {
+    mainCockpitActive = false;
+    islandCockpitActive = false;
+    syncHardwareMonitor();
+  }
+
+  if (readModuleEnabled('island')) {
+    const musicHotkeys = [
+      { accelerator: 'Alt+Z', name: '音乐上一首', action: 'prev' },
+      { accelerator: 'Alt+X', name: '音乐播放暂停', action: 'toggle' },
+      { accelerator: 'Alt+C', name: '音乐下一首', action: 'next' },
+    ];
+    for (const item of musicHotkeys) {
+      ensureGlobalShortcut(item.accelerator, item.name, () => {
+        void runMusicBridgeCommand(['-Control', item.action]);
+      });
+    }
+  } else {
+    for (const accelerator of ['Alt+Z', 'Alt+X', 'Alt+C']) {
+      try { globalShortcut.unregister(accelerator); } catch {}
+    }
   }
 }
 
@@ -1699,6 +1782,7 @@ function pruneTaskList() {
 }
 
 function notifyConfigChanged() {
+  syncModuleServices();
   if (mainWindow && !mainWindow.isDestroyed()) {
     try {
       mainWindow.webContents.send('config:changed');
@@ -1730,6 +1814,7 @@ function taskListBounds() {
 
 function createTaskListWindow() {
   if (taskListHidden) return;
+  if (!readModuleEnabled('island')) return;
   const cfg = readConfigObject();
   if (cfg?.island?.tasksEnabled === false) return;
   pruneTaskList();
@@ -1857,6 +1942,7 @@ function destroyDeepseekBall(animate = false) {
 }
 
 function createReminderWindow(boardId: string, taskId: string) {
+  if (!readModuleEnabled('island')) return;
   const key = `${boardId}:${taskId}`;
   if (reminderWindows.has(key)) return;
   const task = findTask(boardId, taskId);
@@ -2578,7 +2664,11 @@ ipcMain.handle('island:music:seek', (_e: any, ms: number) => runMusicBridgeComma
 
 // IPC Handlers
 ipcMain.handle('config:read', () => readConfig());
-ipcMain.handle('config:write', (_e: any, data: string) => writeConfig(data));
+ipcMain.handle('config:write', (_e: any, data: string) => {
+  writeConfig(data);
+  syncModuleServices();
+  return true;
+});
 
 ipcMain.handle('shell:open', async (_e: any, targetPath: string) => {
   try {
@@ -2747,27 +2837,38 @@ ipcMain.handle('license:activate', (_e: any, code: string) => checkLicense(Strin
 ipcMain.handle('license:check', () => checkLicense());
 ipcMain.handle('license:gate', async () => {
   const machineCode = getMachineCode();
-  const current = readLicense();
-  if (!current.code) {
-    return { required: true, activated: false, checking: false, machineCode, message: '请先输入激活码' };
-  }
   try {
     const result = await checkLicense();
-    if (result.success) {
-      return { required: false, activated: true, checking: false, machineCode, ...result };
-    }
-    return { required: true, activated: false, checking: false, machineCode, message: result.message };
+    const hasCode = !!readLicense()?.code;
+    const policy = result.activationPolicy || 'none';
+    const activated = hasCode && result.success === true;
+    const required = policy !== 'none' && !activated;
+    return {
+      required,
+      activated,
+      checking: false,
+      machineCode,
+      ...result,
+    };
   } catch {
-    return { required: true, activated: false, checking: false, machineCode, message: '无法连接激活服务器，请检查网络后重试' };
+    const policy = readLicense()?.activationPolicy || 'none';
+    return {
+      required: policy !== 'none',
+      activated: false,
+      checking: false,
+      machineCode,
+      activationPolicy: policy,
+      moduleAccess: readLicense()?.moduleAccess,
+      message: '无法连接激活服务器，请检查网络后重试',
+    };
   }
 });
 ipcMain.handle('license:gatePassed', () => {
   licenseGatePassed = true;
-  startUsageMonitor();
-  createIslandWindow();
+  syncModuleServices();
   scanDueReminders();
   pruneTaskList();
-  if (resolveTaskList().length > 0 && !taskListHidden && readConfigObject()?.island?.tasksEnabled !== false) {
+  if (readModuleEnabled('island') && resolveTaskList().length > 0 && !taskListHidden && readConfigObject()?.island?.tasksEnabled !== false) {
     createTaskListWindow();
   }
   return true;
@@ -3311,6 +3412,7 @@ if (!gotSingleInstanceLock) {
   setInterval(() => scanDueReminders(), 20000);
   checkLicenseOnStartup();
   setInterval(() => applyIslandVisibility(), 1500);
+  syncModuleServices();
 
   setTimeout(() => {
     void checkForUpdates();
@@ -3325,12 +3427,6 @@ if (!gotSingleInstanceLock) {
   });
   if (!ret) {
     console.error('Failed to register Alt+Space hotkey');
-  }
-  const translateHotkey = globalShortcut.register('Alt+E', () => {
-    void translateCurrentSelection();
-  });
-  if (!translateHotkey) {
-    console.error('Failed to register Alt+E hotkey');
   }
   const fullScreenshotHotkey = globalShortcut.register('Alt+S', () => {
     void captureCurrentDisplay();
@@ -3349,23 +3445,6 @@ if (!gotSingleInstanceLock) {
   });
   if (!islandHotkey) {
     console.error('Failed to register Alt+I hotkey');
-  }
-  const musicHotkeys = [
-    { accelerator: 'Alt+Z', name: '音乐上一首', action: 'prev' },
-    { accelerator: 'Alt+X', name: '音乐播放暂停', action: 'toggle' },
-    { accelerator: 'Alt+C', name: '音乐下一首', action: 'next' },
-  ];
-  for (const item of musicHotkeys) {
-    const ok = registerShortcut(item.accelerator, item.name, () => {
-      void runMusicBridgeCommand(['-Control', item.action]);
-    });
-    if (!ok) {
-      setTimeout(() => {
-        registerShortcut(item.accelerator, item.name, () => {
-          void runMusicBridgeCommand(['-Control', item.action]);
-        });
-      }, 1500);
-    }
   }
   const taskListHotkey = globalShortcut.register('Alt+U', () => {
     taskListHidden = !taskListHidden;

@@ -1,6 +1,32 @@
 ﻿import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import { AppConfig, DEFAULT_CONFIG, Tab, Group, Shortcut, Locale, PanelAnimation, ModuleId, TaskNote, TaskBoardConfig, TaskEditorDraft, UpdateState, IslandPreferences, UsageData, CodexPresetState } from '../types';
+import {
+  ActivationPolicy,
+  AppConfig,
+  DEFAULT_CONFIG,
+  Tab,
+  Group,
+  Shortcut,
+  Locale,
+  ModuleAccessLevel,
+  ModuleAccessRule,
+  ModuleId,
+  PanelAnimation,
+  TaskNote,
+  TaskBoardConfig,
+  TaskEditorDraft,
+  UpdateState,
+  IslandPreferences,
+  UsageData,
+  CodexPresetState,
+} from '../types';
+import {
+  CORE_MODULE_IDS,
+  MODULE_REGISTRY,
+  getAvailableModuleIds,
+  normalizeModuleConfig,
+  reorderModuleConfig,
+} from '../moduleRegistry';
 import { t } from '../i18n';
 
 interface AppState {
@@ -15,6 +41,8 @@ interface AppState {
   showSettings: boolean;
   showImportSoftware: boolean;
   toasts: Toast[];
+  licensePolicy: ActivationPolicy;
+  licenseModuleAccess: Record<ModuleId, boolean>;
 
   // Actions
   loadConfig: () => Promise<void>;
@@ -27,6 +55,10 @@ interface AppState {
   setSearchQuery: (q: string) => void;
   setSelectedShortcut: (shortcutId: string | null) => void;
   setActiveModule: (moduleId: ModuleId) => void;
+  setLicenseAccess: (info: { activationPolicy?: ActivationPolicy; moduleAccess?: ModuleAccessRule[]; tier?: ModuleAccessLevel }) => void;
+  setModuleEnabled: (id: ModuleId, enabled: boolean) => void;
+  setModuleVisible: (id: ModuleId, visible: boolean) => void;
+  setModuleOrder: (orderedIds: ModuleId[]) => void;
   addSearchHistory: (query: string) => void;
   deleteSearchHistory: (query: string) => void;
 
@@ -262,6 +294,10 @@ export const useStore = create<AppState>((set, get) => ({
   showSettings: false,
   showImportSoftware: false,
   toasts: [],
+  licensePolicy: 'all',
+  licenseModuleAccess: Object.fromEntries(
+    MODULE_REGISTRY.map((meta) => [meta.id, true]),
+  ) as Record<ModuleId, boolean>,
 
   loadConfig: async () => {
     let raw = '';
@@ -275,10 +311,49 @@ export const useStore = create<AppState>((set, get) => ({
       try {
         const parsed = JSON.parse(raw) as AppConfig;
         const island: IslandPreferences = { ...DEFAULT_CONFIG.island!, ...(parsed.island || {}) };
-        set({
-          config: { ...DEFAULT_CONFIG, ...parsed, island, scTaskList: parsed.scTaskList || [], locale: 'zh-CN', searchHistory: parsed.searchHistory || [], activeModule: parsed.activeModule || 'shortcuts', ...normalizeTaskBoards(parsed) },
-          activeTabId: parsed.activeTabId || parsed.tabs[0]?.id || 'default',
+        const modules = normalizeModuleConfig(parsed.modules);
+        const base = {
+          ...DEFAULT_CONFIG,
+          ...parsed,
+          modules,
+          island,
+          scTaskList: parsed.scTaskList || [],
+          locale: 'zh-CN' as Locale,
+          searchHistory: parsed.searchHistory || [],
           activeModule: parsed.activeModule || 'shortcuts',
+          ...normalizeTaskBoards(parsed),
+        };
+        const available = getAvailableModuleIds(base as AppConfig);
+        const usageEntry = modules.find((item) => item.id === 'usage');
+        const usageManageOk = usageEntry?.enabled !== false && usageEntry?.visible !== false;
+        const savedActive = parsed.activeModule;
+        const nextActive: ModuleId = savedActive === 'usageManage' && usageManageOk
+          ? 'usageManage'
+          : available.includes(savedActive as ModuleId)
+            ? (savedActive as ModuleId)
+            : (available[0] || 'shortcuts');
+        const storedLicense = (parsed.license || {}) as {
+          activationPolicy?: ActivationPolicy;
+          moduleAccess?: ModuleAccessRule[];
+        };
+        const storedPolicy = storedLicense.activationPolicy || 'none';
+        const storedRules = new Map((storedLicense.moduleAccess || []).map((rule) => [rule.id, rule]));
+        const licenseModuleAccess = Object.fromEntries(
+          MODULE_REGISTRY.map((meta) => [
+            meta.id,
+            storedPolicy === 'none'
+              ? true
+              : storedRules.has(meta.id)
+                ? storedRules.get(meta.id)!.allowed !== false
+                : storedPolicy === 'all' ? false : true,
+          ]),
+        ) as Record<ModuleId, boolean>;
+        set({
+          config: { ...base, activeModule: nextActive },
+          activeTabId: parsed.activeTabId || parsed.tabs[0]?.id || 'default',
+          activeModule: nextActive,
+          licensePolicy: storedPolicy,
+          licenseModuleAccess,
         });
       } catch {
         console.error('Failed to parse config');
@@ -351,11 +426,118 @@ export const useStore = create<AppState>((set, get) => ({
   setSelectedShortcut: (shortcutId) => set({ selectedShortcutId: shortcutId }),
 
   setActiveModule: (moduleId) => {
+    const state = get();
+    const available = getAvailableModuleIds(state.config);
+    const usageEntry = state.config.modules.find((item) => item.id === 'usage');
+    const usageManageOk = usageEntry?.enabled !== false && state.licenseModuleAccess['usage'] !== false;
+    const target: ModuleId | null = moduleId === 'usageManage' && usageManageOk
+      ? 'usageManage'
+      : available.includes(moduleId) && state.licenseModuleAccess[moduleId] !== false
+        ? moduleId
+        : null;
+    if (!target) {
+      const fallback = available.find((id) => state.licenseModuleAccess[id] !== false) || (state.licenseModuleAccess['shortcuts'] !== false ? 'shortcuts' : null);
+      if (!fallback) return;
+      if (moduleId !== 'usageManage') {
+        get().addToast(state.licenseModuleAccess[moduleId] === false ? '该板块需要激活后可用' : '该板块不可用', 'info');
+      }
+      set((s) => ({
+        activeModule: fallback,
+        config: { ...s.config, activeModule: fallback },
+        searchQuery: '',
+        selectedShortcutId: null,
+      }));
+      get().saveConfig();
+      return;
+    }
     set((state) => ({
-      activeModule: moduleId,
-      config: { ...state.config, activeModule: moduleId },
-      searchQuery: moduleId === 'shortcuts' ? state.searchQuery : '',
+      activeModule: target,
+      config: { ...state.config, activeModule: target },
+      searchQuery: target === 'shortcuts' ? state.searchQuery : '',
       selectedShortcutId: null,
+    }));
+    get().saveConfig();
+  },
+
+  setLicenseAccess: (info) => {
+      const policy = info.activationPolicy || 'none';
+    const rules = new Map((info.moduleAccess || []).map((rule) => [rule.id, rule]));
+    const access = Object.fromEntries(
+      MODULE_REGISTRY.map((meta) => [
+        meta.id,
+        policy === 'none'
+          ? true
+          : rules.has(meta.id)
+            ? rules.get(meta.id)!.allowed !== false
+            : policy === 'all' ? false : true,
+      ]),
+    ) as Record<ModuleId, boolean>;
+    set((s) => {
+      const available = getAvailableModuleIds(s.config).filter((id) => access[id] !== false);
+      const activeIsValid = s.activeModule === 'usageManage'
+        ? access['usage'] !== false
+        : available.includes(s.activeModule);
+      const nextActive = activeIsValid ? s.activeModule : (available[0] || 'shortcuts');
+      const config = {
+        ...s.config,
+        license: {
+          ...(s.config.license || {}),
+          activationPolicy: policy,
+          moduleAccess: info.moduleAccess || [],
+          tier: info.tier,
+        },
+        activeModule: nextActive,
+      };
+      return {
+        licensePolicy: policy,
+        licenseModuleAccess: access,
+        config,
+        activeModule: nextActive,
+      };
+    });
+    get().saveConfig();
+  },
+
+  setModuleEnabled: (id, enabled) => {
+    if (CORE_MODULE_IDS.includes(id) && !enabled) return;
+    set((s) => {
+      const modules = s.config.modules.map((item) => item.id === id ? { ...item, enabled } : item);
+      const nextConfig = { ...s.config, modules };
+      const available = getAvailableModuleIds(nextConfig).filter((itemId) => s.licenseModuleAccess[itemId] !== false);
+      const invalidActive = s.activeModule === id || (id === 'usage' && s.activeModule === 'usageManage');
+      const nextActive = invalidActive
+        ? (available[0] || 'shortcuts')
+        : s.activeModule === 'usageManage'
+          ? (s.licenseModuleAccess['usage'] !== false ? 'usageManage' : (available[0] || 'shortcuts'))
+          : s.activeModule;
+      return {
+        config: { ...nextConfig, activeModule: nextActive },
+        activeModule: nextActive,
+      };
+    });
+    get().saveConfig();
+  },
+
+  setModuleVisible: (id, visible) => {
+    set((s) => {
+      const modules = s.config.modules.map((item) => item.id === id ? { ...item, visible } : item);
+      const nextConfig = { ...s.config, modules };
+      const available = getAvailableModuleIds(nextConfig).filter((itemId) => s.licenseModuleAccess[itemId] !== false);
+      const activeIsVisible = s.activeModule === 'usageManage'
+        ? available.includes('usage') && s.licenseModuleAccess['usage'] !== false
+        : available.includes(s.activeModule);
+      const nextActive = activeIsVisible ? s.activeModule : (available[0] || 'shortcuts');
+      return {
+        config: { ...nextConfig, activeModule: nextActive },
+        activeModule: nextActive,
+      };
+    });
+    get().saveConfig();
+  },
+
+  setModuleOrder: (orderedIds) => {
+    set((s) => ({
+      config: { ...s.config, modules: reorderModuleConfig(s.config.modules, orderedIds) },
     }));
     get().saveConfig();
   },
