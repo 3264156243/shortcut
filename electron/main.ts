@@ -1196,6 +1196,27 @@ function setCodexSharedProviderId(id: string) {
   } catch {}
 }
 
+function getCodexLastAppliedPreset(): any {
+  const store = loadCodexPresetStore();
+  return {
+    name: String(store.lastAppliedPresetName || ''),
+    providerId: String(store.lastAppliedPresetProviderId || ''),
+  };
+}
+
+function setCodexLastAppliedPreset(name: string, providerId: string) {
+  try {
+    const file = getCodexPresetFile();
+    const store = loadCodexPresetStore();
+    store.lastAppliedPresetName = String(name || '');
+    store.lastAppliedPresetProviderId = String(providerId || '');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const tmp = file + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(store, null, 2), 'utf8');
+    fs.renameSync(tmp, file);
+  } catch {}
+}
+
 function normalizeSnapshotConfig(configText: string, sharedProviderId: string): string {
   const sourceProvider = (configText.match(/^model_provider\s*=\s*"([^"]+)"/m) || [])[1] || '';
   if (!sourceProvider) return configText;
@@ -1261,8 +1282,13 @@ function readCodexCurrentState(): any {
   ensureDefaultCodexPreset();
   ensureCodexPresetSnapshots();
   const current = parseCurrentCodexProvider();
+  const lastApplied = getCodexLastAppliedPreset();
+  const currentPresetName = lastApplied.name && lastApplied.providerId === (current?.providerId || '')
+    ? lastApplied.name
+    : (current?.name || current?.providerId || '');
   return {
     presets: loadCodexPresets(),
+    currentPresetName,
     currentProvider: current?.providerId || '',
     currentModel: current?.model || '',
     currentBaseUrl: current?.baseUrl || '',
@@ -1447,6 +1473,8 @@ function applyCodexPreset(preset: any): { success: boolean; error?: string } {
     } else {
       ensureCodexModelInCatalog(preset.model);
     }
+    const appliedProvider = (snapshot.config.match(/^model_provider\s*=\s*"([^"]+)"/m) || [])[1] || preset.providerId;
+    setCodexLastAppliedPreset(preset.name, appliedProvider);
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error?.message || '切换失败' };
@@ -2807,7 +2835,13 @@ ipcMain.handle('codex:saveCurrentPreset', (_e: any, data: any) => {
   const current = parseCurrentCodexProvider();
   if (!current) return { success: false, error: '无法解析当前 Codex 配置' };
   const presets = loadCodexPresets();
-  const existing = existingId ? presets.find((item: any) => item.id === existingId) : null;
+  const existing = existingId
+    ? presets.find((item: any) => item.id === existingId)
+    : name
+      ? presets.find((item: any) => String(item.name || '').trim().toLowerCase() === name.toLowerCase())
+      : null;
+  const lastApplied = getCodexLastAppliedPreset();
+  const oldName = existing?.name || '';
   const now = new Date().toISOString();
   if (existing) {
     Object.assign(existing, {
@@ -2831,6 +2865,9 @@ ipcMain.handle('codex:saveCurrentPreset', (_e: any, data: any) => {
       createdAt: now,
       updatedAt: now,
     });
+  }
+  if (existing && lastApplied.name === oldName && lastApplied.providerId === current.providerId) {
+    setCodexLastAppliedPreset(name || existing.name, lastApplied.providerId);
   }
   const preset = existing || presets[presets.length - 1];
   const shared = getCodexSharedProviderId() || current.providerId;

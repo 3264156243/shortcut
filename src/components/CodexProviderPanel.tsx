@@ -33,7 +33,7 @@ export default function CodexProviderPanel() {
       if (result?.state) setState(result.state);
       addToast(
         result?.success
-          ? `已切换为「${preset?.name || '该'}」方案，重启 Codex 后生效（聊天记录按供应商隔离，切回原方案即恢复）`
+          ? `已切换为「${preset?.name || '该'}」方案，重启 Codex 后生效`
           : `切换失败：${result?.error || '未知错误'}`,
         result?.success ? 'success' : 'error',
       );
@@ -67,7 +67,7 @@ export default function CodexProviderPanel() {
   };
 
   const isCurrent = (preset: CodexPreset) =>
-    state?.currentBaseUrl === preset.baseUrl && state.currentModel === preset.model;
+    !!state?.currentPresetName && state.currentPresetName === preset.name;
 
   const fileButtons: Array<{ which: 'config' | 'auth' | 'models'; label: string; icon: typeof FileText }> = [
     { which: 'config', label: 'config.toml', icon: FileText },

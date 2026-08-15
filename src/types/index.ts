@@ -105,6 +105,7 @@ export interface CodexPreset {
 
 export interface CodexPresetState {
   presets: CodexPreset[];
+  currentPresetName: string;
   currentProvider: string;
   currentModel: string;
   currentBaseUrl: string;
