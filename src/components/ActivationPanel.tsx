@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle2, KeyRound, Loader2, Lock, RefreshCw, ShieldCheck } from 'lucide-react';
 import { useStore } from '../store';
-import { MODULE_REGISTRY, getAvailableModuleIds } from '../moduleRegistry';
+import { MODULE_REGISTRY } from '../moduleRegistry';
 import type { ActivationPolicy } from '../types';
 
 interface LicenseState {
@@ -34,9 +34,7 @@ const POLICY_TEXT: Record<string, string> = {
 };
 
 export default function ActivationPanel() {
-  const licenseModuleAccess = useStore((s) => s.licenseModuleAccess);
   const licensePolicy = useStore((s) => s.licensePolicy);
-  const config = useStore((s) => s.config);
   const [state, setState] = useState<LicenseState | null>(null);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -160,11 +158,6 @@ export default function ActivationPanel() {
   };
 
   const activated = state?.status === 'active' && !!state?.code;
-  const availableIds = getAvailableModuleIds(config).filter((id) => licenseModuleAccess[id] !== false);
-  const visibleModules = availableIds
-    .map((id) => MODULE_REGISTRY.find((meta) => meta.id === id))
-    .filter((meta): meta is NonNullable<typeof meta> => !!meta);
-  const moduleLabels = visibleModules.map((meta) => meta.label).join('、');
   const moduleLabel = (id: string) => moduleMeta[id] || MODULE_REGISTRY.find((meta) => meta.id === id)?.label || id;
 
   const cardStyle: React.CSSProperties = {
@@ -288,9 +281,6 @@ export default function ActivationPanel() {
 
         <div className="mt-2 text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
           {POLICY_TEXT[state?.activationPolicy || licensePolicy] || state?.activationPolicy || licensePolicy}
-        </div>
-        <div className="mt-1 text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
-          当前可用板块：{moduleLabels || '（无）'}
         </div>
       </div>
 
