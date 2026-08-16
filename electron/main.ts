@@ -716,22 +716,26 @@ function writeLicense(license: any) {
   return true;
 }
 
+function buildClientInfoPayload(): any {
+  const profile = getMachineFingerprintProfile();
+  return {
+    appVersion: app.getVersion(),
+    platform: `${os.platform()} ${os.arch()}`,
+    hostname: profile?.hostname || os.hostname(),
+    lanIps: profile?.lanIps || [],
+    macs: profile?.macs || [],
+    machineSource: profile?.source || 'pending',
+  };
+}
+
 async function checkLicense(code?: string) {
   const machineCode = await getMachineCode();
-  const profile = getMachineFingerprintProfile();
   const current = readLicense();
   const activeCode = code || current.code;
   const result = await licenseRequest('check', {
     code: activeCode || '',
     machineCode,
-    clientInfo: {
-      appVersion: app.getVersion(),
-      platform: `${os.platform()} ${os.arch()}`,
-      hostname: profile?.hostname || os.hostname(),
-      lanIps: profile?.lanIps || [],
-      macs: profile?.macs || [],
-      machineSource: profile?.source || 'pending',
-    },
+    clientInfo: buildClientInfoPayload(),
   });
   writeLicense({
     code: activeCode,
@@ -750,6 +754,20 @@ async function checkLicense(code?: string) {
 
 function checkLicenseOnStartup() {
   void checkLicense().catch(() => undefined);
+}
+
+async function reportDeviceStartup() {
+  try {
+    const machineCode = await getMachineCode();
+    const current = readLicense();
+    await licenseRequest('report', {
+      code: current.code || '',
+      machineCode,
+      clientInfo: buildClientInfoPayload(),
+    });
+  } catch {
+    // 设备上报失败不阻塞启动
+  }
 }
 
 const DEEPSEEK_BALANCE_API = 'https://api.deepseek.com/user/balance';
@@ -3580,6 +3598,7 @@ if (!gotSingleInstanceLock) {
   scanDueReminders();
   setInterval(() => scanDueReminders(), 20000);
   checkLicenseOnStartup();
+  reportDeviceStartup();
   setInterval(() => applyIslandVisibility(), 1500);
   syncModuleServices();
 

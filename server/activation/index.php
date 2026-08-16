@@ -579,7 +579,10 @@ $loggedIn = !empty($_SESSION['admin']);
         </div>
       </div>
       <nav class="nav">
-        <button class="nav-item active" data-tab="policy">
+        <button class="nav-item active" data-tab="dashboard">
+          <span class="nav-dot"></span><span class="nav-label">用户看板</span>
+        </button>
+        <button class="nav-item" data-tab="policy">
           <span class="nav-dot"></span><span class="nav-label">授权开关</span>
         </button>
         <button class="nav-item" data-tab="groups">
@@ -587,9 +590,6 @@ $loggedIn = !empty($_SESSION['admin']);
         </button>
         <button class="nav-item" data-tab="codes">
           <span class="nav-dot"></span><span class="nav-label">激活码</span>
-        </button>
-        <button class="nav-item" data-tab="dashboard">
-          <span class="nav-dot"></span><span class="nav-label">用户看板</span>
         </button>
       </nav>
       <div style="padding:14px 0 6px; border-top:1px solid var(--border);">
@@ -600,8 +600,8 @@ $loggedIn = !empty($_SESSION['admin']);
     <main class="main">
       <header class="topbar">
         <div>
-          <h1 id="pageTitle">授权开关</h1>
-          <p id="pageSubtitle">设置是否必须激活，以及未激活用户可用范围</p>
+          <h1 id="pageTitle">用户看板</h1>
+          <p id="pageSubtitle">查看所有打开过软件的设备，包括未激活用户</p>
         </div>
         <div class="top-actions">
           <span class="save-status" id="saveStatus">已自动保存</span>
@@ -610,7 +610,7 @@ $loggedIn = !empty($_SESSION['admin']);
       </header>
       <div id="message" class="muted"></div>
 
-      <section class="tab-page active" id="tab-policy">
+      <section class="tab-page" id="tab-policy">
         <div class="card">
           <div class="card-head">
             <div>
@@ -694,7 +694,7 @@ $loggedIn = !empty($_SESSION['admin']);
         </div>
       </section>
 
-      <section class="tab-page" id="tab-dashboard">
+      <section class="tab-page active" id="tab-dashboard">
         <div class="card">
           <div class="card-head">
             <div>
@@ -712,7 +712,7 @@ $loggedIn = !empty($_SESSION['admin']);
           <div class="card-head">
             <div>
               <h2>设备列表</h2>
-              <p>每一行是一个已绑定的激活码设备，点击查看可展开该设备的全部使用记录。</p>
+              <p>每一行是一台打开过软件的设备，未激活用户也会记录；点击查看可展开该设备的全部使用记录。</p>
             </div>
           </div>
           <div class="table-wrap">
@@ -739,7 +739,7 @@ $loggedIn = !empty($_SESSION['admin']);
           <div class="card-head">
             <div>
               <h2>最近检查记录</h2>
-              <p>客户端每次启动验证授权时上报。</p>
+              <p>客户端每次启动自动上报，未激活用户也会记录。</p>
             </div>
           </div>
           <div class="table-wrap">
@@ -836,7 +836,7 @@ $loggedIn = !empty($_SESSION['admin']);
       editRecord: null,
       editStatus: true,
       editGroupId: '',
-      currentTab: 'policy',
+      currentTab: 'dashboard',
       saveTimer: null,
       savingPolicy: false,
       saveQueued: false,
@@ -992,7 +992,7 @@ $loggedIn = !empty($_SESSION['admin']);
         policy: ['授权开关', '设置是否必须激活，以及未激活用户可用范围'],
         groups: ['用户分组', '自定义身份分组，并设置每个分组的板块权限'],
         codes: ['激活码', '生成、管理激活码，支持修改分组与续期'],
-        dashboard: ['用户看板', '查看设备硬件指纹、网络、版本与启动检查记录'],
+        dashboard: ['用户看板', '查看所有打开过软件的设备，包括未激活用户'],
       }[tab];
       document.getElementById('pageTitle').textContent = meta[0];
       document.getElementById('pageSubtitle').textContent = meta[1];
@@ -1315,6 +1315,9 @@ $loggedIn = !empty($_SESSION['admin']);
         const machine = item.machine || '';
         const firstSeen = item.first_seen_at ? new Date(item.first_seen_at).toLocaleString('zh-CN') : '-';
         const lastSeen = item.last_check_at ? new Date(item.last_check_at).toLocaleString('zh-CN') : '-';
+        const unbindAction = item.code
+          ? '<button class="btn small" onclick="unbindCode(\'' + escapeJs(item.code) + '\')">解绑</button>'
+          : '';
         tr.innerHTML =
           '<td class="truncate-cell" title="' + escapeHtml(machine) + '">' + escapeHtml(shortMachine(machine)) + '</td>' +
           '<td class="code-text">' + escapeHtml(item.code) + '</td>' +
@@ -1327,7 +1330,7 @@ $loggedIn = !empty($_SESSION['admin']);
           '<td>' + escapeHtml(String(item.check_count || 0)) + '</td>' +
           '<td><div class="actions">' +
           '<button class="btn small" onclick="viewDevice(\'' + escapeJs(machine) + '\')">查看</button>' +
-          '<button class="btn small" onclick="unbindCode(\'' + escapeJs(item.code) + '\')">解绑</button>' +
+          unbindAction +
           '</div></td>';
         devicesBody.appendChild(tr);
       }
@@ -1481,6 +1484,7 @@ $loggedIn = !empty($_SESSION['admin']);
     }
 
     window.unbindCode = (code) => {
+      if (!code) return;
       askConfirm('确定解除激活码 ' + code + ' 的绑定吗？', () => void updateCode({ action: 'unbind', code }, true));
     };
     window.deleteCode = (code) => {

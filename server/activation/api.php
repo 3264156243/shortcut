@@ -129,6 +129,35 @@ switch ($action) {
         respond(['success' => true, 'code' => $code, 'record' => $record]);
         break;
 
+    case 'report':
+        $machine = isset($input['machineCode']) ? trim(strval($input['machineCode'])) : '';
+        if ($machine === '') {
+            respond(['success' => false, 'message' => '机器码为空']);
+        }
+        $code = isset($input['code']) ? strtoupper(trim(strval($input['code']))) : '';
+        $now = date('c');
+        $remoteIp = isset($_SERVER['REMOTE_ADDR']) ? strval($_SERVER['REMOTE_ADDR']) : '';
+        $info = normalize_client_info($clientInfo);
+        if (!upsert_device($machine, $clientInfo, $code, $remoteIp)) {
+            respond(['success' => false, 'message' => '设备上报保存失败']);
+        }
+        append_check_log([
+            'time' => $now,
+            'code' => $code,
+            'machine' => $machine,
+            'machine_source' => $info['machineSource'],
+            'device_name' => $info['hostname'],
+            'group_id' => null,
+            'group_name' => '',
+            'ip' => $remoteIp,
+            'lan_ips' => $info['lanIps'],
+            'client_version' => $info['appVersion'],
+            'platform' => $info['platform'],
+            'event' => 'startup',
+        ]);
+        respond(['success' => true, 'message' => '设备已上报', 'machineCode' => $machine]);
+        break;
+
     case 'check':
         $code = isset($input['code']) ? strtoupper(trim(strval($input['code']))) : '';
         $machine = isset($input['machineCode']) ? trim(strval($input['machineCode'])) : '';
@@ -200,6 +229,7 @@ switch ($action) {
         $found['last_ip'] = $remoteIp !== '' ? $remoteIp : ($found['last_ip'] ?? '');
         $found['lan_ips'] = count($lanIps) > 0 ? $lanIps : ($found['lan_ips'] ?? []);
         $found['macs'] = count($macs) > 0 ? $macs : ($found['macs'] ?? []);
+        upsert_device($machine, $clientInfo, strval($found['code']), $remoteIp);
         if (empty($found['first_seen_at'])) {
             $found['first_seen_at'] = $now;
         }
@@ -221,6 +251,7 @@ switch ($action) {
             'lan_ips' => $lanIps,
             'client_version' => $clientVersion,
             'platform' => $platform,
+            'event' => 'check',
         ]);
         respond([
             'success' => true,
@@ -373,6 +404,7 @@ switch ($action) {
         $config = load_activation_config();
         $codes = load_codes();
         $logs = load_logs();
+        $registry = load_devices();
         $todayStart = strtotime(date('Y-m-d'));
         $weekStart = strtotime('-7 days', $todayStart);
         $checksToday = 0;
@@ -386,8 +418,7 @@ switch ($action) {
                 $checksWeek++;
             }
         }
-        $devices = [];
-        $uniqueMachines = [];
+        $bindingsByMachine = [];
         $activeCodes = 0;
         foreach ($codes as $record) {
             if (isset($record['status']) && $record['status'] === 'active') {
@@ -397,14 +428,46 @@ switch ($action) {
             if ($machine === '') {
                 continue;
             }
-            $groupId = isset($record['group_id']) && $record['group_id'] !== ''
-                ? $record['group_id']
-                : (isset($record['tier']) ? $record['tier'] : null);
+            if (!isset($bindingsByMachine[$machine])) {
+                $bindingsByMachine[$machine] = [];
+            }
+            $bindingsByMachine[$machine][] = $record;
+        }
+        $devicesByMachine = [];
+        foreach ($registry as $machine => $device) {
+            if (!is_array($device) || trim(strval($machine)) === '') {
+                continue;
+            }
+            $devicesByMachine[$machine] = $device;
+        }
+        foreach ($bindingsByMachine as $machine => $records) {
+            if (!isset($devicesByMachine[$machine])) {
+                $devicesByMachine[$machine] = ['machine' => $machine];
+            }
+            $binding = !empty($records[0]) ? $records[0] : [];
+            if (!empty($binding)) {
+                $devicesByMachine[$machine]['code'] = strval($binding['code'] ?? '');
+                $devicesByMachine[$machine]['status'] = strval($binding['status'] ?? '');
+                $devicesByMachine[$machine]['created_at'] = strval($binding['created_at'] ?? '');
+                $devicesByMachine[$machine]['expires_at'] = strval($binding['expires_at'] ?? '');
+                if (isset($binding['group_id']) && $binding['group_id'] !== '') {
+                    $devicesByMachine[$machine]['group_id'] = $binding['group_id'];
+                } elseif (isset($binding['tier']) && $binding['tier'] !== '') {
+                    $devicesByMachine[$machine]['group_id'] = $binding['tier'];
+                }
+            }
+        }
+        $devices = [];
+        foreach ($devicesByMachine as $machine => $device) {
+            $device['machine'] = $machine;
+            $groupId = isset($device['group_id']) && $device['group_id'] !== ''
+                ? $device['group_id']
+                : (isset($device['tier']) ? $device['tier'] : null);
             $group = find_group($config, $groupId);
-            $record['group_name'] = $group ? $group['name'] : ($record['group_name'] ?? '未指定');
-            $record['tier'] = $group ? $group['name'] : ($record['tier'] ?? '未指定');
-            $devices[] = $record;
-            $uniqueMachines[$machine] = true;
+            $device['group_name'] = $group ? $group['name'] : ($device['group_name'] ?? '未指定');
+            $device['tier'] = $group ? $group['name'] : ($device['tier'] ?? '未指定');
+            $device['code'] = $device['code'] ?? '';
+            $devices[] = $device;
         }
         usort($devices, function ($a, $b) {
             return strcmp(strval($b['last_check_at'] ?? ''), strval($a['last_check_at'] ?? ''));
@@ -414,8 +477,8 @@ switch ($action) {
             'devices' => $devices,
             'logs' => array_slice($logs, 0, 200),
             'stats' => [
-                'devices' => count($uniqueMachines),
-                'bindings' => count($devices),
+                'devices' => count($devicesByMachine),
+                'bindings' => count($bindingsByMachine),
                 'codes' => count($codes),
                 'activeCodes' => $activeCodes,
                 'checksToday' => $checksToday,
@@ -452,8 +515,9 @@ switch ($action) {
         require_admin();
         $codesOk = save_codes([]);
         $logsOk = save_logs([]);
-        if ($codesOk && $logsOk) {
-            respond(['success' => true, 'message' => '激活码与使用记录已全部清空']);
+        $devicesOk = save_devices([]);
+        if ($codesOk && $logsOk && $devicesOk) {
+            respond(['success' => true, 'message' => '激活码、设备与使用记录已全部清空']);
         }
         error_message('数据清空失败');
         break;

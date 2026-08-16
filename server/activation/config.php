@@ -6,6 +6,7 @@ $DATA_FILE = $DATA_DIR . '/codes.json';
 $CONFIG_FILE = $DATA_DIR . '/activation_config.json';
 $LOG_FILE = $DATA_DIR . '/checks.json';
 $LOG_LIMIT = 20000;
+$DEVICES_FILE = $DATA_DIR . '/devices.json';
 
 $MODULE_META = [
     'shortcuts' => '快捷方式',
@@ -91,6 +92,97 @@ function append_check_log($entry) {
         $logs = array_slice($logs, 0, $LOG_LIMIT);
     }
     return save_logs($logs);
+}
+
+function load_devices() {
+    global $DEVICES_FILE;
+    if (!file_exists($DEVICES_FILE)) {
+        return [];
+    }
+    $raw = file_get_contents($DEVICES_FILE);
+    $data = json_decode($raw, true);
+    return is_array($data) ? $data : [];
+}
+
+function save_devices($devices) {
+    global $DATA_DIR, $DEVICES_FILE;
+    if (!is_dir($DATA_DIR)) {
+        mkdir($DATA_DIR, 0755, true);
+    }
+    $tmp = $DEVICES_FILE . '.' . getmypid() . '.' . uniqid() . '.tmp';
+    $payload = json_encode($devices, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    if (file_put_contents($tmp, $payload, LOCK_EX) === false) {
+        @unlink($tmp);
+        return false;
+    }
+    if (!@rename($tmp, $DEVICES_FILE)) {
+        @unlink($tmp);
+        return false;
+    }
+    return true;
+}
+
+function normalize_client_info($clientInfo) {
+    if (!is_array($clientInfo)) {
+        $clientInfo = [];
+    }
+    $lanIps = isset($clientInfo['lanIps']) && is_array($clientInfo['lanIps'])
+        ? array_values(array_filter(array_map('strval', $clientInfo['lanIps'])))
+        : [];
+    $macs = isset($clientInfo['macs']) && is_array($clientInfo['macs'])
+        ? array_values(array_filter(array_map('strval', $clientInfo['macs'])))
+        : [];
+    return [
+        'hostname' => trim(strval($clientInfo['hostname'] ?? '')),
+        'appVersion' => trim(strval($clientInfo['appVersion'] ?? '')),
+        'platform' => trim(strval($clientInfo['platform'] ?? '')),
+        'machineSource' => trim(strval($clientInfo['machineSource'] ?? 'hardware')),
+        'lanIps' => $lanIps,
+        'macs' => $macs,
+    ];
+}
+
+function upsert_device($machine, $clientInfo, $code = '', $remoteIp = '') {
+    $machine = trim(strval($machine));
+    if ($machine === '') {
+        return false;
+    }
+    $info = normalize_client_info($clientInfo);
+    $devices = load_devices();
+    $now = date('c');
+    $record = isset($devices[$machine]) && is_array($devices[$machine])
+        ? $devices[$machine]
+        : ['machine' => $machine];
+    $record['machine'] = $machine;
+    $record['machine_source'] = $info['machineSource'] !== '' ? $info['machineSource'] : ($record['machine_source'] ?? 'hardware');
+    if ($info['hostname'] !== '') {
+        $record['device_name'] = $info['hostname'];
+    }
+    if ($info['appVersion'] !== '') {
+        $record['client_version'] = $info['appVersion'];
+    }
+    if ($info['platform'] !== '') {
+        $record['platform'] = $info['platform'];
+    }
+    if ($remoteIp !== '') {
+        $record['last_ip'] = $remoteIp;
+    }
+    if (count($info['lanIps']) > 0) {
+        $record['lan_ips'] = $info['lanIps'];
+    }
+    if (count($info['macs']) > 0) {
+        $record['macs'] = $info['macs'];
+    }
+    if ($code !== '') {
+        $record['code'] = $code;
+    }
+    if (empty($record['first_seen_at'])) {
+        $record['first_seen_at'] = $now;
+    }
+    $record['last_check_at'] = $now;
+    $record['check_count'] = 1 + intval($record['check_count'] ?? 0);
+    $devices[$machine] = $record;
+    return save_devices($devices);
 }
 
 function generate_code() {
