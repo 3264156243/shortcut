@@ -4,6 +4,8 @@ $ADMIN_PASSWORD = '791214';
 $DATA_DIR = __DIR__ . '/data';
 $DATA_FILE = $DATA_DIR . '/codes.json';
 $CONFIG_FILE = $DATA_DIR . '/activation_config.json';
+$LOG_FILE = $DATA_DIR . '/checks.json';
+$LOG_LIMIT = 20000;
 
 $MODULE_META = [
     'shortcuts' => '快捷方式',
@@ -51,6 +53,44 @@ function save_codes($codes) {
         return false;
     }
     return true;
+}
+
+function load_logs() {
+    global $LOG_FILE;
+    if (!file_exists($LOG_FILE)) {
+        return [];
+    }
+    $raw = file_get_contents($LOG_FILE);
+    $data = json_decode($raw, true);
+    return is_array($data) ? $data : [];
+}
+
+function save_logs($logs) {
+    global $DATA_DIR, $LOG_FILE;
+    if (!is_dir($DATA_DIR)) {
+        mkdir($DATA_DIR, 0755, true);
+    }
+    $tmp = $LOG_FILE . '.' . getmypid() . '.' . uniqid() . '.tmp';
+    $payload = json_encode($logs, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    if (file_put_contents($tmp, $payload, LOCK_EX) === false) {
+        @unlink($tmp);
+        return false;
+    }
+    if (!@rename($tmp, $LOG_FILE)) {
+        @unlink($tmp);
+        return false;
+    }
+    return true;
+}
+
+function append_check_log($entry) {
+    global $LOG_LIMIT;
+    $logs = load_logs();
+    array_unshift($logs, $entry);
+    if (count($logs) > $LOG_LIMIT) {
+        $logs = array_slice($logs, 0, $LOG_LIMIT);
+    }
+    return save_logs($logs);
 }
 
 function generate_code() {

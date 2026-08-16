@@ -11,6 +11,7 @@ $input = json_decode(file_get_contents('php://input'), true);
 if (!is_array($input)) {
     $input = [];
 }
+$clientInfo = isset($input['clientInfo']) && is_array($input['clientInfo']) ? $input['clientInfo'] : [];
 $action = isset($input['action']) ? $input['action'] : (isset($_GET['action']) ? $_GET['action'] : '');
 
 function respond($data) {
@@ -170,9 +171,7 @@ switch ($action) {
         if ($group && empty($group['enabled'])) {
             respond(['success' => false, 'active' => false, 'message' => '激活码所属分组已停用']);
         }
-        if (empty($found['machine'])) {
-            $found['machine'] = $machine;
-        } elseif ($found['machine'] !== $machine) {
+        if (!empty($found['machine']) && $found['machine'] !== $machine) {
             respond([
                 'success' => false,
                 'active' => false,
@@ -181,11 +180,48 @@ switch ($action) {
                 'moduleAccess' => module_rules($config, $group ? $group['id'] : null),
             ]);
         }
-        $found['last_check_at'] = date('c');
+        $now = date('c');
+        $remoteIp = isset($_SERVER['REMOTE_ADDR']) ? strval($_SERVER['REMOTE_ADDR']) : '';
+        $deviceName = trim(strval($clientInfo['hostname'] ?? ''));
+        $clientVersion = trim(strval($clientInfo['appVersion'] ?? ''));
+        $platform = trim(strval($clientInfo['platform'] ?? ''));
+        $machineSource = trim(strval($clientInfo['machineSource'] ?? 'hardware'));
+        $lanIps = isset($clientInfo['lanIps']) && is_array($clientInfo['lanIps'])
+            ? array_values(array_filter(array_map('strval', $clientInfo['lanIps'])))
+            : [];
+        $macs = isset($clientInfo['macs']) && is_array($clientInfo['macs'])
+            ? array_values(array_filter(array_map('strval', $clientInfo['macs'])))
+            : [];
+        $found['machine'] = $machine;
+        $found['machine_source'] = $machineSource !== '' ? $machineSource : 'hardware';
+        $found['device_name'] = $deviceName !== '' ? $deviceName : ($found['device_name'] ?? '');
+        $found['client_version'] = $clientVersion !== '' ? $clientVersion : ($found['client_version'] ?? '');
+        $found['platform'] = $platform !== '' ? $platform : ($found['platform'] ?? '');
+        $found['last_ip'] = $remoteIp !== '' ? $remoteIp : ($found['last_ip'] ?? '');
+        $found['lan_ips'] = count($lanIps) > 0 ? $lanIps : ($found['lan_ips'] ?? []);
+        $found['macs'] = count($macs) > 0 ? $macs : ($found['macs'] ?? []);
+        if (empty($found['first_seen_at'])) {
+            $found['first_seen_at'] = $now;
+        }
+        $found['last_check_at'] = $now;
+        $found['check_count'] = 1 + intval($found['check_count'] ?? 0);
         $codes[$foundIndex] = $found;
         if (!save_codes($codes)) {
             respond(['success' => false, 'active' => false, 'message' => '激活记录保存失败']);
         }
+        append_check_log([
+            'time' => $now,
+            'code' => strval($found['code']),
+            'machine' => $machine,
+            'machine_source' => $machineSource,
+            'device_name' => $deviceName,
+            'group_id' => $group ? $group['id'] : ($found['group_id'] ?? null),
+            'group_name' => $group ? $group['name'] : ($found['group_name'] ?? ''),
+            'ip' => $remoteIp,
+            'lan_ips' => $lanIps,
+            'client_version' => $clientVersion,
+            'platform' => $platform,
+        ]);
         respond([
             'success' => true,
             'active' => true,
@@ -330,6 +366,96 @@ switch ($action) {
         }
         save_codes($kept);
         respond(['success' => true, 'message' => '已删除']);
+        break;
+
+    case 'dashboard':
+        require_admin();
+        $config = load_activation_config();
+        $codes = load_codes();
+        $logs = load_logs();
+        $todayStart = strtotime(date('Y-m-d'));
+        $weekStart = strtotime('-7 days', $todayStart);
+        $checksToday = 0;
+        $checksWeek = 0;
+        foreach ($logs as $log) {
+            $t = strtotime(strval($log['time'] ?? ''));
+            if ($t >= $todayStart) {
+                $checksToday++;
+            }
+            if ($t >= $weekStart) {
+                $checksWeek++;
+            }
+        }
+        $devices = [];
+        $uniqueMachines = [];
+        $activeCodes = 0;
+        foreach ($codes as $record) {
+            if (isset($record['status']) && $record['status'] === 'active') {
+                $activeCodes++;
+            }
+            $machine = trim(strval($record['machine'] ?? ''));
+            if ($machine === '') {
+                continue;
+            }
+            $groupId = isset($record['group_id']) && $record['group_id'] !== ''
+                ? $record['group_id']
+                : (isset($record['tier']) ? $record['tier'] : null);
+            $group = find_group($config, $groupId);
+            $record['group_name'] = $group ? $group['name'] : ($record['group_name'] ?? '未指定');
+            $record['tier'] = $group ? $group['name'] : ($record['tier'] ?? '未指定');
+            $devices[] = $record;
+            $uniqueMachines[$machine] = true;
+        }
+        usort($devices, function ($a, $b) {
+            return strcmp(strval($b['last_check_at'] ?? ''), strval($a['last_check_at'] ?? ''));
+        });
+        respond([
+            'success' => true,
+            'devices' => $devices,
+            'logs' => array_slice($logs, 0, 200),
+            'stats' => [
+                'devices' => count($uniqueMachines),
+                'bindings' => count($devices),
+                'codes' => count($codes),
+                'activeCodes' => $activeCodes,
+                'checksToday' => $checksToday,
+                'checksWeek' => $checksWeek,
+                'checksTotal' => count($logs),
+            ],
+        ]);
+        break;
+
+    case 'deviceLogs':
+        require_admin();
+        $machine = trim(strval($input['machine'] ?? ''));
+        if ($machine === '') {
+            error_message('设备指纹为空');
+        }
+        $logs = array_values(array_filter(load_logs(), function ($log) use ($machine) {
+            return strval($log['machine'] ?? '') === $machine;
+        }));
+        $bindings = array_values(array_filter(load_codes(), function ($record) use ($machine) {
+            return strval($record['machine'] ?? '') === $machine;
+        }));
+        respond(['success' => true, 'machine' => $machine, 'logs' => $logs, 'bindings' => $bindings]);
+        break;
+
+    case 'clearLogs':
+        require_admin();
+        if (save_logs([])) {
+            respond(['success' => true, 'message' => '使用记录已清空']);
+        }
+        error_message('使用记录清空失败');
+        break;
+
+    case 'clearAllData':
+        require_admin();
+        $codesOk = save_codes([]);
+        $logsOk = save_logs([]);
+        if ($codesOk && $logsOk) {
+            respond(['success' => true, 'message' => '激活码与使用记录已全部清空']);
+        }
+        error_message('数据清空失败');
         break;
 
     default:

@@ -517,7 +517,164 @@ function runMusicBridgeCommand(args: string[]) {
 
 const LICENSE_API_URL = 'https://shortcut.326415.xyz/activation/api.php';
 
-function getMachineCode(): string {
+let machineProfilePromise: Promise<any> | null = null;
+let machineProfileCache: any = null;
+
+const MACHINE_FINGERPRINT_SCRIPT = `
+$ErrorActionPreference = 'SilentlyContinue'
+$props = [ordered]@{}
+function Get-Value($obj, $name) {
+  try { $v = $obj.$name } catch { return '' }
+  if ($null -eq $v) { return '' }
+  return ([string]$v).Trim()
+}
+function Add-Prop($key, $value) {
+  $s = [string]$value
+  $props[$key] = $s.Trim()
+}
+$cs = Get-CimInstance Win32_ComputerSystemProduct
+if ($cs) {
+  Add-Prop 'systemUuid' (Get-Value $cs 'UUID')
+  Add-Prop 'systemSerial' (Get-Value $cs 'IdentifyingNumber')
+}
+$bb = Get-CimInstance Win32_BaseBoard
+if ($bb) {
+  Add-Prop 'baseboardSerial' (Get-Value $bb 'SerialNumber')
+  Add-Prop 'baseboardProduct' (Get-Value $bb 'Product')
+}
+$bios = Get-CimInstance Win32_BIOS
+if ($bios) { Add-Prop 'biosSerial' (Get-Value $bios 'SerialNumber') }
+$cpu = Get-CimInstance Win32_Processor
+if ($cpu) {
+  Add-Prop 'cpuId' (Get-Value $cpu 'ProcessorId')
+  Add-Prop 'cpuModel' (Get-Value $cpu 'Name')
+}
+$disk = Get-CimInstance Win32_DiskDrive | Sort-Object Index | Select-Object -First 1
+if ($disk) {
+  Add-Prop 'diskSerial' (Get-Value $disk 'SerialNumber')
+  Add-Prop 'diskModel' (Get-Value $disk 'Model')
+}
+$guid = Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Cryptography' -Name MachineGuid
+if ($guid) { Add-Prop 'machineGuid' $guid.MachineGuid }
+$adapterMacs = @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Where-Object { $_.MacAddress -and $_.MacAddress -ne '00-00-00-00-00-00' } | Select-Object -ExpandProperty MacAddress | ForEach-Object { ($_ -replace '[-:]','').ToUpper() })
+$lanIps = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } | Select-Object -ExpandProperty IPAddress)
+$props['adapterMacs'] = @($adapterMacs)
+$props['lanIps'] = @($lanIps)
+$props['hostname'] = $env:COMPUTERNAME
+$props['platform'] = $env:PROCESSOR_ARCHITECTURE
+$result = [ordered]@{ success = $true; fields = $props; collectedAt = (Get-Date).ToString('o') }
+$result | ConvertTo-Json -Compress -Depth 4
+`;
+
+function runFingerprintScript(): Promise<any> {
+  return new Promise<any>((resolve) => {
+    let child: any;
+    try {
+      child = childProcess.spawn('powershell.exe', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy', 'Bypass',
+        '-Command', MACHINE_FINGERPRINT_SCRIPT,
+      ], {
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } catch (error: any) {
+      resolve({ success: false, error: error?.message || '指纹采集启动失败' });
+      return;
+    }
+    let out = '';
+    let err = '';
+    const timer = setTimeout(() => {
+      try { child.kill(); } catch {}
+      resolve({ success: false, error: '指纹采集超时' });
+    }, 15000);
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => { out += chunk; });
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk: string) => { err += chunk; });
+    child.once('close', () => {
+      clearTimeout(timer);
+      try {
+        const firstLine = out.trim().split(/\r?\n/)[0];
+        if (firstLine) {
+          resolve(JSON.parse(firstLine));
+        } else {
+          resolve({ success: false, error: err.trim() || '指纹采集无输出' });
+        }
+      } catch {
+        resolve({ success: false, error: err.trim() || '指纹采集输出解析失败' });
+      }
+    });
+    child.once('error', (error: Error) => {
+      clearTimeout(timer);
+      resolve({ success: false, error: error.message });
+    });
+  });
+}
+
+async function getMachineProfile(): Promise<any> {
+  if (machineProfileCache) return machineProfileCache;
+  if (!machineProfilePromise) {
+    machineProfilePromise = (async () => {
+      const nodeMacs: string[] = [];
+      const nodeLanIps: string[] = [];
+      const interfaces = os.networkInterfaces();
+      for (const key of Object.keys(interfaces)) {
+        for (const item of interfaces[key] || []) {
+          if (item.internal) continue;
+          if (item.mac && item.mac !== '00:00:00:00:00:00') {
+            nodeMacs.push(item.mac.replace(/[-:]/g, '').toUpperCase());
+          }
+          if (item.family === 'IPv4' && item.address && item.address !== '127.0.0.1' && !item.address.startsWith('169.254.')) {
+            nodeLanIps.push(item.address);
+          }
+        }
+      }
+      const payload = await runFingerprintScript();
+      const fields = payload?.success && payload?.fields ? payload.fields : null;
+      const copyFields = fields ? JSON.parse(JSON.stringify(fields)) : null;
+      const lanIps = Array.from(new Set([...(copyFields?.lanIps || []), ...nodeLanIps])).filter(Boolean) as string[];
+      const macs = Array.from(new Set([...(copyFields?.adapterMacs || []), ...nodeMacs])).filter(Boolean) as string[];
+      machineProfileCache = {
+        fields: copyFields,
+        source: copyFields ? 'hardware' : 'fallback',
+        hostname: copyFields?.hostname || os.hostname(),
+        lanIps,
+        macs,
+        collectedAt: payload?.collectedAt || new Date().toISOString(),
+      };
+      return machineProfileCache;
+    })();
+  }
+  return machineProfilePromise;
+}
+
+function getMachineFingerprintProfile(): any {
+  return machineProfileCache || { source: 'pending' };
+}
+
+async function getMachineCode(): Promise<string> {
+  const profile = await getMachineProfile();
+  const fields = profile?.fields;
+  if (fields) {
+    const stableKeys = [
+      'systemUuid',
+      'systemSerial',
+      'baseboardSerial',
+      'baseboardProduct',
+      'biosSerial',
+      'cpuId',
+      'cpuModel',
+      'diskSerial',
+      'diskModel',
+      'machineGuid',
+    ];
+    const parts = stableKeys.map((key) => `${key}=${String(fields[key] || '').trim().toUpperCase()}`);
+    parts.push(`macs=${(profile.macs || []).map((mac: string) => mac.replace(/[-:]/g, '')).sort().join(',')}`);
+    const source = parts.sort().join('|');
+    return nodeCrypto.createHash('sha256').update(source).digest('hex').slice(0, 32).toUpperCase();
+  }
   let mac = '';
   const interfaces = os.networkInterfaces();
   for (const key of Object.keys(interfaces)) {
@@ -560,10 +717,22 @@ function writeLicense(license: any) {
 }
 
 async function checkLicense(code?: string) {
-  const machineCode = getMachineCode();
+  const machineCode = await getMachineCode();
+  const profile = getMachineFingerprintProfile();
   const current = readLicense();
   const activeCode = code || current.code;
-  const result = await licenseRequest('check', { code: activeCode || '', machineCode });
+  const result = await licenseRequest('check', {
+    code: activeCode || '',
+    machineCode,
+    clientInfo: {
+      appVersion: app.getVersion(),
+      platform: `${os.platform()} ${os.arch()}`,
+      hostname: profile?.hostname || os.hostname(),
+      lanIps: profile?.lanIps || [],
+      macs: profile?.macs || [],
+      machineSource: profile?.source || 'pending',
+    },
+  });
   writeLicense({
     code: activeCode,
     machineCode,
@@ -2832,11 +3001,11 @@ ipcMain.handle('fs:exists', (_e: any, filePath: string) => {
 });
 
 ipcMain.handle('app:getVersion', () => app.getVersion());
-ipcMain.handle('license:getState', () => ({ ...readLicense(), machineCode: getMachineCode() }));
+ipcMain.handle('license:getState', async () => ({ ...readLicense(), machineCode: await getMachineCode() }));
 ipcMain.handle('license:activate', (_e: any, code: string) => checkLicense(String(code || '').trim()));
 ipcMain.handle('license:check', () => checkLicense());
 ipcMain.handle('license:gate', async () => {
-  const machineCode = getMachineCode();
+  const machineCode = await getMachineCode();
   try {
     const result = await checkLicense();
     const hasCode = !!readLicense()?.code;

@@ -444,6 +444,48 @@ $loggedIn = !empty($_SESSION['admin']);
     .bad { color: var(--red); }
     .muted { color: var(--muted); }
     .actions { display: flex; gap: 6px; }
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 12px;
+    }
+    .stat-card {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .stat-card strong {
+      display: block;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+    .stat-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .modal.modal-wide { width: 780px; }
+    .truncate-cell {
+      max-width: 150px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .detail-block {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+    .detail-block h4 {
+      margin: 0 0 10px;
+      font-size: 13px;
+      color: var(--text);
+    }
 
     .modal-mask {
       display: none;
@@ -545,6 +587,9 @@ $loggedIn = !empty($_SESSION['admin']);
         </button>
         <button class="nav-item" data-tab="codes">
           <span class="nav-dot"></span><span class="nav-label">激活码</span>
+        </button>
+        <button class="nav-item" data-tab="dashboard">
+          <span class="nav-dot"></span><span class="nav-label">用户看板</span>
         </button>
       </nav>
       <div style="padding:14px 0 6px; border-top:1px solid var(--border);">
@@ -648,6 +693,74 @@ $loggedIn = !empty($_SESSION['admin']);
           </div>
         </div>
       </section>
+
+      <section class="tab-page" id="tab-dashboard">
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>设备统计</h2>
+              <p>基于硬件指纹、网络与启动检查记录汇总用户设备。</p>
+            </div>
+            <div class="actions">
+              <button class="btn" onclick="askConfirm('确认清空全部使用记录吗？激活码数据仍会保留。', () => void clearLogs())">清空记录</button>
+              <button class="btn danger" onclick="askConfirm('确认清空全部激活码与使用记录吗？此操作不可恢复。', () => void clearAllData())">清空全部数据</button>
+            </div>
+          </div>
+          <div class="stat-grid" id="statGrid"></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>设备列表</h2>
+              <p>每一行是一个已绑定的激活码设备，点击查看可展开该设备的全部使用记录。</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table id="deviceTable">
+              <thead>
+                <tr>
+                  <th>设备指纹</th>
+                  <th>激活码</th>
+                  <th>用户分组</th>
+                  <th>设备名</th>
+                  <th>版本</th>
+                  <th>最近IP</th>
+                  <th>首次在线</th>
+                  <th>最后在线</th>
+                  <th>检查次数</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="devicesBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>最近检查记录</h2>
+              <p>客户端每次启动验证授权时上报。</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table id="logsTable">
+              <thead>
+                <tr>
+                  <th>时间</th>
+                  <th>设备指纹</th>
+                  <th>激活码</th>
+                  <th>用户分组</th>
+                  <th>设备名</th>
+                  <th>版本</th>
+                  <th>公网IP</th>
+                  <th>局域网IP</th>
+                </tr>
+              </thead>
+              <tbody id="logsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -702,10 +815,24 @@ $loggedIn = !empty($_SESSION['admin']);
     </div>
   </div>
 
+  <div class="modal-mask" id="deviceModal">
+    <div class="modal modal-wide">
+      <h3>设备使用详情</h3>
+      <div class="code-stamp" id="deviceMachineText"></div>
+      <div id="deviceBindings"></div>
+      <div class="table-wrap" id="deviceLogsWrap"></div>
+      <div class="modal-actions">
+        <button class="btn" id="deviceModalClose">关闭</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const state = {
       policy: null,
       codes: [],
+      dashboard: { devices: [], logs: [], stats: {} },
+      deviceMachine: '',
       editRecord: null,
       editStatus: true,
       editGroupId: '',
@@ -865,11 +992,13 @@ $loggedIn = !empty($_SESSION['admin']);
         policy: ['授权开关', '设置是否必须激活，以及未激活用户可用范围'],
         groups: ['用户分组', '自定义身份分组，并设置每个分组的板块权限'],
         codes: ['激活码', '生成、管理激活码，支持修改分组与续期'],
+        dashboard: ['用户看板', '查看设备硬件指纹、网络、版本与启动检查记录'],
       }[tab];
       document.getElementById('pageTitle').textContent = meta[0];
       document.getElementById('pageSubtitle').textContent = meta[1];
       if (tab === 'groups') renderGroups();
       if (tab === 'codes') renderCodes();
+      if (tab === 'dashboard') renderDashboard();
     }
 
     for (const btn of document.querySelectorAll('.nav-item')) {
@@ -1141,6 +1270,152 @@ $loggedIn = !empty($_SESSION['admin']);
       return String(value ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     }
 
+    const DASHBOARD_STAT_LABELS = {
+      devices: '设备总数',
+      bindings: '绑定数',
+      codes: '激活码总数',
+      activeCodes: '启用激活码',
+      checksToday: '今日检查',
+      checksWeek: '近7天检查',
+      checksTotal: '累计检查',
+    };
+
+    function shortMachine(machine) {
+      const value = String(machine || '');
+      return value.length > 12 ? value.slice(0, 8) + '…' + value.slice(-4) : value;
+    }
+
+    function machineIpText(item) {
+      const lanIps = Array.isArray(item.lan_ips) ? item.lan_ips.join(', ') : (item.lan_ips || '');
+      const publicIp = item.last_ip || '';
+      if (publicIp && lanIps) return publicIp + ' / ' + lanIps;
+      return publicIp || lanIps || '-';
+    }
+
+    function renderDashboard() {
+      const stats = state.dashboard.stats || {};
+      const statGrid = document.getElementById('statGrid');
+      statGrid.innerHTML = '';
+      for (const key of ['devices', 'bindings', 'codes', 'activeCodes', 'checksToday', 'checksWeek', 'checksTotal']) {
+        const card = document.createElement('div');
+        card.className = 'stat-card';
+        const value = document.createElement('strong');
+        value.textContent = String(stats[key] ?? 0);
+        const label = document.createElement('span');
+        label.textContent = DASHBOARD_STAT_LABELS[key] || key;
+        card.appendChild(value);
+        card.appendChild(label);
+        statGrid.appendChild(card);
+      }
+
+      const devicesBody = document.getElementById('devicesBody');
+      devicesBody.innerHTML = '';
+      for (const item of state.dashboard.devices) {
+        const tr = document.createElement('tr');
+        const machine = item.machine || '';
+        const firstSeen = item.first_seen_at ? new Date(item.first_seen_at).toLocaleString('zh-CN') : '-';
+        const lastSeen = item.last_check_at ? new Date(item.last_check_at).toLocaleString('zh-CN') : '-';
+        tr.innerHTML =
+          '<td class="truncate-cell" title="' + escapeHtml(machine) + '">' + escapeHtml(shortMachine(machine)) + '</td>' +
+          '<td class="code-text">' + escapeHtml(item.code) + '</td>' +
+          '<td><span class="pill">' + escapeHtml(item.group_name || item.tier || '未指定') + '</span></td>' +
+          '<td>' + escapeHtml(item.device_name || '-') + '</td>' +
+          '<td>' + escapeHtml(item.client_version || '-') + '</td>' +
+          '<td class="truncate-cell" title="' + escapeHtml(machineIpText(item)) + '">' + escapeHtml(machineIpText(item)) + '</td>' +
+          '<td>' + escapeHtml(firstSeen) + '</td>' +
+          '<td>' + escapeHtml(lastSeen) + '</td>' +
+          '<td>' + escapeHtml(String(item.check_count || 0)) + '</td>' +
+          '<td><div class="actions">' +
+          '<button class="btn small" onclick="viewDevice(\'' + escapeJs(machine) + '\')">查看</button>' +
+          '<button class="btn small" onclick="unbindCode(\'' + escapeJs(item.code) + '\')">解绑</button>' +
+          '</div></td>';
+        devicesBody.appendChild(tr);
+      }
+      if (state.dashboard.devices.length === 0) {
+        devicesBody.innerHTML = '<tr><td colspan="10" class="muted">暂无绑定设备</td></tr>';
+      }
+
+      const logsBody = document.getElementById('logsBody');
+      logsBody.innerHTML = '';
+      for (const log of state.dashboard.logs) {
+        const tr = document.createElement('tr');
+        const lanIps = Array.isArray(log.lan_ips) ? log.lan_ips.join(', ') : (log.lan_ips || '-');
+        tr.innerHTML =
+          '<td>' + escapeHtml(new Date(log.time).toLocaleString('zh-CN')) + '</td>' +
+          '<td class="truncate-cell" title="' + escapeHtml(log.machine) + '">' + escapeHtml(shortMachine(log.machine)) + '</td>' +
+          '<td class="code-text">' + escapeHtml(log.code) + '</td>' +
+          '<td><span class="pill">' + escapeHtml(log.group_name || '未指定') + '</span></td>' +
+          '<td>' + escapeHtml(log.device_name || '-') + '</td>' +
+          '<td>' + escapeHtml(log.client_version || '-') + '</td>' +
+          '<td>' + escapeHtml(log.ip || '-') + '</td>' +
+          '<td class="truncate-cell" title="' + escapeHtml(lanIps) + '">' + escapeHtml(lanIps) + '</td>';
+        logsBody.appendChild(tr);
+      }
+      if (state.dashboard.logs.length === 0) {
+        logsBody.innerHTML = '<tr><td colspan="8" class="muted">暂无检查记录</td></tr>';
+      }
+    }
+
+    window.viewDevice = async (machine) => {
+      const result = await api({ action: 'deviceLogs', machine });
+      if (!result.success) {
+        showMessage(result.message || '读取设备详情失败', false);
+        return;
+      }
+      document.getElementById('deviceMachineText').textContent = result.machine;
+      const bindingsEl = document.getElementById('deviceBindings');
+      bindingsEl.innerHTML = '';
+      for (const binding of result.bindings || []) {
+        const block = document.createElement('div');
+        block.className = 'detail-block';
+        block.innerHTML =
+          '<h4>绑定激活码</h4>' +
+          '<div class="code-stamp" style="margin-bottom:8px;">' + escapeHtml(binding.code) + '</div>' +
+          '<div class="row-text"><strong>' + escapeHtml(binding.group_name || binding.tier || '未指定') + '</strong>' +
+          '<small>到期：' + (binding.expires_at ? new Date(binding.expires_at).toLocaleString('zh-CN') : '-') + '，状态：' + (binding.status === 'active' ? '启用' : '禁用') + '</small></div>';
+        bindingsEl.appendChild(block);
+      }
+      const wrap = document.getElementById('deviceLogsWrap');
+      wrap.innerHTML = '';
+      const logs = result.logs || [];
+      if (logs.length === 0) {
+        wrap.innerHTML = '<p class="muted">暂无使用记录</p>';
+      } else {
+        const rows = logs.map((log) =>
+          '<tr>' +
+          '<td>' + escapeHtml(new Date(log.time).toLocaleString('zh-CN')) + '</td>' +
+          '<td class="code-text">' + escapeHtml(log.code) + '</td>' +
+          '<td>' + escapeHtml(log.ip || '-') + '</td>' +
+          '<td>' + escapeHtml(Array.isArray(log.lan_ips) ? log.lan_ips.join(', ') : (log.lan_ips || '-')) + '</td>' +
+          '<td>' + escapeHtml(log.client_version || '-') + '</td>' +
+          '</tr>'
+        ).join('');
+        wrap.innerHTML =
+          '<table><thead><tr><th>时间</th><th>激活码</th><th>公网IP</th><th>局域网IP</th><th>版本</th></tr></thead>' +
+          '<tbody>' + rows + '</tbody></table>';
+      }
+      document.getElementById('deviceModal').classList.add('show');
+    };
+
+    document.getElementById('deviceModalClose').addEventListener('click', () => {
+      document.getElementById('deviceModal').classList.remove('show');
+    });
+    document.getElementById('deviceModal').addEventListener('click', (event) => {
+      if (event.target.id === 'deviceModal') document.getElementById('deviceModal').classList.remove('show');
+    });
+
+    async function clearLogs() {
+      const result = await api({ action: 'clearLogs' });
+      showMessage(result.message || '操作失败', result.success);
+      if (result.success) await refresh();
+    }
+
+    async function clearAllData() {
+      const result = await api({ action: 'clearAllData' });
+      showMessage(result.message || '操作失败', result.success);
+      if (result.success) await refresh();
+    }
+
     async function generate() {
       const days = parseInt(document.getElementById('genDays').value, 10) || 365;
       const groupId = state.genSelect ? state.genSelect.getValue() : '';
@@ -1215,9 +1490,10 @@ $loggedIn = !empty($_SESSION['admin']);
 
     async function refresh() {
       await flushPolicySave();
-      const [policyResult, listResult] = await Promise.all([
+      const [policyResult, listResult, dashboardResult] = await Promise.all([
         api({ action: 'getPolicy' }),
         api({ action: 'list' }),
+        api({ action: 'dashboard' }),
       ]);
       if (!policyResult.success) {
         showMessage(policyResult.message || '读取策略失败', false);
@@ -1227,12 +1503,22 @@ $loggedIn = !empty($_SESSION['admin']);
         showMessage(listResult.message || '读取列表失败', false);
         return;
       }
+      if (!dashboardResult.success) {
+        showMessage(dashboardResult.message || '读取看板失败', false);
+        return;
+      }
       state.policy = policyResult;
       state.codes = listResult.codes || [];
+      state.dashboard = {
+        devices: dashboardResult.devices || [],
+        logs: dashboardResult.logs || [],
+        stats: dashboardResult.stats || {},
+      };
       renderPolicy();
       renderGroups();
       renderCodes();
-      showMessage('已加载 ' + state.codes.length + ' 条激活码', true);
+      renderDashboard();
+      showMessage('已加载 ' + state.codes.length + ' 条激活码，' + (state.dashboard.stats.devices || 0) + ' 台设备', true);
     }
 
     refresh();
