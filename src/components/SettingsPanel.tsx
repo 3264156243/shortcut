@@ -1,8 +1,8 @@
 import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Moon, Sun, Monitor, Download, Upload, Power, ChevronUp, ChevronDown, Eye, EyeOff } from 'lucide-react';
-import { CORE_MODULE_IDS, MODULE_REGISTRY, type ModuleMeta } from '../moduleRegistry';
+import { X, Moon, Sun, Monitor, Download, Upload, Power, ChevronUp, ChevronDown, Eye, EyeOff, ArrowRightLeft } from 'lucide-react';
+import { CORE_MODULE_IDS, MODULE_REGISTRY, getModuleGroup, type ModuleMeta } from '../moduleRegistry';
 import type { ModuleConfigItem } from '../types';
 
 interface ModuleRowProps {
@@ -11,12 +11,14 @@ interface ModuleRowProps {
   isCore: boolean;
   groupLength: number;
   index: number;
+  canMoveGroup: boolean;
   onMove: (direction: -1 | 1) => void;
   onToggleVisible: () => void;
   onToggleEnabled: () => void;
+  onMoveGroup: () => void;
 }
 
-function ModuleRow({ meta, item, isCore, groupLength, index, onMove, onToggleVisible, onToggleEnabled }: ModuleRowProps) {
+function ModuleRow({ meta, item, isCore, groupLength, index, canMoveGroup, onMove, onToggleVisible, onToggleEnabled, onMoveGroup }: ModuleRowProps) {
   const Icon = meta.icon;
   return (
     <div
@@ -47,6 +49,19 @@ function ModuleRow({ meta, item, isCore, groupLength, index, onMove, onToggleVis
         title="下移"
       >
         <ChevronDown size={14} />
+      </button>
+      <button
+        type="button"
+        disabled={isCore || !canMoveGroup}
+        onClick={onMoveGroup}
+        className="flex h-7 w-7 items-center justify-center rounded-lg transition-opacity hover:opacity-75 disabled:opacity-30"
+        style={{
+          background: 'var(--color-bg-card)',
+          color: item.group === 'primary' ? 'var(--color-text-secondary)' : 'var(--color-accent)',
+        }}
+        title={isCore ? '核心板块不能移动分组' : (item.group === 'primary' ? '移到“更多菜单”' : '移到“主界面”')}
+      >
+        <ArrowRightLeft size={13} />
       </button>
       <button
         type="button"
@@ -87,6 +102,7 @@ export default function SettingsPanel() {
   const setModuleEnabled = useStore((s) => s.setModuleEnabled);
   const setModuleVisible = useStore((s) => s.setModuleVisible);
   const setModuleOrder = useStore((s) => s.setModuleOrder);
+  const setModuleGroup = useStore((s) => s.setModuleGroup);
   const licenseModuleAccess = useStore((s) => s.licenseModuleAccess);
   const { t } = useTranslation();
   const themes: { value: 'dark' | 'light' | 'system'; labelKey: string; icon: typeof Moon }[] = [
@@ -102,7 +118,7 @@ export default function SettingsPanel() {
     })
     .filter((entry): entry is NonNullable<typeof entry> => !!entry);
   const moveModuleInGroup = (group: 'primary' | 'more', index: number, direction: -1 | 1) => {
-    const groupItems = moduleItems.filter((entry) => entry.meta.group === group);
+    const groupItems = moduleItems.filter((entry) => getModuleGroup(config, entry.meta.id) === group);
     const target = index + direction;
     if (target < 0 || target >= groupItems.length) return;
     const moved = groupItems.map((entry) => entry.meta.id);
@@ -234,7 +250,7 @@ export default function SettingsPanel() {
                   { group: 'primary', title: '主界面板块', description: '直接展示在左侧主栏' },
                   { group: 'more', title: '更多菜单板块', description: '收进左侧“更多”菜单' },
                 ] as const).map(({ group, title, description }) => {
-                  const groupItems = moduleItems.filter((entry) => entry.meta.group === group);
+                  const groupItems = moduleItems.filter((entry) => getModuleGroup(config, entry.meta.id) === group);
                   return (
                     <div
                       key={group}
@@ -254,9 +270,11 @@ export default function SettingsPanel() {
                             isCore={CORE_MODULE_IDS.includes(meta.id)}
                             groupLength={groupItems.length}
                             index={index}
+                            canMoveGroup={!CORE_MODULE_IDS.includes(meta.id)}
                             onMove={(direction) => moveModuleInGroup(group, index, direction)}
                             onToggleVisible={() => setModuleVisible(meta.id, item.visible !== false ? false : true)}
                             onToggleEnabled={() => setModuleEnabled(meta.id, item.enabled !== false ? false : true)}
+                            onMoveGroup={() => setModuleGroup(meta.id, group === 'primary' ? 'more' : 'primary')}
                           />
                         ))}
                       </div>

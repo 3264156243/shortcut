@@ -5,6 +5,7 @@ import { BalanceProvider, IslandDisplayState, IslandStyle, IslandPosition } from
 
 export default function IslandPanel() {
   const config = useStore((s) => s.config);
+  const licenseFeatureAccess = useStore((s) => s.licenseFeatureAccess);
   const island = config.island || {
     enabled: true,
     style: 'capsule' as IslandStyle,
@@ -60,12 +61,16 @@ export default function IslandPanel() {
     color: 'var(--color-text)',
     marginBottom: 10,
   };
-  const toggleRow = (label: string, checked: boolean, onChange: (value: boolean) => void) => (
-    <label className="flex items-center justify-between cursor-pointer">
-      <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>{label}</span>
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="w-4 h-4 accent-indigo-500" />
+  const toggleRow = (label: string, checked: boolean, onChange: (value: boolean) => void, locked = false) => (
+    <label className={locked ? 'flex items-center justify-between cursor-not-allowed opacity-55' : 'flex items-center justify-between cursor-pointer'}>
+      <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+        {label}
+        {locked && <span className="ml-1.5 text-[10px]" style={{ color: '#fb923c' }}>未授权</span>}
+      </span>
+      <input type="checkbox" checked={checked} disabled={locked} onChange={(e) => onChange(e.target.checked)} className="w-4 h-4 accent-indigo-500" />
     </label>
   );
+  const featureOk = (key: string) => licenseFeatureAccess[key] !== false;
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
@@ -132,7 +137,7 @@ export default function IslandPanel() {
         <div style={sectionStyle}>
           <div style={titleStyle}>音乐板块设置</div>
           <div className="flex flex-col gap-3">
-            {toggleRow('音乐模块', island.musicEnabled !== false, (v) => void updateIsland({ musicEnabled: v }))}
+            {toggleRow('音乐模块', island.musicEnabled !== false, (v) => void updateIsland({ musicEnabled: v }), !featureOk('island.music'))}
             {toggleRow('歌词逐字跳动', island.lyricBounce !== false, (v) => void updateIsland({ lyricBounce: v }))}
             {toggleRow('播放时光效环绕', island.orbitGlow !== false, (v) => void updateIsland({ orbitGlow: v }))}
             {toggleRow('播放时柱条跳动', island.barsEnabled !== false, (v) => void updateIsland({ barsEnabled: v }))}
@@ -143,7 +148,7 @@ export default function IslandPanel() {
         <div style={sectionStyle}>
           <div style={titleStyle}>任务板块设置</div>
           <div className="flex flex-col gap-3">
-            {toggleRow('任务模块', island.tasksEnabled !== false, (v) => void updateIsland({ tasksEnabled: v }))}
+            {toggleRow('任务模块', island.tasksEnabled !== false, (v) => void updateIsland({ tasksEnabled: v }), !featureOk('island.tasks'))}
             <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
               <Film size={14} /> Alt+U 可隐藏或显示任务清单球
             </div>
@@ -154,7 +159,7 @@ export default function IslandPanel() {
         <div style={sectionStyle}>
           <div style={titleStyle}>驾驶舱板块设置</div>
           <div className="flex flex-col gap-3">
-            {toggleRow('驾驶舱数据', island.cockpitEnabled === true, (v) => void updateIsland({ cockpitEnabled: v }))}
+            {toggleRow('驾驶舱数据', island.cockpitEnabled === true, (v) => void updateIsland({ cockpitEnabled: v }), !featureOk('island.cockpit'))}
             <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
               <Film size={14} /> 显示 CPU / GPU / 内存占用与温度
             </div>
@@ -175,8 +180,9 @@ export default function IslandPanel() {
                 ] as Array<[BalanceProvider, string]>).map(([value, label]) => (
                   <button
                     key={value}
+                    disabled={!featureOk('island.balance')}
                     onClick={() => void updateIsland({ balanceProvider: value })}
-                    className="flex items-center justify-center py-2 rounded-xl text-xs transition-all duration-150"
+                    className="flex items-center justify-center py-2 rounded-xl text-xs transition-all duration-150 disabled:opacity-40"
                     style={{
                       background: balanceProvider === value ? 'var(--color-accent)' : 'var(--color-bg-card-hover)',
                       border: '1px solid ' + (balanceProvider === value ? 'var(--color-accent)' : 'var(--color-border)'),

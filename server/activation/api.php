@@ -52,7 +52,10 @@ switch ($action) {
     case 'getPolicy':
         require_admin();
         $config = load_activation_config();
-        respond(array_merge(['success' => true], $config, ['moduleMeta' => $GLOBALS['MODULE_META']]));
+        respond(array_merge(['success' => true], $config, [
+            'moduleMeta' => $GLOBALS['MODULE_META'],
+            'featureMeta' => $GLOBALS['FEATURE_META'],
+        ]));
         break;
 
     case 'savePolicy':
@@ -63,6 +66,9 @@ switch ($action) {
         }
         if (array_key_exists('guestEnabled', $input)) {
             $config['guestEnabled'] = !empty($input['guestEnabled']);
+        }
+        if (array_key_exists('contactLine', $input)) {
+            $config['contactLine'] = trim(strval($input['contactLine']));
         }
         if (isset($input['groups']) && is_array($input['groups'])) {
             $groups = [];
@@ -75,6 +81,9 @@ switch ($action) {
                 $permissions = [];
                 foreach ($GLOBALS['MODULE_META'] as $mid => $label) {
                     $permissions[$mid] = array_key_exists($mid, $rawPerms) ? !empty($rawPerms[$mid]) : true;
+                }
+                foreach ($GLOBALS['FEATURE_META'] as $fid => $fmeta) {
+                    $permissions[$fid] = array_key_exists($fid, $rawPerms) ? !empty($rawPerms[$fid]) : true;
                 }
                 $groups[] = [
                     'id' => $gid,
@@ -134,6 +143,7 @@ switch ($action) {
         if ($machine === '') {
             respond(['success' => false, 'message' => '机器码为空']);
         }
+        sync_module_meta(isset($clientInfo['modules']) && is_array($clientInfo['modules']) ? $clientInfo['modules'] : null);
         $code = isset($input['code']) ? strtoupper(trim(strval($input['code']))) : '';
         $now = date('c');
         $remoteIp = isset($_SERVER['REMOTE_ADDR']) ? strval($_SERVER['REMOTE_ADDR']) : '';
@@ -161,6 +171,7 @@ switch ($action) {
     case 'check':
         $code = isset($input['code']) ? strtoupper(trim(strval($input['code']))) : '';
         $machine = isset($input['machineCode']) ? trim(strval($input['machineCode'])) : '';
+        sync_module_meta(isset($clientInfo['modules']) && is_array($clientInfo['modules']) ? $clientInfo['modules'] : null);
         $config = load_activation_config();
         if ($code === '' || $machine === '') {
             respond([
@@ -169,6 +180,9 @@ switch ($action) {
                 'message' => $code === '' ? '请先填写激活码' : '机器码为空',
                 'activationPolicy' => $config['activationPolicy'],
                 'moduleAccess' => public_module_rules($config),
+                'featureAccess' => public_feature_rules($config),
+                'guestEnabled' => $config['guestEnabled'],
+                'contactLine' => $config['contactLine'],
             ]);
         }
         $codes = load_codes();
@@ -188,17 +202,47 @@ switch ($action) {
                 'message' => '激活码不存在',
                 'activationPolicy' => $config['activationPolicy'],
                 'moduleAccess' => public_module_rules($config),
+                'featureAccess' => public_feature_rules($config),
+                'guestEnabled' => $config['guestEnabled'],
+                'contactLine' => $config['contactLine'],
             ]);
         }
         if ($found['status'] !== 'active') {
-            respond(['success' => false, 'active' => false, 'message' => '激活码已被禁用']);
+            respond([
+                'success' => false,
+                'active' => false,
+                'message' => '激活码已被禁用',
+                'activationPolicy' => $config['activationPolicy'],
+                'moduleAccess' => public_module_rules($config),
+                'featureAccess' => public_feature_rules($config),
+                'guestEnabled' => $config['guestEnabled'],
+                'contactLine' => $config['contactLine'],
+            ]);
         }
         if (isset($found['expires_at']) && strtotime($found['expires_at']) < time()) {
-            respond(['success' => false, 'active' => false, 'message' => '激活码已过期']);
+            respond([
+                'success' => false,
+                'active' => false,
+                'message' => '激活码已过期',
+                'activationPolicy' => $config['activationPolicy'],
+                'moduleAccess' => public_module_rules($config),
+                'featureAccess' => public_feature_rules($config),
+                'guestEnabled' => $config['guestEnabled'],
+                'contactLine' => $config['contactLine'],
+            ]);
         }
         $group = find_group($config, isset($found['group_id']) && $found['group_id'] !== '' ? $found['group_id'] : (isset($found['tier']) ? $found['tier'] : null));
         if ($group && empty($group['enabled'])) {
-            respond(['success' => false, 'active' => false, 'message' => '激活码所属分组已停用']);
+            respond([
+                'success' => false,
+                'active' => false,
+                'message' => '激活码所属分组已停用',
+                'activationPolicy' => $config['activationPolicy'],
+                'moduleAccess' => public_module_rules($config),
+                'featureAccess' => public_feature_rules($config),
+                'guestEnabled' => $config['guestEnabled'],
+                'contactLine' => $config['contactLine'],
+            ]);
         }
         if (!empty($found['machine']) && $found['machine'] !== $machine) {
             respond([
@@ -207,6 +251,9 @@ switch ($action) {
                 'message' => '激活码已绑定其他设备',
                 'activationPolicy' => $config['activationPolicy'],
                 'moduleAccess' => module_rules($config, $group ? $group['id'] : null),
+                'featureAccess' => feature_rules($config, $group ? $group['id'] : null),
+                'guestEnabled' => $config['guestEnabled'],
+                'contactLine' => $config['contactLine'],
             ]);
         }
         $now = date('c');
@@ -263,6 +310,9 @@ switch ($action) {
             'tier' => $group ? $group['name'] : ($found['tier'] ?? 'free'),
             'activationPolicy' => $config['activationPolicy'],
             'moduleAccess' => module_rules($config, $group ? $group['id'] : null),
+            'featureAccess' => feature_rules($config, $group ? $group['id'] : null),
+            'guestEnabled' => $config['guestEnabled'],
+            'contactLine' => $config['contactLine'],
         ]);
         break;
 

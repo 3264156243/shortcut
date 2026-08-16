@@ -1,4 +1,4 @@
-﻿export type ShortcutType = 'app' | 'folder' | 'file' | 'url' | 'group' | 'bat';
+export type ShortcutType = 'app' | 'folder' | 'file' | 'url' | 'group' | 'bat';
 export type ShortcutTargetType = 'app' | 'folder' | 'file' | 'url';
 
 export interface ShortcutTarget {
@@ -77,7 +77,7 @@ export interface MusicState {
   durationMs?: number;
 }
 
-export type ModuleId = 'shortcuts' | 'tasks' | 'cockpit' | 'usage' | 'usageManage' | 'translate' | 'island' | 'codexProvider';
+export type ModuleId = 'shortcuts' | 'tasks' | 'cockpit' | 'usage' | 'usageManage' | 'translate' | 'island' | 'codexProvider' | 'activation';
 export type ModuleAccessLevel = 'free' | 'member' | 'super';
 export type ActivationPolicy = 'all' | 'premium_only' | 'none';
 
@@ -85,11 +85,19 @@ export interface ModuleConfigItem {
   id: ModuleId;
   enabled: boolean;
   visible: boolean;
+  group?: 'primary' | 'more';
 }
 
 export interface ModuleAccessRule {
   id: ModuleId;
   level: ModuleAccessLevel;
+  allowed?: boolean;
+}
+
+export interface FeatureAccessRule {
+  id: string;
+  module?: string;
+  label?: string;
   allowed?: boolean;
 }
 

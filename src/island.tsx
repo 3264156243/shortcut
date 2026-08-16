@@ -20,6 +20,7 @@ interface IslandState {
   orbitGlow: boolean;
   barsEnabled: boolean;
   displayState: IslandDisplayState;
+  featureAccess: Record<string, boolean>;
 }
 
 interface LyricLine {
@@ -40,6 +41,7 @@ const DEFAULT_STATE: IslandState = {
   orbitGlow: true,
   barsEnabled: true,
   displayState: 'collapsed',
+  featureAccess: {},
 };
 
 function nowText(): string {
@@ -151,6 +153,9 @@ function IslandApp() {
         const parsed = JSON.parse(raw);
         const prefs = parsed?.island || {};
         const legacyProvider: BalanceProvider = prefs.deepseekEnabled === true ? 'deepseek' : 'none';
+        const featureAccess: Record<string, boolean> = Object.fromEntries(
+          (parsed?.license?.featureAccess || []).map((rule: { id: string; allowed?: boolean }) => [rule.id, rule.allowed !== false]),
+        );
         setState({
           enabled: prefs.enabled === true,
           style: prefs.style || 'capsule',
@@ -164,6 +169,7 @@ function IslandApp() {
           orbitGlow: prefs.orbitGlow !== false,
           barsEnabled: prefs.barsEnabled !== false,
           displayState: prefs.displayState || 'collapsed',
+          featureAccess,
         });
       } catch {}
     };
@@ -190,7 +196,22 @@ function IslandApp() {
         displayState: (next.displayState as IslandDisplayState) ?? current.displayState,
       }));
     });
-    return unsubscribe;
+    const unsubLicense = window.electronAPI?.onLicenseChanged?.(() => {
+      void window.electronAPI?.readConfig?.().then((raw) => {
+        if (!raw) return;
+        try {
+          const parsed = JSON.parse(raw);
+          const featureAccess: Record<string, boolean> = Object.fromEntries(
+            (parsed?.license?.featureAccess || []).map((rule: { id: string; allowed?: boolean }) => [rule.id, rule.allowed !== false]),
+          );
+          setState((current) => ({ ...current, featureAccess }));
+        } catch {}
+      });
+    });
+    return () => {
+      unsubscribe?.();
+      unsubLicense?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -322,9 +343,10 @@ function IslandApp() {
 
   const expanded = state.displayState === 'expanded';
   const mini = state.displayState === 'mini';
-  const showMusic = state.musicEnabled && music.available;
-  const showCockpit = state.cockpitEnabled && !showMusic;
-  const showBalance = state.balanceProvider !== 'none' && !showMusic && !showCockpit;
+  const featureOk = (key: string) => state.featureAccess[key] !== false;
+  const showMusic = state.musicEnabled && music.available && featureOk('island.music');
+  const showCockpit = state.cockpitEnabled && !showMusic && featureOk('island.cockpit');
+  const showBalance = state.balanceProvider !== 'none' && !showMusic && !showCockpit && featureOk('island.balance');
   const openBalancePlatform = () => {
     void window.electronAPI?.openBalancePlatform?.(state.balanceProvider);
   };
@@ -443,8 +465,17 @@ function IslandApp() {
             <span>内存 {formatMetric(cockpit.memory?.usage)} {formatMetric(cockpit.memory?.temperature, '°C')}</span>
           </div>
         ) : showBalance && state.balanceProvider === 'opencode' ? (
-          <div className="island-balance-mini" onClick={openBalancePlatform} title="OpenCode Go 5小时用量">
-            <BalanceRing percent={balance && balance.provider === 'opencode' ? balance.rolling?.percent : undefined} size={32} stroke={4} tone={1} valueClass="island-ring-value-mini" />
+          <div className="island-balance-mini" onClick={openBalancePlatform} title="OpenCode Go 用量（5小时/本周/本月）">
+            {[
+              { key: 'rolling', percent: balance && balance.provider === 'opencode' ? balance.rolling?.percent : undefined, label: '5小时', tone: 1 },
+              { key: 'weekly', percent: balance && balance.provider === 'opencode' ? balance.weekly?.percent : undefined, label: '本周', tone: 2 },
+              { key: 'monthly', percent: balance && balance.provider === 'opencode' ? balance.monthly?.percent : undefined, label: '本月', tone: 3 },
+            ].map((item) => (
+              <div className="island-balance-mini-item" key={item.key}>
+                <BalanceRing percent={item.percent} size={28} stroke={3} tone={item.tone} valueClass="island-ring-value-mini" />
+                <span className="island-balance-mini-label">{item.label}</span>
+              </div>
+            ))}
           </div>
         ) : showBalance ? (
           <div className="island-deepseek-mini" onClick={openBalancePlatform} title="打开 DeepSeek 平台">

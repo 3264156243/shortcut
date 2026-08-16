@@ -1,4 +1,4 @@
-﻿const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // Config
@@ -29,6 +29,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkLicense: () => ipcRenderer.invoke('license:check'),
   getLicenseGate: () => ipcRenderer.invoke('license:gate'),
   licenseGatePassed: () => ipcRenderer.invoke('license:gatePassed'),
+  onLicenseChanged: (callback: (data: unknown) => void) => {
+    const handler = (_event: unknown, data: unknown) => callback(data);
+    ipcRenderer.on('license:changed', handler);
+    return () => ipcRenderer.removeListener('license:changed', handler);
+  },
   getReminderData: () => ipcRenderer.invoke('reminder:getData'),
   onReminderData: (callback: (data: unknown) => void) => {
     const handler = (_event: unknown, data: unknown) => callback(data);

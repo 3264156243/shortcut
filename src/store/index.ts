@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import {
   ActivationPolicy,
@@ -10,6 +10,7 @@ import {
   Locale,
   ModuleAccessLevel,
   ModuleAccessRule,
+  FeatureAccessRule,
   ModuleId,
   PanelAnimation,
   TaskNote,
@@ -43,6 +44,7 @@ interface AppState {
   toasts: Toast[];
   licensePolicy: ActivationPolicy;
   licenseModuleAccess: Record<ModuleId, boolean>;
+  licenseFeatureAccess: Record<string, boolean>;
 
   // Actions
   loadConfig: () => Promise<void>;
@@ -55,10 +57,11 @@ interface AppState {
   setSearchQuery: (q: string) => void;
   setSelectedShortcut: (shortcutId: string | null) => void;
   setActiveModule: (moduleId: ModuleId) => void;
-  setLicenseAccess: (info: { activationPolicy?: ActivationPolicy; moduleAccess?: ModuleAccessRule[]; tier?: ModuleAccessLevel }) => void;
+  setLicenseAccess: (info: { activationPolicy?: ActivationPolicy; moduleAccess?: ModuleAccessRule[]; featureAccess?: FeatureAccessRule[]; tier?: ModuleAccessLevel; guestEnabled?: boolean; contactLine?: string }) => void;
   setModuleEnabled: (id: ModuleId, enabled: boolean) => void;
   setModuleVisible: (id: ModuleId, visible: boolean) => void;
   setModuleOrder: (orderedIds: ModuleId[]) => void;
+  setModuleGroup: (id: ModuleId, group: 'primary' | 'more') => void;
   addSearchHistory: (query: string) => void;
   deleteSearchHistory: (query: string) => void;
 
@@ -144,6 +147,7 @@ declare global {
       checkLicense: () => Promise<unknown>;
       getLicenseGate: () => Promise<unknown>;
       licenseGatePassed: () => Promise<unknown>;
+      onLicenseChanged: (callback: (data: unknown) => void) => () => void;
       getReminderData: () => Promise<unknown>;
       onReminderData: (callback: (data: unknown) => void) => () => void;
       confirmReminder: (boardId: string, taskId: string) => Promise<unknown>;
@@ -305,6 +309,7 @@ export const useStore = create<AppState>((set, get) => ({
   licenseModuleAccess: Object.fromEntries(
     MODULE_REGISTRY.map((meta) => [meta.id, true]),
   ) as Record<ModuleId, boolean>,
+  licenseFeatureAccess: {},
 
   loadConfig: async () => {
     let raw = '';
@@ -342,25 +347,32 @@ export const useStore = create<AppState>((set, get) => ({
         const storedLicense = (parsed.license || {}) as {
           activationPolicy?: ActivationPolicy;
           moduleAccess?: ModuleAccessRule[];
+          featureAccess?: FeatureAccessRule[];
         };
         const storedPolicy = storedLicense.activationPolicy || 'none';
         const storedRules = new Map((storedLicense.moduleAccess || []).map((rule) => [rule.id, rule]));
         const licenseModuleAccess = Object.fromEntries(
           MODULE_REGISTRY.map((meta) => [
             meta.id,
-            storedPolicy === 'none'
+            meta.id === 'activation'
               ? true
-              : storedRules.has(meta.id)
-                ? storedRules.get(meta.id)!.allowed !== false
-                : storedPolicy === 'all' ? false : true,
+              : storedPolicy === 'none'
+                ? true
+                : storedRules.has(meta.id)
+                  ? storedRules.get(meta.id)!.allowed !== false
+                  : storedPolicy === 'all' ? false : true,
           ]),
         ) as Record<ModuleId, boolean>;
+        const licenseFeatureAccess = Object.fromEntries(
+          (storedLicense.featureAccess || []).map((rule) => [rule.id, rule.allowed !== false]),
+        );
         set({
           config: { ...base, activeModule: nextActive },
           activeTabId: parsed.activeTabId || parsed.tabs[0]?.id || 'default',
           activeModule: nextActive,
           licensePolicy: storedPolicy,
           licenseModuleAccess,
+          licenseFeatureAccess,
         });
       } catch {
         console.error('Failed to parse config');
@@ -472,13 +484,18 @@ export const useStore = create<AppState>((set, get) => ({
     const access = Object.fromEntries(
       MODULE_REGISTRY.map((meta) => [
         meta.id,
-        policy === 'none'
+        meta.id === 'activation'
           ? true
-          : rules.has(meta.id)
-            ? rules.get(meta.id)!.allowed !== false
-            : policy === 'all' ? false : true,
+          : policy === 'none'
+            ? true
+            : rules.has(meta.id)
+              ? rules.get(meta.id)!.allowed !== false
+              : policy === 'all' ? false : true,
       ]),
     ) as Record<ModuleId, boolean>;
+    const featureAccess = Object.fromEntries(
+      (info.featureAccess || []).map((rule) => [rule.id, rule.allowed !== false]),
+    );
     set((s) => {
       const available = getAvailableModuleIds(s.config).filter((id) => access[id] !== false);
       const activeIsValid = s.activeModule === 'usageManage'
@@ -491,13 +508,17 @@ export const useStore = create<AppState>((set, get) => ({
           ...(s.config.license || {}),
           activationPolicy: policy,
           moduleAccess: info.moduleAccess || [],
+          featureAccess: info.featureAccess || [],
           tier: info.tier,
+          guestEnabled: info.guestEnabled,
+          contactLine: info.contactLine,
         },
         activeModule: nextActive,
       };
       return {
         licensePolicy: policy,
         licenseModuleAccess: access,
+        licenseFeatureAccess: featureAccess,
         config,
         activeModule: nextActive,
       };
@@ -546,6 +567,15 @@ export const useStore = create<AppState>((set, get) => ({
     set((s) => ({
       config: { ...s.config, modules: reorderModuleConfig(s.config.modules, orderedIds) },
     }));
+    get().saveConfig();
+  },
+
+  setModuleGroup: (id, group) => {
+    set((s) => {
+      const safe = group === 'primary' || group === 'more' ? group : 'more';
+      const modules = s.config.modules.map((item) => item.id === id ? { ...item, group: safe } : item);
+      return { config: { ...s.config, modules } };
+    });
     get().saveConfig();
   },
 

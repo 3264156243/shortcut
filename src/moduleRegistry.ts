@@ -4,6 +4,7 @@ import {
   CheckSquare,
   Gauge,
   Grid2X2,
+  KeyRound,
   Languages,
   Smartphone,
   type LucideIcon,
@@ -27,6 +28,7 @@ export const MODULE_REGISTRY: ModuleMeta[] = [
   { id: 'usage', label: '统计', icon: BarChart3, group: 'more', defaultEnabled: true, defaultVisible: true },
   { id: 'island', label: 'SC球', icon: Smartphone, group: 'more', defaultEnabled: true, defaultVisible: true },
   { id: 'codexProvider', label: '供应商', icon: Bot, group: 'more', defaultEnabled: true, defaultVisible: true },
+  { id: 'activation', label: '激活', icon: KeyRound, group: 'more', defaultEnabled: true, defaultVisible: true },
 ];
 
 export const CORE_MODULE_IDS: ModuleId[] = ['shortcuts', 'tasks'];
@@ -40,10 +42,12 @@ export function normalizeModuleConfig(raw?: ModuleConfigItem[]): ModuleConfigIte
   for (const item of items) {
     if (seen.has(item.id)) continue;
     seen.add(item.id);
+    const meta = MODULE_REGISTRY.find((entry) => entry.id === item.id);
     list.push({
       id: item.id,
       enabled: item.enabled !== false,
       visible: item.visible !== false,
+      group: item.group === 'primary' || item.group === 'more' ? item.group : meta?.group,
     });
   }
   for (const meta of MODULE_REGISTRY) {
@@ -53,9 +57,16 @@ export function normalizeModuleConfig(raw?: ModuleConfigItem[]): ModuleConfigIte
       id: meta.id,
       enabled: meta.defaultEnabled,
       visible: meta.defaultVisible,
+      group: meta.group,
     });
   }
   return list;
+}
+
+export function getModuleGroup(config: AppConfig, id: ModuleId): 'primary' | 'more' {
+  const meta = MODULE_REGISTRY.find((entry) => entry.id === id);
+  const item = normalizeModuleConfig(config?.modules).find((entry) => entry.id === id);
+  return (item?.group === 'primary' || item?.group === 'more') ? item.group : (meta?.group || 'more');
 }
 
 export function getAvailableModuleIds(config: AppConfig): ModuleId[] {

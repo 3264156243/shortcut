@@ -406,6 +406,15 @@ $loggedIn = !empty($_SESSION['admin']);
     .perm-row .switch { width: 38px; height: 21px; flex-basis: 38px; }
     .perm-row .switch::after { width: 15px; height: 15px; top: 2px; left: 2px; }
     .perm-row .switch.on::after { left: 19px; }
+    .perm-row-feature {
+      margin-left: 22px;
+      padding: 6px 10px;
+      font-size: 11px;
+      opacity: .92;
+      border-color: #263349;
+      border-style: dashed;
+      background: rgba(28, 38, 58, .35);
+    }
 
     .generate-grid {
       display: grid;
@@ -631,6 +640,13 @@ $loggedIn = !empty($_SESSION['admin']);
               <small>开启后，未激活用户可先使用“未激活用户”分组中开放的板块，剩余板块仍需激活。</small>
             </div>
             <button class="switch off" id="guestToggle" type="button" aria-checked="false"></button>
+          </div>
+          <div class="row-line">
+            <div class="row-text" style="flex:1;">
+              <strong>获取激活码提示</strong>
+              <small>显示在客户端“激活”板块底部，联系管理员获取激活码。</small>
+              <input class="text-input" id="contactLineInput" maxlength="60" style="margin-top:8px;" />
+            </div>
           </div>
         </div>
       </section>
@@ -1074,6 +1090,11 @@ $loggedIn = !empty($_SESSION['admin']);
       if (!policy) return;
       setSwitch(document.getElementById('requireToggle'), !!policy.requireActivation);
       setSwitch(document.getElementById('guestToggle'), !!policy.guestEnabled);
+      document.getElementById('contactLineInput').value = policy.contactLine || '';
+      document.getElementById('contactLineInput').onchange = () => {
+        state.policy.contactLine = document.getElementById('contactLineInput').value;
+        queuePolicySave(700);
+      };
       updatePolicyVisual();
     }
 
@@ -1123,7 +1144,9 @@ $loggedIn = !empty($_SESSION['admin']);
 
         const grid = document.createElement('div');
         grid.className = 'perm-grid';
-        for (const [mid, label] of Object.entries(MODULE_META)) {
+        const moduleMeta = (state.policy.moduleMeta && Object.keys(state.policy.moduleMeta).length ? state.policy.moduleMeta : MODULE_META);
+        const featureMeta = state.policy.featureMeta || {};
+        for (const [mid, label] of Object.entries(moduleMeta)) {
           const row = document.createElement('div');
           row.className = 'perm-row';
           const text = document.createElement('span');
@@ -1135,6 +1158,20 @@ $loggedIn = !empty($_SESSION['admin']);
           row.appendChild(text);
           row.appendChild(sw);
           grid.appendChild(row);
+          for (const [fid, fmeta] of Object.entries(featureMeta)) {
+            if (!fmeta || fmeta.module !== mid) continue;
+            const frow = document.createElement('div');
+            frow.className = 'perm-row perm-row-feature';
+            const ftext = document.createElement('span');
+            ftext.textContent = '└ ' + (fmeta.label || fid);
+            const fsw = makeSwitch(!!group.permissions[fid], (next) => {
+              state.policy.groups[index].permissions[fid] = next;
+              queuePolicySave(400);
+            });
+            frow.appendChild(ftext);
+            frow.appendChild(fsw);
+            grid.appendChild(frow);
+          }
         }
 
         card.appendChild(head);
@@ -1164,6 +1201,7 @@ $loggedIn = !empty($_SESSION['admin']);
         action: 'savePolicy',
         requireActivation: document.getElementById('requireToggle').classList.contains('on'),
         guestEnabled: document.getElementById('guestToggle').classList.contains('on'),
+        contactLine: document.getElementById('contactLineInput').value || '',
         groups,
       };
       state.savingPolicy = true;
@@ -1255,7 +1293,7 @@ $loggedIn = !empty($_SESSION['admin']);
       for (const toggle of body.querySelectorAll('td.status-text .switch')) {
         toggle.addEventListener('click', () => {
           const next = toggle.classList.contains('on') ? 'disabled' : 'active';
-          void updateCode({ code: toggle.dataset.code, status: next }, true);
+          void updateCode({ action: 'updateCode', code: toggle.dataset.code, status: next }, true);
         });
       }
     }

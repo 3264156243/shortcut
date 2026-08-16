@@ -6,7 +6,7 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
 .island-shell {
   position: relative;
   -webkit-app-region: drag;
-  width: auto;
+  width: fit-content;
   min-width: 120px;
   max-width: 380px;
   height: 46px;
@@ -70,6 +70,7 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
   opacity: 0;
   pointer-events: none;
   height: 0;
+  width: 0;
   overflow: hidden;
   transform: translateY(12px);
   transition: opacity .35s, transform .45s cubic-bezier(.22,1,.36,1);
@@ -78,9 +79,10 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
   opacity: 1;
   pointer-events: auto;
   height: auto;
+  width: auto;
   transform: translateY(0);
 }
-.island-root.mini .island-panel-content { opacity: 0; pointer-events: none; height: 0; }
+.island-root.mini .island-panel-content { opacity: 0; pointer-events: none; height: 0; width: 0; }
 
 .island-mini {
   display: none;
@@ -158,7 +160,9 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
   font-variant-numeric: tabular-nums;
 }
 .island-deepseek-mini { cursor: pointer; }
-.island-balance-mini { display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.island-balance-mini { display: flex; align-items: center; justify-content: center; gap: 16px; cursor: pointer; }
+.island-balance-mini-item { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.island-balance-mini-label { font-size: 9px; line-height: 1; color: rgba(255,255,255,.55); }
 .island-deepseek-panel { width: 100%; }
 .island-deepseek-panel { cursor: pointer; }
 .island-deepseek-balance {
@@ -311,6 +315,7 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
 .island-root.paper .island-ring-track { stroke: rgba(151,124,88,.22); }
 .island-root.paper .island-ring-value { color: #4a3b2c; }
 .island-root.paper .island-balance-ring-label { color: rgba(74,59,44,.6); }
+.island-root.paper .island-balance-mini-label { color: rgba(74,59,44,.6); }
 .island-root.paper .island-control { background: rgba(151,124,88,.12); border-color: rgba(151,124,88,.35); color: #4a3b2c; }
 .island-root.paper .island-control.main { background: #9b2335; color: #fff; box-shadow: 4px 5px 0 rgba(151,124,88,.25); }
 

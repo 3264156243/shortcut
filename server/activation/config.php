@@ -28,6 +28,18 @@ $DEFAULT_MODULE_LIST = [
     'codexProvider' => '免费',
 ];
 
+// 子功能级权限（挂在板块之下，可单独授权）
+$FEATURE_META = [
+    'island.music' => ['module' => 'island', 'label' => 'SC球-音乐'],
+    'island.tasks' => ['module' => 'island', 'label' => 'SC球-任务提醒'],
+    'island.cockpit' => ['module' => 'island', 'label' => 'SC球-驾驶舱数据'],
+    'island.balance' => ['module' => 'island', 'label' => 'SC球-余额(DeepSeek/OpenCode)'],
+    'translate.bubble' => ['module' => 'translate', 'label' => '翻译-划词气泡 Alt+E'],
+];
+
+// 客户端激活板块提示“如何获取激活码”的文字，可在管理后台修改
+$CONTACT_LINE_DEFAULT = '激活码请联系管理员获取';
+
 function load_codes() {
     global $DATA_FILE;
     if (!file_exists($DATA_FILE)) {
@@ -201,6 +213,9 @@ function full_permissions($allowed = true) {
     foreach (module_ids() as $id) {
         $permissions[$id] = $allowed;
     }
+    foreach ($GLOBALS['FEATURE_META'] as $fid => $fmeta) {
+        $permissions[$fid] = $allowed;
+    }
     return $permissions;
 }
 
@@ -308,6 +323,18 @@ function normalize_activation_config($data = null) {
         }
     }
 
+    // 解析持久化的板块元数据（客户端校验/上报时自动同步），并更新全局
+    $savedMeta = isset($config['moduleMeta']) && is_array($config['moduleMeta']) ? $config['moduleMeta'] : [];
+    $effectiveMeta = [];
+    foreach ($MODULE_META as $mid => $label) {
+        $effectiveMeta[$mid] = (isset($savedMeta[$mid]) && trim(strval($savedMeta[$mid])) !== '') ? strval($savedMeta[$mid]) : $label;
+    }
+    if (count($effectiveMeta) === 0) {
+        $effectiveMeta = $MODULE_META;
+    }
+    $GLOBALS['MODULE_META'] = $effectiveMeta;
+    $MODULE_META = $effectiveMeta;
+
     $requireActivation = !empty($config['requireActivation']);
     $guestEnabled = !empty($config['guestEnabled']);
     $groups = [];
@@ -325,6 +352,9 @@ function normalize_activation_config($data = null) {
         $permissions = [];
         foreach ($MODULE_META as $mid => $label) {
             $permissions[$mid] = array_key_exists($mid, $rawPerms) ? (bool)$rawPerms[$mid] : true;
+        }
+        foreach ($GLOBALS['FEATURE_META'] as $fid => $fmeta) {
+            $permissions[$fid] = array_key_exists($fid, $rawPerms) ? (bool)$rawPerms[$fid] : true;
         }
         $name = trim((string)($group['name'] ?? ''));
         if ($name === '') {
@@ -373,7 +403,62 @@ function normalize_activation_config($data = null) {
         'groups' => $groups,
         'activationPolicy' => $requireActivation ? ($guestEnabled ? 'premium_only' : 'all') : 'none',
         'moduleList' => $moduleList,
+        'moduleMeta' => $effectiveMeta,
+        'featureMeta' => $GLOBALS['FEATURE_META'],
+        'contactLine' => (isset($config['contactLine']) && trim(strval($config['contactLine'])) !== '') ? strval($config['contactLine']) : $GLOBALS['CONTACT_LINE_DEFAULT'],
     ];
+}
+
+/**
+ * 客户端上报的板块清单（id=>label）与后台元数据合并：
+ * 新增板块自动加入权限项，板块改名自动同步。
+ * 返回 true 表示有变化并已保存。
+ */
+function sync_module_meta($moduleList) {
+    if (!is_array($moduleList) || count($moduleList) === 0) {
+        return false;
+    }
+    $config = load_activation_config();
+    $meta = $GLOBALS['MODULE_META'];
+    $changed = false;
+    foreach ($moduleList as $entry) {
+        if (!is_array($entry)) {
+            continue;
+        }
+        $mid = trim(strval($entry['id'] ?? ''));
+        if ($mid === '' || $mid === 'usageManage') {
+            continue;
+        }
+        $label = trim(strval($entry['label'] ?? ''));
+        if ($label === '') {
+            continue;
+        }
+        if (!isset($meta[$mid])) {
+            $meta[$mid] = $label;
+            $changed = true;
+        } elseif ($meta[$mid] !== $label) {
+            $meta[$mid] = $label;
+            $changed = true;
+        }
+    }
+    if (!$changed) {
+        return false;
+    }
+    $GLOBALS['MODULE_META'] = $meta;
+    $config['moduleMeta'] = $meta;
+    foreach ($config['groups'] as &$group) {
+        if (!is_array($group) || !isset($group['permissions']) || !is_array($group['permissions'])) {
+            continue;
+        }
+        foreach ($meta as $mid => $label) {
+            if (!array_key_exists($mid, $group['permissions'])) {
+                $group['permissions'][$mid] = true;
+            }
+        }
+    }
+    unset($group);
+    $normalized = normalize_activation_config($config);
+    return save_activation_config($normalized);
 }
 
 function load_activation_config() {
@@ -460,6 +545,37 @@ function module_rules($config, $token = null) {
             'level' => $group['name'],
             'allowed' => !empty($group['permissions'][$id]),
         ];
+    }
+    return $rules;
+}
+
+function feature_rules($config, $token = null) {
+    $group = find_group($config, $token);
+    $rules = [];
+    foreach ($GLOBALS['FEATURE_META'] as $fid => $fmeta) {
+        $rules[] = [
+            'id' => $fid,
+            'module' => $fmeta['module'],
+            'label' => $fmeta['label'],
+            'allowed' => $group ? !empty($group['permissions'][$fid]) : false,
+        ];
+    }
+    return $rules;
+}
+
+function public_feature_rules($config) {
+    $rules = [];
+    foreach ($GLOBALS['FEATURE_META'] as $fid => $fmeta) {
+        $rules[] = ['id' => $fid, 'module' => $fmeta['module'], 'label' => $fmeta['label'], 'allowed' => true];
+    }
+    if (!$config['requireActivation']) {
+        return $rules;
+    }
+    if ($config['guestEnabled']) {
+        return feature_rules($config, 'guest');
+    }
+    foreach ($rules as $index => $rule) {
+        $rules[$index]['allowed'] = false;
     }
     return $rules;
 }

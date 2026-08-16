@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from './store';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Minus, Square, X, Maximize2, Minimize2 } from 'lucide-react';
@@ -20,6 +20,7 @@ import UsagePanel from './components/UsagePanel';
 import UsageManagePanel from './components/UsageManagePanel';
 import CodexProviderPanel from './components/CodexProviderPanel';
 import ActivationGate from './components/ActivationGate';
+import ActivationPanel from './components/ActivationPanel';
 import { ModuleId, PanelAnimation, UpdateState } from './types';
 import { useTranslation } from './hooks/useTranslation';
 import { getAvailableModuleIds } from './moduleRegistry';
@@ -60,6 +61,7 @@ export default function App() {
   const showSettings = useStore((s) => s.showSettings);
   const showImportSoftware = useStore((s) => s.showImportSoftware);
   const activeModule = useStore((s) => s.activeModule);
+  const setActiveModule = useStore((s) => s.setActiveModule);
   const addToast = useStore((s) => s.addToast);
   const [animKey, setAnimKey] = useState(0);
   const [isMaximized, setIsMaximized] = useState(false);
@@ -73,8 +75,13 @@ export default function App() {
     checking: boolean;
     machineCode?: string;
     message?: string;
+    activationPolicy?: string;
+    guestEnabled?: boolean;
+    tier?: string;
+    contactLine?: string;
   } | null>({ required: true, activated: false, checking: true });
   const [initialLicenseCode, setInitialLicenseCode] = useState('');
+  const [activationPromptDismissed, setActivationPromptDismissed] = useState(false);
   const spaceDownAt = useRef<number | null>(null);
   const longSpaceTimer = useRef<number | null>(null);
   const shortSpaceTimer = useRef<number | null>(null);
@@ -149,20 +156,23 @@ export default function App() {
     api.getLicenseState().then((state) => {
       setInitialLicenseCode((state as any)?.code || '');
     }).catch(() => undefined);
-    api.getLicenseGate().then((gate) => {
-      setLicenseGate(gate as any);
-      const gateInfo = gate as any;
+    const applyGate = (gateInfo: any) => {
+      setLicenseGate(gateInfo);
       if (gateInfo && (gateInfo.success === true || gateInfo.activationPolicy || gateInfo.moduleAccess)) {
         useStore.getState().setLicenseAccess({
           activationPolicy: gateInfo.activationPolicy,
           moduleAccess: gateInfo.moduleAccess,
+          featureAccess: gateInfo.featureAccess,
           tier: gateInfo.tier,
+          guestEnabled: gateInfo.guestEnabled,
+          contactLine: gateInfo.contactLine,
         });
       }
       if (!gateInfo?.required) {
         void api.licenseGatePassed?.();
       }
-    }).catch(() => {
+    };
+    api.getLicenseGate().then(applyGate).catch(() => {
       const stored = useStore.getState().config.license;
       const policy = stored?.activationPolicy || 'none';
       setLicenseGate({
@@ -170,11 +180,16 @@ export default function App() {
         activated: false,
         checking: false,
         message: '无法连接激活服务器，请检查网络后重试',
+        activationPolicy: policy,
       });
       if (policy === 'none') {
         void api?.licenseGatePassed?.();
       }
     });
+    const unsub = api.onLicenseChanged?.((next) => {
+      applyGate(next as any);
+    });
+    return () => unsub?.();
   }, [api]);
   useEffect(() => {
     loadConfig();
@@ -384,16 +399,27 @@ export default function App() {
         onActivated={(result) => {
           const license = (result || {}) as any;
           setLicenseGate({ required: false, activated: true, checking: false });
+          setActivationPromptDismissed(true);
           useStore.getState().setLicenseAccess({
             activationPolicy: license?.activationPolicy,
             moduleAccess: license?.moduleAccess,
+            featureAccess: license?.featureAccess,
             tier: license?.tier,
+            guestEnabled: license?.guestEnabled,
+            contactLine: license?.contactLine,
           });
           void api?.licenseGatePassed?.();
         }}
       />
     );
   }
+
+  const showActivationBanner = !!licenseGate
+    && licenseGate.activationPolicy !== undefined
+    && licenseGate.activationPolicy !== 'none'
+    && !licenseGate.activated
+    && licenseGate.guestEnabled
+    && !activationPromptDismissed;
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden" style={{ background: 'var(--color-bg)' }}>
@@ -415,6 +441,21 @@ export default function App() {
             <img src={appIcon} alt="" className="h-5 w-5 object-contain" />
             <span className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>ShortCut</span>
             {appVersion && <span className="text-[11px] font-medium" style={{ color: 'var(--color-text-muted)' }}>v{appVersion}</span>}
+            {licenseGate && licenseGate.activationPolicy !== undefined && (
+              <button
+                type="button"
+                onClick={() => setActiveModule('activation')}
+                className="no-drag flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium transition-opacity hover:opacity-75"
+                style={{
+                  background: licenseGate.activated ? 'rgba(99,211,145,.16)' : 'rgba(251,146,60,.16)',
+                  color: licenseGate.activated ? '#63d391' : '#fb923c',
+                  border: `1px solid ${licenseGate.activated ? 'rgba(99,211,145,.4)' : 'rgba(251,146,60,.4)'}`,
+                }}
+                title="激活状态，点击打开激活板块"
+              >
+                {licenseGate.activated ? `已激活${licenseGate.tier ? ' · ' + licenseGate.tier : ''}` : '未激活'}
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-1">
@@ -450,6 +491,39 @@ export default function App() {
           </div>
         </div>
 
+        {showActivationBanner && (
+          <div
+            className="no-drag flex items-center justify-between gap-3 px-4 py-1.5 shrink-0"
+            style={{
+              background: 'linear-gradient(90deg, rgba(124,58,237,.28), rgba(37,99,235,.28))',
+              borderBottom: '1px solid var(--color-border)',
+            }}
+          >
+            <span className="text-[11px] truncate" style={{ color: 'var(--color-text-secondary)' }}>
+              当前为未激活模式，仅可使用已开放的板块。{licenseGate?.contactLine || '激活码请联系管理员获取'}
+            </span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setActiveModule('activation')}
+                className="rounded-md px-2 py-0.5 text-[11px] font-medium hover:opacity-80"
+                style={{ background: 'var(--color-accent)', color: 'white' }}
+              >
+                去激活
+              </button>
+              <button
+                type="button"
+                onClick={() => setActivationPromptDismissed(true)}
+                className="rounded-md px-1.5 py-0.5 text-[11px] hover:opacity-70"
+                style={{ color: 'var(--color-text-muted)' }}
+                title="关闭提示"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="flex min-h-0 flex-1">
           <ModuleSidebar
             updateState={updateState}
@@ -474,6 +548,8 @@ export default function App() {
               <IslandPanel />
             ) : activeModule === 'codexProvider' ? (
               <CodexProviderPanel />
+            ) : activeModule === 'activation' ? (
+              <ActivationPanel />
             ) : (
               <TranslatePanel />
             )}

@@ -8,7 +8,7 @@ import {
   Settings,
   type LucideIcon,
 } from 'lucide-react';
-import { MODULE_REGISTRY, getAvailableModuleIds, type ModuleMeta } from '../moduleRegistry';
+import { MODULE_REGISTRY, getAvailableModuleIds, getModuleGroup, type ModuleMeta } from '../moduleRegistry';
 import { useStore } from '../store';
 import { ModuleId, UpdateState } from '../types';
 import { useTranslation } from '../hooks/useTranslation';
@@ -71,10 +71,10 @@ export default function ModuleSidebar({ updateState, onUpdateClick, onShowKeyboa
   const metaById = new Map(MODULE_REGISTRY.map((item) => [item.id, item]));
   const primaryModules = visibleIds
     .map((id) => metaById.get(id))
-    .filter((meta): meta is ModuleMeta => !!meta && meta.group === 'primary');
+    .filter((meta): meta is ModuleMeta => !!meta && getModuleGroup(config, meta.id) === 'primary');
   const moreModules = visibleIds
     .map((id) => metaById.get(id))
-    .filter((meta): meta is ModuleMeta => !!meta && meta.group === 'more');
+    .filter((meta): meta is ModuleMeta => !!meta && getModuleGroup(config, meta.id) === 'more');
   const moreActive = moreModules.some((item) => item.id === activeModule);
 
   useEffect(() => {

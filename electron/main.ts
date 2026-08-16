@@ -1,4 +1,4 @@
-﻿const electron = require('electron');
+const electron = require('electron');
 const app = electron.app;
 const BrowserWindow = electron.BrowserWindow;
 const globalShortcut = electron.globalShortcut;
@@ -401,10 +401,12 @@ function createIslandWindow() {
   islandWindow.once('ready-to-show', () => {
     applyIslandVisibility();
   });
-  if (prefs.musicEnabled !== false) {
+  if (readModuleEnabled('island') && readFeatureEnabled('island.music') && prefs?.musicEnabled !== false) {
     startMusicBridge();
+  } else if (islandWindow && !islandWindow.isDestroyed()) {
+    stopMusicBridge();
   }
-  islandCockpitActive = prefs.cockpitEnabled === true;
+  islandCockpitActive = prefs?.cockpitEnabled === true && readModuleEnabled('cockpit') && readFeatureEnabled('island.cockpit');
   syncHardwareMonitor();
   islandWindow.on('closed', () => { islandWindow = null; });
   islandWindow.on('move', () => positionDeepseekBall());
@@ -729,6 +731,16 @@ function buildClientInfoPayload(): any {
     lanIps: profile?.lanIps || [],
     macs: profile?.macs || [],
     machineSource: profile?.source || 'pending',
+    // 板块清单（含改名）随校验/上报自动同步到服务端
+    modules: [
+      { id: 'shortcuts', label: '快捷' },
+      { id: 'tasks', label: '任务' },
+      { id: 'cockpit', label: '驾驶舱' },
+      { id: 'translate', label: '翻译' },
+      { id: 'usage', label: '统计' },
+      { id: 'island', label: 'SC球' },
+      { id: 'codexProvider', label: '供应商' },
+    ],
   };
 }
 
@@ -752,6 +764,9 @@ async function checkLicense(code?: string) {
     tier: result.tier,
     activationPolicy: result.activationPolicy,
     moduleAccess: result.moduleAccess,
+    featureAccess: result.featureAccess,
+    guestEnabled: result.guestEnabled,
+    contactLine: result.contactLine,
   });
   return { ...result, machineCode };
 }
@@ -1044,9 +1059,31 @@ function readConfigObject(): any | null {
 
 function readModuleEnabled(id: string): boolean {
   try {
-    const list = readConfigObject()?.modules || [];
+    const cfg = readConfigObject();
+    const list = cfg?.modules || [];
     const item = (Array.isArray(list) ? list : []).find((entry: any) => entry?.id === id);
-    return item ? item.enabled !== false : true;
+    if (item && item.enabled === false) return false;
+    // 授权门：未授权不可用的板块，后台服务同步停止
+    const license = cfg?.license || {};
+    const policy = license.activationPolicy || 'none';
+    if (policy === 'none') return true;
+    const rules: any[] = Array.isArray(license.moduleAccess) ? license.moduleAccess : [];
+    const rule = rules.find((r: any) => r?.id === id);
+    return rule ? rule.allowed !== false : false;
+  } catch {
+    return true;
+  }
+}
+
+function readFeatureEnabled(key: string): boolean {
+  try {
+    const cfg = readConfigObject();
+    const license = cfg?.license || {};
+    const policy = license.activationPolicy || 'none';
+    if (policy === 'none') return true;
+    const rules: any[] = Array.isArray(license.featureAccess) ? license.featureAccess : [];
+    const rule = rules.find((r: any) => r?.id === key);
+    return rule ? rule.allowed !== false : false;
   } catch {
     return true;
   }
@@ -1055,7 +1092,7 @@ function readModuleEnabled(id: string): boolean {
 function syncModuleServices() {
   if (!licenseGatePassed) return;
 
-  if (readModuleEnabled('translate')) {
+  if (readModuleEnabled('translate') && readFeatureEnabled('translate.bubble')) {
     ensureGlobalShortcut('Alt+E', '翻译选中文字', () => {
       void translateCurrentSelection();
     });
@@ -1077,6 +1114,10 @@ function syncModuleServices() {
   }
 
   const islandEnabled = readModuleEnabled('island');
+  const islandMusicOk = islandEnabled && readFeatureEnabled('island.music');
+  const islandTasksOk = islandEnabled && readFeatureEnabled('island.tasks');
+  const islandCockpitOk = islandEnabled && readFeatureEnabled('island.cockpit');
+  const islandBalanceOk = islandEnabled && readFeatureEnabled('island.balance');
   if (islandEnabled) {
     createIslandWindow();
   } else {
@@ -1093,13 +1134,31 @@ function syncModuleServices() {
     reminderWindows.clear();
   }
 
+  if (!islandMusicOk) {
+    stopMusicBridge();
+  }
+  if (!islandTasksOk) {
+    destroyTaskListWindow();
+    for (const win of reminderWindows.values()) {
+      if (!win.isDestroyed()) win.destroy();
+    }
+    reminderWindows.clear();
+  }
+  if (!islandCockpitOk) {
+    islandCockpitActive = false;
+    syncHardwareMonitor();
+  }
+  if (!islandBalanceOk) {
+    destroyDeepseekBall(false);
+  }
+
   if (!readModuleEnabled('cockpit')) {
     mainCockpitActive = false;
     islandCockpitActive = false;
     syncHardwareMonitor();
   }
 
-  if (readModuleEnabled('island')) {
+  if (readModuleEnabled('island') && readFeatureEnabled('island.music')) {
     const musicHotkeys = [
       { accelerator: 'Alt+Z', name: '音乐上一首', action: 'prev' },
       { accelerator: 'Alt+X', name: '音乐播放暂停', action: 'toggle' },
@@ -2911,7 +2970,7 @@ ipcMain.handle('island:opencode:setKey', (_e: any, key: string) => handleBalance
 function handleBalanceMusicPlaying(playing: boolean) {
   const cfg = readConfigObject();
   const enabled = currentBalanceProvider(cfg) !== 'none';
-  if (playing && enabled && licenseGatePassed) {
+  if (playing && enabled && licenseGatePassed && readFeatureEnabled('island.balance')) {
     createDeepseekBall();
   } else {
     destroyDeepseekBall(true);
@@ -3112,6 +3171,35 @@ ipcMain.handle('fs:exists', (_e: any, filePath: string) => {
 ipcMain.handle('app:getVersion', () => app.getVersion());
 ipcMain.handle('license:getState', async () => ({ ...readLicense(), machineCode: await getMachineCode() }));
 ipcMain.handle('license:activate', (_e: any, code: string) => checkLicense(String(code || '').trim()));
+
+async function broadcastLicenseGate() {
+  const machineCode = await getMachineCode();
+  const license = readLicense();
+  const policy = license?.activationPolicy || 'none';
+  const activated = !!license?.code && license?.status === 'active';
+  const guestEnabled = license?.guestEnabled === true;
+  const payload = {
+    required: policy !== 'none' && !activated && !guestEnabled,
+    activated,
+    checking: false,
+    machineCode,
+    activationPolicy: policy,
+    moduleAccess: license?.moduleAccess || [],
+    featureAccess: license?.featureAccess || [],
+    guestEnabled,
+    contactLine: license?.contactLine || '',
+    tier: license?.tier,
+    plan: license?.plan,
+    message: license?.message,
+  };
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      try {
+        win.webContents.send('license:changed', payload);
+      } catch {}
+    }
+  }
+}
 ipcMain.handle('license:check', () => checkLicense());
 ipcMain.handle('license:gate', async () => {
   const machineCode = await getMachineCode();
@@ -3120,23 +3208,32 @@ ipcMain.handle('license:gate', async () => {
     const hasCode = !!readLicense()?.code;
     const policy = result.activationPolicy || 'none';
     const activated = hasCode && result.success === true;
-    const required = policy !== 'none' && !activated;
+    const guestEnabled = result.guestEnabled === true;
+    const required = policy !== 'none' && !activated && !guestEnabled;
     return {
       required,
       activated,
       checking: false,
       machineCode,
+      guestEnabled,
       ...result,
     };
   } catch {
-    const policy = readLicense()?.activationPolicy || 'none';
+    const license = readLicense();
+    const policy = license?.activationPolicy || 'none';
+    const activated = !!license?.code && license?.status === 'active';
+    const guestEnabled = license?.guestEnabled === true;
     return {
-      required: policy !== 'none',
-      activated: false,
+      required: policy !== 'none' && !activated && !guestEnabled,
+      activated,
       checking: false,
       machineCode,
       activationPolicy: policy,
-      moduleAccess: readLicense()?.moduleAccess,
+      moduleAccess: license?.moduleAccess,
+      featureAccess: license?.featureAccess,
+      guestEnabled,
+      contactLine: license?.contactLine,
+      tier: license?.tier,
       message: '无法连接激活服务器，请检查网络后重试',
     };
   }
@@ -3692,6 +3789,17 @@ if (!gotSingleInstanceLock) {
   reportDeviceStartup();
   setInterval(() => applyIslandVisibility(), 1500);
   syncModuleServices();
+
+  // 每 10 分钟复查激活状态：后台禁用激活码/调整权限后客户端口可生效
+  setInterval(() => {
+    void checkLicense()
+      .then((result) => {
+        if (result.success === true) licenseGatePassed = true;
+        if (licenseGatePassed) syncModuleServices();
+        void broadcastLicenseGate();
+      })
+      .catch(() => undefined);
+  }, 10 * 60 * 1000);
 
   setTimeout(() => {
     void checkForUpdates();
