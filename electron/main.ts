@@ -3181,10 +3181,40 @@ ipcMain.handle('license:activate', async (_e: any, code: string) => {
 });
 ipcMain.handle('license:policy', async () => {
   try {
-    const result = await licenseRequest('policy', { clientInfo: buildClientInfoPayload() });
+    const machineCode = await getMachineCode();
+    const result = await licenseRequest('policy', { machineCode, clientInfo: buildClientInfoPayload() });
     return result;
   } catch {
     return { success: false, message: '无法连接激活服务器' };
+  }
+});
+ipcMain.handle('license:trial', async () => {
+  const machineCode = await getMachineCode();
+  try {
+    const result = await licenseRequest('trial', { machineCode, clientInfo: buildClientInfoPayload() });
+    if (result.success === true && result.code) {
+      writeLicense({
+        code: result.code,
+        machineCode,
+        plan: result.tier,
+        status: 'active',
+        expiresAt: result.expiresAt,
+        lastCheckAt: new Date().toISOString(),
+        message: result.message,
+        tier: result.tier,
+        activationPolicy: result.activationPolicy,
+        moduleAccess: result.moduleAccess,
+        featureAccess: result.featureAccess,
+        guestEnabled: result.guestEnabled,
+        contactLine: result.contactLine,
+      });
+      licenseGatePassed = true;
+      syncModuleServices();
+      await broadcastLicenseGate();
+    }
+    return { ...result, machineCode };
+  } catch {
+    return { success: false, machineCode, message: '无法连接激活服务器' };
   }
 });
 

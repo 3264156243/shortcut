@@ -148,6 +148,7 @@ declare global {
       getLicenseGate: () => Promise<unknown>;
       licenseGatePassed: () => Promise<unknown>;
       getLicensePolicy: () => Promise<unknown>;
+      startTrial: () => Promise<unknown>;
       onLicenseChanged: (callback: (data: unknown) => void) => () => void;
       getReminderData: () => Promise<unknown>;
       onReminderData: (callback: (data: unknown) => void) => () => void;

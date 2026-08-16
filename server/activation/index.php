@@ -642,6 +642,13 @@ $loggedIn = !empty($_SESSION['admin']);
             <button class="switch off" id="guestToggle" type="button" aria-checked="false"></button>
           </div>
           <div class="row-line">
+            <div class="row-text">
+              <strong>免费试用 10 分钟</strong>
+              <small>每个机器码有且仅有一次免费体验，试用期间按“免费试用”分组的权限生效，自动绑定机器码。</small>
+            </div>
+            <button class="switch off" id="trialToggle" type="button" aria-checked="false"></button>
+          </div>
+          <div class="row-line">
             <div class="row-text" style="flex:1;">
               <strong>获取激活码提示</strong>
               <small>显示在客户端“激活”板块底部，联系管理员获取激活码。</small>
@@ -1090,6 +1097,7 @@ $loggedIn = !empty($_SESSION['admin']);
       if (!policy) return;
       setSwitch(document.getElementById('requireToggle'), !!policy.requireActivation);
       setSwitch(document.getElementById('guestToggle'), !!policy.guestEnabled);
+      setSwitch(document.getElementById('trialToggle'), !!policy.trialEnabled);
       document.getElementById('contactLineInput').value = policy.contactLine || '';
       document.getElementById('contactLineInput').onchange = () => {
         state.policy.contactLine = document.getElementById('contactLineInput').value;
@@ -1118,7 +1126,7 @@ $loggedIn = !empty($_SESSION['admin']);
         });
         const badge = document.createElement('span');
         badge.className = 'badge' + (group.system ? ' system' : '');
-        badge.textContent = group.system ? '未激活用户组' : '授权分组';
+        badge.textContent = group.id === 'trial' ? '免费试用组' : (group.system ? '未激活用户组' : '授权分组');
         const enabledSwitch = makeSwitch(!!group.enabled, (next) => {
           state.policy.groups[index].enabled = next;
           queuePolicySave(400);
@@ -1201,6 +1209,7 @@ $loggedIn = !empty($_SESSION['admin']);
         action: 'savePolicy',
         requireActivation: document.getElementById('requireToggle').classList.contains('on'),
         guestEnabled: document.getElementById('guestToggle').classList.contains('on'),
+        trialEnabled: document.getElementById('trialToggle').classList.contains('on'),
         contactLine: document.getElementById('contactLineInput').value || '',
         groups,
       };

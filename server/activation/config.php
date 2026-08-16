@@ -230,6 +230,13 @@ function default_groups() {
             'permissions' => $all,
         ],
         [
+            'id' => 'trial',
+            'name' => '免费试用',
+            'system' => true,
+            'enabled' => true,
+            'permissions' => $all,
+        ],
+        [
             'id' => 'default',
             'name' => '默认用户',
             'system' => false,
@@ -379,6 +386,25 @@ function normalize_activation_config($data = null) {
         ]);
     }
 
+    $trialEnabled = array_key_exists('trialEnabled', $config) ? !empty($config['trialEnabled']) : true;
+    if (!isset($seen['trial'])) {
+        $groups[] = [
+            'id' => 'trial',
+            'name' => '免费试用',
+            'system' => true,
+            'enabled' => $trialEnabled,
+            'permissions' => full_permissions(true),
+        ];
+    } else {
+        // 试用分组启用状态跟随 trialEnabled 开关
+        foreach ($groups as &$g) {
+            if ($g['id'] === 'trial') {
+                $g['enabled'] = $trialEnabled && !empty($g['enabled']);
+            }
+        }
+        unset($g);
+    }
+
     $moduleList = [];
     if (isset($config['moduleList']) && is_array($config['moduleList'])) {
         foreach ($MODULE_META as $mid => $label) {
@@ -400,6 +426,7 @@ function normalize_activation_config($data = null) {
     return [
         'requireActivation' => $requireActivation,
         'guestEnabled' => $guestEnabled,
+        'trialEnabled' => $trialEnabled,
         'groups' => $groups,
         'activationPolicy' => $requireActivation ? ($guestEnabled ? 'premium_only' : 'all') : 'none',
         'moduleList' => $moduleList,

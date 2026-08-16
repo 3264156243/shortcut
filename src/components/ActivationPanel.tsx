@@ -44,13 +44,24 @@ export default function ActivationPanel() {
   const [error, setError] = useState('');
   const [groups, setGroups] = useState<PolicyGroup[]>([]);
   const [moduleMeta, setModuleMeta] = useState<Record<string, string>>({});
+  const [trialEnabled, setTrialEnabled] = useState(false);
+  const [trialUsed, setTrialUsed] = useState(false);
+  const [trialActive, setTrialActive] = useState(false);
+  const [trialExpiresAt, setTrialExpiresAt] = useState<string | null>(null);
+  const [trialBusy, setTrialBusy] = useState(false);
+  const [nowTick, setNowTick] = useState(Date.now());
 
   const loadPolicy = async () => {
     try {
       const result = await window.electronAPI?.getLicensePolicy?.();
       if (result && (result as any).success) {
-        setGroups((result as any).groups || []);
-        setModuleMeta((result as any).moduleMeta || {});
+        const r = result as any;
+        setGroups(r.groups || []);
+        setModuleMeta(r.moduleMeta || {});
+        setTrialEnabled(r.trialEnabled === true);
+        setTrialUsed(r.trialUsed === true);
+        setTrialActive(r.trialActive === true);
+        setTrialExpiresAt(r.trialExpiresAt || null);
       }
     } catch {
       // 策略加载失败不阻塞激活
@@ -77,9 +88,37 @@ export default function ActivationPanel() {
       void load();
       void loadPolicy();
     });
-    return () => unsub?.();
+    const tick = window.setInterval(() => setNowTick(Date.now()), 30000);
+    return () => {
+      unsub?.();
+      window.clearInterval(tick);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const startTrial = async () => {
+    if (trialBusy) return;
+    setTrialBusy(true);
+    setError('');
+    try {
+      const result = await window.electronAPI?.startTrial?.();
+      const r = result as any;
+      if (r && r.success) {
+        if (r.code) setCode(r.code);
+        await load();
+        await loadPolicy();
+      } else {
+        setError(r?.message || '免费试用开启失败');
+      }
+    } catch {
+      setError('无法连接激活服务器，请检查网络');
+    } finally {
+      setTrialBusy(false);
+    }
+  };
+
+  const trialRemainMs = trialActive && trialExpiresAt ? new Date(trialExpiresAt).getTime() - nowTick : 0;
+  const trialRemainMin = Math.max(0, Math.ceil(trialRemainMs / 60000));
 
   const activate = async (targetCode?: string) => {
     const value = (targetCode ?? code).trim();
@@ -210,6 +249,37 @@ export default function ActivationPanel() {
         {state?.message && !error && (
           <div className="mt-2 text-xs" style={{ color: state?.status === 'active' ? '#63d391' : 'var(--color-text-muted)' }}>{state.message}</div>
         )}
+
+        {/* 免费试用 */}
+        {!activated && trialEnabled && (
+          <div className="mt-3 rounded-xl px-3 py-2.5" style={{ background: 'rgba(124,58,237,.08)', border: '1px dashed rgba(124,58,237,.4)' }}>
+            {trialActive && trialExpiresAt ? (
+              <div className="flex items-center justify-between">
+                <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>免费试用进行中，剩余约 {trialRemainMin} 分钟</span>
+                <span className="text-[11px] font-medium" style={{ color: '#a78bfa' }}>试用中</span>
+              </div>
+            ) : trialUsed ? (
+              <div className="flex items-center justify-between">
+                <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>该设备已使用过免费试用</span>
+                <span className="text-[11px] font-medium" style={{ color: 'var(--color-text-muted)' }}>已使用</span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>每个设备有且仅有一次免费体验机会，绑定机器码</span>
+                <button
+                  type="button"
+                  disabled={trialBusy}
+                  onClick={() => void startTrial()}
+                  className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-85 disabled:opacity-50"
+                  style={{ background: 'var(--color-accent)', color: 'white' }}
+                >
+                  {trialBusy ? <Loader2 size={13} className="animate-spin" /> : '免费试用 10 分钟'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="mt-2 text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
           {POLICY_TEXT[state?.activationPolicy || licensePolicy] || state?.activationPolicy || licensePolicy}
         </div>

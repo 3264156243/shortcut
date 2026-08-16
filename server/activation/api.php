@@ -47,6 +47,22 @@ switch ($action) {
                 'permissions' => $group['permissions'],
             ];
         }
+        $trialUsed = false;
+        $trialActive = false;
+        $trialExpiresAt = null;
+        $machine = trim(strval($input['machineCode'] ?? ''));
+        if ($machine !== '') {
+            $devices = load_devices();
+            $trialUsed = isset($devices[$machine]['trial_used_at']) && $devices[$machine]['trial_used_at'] !== '';
+            $trialCodes = load_codes();
+            foreach ($trialCodes as $record) {
+                if ((strval($record['kind'] ?? '') === 'trial') && strval($record['machine'] ?? '') === $machine && strval($record['status'] ?? '') === 'active' && isset($record['expires_at']) && strtotime($record['expires_at']) >= time()) {
+                    $trialActive = true;
+                    $trialExpiresAt = $record['expires_at'];
+                    break;
+                }
+            }
+        }
         respond([
             'success' => true,
             'groups' => $groups,
@@ -54,6 +70,10 @@ switch ($action) {
             'featureMeta' => $GLOBALS['FEATURE_META'],
             'activationPolicy' => $config['activationPolicy'],
             'guestEnabled' => $config['guestEnabled'],
+            'trialEnabled' => !empty($config['trialEnabled']),
+            'trialUsed' => $trialUsed,
+            'trialActive' => $trialActive,
+            'trialExpiresAt' => $trialExpiresAt,
             'contactLine' => $config['contactLine'],
         ]);
         break;
@@ -90,6 +110,9 @@ switch ($action) {
         }
         if (array_key_exists('guestEnabled', $input)) {
             $config['guestEnabled'] = !empty($input['guestEnabled']);
+        }
+        if (array_key_exists('trialEnabled', $input)) {
+            $config['trialEnabled'] = !empty($input['trialEnabled']);
         }
         if (array_key_exists('contactLine', $input)) {
             $config['contactLine'] = trim(strval($input['contactLine']));
@@ -337,6 +360,89 @@ switch ($action) {
             'featureAccess' => feature_rules($config, $group ? $group['id'] : null),
             'guestEnabled' => $config['guestEnabled'],
             'contactLine' => $config['contactLine'],
+        ]);
+        break;
+
+    case 'trial':
+        // 每个机器码有且仅有一次免费试用（10 分钟），试用期间幂等返回
+        $machine = trim(strval($input['machineCode'] ?? ''));
+        if ($machine === '') {
+            respond(['success' => false, 'message' => '机器码为空']);
+        }
+        $config = load_activation_config();
+        if (empty($config['trialEnabled'])) {
+            respond(['success' => false, 'message' => '免费试用未开放']);
+        }
+        $group = find_group($config, 'trial');
+        if (!$group || empty($group['enabled'])) {
+            respond(['success' => false, 'message' => '免费试用分组已停用']);
+        }
+        $codes = load_codes();
+        $activeTrial = null;
+        foreach ($codes as $record) {
+            if ((strval($record['kind'] ?? '') === 'trial') && strval($record['machine'] ?? '') === $machine && strval($record['status'] ?? '') === 'active') {
+                $activeTrial = $record;
+                break;
+            }
+        }
+        if ($activeTrial && isset($activeTrial['expires_at']) && strtotime($activeTrial['expires_at']) >= time()) {
+            // 试用仍在有效期内：幂等返回
+            respond([
+                'success' => true,
+                'active' => true,
+                'code' => strval($activeTrial['code']),
+                'expiresAt' => $activeTrial['expires_at'],
+                'tier' => $group['name'],
+                'plan' => $group['name'],
+                'trialUsed' => true,
+                'trialActive' => true,
+                'activationPolicy' => $config['activationPolicy'],
+                'moduleAccess' => module_rules($config, 'trial'),
+                'featureAccess' => feature_rules($config, 'trial'),
+                'guestEnabled' => $config['guestEnabled'],
+                'contactLine' => $config['contactLine'],
+                'message' => '免费试用进行中',
+            ]);
+        }
+        $devices = load_devices();
+        $usedAt = isset($devices[$machine]['trial_used_at']) ? $devices[$machine]['trial_used_at'] : null;
+        if ($usedAt !== null && $usedAt !== '') {
+            respond(['success' => false, 'message' => '该设备已使用过免费试用']);
+        }
+        $code = 'TRIAL-' . strtoupper(substr(md5(uniqid('', true)), 0, 10));
+        $now = time();
+        $record = [
+            'code' => $code,
+            'kind' => 'trial',
+            'days' => 0,
+            'group_id' => 'trial',
+            'group_name' => $group['name'],
+            'tier' => $group['name'],
+            'status' => 'active',
+            'machine' => $machine,
+            'created_at' => date('c', $now),
+            'expires_at' => date('c', $now + 600),
+            'last_check_at' => null,
+        ];
+        $codes[] = $record;
+        save_codes($codes);
+        $devices[$machine]['trial_used_at'] = date('c', $now);
+        save_devices($devices);
+        respond([
+            'success' => true,
+            'active' => true,
+            'code' => $code,
+            'expiresAt' => $record['expires_at'],
+            'tier' => $group['name'],
+            'plan' => $group['name'],
+            'trialUsed' => true,
+            'trialActive' => true,
+            'activationPolicy' => $config['activationPolicy'],
+            'moduleAccess' => module_rules($config, 'trial'),
+            'featureAccess' => feature_rules($config, 'trial'),
+            'guestEnabled' => $config['guestEnabled'],
+            'contactLine' => $config['contactLine'],
+            'message' => '免费试用已开启，10 分钟后自动到期',
         ]);
         break;
 
