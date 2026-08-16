@@ -1,0 +1,87 @@
+html, body, #root { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
+* { box-sizing: border-box; -webkit-user-select: none; user-select: none; }
+
+:root {
+  --voice-bg: rgba(18, 20, 26, .94);
+  --voice-border: rgba(255, 255, 255, .14);
+  --voice-muted: rgba(255, 255, 255, .55);
+  --voice-text: rgba(255, 255, 255, .92);
+  --voice-accent: #8b5cf6;
+}
+
+.voice-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--voice-bg);
+  border: 1px solid var(--voice-border);
+  border-radius: 16px;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, .5);
+  overflow: hidden;
+  backdrop-filter: blur(18px);
+}
+
+.voice-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--voice-border);
+  cursor: grab;
+}
+
+.voice-title { font-size: 12px; font-weight: 600; color: var(--voice-text); }
+.voice-hint { margin-left: auto; font-size: 10px; color: var(--voice-muted); }
+
+.voice-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  overflow-y: auto;
+}
+
+.voice-row { display: flex; flex-direction: column; gap: 3px; }
+.voice-label { font-size: 10px; color: var(--voice-muted); }
+.voice-text { font-size: 12.5px; line-height: 1.5; color: var(--voice-text); word-break: break-all; max-height: 72px; overflow-y: auto; }
+.voice-text.polish { color: #c4b5fd; }
+
+.voice-loading, .voice-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--voice-muted);
+  padding: 8px 2px;
+}
+.voice-error { color: #f87171; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.voice-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--voice-border);
+}
+
+.voice-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--voice-border);
+  background: rgba(255, 255, 255, .07);
+  color: var(--voice-text);
+  border-radius: 9px;
+  padding: 6px 10px;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.voice-btn:hover { opacity: .85; }
+.voice-btn:disabled { opacity: .35; cursor: not-allowed; }
+.voice-btn.primary { background: var(--voice-accent); border-color: var(--voice-accent); color: #fff; }
+.voice-btn.close { margin-left: auto; padding: 6px 8px; }

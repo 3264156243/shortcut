@@ -36,6 +36,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('license:changed', handler);
     return () => ipcRenderer.removeListener('license:changed', handler);
   },
+
+  // 语音输入
+  voiceGetConfig: () => ipcRenderer.invoke('voice:getConfig'),
+  voiceStart: () => ipcRenderer.invoke('voice:start'),
+  voiceAudio: (chunk: ArrayBuffer) => ipcRenderer.send('voice:audio', chunk),
+  voiceStop: () => ipcRenderer.invoke('voice:stop'),
+  voiceEnter: () => ipcRenderer.invoke('voice:enter'),
+  voiceAdopt: () => ipcRenderer.invoke('voice:adopt'),
+  onVoicePolish: (callback: (text: string) => void) => {
+    const handler = (_event: unknown, text: string) => callback(text);
+    ipcRenderer.on('voice:polish', handler);
+    return () => ipcRenderer.removeListener('voice:polish', handler);
+  },
+  onVoiceRaw: (callback: (text: string) => void) => {
+    const handler = (_event: unknown, text: string) => callback(text);
+    ipcRenderer.on('voice:raw', handler);
+    return () => ipcRenderer.removeListener('voice:raw', handler);
+  },
+  onVoiceStatus: (callback: (data: unknown) => void) => {
+    const handler = (_event: unknown, data: unknown) => callback(data);
+    ipcRenderer.on('voice:status', handler);
+    return () => ipcRenderer.removeListener('voice:status', handler);
+  },
   getReminderData: () => ipcRenderer.invoke('reminder:getData'),
   onReminderData: (callback: (data: unknown) => void) => {
     const handler = (_event: unknown, data: unknown) => callback(data);

@@ -150,6 +150,15 @@ declare global {
       getLicensePolicy: () => Promise<unknown>;
       startTrial: () => Promise<unknown>;
       onLicenseChanged: (callback: (data: unknown) => void) => () => void;
+      voiceGetConfig: () => Promise<unknown>;
+      voiceStart: () => Promise<unknown>;
+      voiceAudio: (chunk: ArrayBuffer) => void;
+      voiceStop: () => Promise<unknown>;
+      voiceEnter: () => Promise<unknown>;
+      voiceAdopt: () => Promise<unknown>;
+      onVoicePolish: (callback: (text: string) => void) => () => void;
+      onVoiceRaw: (callback: (text: string) => void) => () => void;
+      onVoiceStatus: (callback: (data: unknown) => void) => () => void;
       getReminderData: () => Promise<unknown>;
       onReminderData: (callback: (data: unknown) => void) => () => void;
       confirmReminder: (boardId: string, taskId: string) => Promise<unknown>;

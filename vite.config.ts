@@ -19,6 +19,7 @@ export default defineConfig({
         reminder: 'reminder.html',
         tasklist: 'tasklist.html',
         deepseekball: 'deepseekball.html',
+        voiceinput: 'voiceinput.html',
       },
     },
   },

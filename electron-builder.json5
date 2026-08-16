@@ -34,6 +34,10 @@
     {
       "from": "resources/usage-monitor",
       "to": "usage-monitor"
+    },
+    {
+      "from": "scripts/voice-input-bridge.ps1",
+      "to": "scripts/voice-input-bridge.ps1"
     }
   ],
   "publish": [

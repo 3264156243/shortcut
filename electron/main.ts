@@ -20,6 +20,7 @@ const os = require('os');
 const childProcess = require('child_process');
 const net = electron.net;
 const nodeCrypto = require('crypto');
+const session = electron.session;
 
 const APP_USER_MODEL_ID = 'com.wanan.shortcut';
 
@@ -3845,6 +3846,17 @@ if (!gotSingleInstanceLock) {
   reportDeviceStartup();
   setInterval(() => applyIslandVisibility(), 1500);
   syncModuleServices();
+
+  // 语音输入（Alt+H）初始化 + 麦克风权限
+  try {
+    session.defaultSession.setPermissionRequestHandler((_wc: any, permission: string, callback: (grant: boolean) => void) => {
+      callback(permission === 'media');
+    });
+    const { initVoiceInput } = require('./voice-input');
+    initVoiceInput();
+  } catch (err: any) {
+    console.error('voice input init failed:', err?.message || err);
+  }
 
   // 每 10 分钟复查激活状态：后台禁用激活码/调整权限后客户端口可生效
   setInterval(() => {

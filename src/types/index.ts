@@ -269,6 +269,13 @@ export interface TaskEditorDraft {
   originalRemindedAt?: string;
 }
 
+export interface VoiceInputConfig {
+  enabled?: boolean;
+  apiKey?: string;
+  workspaceId?: string;
+  polishMode?: 'asr' | 'off';
+}
+
 export interface AppConfig {
   version: number;
   theme: 'dark' | 'light' | 'system';
@@ -290,6 +297,7 @@ export interface AppConfig {
   license?: LicenseState;
   scTaskList: ScTaskListItem[];
   modules: ModuleConfigItem[];
+  voiceInput?: VoiceInputConfig;
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -352,5 +360,9 @@ export const DEFAULT_CONFIG: AppConfig = {
     orbitGlow: true,
     barsEnabled: true,
     displayState: 'collapsed',
+  },
+  voiceInput: {
+    enabled: true,
+    polishMode: 'asr',
   },
 };
