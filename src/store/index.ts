@@ -455,6 +455,11 @@ export const useStore = create<AppState>((set, get) => ({
         ? moduleId
         : null;
     if (!target) {
+      // 无权限板块：保留入口展示，点击仅提示并停留当前板块
+      if (moduleId !== 'usageManage' && available.includes(moduleId) && state.licenseModuleAccess[moduleId] === false) {
+        get().addToast('该板块需要激活后可用', 'info');
+        return;
+      }
       const fallback = available.find((id) => state.licenseModuleAccess[id] !== false) || (state.licenseModuleAccess['shortcuts'] !== false ? 'shortcuts' : null);
       if (!fallback) return;
       if (moduleId !== 'usageManage') {

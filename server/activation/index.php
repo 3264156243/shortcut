@@ -1277,7 +1277,7 @@ $loggedIn = !empty($_SESSION['admin']);
           ? '<button class="btn small" onclick="unbindCode(\'' + escapeJs(item.code) + '\')">解绑</button>'
           : '';
         tr.innerHTML =
-          '<td class="code-text">' + escapeHtml(item.code) + '</td>' +
+          '<td class="code-text" data-code="' + escapeHtml(item.code) + '" title="双击复制激活码">' + escapeHtml(item.code) + '</td>' +
           '<td><span class="pill">' + escapeHtml(item.group_name || item.tier || '未指定') + '</span></td>' +
           '<td class="status-text"><button class="switch ' + (active ? 'on' : 'off') + '" data-code="' + escapeHtml(item.code) + '" data-status="' + (active ? 'active' : 'disabled') + '"></button><span class="' + (active ? 'ok' : 'bad') + '">' + (active ? '启用' : '禁用') + '</span></td>' +
           '<td class="muted" title="' + escapeHtml(machine) + '" style="max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(machine) + '</td>' +
@@ -1294,6 +1294,14 @@ $loggedIn = !empty($_SESSION['admin']);
         toggle.addEventListener('click', () => {
           const next = toggle.classList.contains('on') ? 'disabled' : 'active';
           void updateCode({ action: 'updateCode', code: toggle.dataset.code, status: next }, true);
+        });
+      }
+      for (const td of body.querySelectorAll('td.code-text')) {
+        td.addEventListener('dblclick', () => {
+          const value = td.dataset.code || '';
+          navigator.clipboard.writeText(value)
+            .then(() => showMessage('已复制: ' + value, true))
+            .catch(() => showMessage('复制失败', false));
         });
       }
     }

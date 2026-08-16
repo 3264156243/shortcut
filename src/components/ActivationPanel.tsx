@@ -99,6 +99,13 @@ export default function ActivationPanel() {
     .filter((meta): meta is NonNullable<typeof meta> => !!meta);
   const moduleLabels = visibleModules.map((meta) => meta.label).join('、');
 
+  const moduleAccess: Array<{ id: string; level?: string; allowed?: boolean }> = (state as any)?.moduleAccess || [];
+  const featureAccess: Array<{ id: string; module?: string; label?: string; allowed?: boolean }> = (state as any)?.featureAccess || [];
+  const currentGroupName = activated
+    ? (state?.tier || state?.plan || '已授权')
+    : (state?.guestEnabled ? '未激活用户（游客）' : '未授权');
+  const moduleLabel = (id: string) => MODULE_REGISTRY.find((meta) => meta.id === id)?.label || id;
+
   const cardStyle: React.CSSProperties = {
     background: 'var(--color-bg-card)',
     border: '1px solid var(--color-border)',
@@ -147,6 +154,33 @@ export default function ActivationPanel() {
         <p className="mt-1 text-xs leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
           {POLICY_TEXT[state?.activationPolicy || licensePolicy] || state?.activationPolicy || licensePolicy}
         </p>
+        <div className="mt-2 rounded-xl px-3 py-2.5" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)' }}>
+          <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>当前授权分组</div>
+          <div className="mt-0.5 text-sm font-medium" style={{ color: 'var(--color-text)' }}>{currentGroupName}</div>
+        </div>
+        {(moduleAccess.length > 0 || featureAccess.length > 0) && (
+          <div className="mt-2 flex flex-col gap-1.5">
+            {moduleAccess.map((rule) => (
+              <div key={rule.id} className="flex items-center justify-between rounded-lg px-3 py-1.5" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)' }}>
+                <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>{moduleLabel(rule.id)}</span>
+                <span className="text-[11px] font-medium" style={{ color: rule.allowed === false ? '#fb923c' : '#63d391' }}>
+                  {rule.allowed === false ? '无权限' : '可用'}
+                </span>
+              </div>
+            ))}
+            {featureAccess.length > 0 && (
+              <div className="mt-1 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>子功能权限</div>
+            )}
+            {featureAccess.map((rule) => (
+              <div key={rule.id} className="flex items-center justify-between rounded-lg px-3 py-1.5" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', marginLeft: 14 }}>
+                <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>└ {rule.label || rule.id}</span>
+                <span className="text-[11px] font-medium" style={{ color: rule.allowed === false ? '#fb923c' : '#63d391' }}>
+                  {rule.allowed === false ? '无权限' : '可用'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="mt-2 text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
           当前可用板块：{moduleLabels || '（无）'}
         </div>

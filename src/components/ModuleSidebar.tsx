@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   Download,
   Keyboard,
+  Lock,
   MoreHorizontal,
   RefreshCw,
   Settings,
@@ -20,11 +21,12 @@ interface SidebarButtonProps {
   badge?: boolean;
   busy?: boolean;
   disabled?: boolean;
+  locked?: boolean;
   onClick: () => void;
   title?: string;
 }
 
-function SidebarButton({ label, icon: Icon, active, badge, busy, disabled, onClick, title }: SidebarButtonProps) {
+function SidebarButton({ label, icon: Icon, active, badge, busy, disabled, locked, onClick, title }: SidebarButtonProps) {
   return (
     <button
       type="button"
@@ -34,13 +36,19 @@ function SidebarButton({ label, icon: Icon, active, badge, busy, disabled, onCli
       style={{
         background: active ? 'var(--color-accent)' : 'var(--color-bg-card)',
         border: '1px solid ' + (active ? 'var(--color-accent)' : 'var(--color-border)'),
-        color: active ? 'white' : 'var(--color-text-secondary)',
+        color: active ? 'white' : (locked ? 'var(--color-text-muted)' : 'var(--color-text-secondary)'),
         boxShadow: active ? '0 4px 14px var(--color-accent-glow)' : 'none',
+        opacity: locked && !active ? 0.45 : 1,
       }}
-      title={title || label}
+      title={locked ? `${title || label}（无权限，需激活）` : (title || label)}
     >
       <Icon size={17} className={busy ? 'animate-spin' : ''} />
       <span className="max-w-full truncate px-0.5">{label}</span>
+      {locked && (
+        <span className="absolute right-0.5 top-0.5 flex h-3 w-3 items-center justify-center rounded-full" style={{ background: 'var(--color-accent)', color: 'white' }}>
+          <Lock size={7} strokeWidth={3} />
+        </span>
+      )}
       {badge && (
         <span
           className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full"
@@ -67,8 +75,9 @@ export default function ModuleSidebar({ updateState, onUpdateClick, onShowKeyboa
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement | null>(null);
 
-  const visibleIds = getAvailableModuleIds(config).filter((id) => licenseModuleAccess[id] !== false);
+  const visibleIds = getAvailableModuleIds(config);
   const metaById = new Map(MODULE_REGISTRY.map((item) => [item.id, item]));
+  const isLocked = (id: ModuleId) => licenseModuleAccess[id] === false;
   const primaryModules = visibleIds
     .map((id) => metaById.get(id))
     .filter((meta): meta is ModuleMeta => !!meta && getModuleGroup(config, meta.id) === 'primary');
@@ -131,6 +140,7 @@ export default function ModuleSidebar({ updateState, onUpdateClick, onShowKeyboa
             label={label}
             icon={icon}
             active={activeModule === id}
+            locked={isLocked(id)}
             onClick={() => setActiveModule(id)}
           />
         ))}
@@ -165,11 +175,14 @@ export default function ModuleSidebar({ updateState, onUpdateClick, onShowKeyboa
                   className="flex h-10 items-center gap-2 rounded-lg px-2.5 text-[12px] transition-colors duration-150"
                   style={{
                     background: activeModule === id ? 'var(--color-accent)' : 'var(--color-bg-card-hover)',
-                    color: activeModule === id ? 'white' : 'var(--color-text-secondary)',
+                    color: activeModule === id ? 'white' : (isLocked(id) ? 'var(--color-text-muted)' : 'var(--color-text-secondary)'),
+                    opacity: isLocked(id) && activeModule !== id ? 0.55 : 1,
                   }}
+                  title={isLocked(id) ? '无权限，需激活' : undefined}
                 >
                   <Icon size={15} />
                   {label}
+                  {isLocked(id) && <Lock size={11} style={{ marginLeft: 'auto', opacity: .8 }} />}
                 </button>
               ))}
               {moreModules.length > 0 && (

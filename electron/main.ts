@@ -3170,7 +3170,14 @@ ipcMain.handle('fs:exists', (_e: any, filePath: string) => {
 
 ipcMain.handle('app:getVersion', () => app.getVersion());
 ipcMain.handle('license:getState', async () => ({ ...readLicense(), machineCode: await getMachineCode() }));
-ipcMain.handle('license:activate', (_e: any, code: string) => checkLicense(String(code || '').trim()));
+ipcMain.handle('license:activate', async (_e: any, code: string) => {
+  const result = await checkLicense(String(code || '').trim());
+  // 激活/换码成功后立即应用新权限，无需重启
+  if (result.success === true) licenseGatePassed = true;
+  syncModuleServices();
+  await broadcastLicenseGate();
+  return result;
+});
 
 async function broadcastLicenseGate() {
   const machineCode = await getMachineCode();
