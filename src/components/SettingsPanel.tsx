@@ -2,7 +2,80 @@ import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Moon, Sun, Monitor, Download, Upload, Power, ChevronUp, ChevronDown, Eye, EyeOff } from 'lucide-react';
-import { CORE_MODULE_IDS, MODULE_REGISTRY } from '../moduleRegistry';
+import { CORE_MODULE_IDS, MODULE_REGISTRY, type ModuleMeta } from '../moduleRegistry';
+import type { ModuleConfigItem } from '../types';
+
+interface ModuleRowProps {
+  meta: ModuleMeta;
+  item: ModuleConfigItem;
+  isCore: boolean;
+  groupLength: number;
+  index: number;
+  onMove: (direction: -1 | 1) => void;
+  onToggleVisible: () => void;
+  onToggleEnabled: () => void;
+}
+
+function ModuleRow({ meta, item, isCore, groupLength, index, onMove, onToggleVisible, onToggleEnabled }: ModuleRowProps) {
+  const Icon = meta.icon;
+  return (
+    <div
+      className="flex items-center gap-2 rounded-xl px-3 py-2.5"
+      style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)' }}
+    >
+      <Icon size={15} style={{ color: item.enabled === false ? 'var(--color-text-muted)' : 'var(--color-accent)' }} />
+      <span className="min-w-0 flex-1 text-sm font-medium" style={{ color: 'var(--color-text)' }}>
+        {meta.label}
+        {isCore && <span className="ml-1.5 text-[10px]" style={{ color: 'var(--color-text-muted)' }}>核心</span>}
+      </span>
+      <button
+        type="button"
+        disabled={index === 0}
+        onClick={() => onMove(-1)}
+        className="flex h-7 w-7 items-center justify-center rounded-lg transition-opacity hover:opacity-75 disabled:opacity-30"
+        style={{ background: 'var(--color-bg-card)', color: 'var(--color-text-secondary)' }}
+        title="上移"
+      >
+        <ChevronUp size={14} />
+      </button>
+      <button
+        type="button"
+        disabled={index === groupLength - 1}
+        onClick={() => onMove(1)}
+        className="flex h-7 w-7 items-center justify-center rounded-lg transition-opacity hover:opacity-75 disabled:opacity-30"
+        style={{ background: 'var(--color-bg-card)', color: 'var(--color-text-secondary)' }}
+        title="下移"
+      >
+        <ChevronDown size={14} />
+      </button>
+      <button
+        type="button"
+        onClick={onToggleVisible}
+        className="flex h-7 w-7 items-center justify-center rounded-lg transition-opacity hover:opacity-75"
+        style={{
+          background: 'var(--color-bg-card)',
+          color: item.visible === false ? 'var(--color-text-muted)' : 'var(--color-accent)',
+        }}
+        title={item.visible === false ? '显示该板块' : '隐藏该板块'}
+      >
+        {item.visible === false ? <EyeOff size={14} /> : <Eye size={14} />}
+      </button>
+      <button
+        type="button"
+        disabled={isCore}
+        onClick={onToggleEnabled}
+        className="flex h-7 w-7 items-center justify-center rounded-lg transition-opacity hover:opacity-75 disabled:opacity-40"
+        style={{
+          background: 'var(--color-bg-card)',
+          color: item.enabled === false ? 'var(--color-text-muted)' : '#63d391',
+        }}
+        title={isCore ? '快捷、任务是基础板块，不能禁用' : (item.enabled === false ? '启用该板块' : '禁用该板块并停止后台服务')}
+      >
+        <Power size={14} />
+      </button>
+    </div>
+  );
+}
 
 export default function SettingsPanel() {
   const closeSettings = useStore((s) => s.closeSettings);
@@ -28,14 +101,19 @@ export default function SettingsPanel() {
       return meta ? { meta, item } : null;
     })
     .filter((entry): entry is NonNullable<typeof entry> => !!entry);
-  const moveModule = (index: number, direction: -1 | 1) => {
+  const moveModuleInGroup = (group: 'primary' | 'more', index: number, direction: -1 | 1) => {
+    const groupItems = moduleItems.filter((entry) => entry.meta.group === group);
     const target = index + direction;
-    if (target < 0 || target >= moduleItems.length) return;
-    const ids = moduleItems.map((item) => item.meta.id);
-    const moved = [...ids];
+    if (target < 0 || target >= groupItems.length) return;
+    const moved = groupItems.map((entry) => entry.meta.id);
     const [removed] = moved.splice(index, 1);
     moved.splice(target, 0, removed);
-    setModuleOrder(moved);
+    const movedIndex = new Map(moved.map((id, idx) => [id, idx]));
+    const orderedIds = moduleItems.map((entry) => {
+      const movedId = movedIndex.get(entry.meta.id);
+      return movedId === undefined ? entry.meta.id : moved[movedId];
+    });
+    setModuleOrder(orderedIds);
   };
 
   const sectionStyle: React.CSSProperties = {
@@ -151,66 +229,37 @@ export default function SettingsPanel() {
               <p className="mb-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
                 隐藏后不显示入口，禁用后会停止对应后台服务以节省内存。
               </p>
-              <div className="flex flex-col gap-2">
-                {moduleItems.map(({ meta, item }, index) => {
-                  const isCore = CORE_MODULE_IDS.includes(meta.id);
-                  const Icon = meta.icon;
+              <div className="flex flex-col gap-3">
+                {([
+                  { group: 'primary', title: '主界面板块', description: '直接展示在左侧主栏' },
+                  { group: 'more', title: '更多菜单板块', description: '收进左侧“更多”菜单' },
+                ] as const).map(({ group, title, description }) => {
+                  const groupItems = moduleItems.filter((entry) => entry.meta.group === group);
                   return (
                     <div
-                      key={meta.id}
-                      className="flex items-center gap-2 rounded-xl px-3 py-2.5"
-                      style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)' }}
+                      key={group}
+                      className="rounded-xl p-3"
+                      style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }}
                     >
-                      <Icon size={15} style={{ color: item.enabled === false ? 'var(--color-text-muted)' : 'var(--color-accent)' }} />
-                      <span className="min-w-0 flex-1 text-sm font-medium" style={{ color: 'var(--color-text)' }}>
-                        {meta.label}
-                        {isCore && <span className="ml-1.5 text-[10px]" style={{ color: 'var(--color-text-muted)' }}>核心</span>}
-                      </span>
-                      <button
-                        type="button"
-                        disabled={index === 0}
-                        onClick={() => moveModule(index, -1)}
-                        className="flex h-7 w-7 items-center justify-center rounded-lg transition-opacity hover:opacity-75 disabled:opacity-30"
-                        style={{ background: 'var(--color-bg-card)', color: 'var(--color-text-secondary)' }}
-                        title="上移"
-                      >
-                        <ChevronUp size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        disabled={index === moduleItems.length - 1}
-                        onClick={() => moveModule(index, 1)}
-                        className="flex h-7 w-7 items-center justify-center rounded-lg transition-opacity hover:opacity-75 disabled:opacity-30"
-                        style={{ background: 'var(--color-bg-card)', color: 'var(--color-text-secondary)' }}
-                        title="下移"
-                      >
-                        <ChevronDown size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setModuleVisible(meta.id, item.visible !== false ? false : true)}
-                        className="flex h-7 w-7 items-center justify-center rounded-lg transition-opacity hover:opacity-75"
-                        style={{
-                          background: 'var(--color-bg-card)',
-                          color: item.visible === false ? 'var(--color-text-muted)' : 'var(--color-accent)',
-                        }}
-                        title={item.visible === false ? '显示该板块' : '隐藏该板块'}
-                      >
-                        {item.visible === false ? <EyeOff size={14} /> : <Eye size={14} />}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isCore}
-                        onClick={() => setModuleEnabled(meta.id, item.enabled !== false ? false : true)}
-                        className="flex h-7 w-7 items-center justify-center rounded-lg transition-opacity hover:opacity-75 disabled:opacity-40"
-                        style={{
-                          background: 'var(--color-bg-card)',
-                          color: item.enabled === false ? 'var(--color-text-muted)' : '#63d391',
-                        }}
-                        title={isCore ? '快捷、任务是基础板块，不能禁用' : (item.enabled === false ? '启用该板块' : '禁用该板块并停止后台服务')}
-                      >
-                        <Power size={14} />
-                      </button>
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>{title}</span>
+                        <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{description}</span>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        {groupItems.map(({ meta, item }, index) => (
+                          <ModuleRow
+                            key={meta.id}
+                            meta={meta}
+                            item={item}
+                            isCore={CORE_MODULE_IDS.includes(meta.id)}
+                            groupLength={groupItems.length}
+                            index={index}
+                            onMove={(direction) => moveModuleInGroup(group, index, direction)}
+                            onToggleVisible={() => setModuleVisible(meta.id, item.visible !== false ? false : true)}
+                            onToggleEnabled={() => setModuleEnabled(meta.id, item.enabled !== false ? false : true)}
+                          />
+                        ))}
+                      </div>
                     </div>
                   );
                 })}

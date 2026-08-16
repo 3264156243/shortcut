@@ -147,7 +147,7 @@ export default function ModuleSidebar({ updateState, onUpdateClick, onShowKeyboa
           />
           {moreOpen && (
             <div
-              className="absolute bottom-full right-0 z-50 mb-2 flex w-40 flex-col gap-1 overflow-hidden rounded-xl p-1.5"
+              className="absolute bottom-0 left-full z-50 ml-2 flex w-40 flex-col gap-1 overflow-hidden rounded-xl p-1.5"
               style={{
                 background: 'var(--color-bg-secondary)',
                 border: '1px solid var(--color-border)',
