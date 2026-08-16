@@ -251,6 +251,10 @@ export default function ActivationPanel() {
         {state?.message && !error && (
           <div className="mt-2 text-xs" style={{ color: state?.status === 'active' ? '#63d391' : 'var(--color-text-muted)' }}>{state.message}</div>
         )}
+        <div className="mt-2 flex items-center gap-1.5 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+          <ShieldCheck size={13} />
+          {state?.contactLine || '激活码请联系管理员获取'}
+        </div>
 
         {/* 免费试用：试用中状态常显；未激活时才显示按钮/已使用 */}
         {trialEnabled && (trialActive || !activated) && (
@@ -327,11 +331,6 @@ export default function ActivationPanel() {
             </div>
           ))}
         </div>
-      </div>
-
-      <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-        <ShieldCheck size={14} />
-        {state?.contactLine || '激活码请联系管理员获取'}
       </div>
     </div>
   );
