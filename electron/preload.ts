@@ -95,7 +95,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Dynamic island
   getIslandState: () => ipcRenderer.invoke('island:getState'),
-  setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string, orbitGlow: boolean, barsEnabled: boolean, tasksEnabled: boolean, cockpitEnabled: boolean, deepseekEnabled: boolean) => ipcRenderer.invoke('island:set', enabled, style, position, autoHideFullscreen, musicEnabled, lyricBounce, displayState, orbitGlow, barsEnabled, tasksEnabled, cockpitEnabled, deepseekEnabled),
+  setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string, orbitGlow: boolean, barsEnabled: boolean, tasksEnabled: boolean, cockpitEnabled: boolean, balanceProvider: string) => ipcRenderer.invoke('island:set', enabled, style, position, autoHideFullscreen, musicEnabled, lyricBounce, displayState, orbitGlow, barsEnabled, tasksEnabled, cockpitEnabled, balanceProvider),
   moveIsland: (screenX: number, screenY: number, deltaX: number, deltaY: number) => ipcRenderer.invoke('island:move', screenX, screenY, deltaX, deltaY),
   getIslandBounds: () => ipcRenderer.invoke('island:getBounds'),
   moveIslandTo: (x: number, y: number) => ipcRenderer.invoke('island:moveTo', x, y),
@@ -110,10 +110,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   stopMusicBridge: () => ipcRenderer.invoke('island:music:stop'),
   getMusicState: () => ipcRenderer.invoke('island:music:state'),
   getIslandCockpitState: () => ipcRenderer.invoke('island:cockpit:state'),
+  getBalanceData: () => ipcRenderer.invoke('island:balance:get'),
+  setBalanceKey: (provider: string, key: string) => ipcRenderer.invoke('island:balance:setKey', provider, key),
+  setBalanceMusicPlaying: (playing: boolean) => ipcRenderer.invoke('island:balance:musicPlaying', playing),
+  openBalancePlatform: (provider: string) => ipcRenderer.invoke('island:balance:open', provider),
+  onBalanceMerge: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('balance:merge', handler);
+    return () => ipcRenderer.removeListener('balance:merge', handler);
+  },
   getDeepseekBalance: () => ipcRenderer.invoke('island:deepseek:get'),
   setDeepseekKey: (key: string) => ipcRenderer.invoke('island:deepseek:setKey', key),
+  setOpenCodeKey: (key: string) => ipcRenderer.invoke('island:opencode:setKey', key),
   setDeepseekMusicPlaying: (playing: boolean) => ipcRenderer.invoke('island:deepseek:musicPlaying', playing),
   openDeepseekPlatform: () => ipcRenderer.invoke('island:deepseek:open'),
+  openOpenCodePlatform: () => ipcRenderer.invoke('island:opencode:open'),
   onDeepseekMerge: (callback: () => void) => {
     const handler = () => callback();
     ipcRenderer.on('deepseek:merge', handler);

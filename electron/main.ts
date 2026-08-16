@@ -82,6 +82,8 @@ let mainCockpitActive = false;
 let latestCockpitData: any = null;
 let latestDeepseek: any = null;
 let latestDeepseekAt = 0;
+let latestOpenCode: any = null;
+let latestOpenCodeAt = 0;
 let usageMonitorProcess: any = null;
 let usageMonitorBuffer = '';
 let usageRecord: any = null;
@@ -266,6 +268,7 @@ function getIslandPreferences(): any {
       tasksEnabled: island?.tasksEnabled !== false,
       cockpitEnabled: island?.cockpitEnabled === true,
       deepseekEnabled: island?.deepseekEnabled === true,
+      balanceProvider: currentBalanceProvider({ island }),
       lyricBounce: island?.lyricBounce !== false,
       orbitGlow: island?.orbitGlow !== false,
       barsEnabled: island?.barsEnabled !== false,
@@ -283,6 +286,7 @@ function getIslandPreferences(): any {
       tasksEnabled: true,
       cockpitEnabled: false,
       deepseekEnabled: false,
+      balanceProvider: 'none',
       lyricBounce: true,
       orbitGlow: true,
       barsEnabled: true,
@@ -771,11 +775,21 @@ async function reportDeviceStartup() {
 }
 
 const DEEPSEEK_BALANCE_API = 'https://api.deepseek.com/user/balance';
+const OPENCODE_USAGE_API = 'https://opencode.ai/zen/go/v1/usage';
+const OPENCODE_WORKSPACE_URL = 'https://opencode.ai/workspace/wrk_01M00CWWMMNAXGCSG43KM5MMSD/go';
+
+function currentBalanceProvider(cfg?: any): 'none' | 'deepseek' | 'opencode' {
+  const island = cfg?.island || {};
+  if (island.balanceProvider === 'deepseek' || island.balanceProvider === 'opencode') {
+    return island.balanceProvider;
+  }
+  return island.deepseekEnabled === true ? 'deepseek' : 'none';
+}
 
 async function getDeepseekBalance(force = false) {
   const apiKey = readConfigObject()?.island?.deepseekApiKey;
   if (!apiKey) {
-    return { configured: false, error: '未配置 API Key' };
+    return { provider: 'deepseek', configured: false, error: '未配置 API Key' };
   }
   if (!force && latestDeepseek && Date.now() - latestDeepseekAt < 60000) {
     return latestDeepseek;
@@ -790,6 +804,7 @@ async function getDeepseekBalance(force = false) {
     const data = await response.json();
     const info = Array.isArray(data?.balance_infos) ? data.balance_infos[0] : null;
     latestDeepseek = {
+      provider: 'deepseek',
       configured: true,
       currency: info?.currency || 'CNY',
       balance: info?.total_balance != null ? Number(info.total_balance) : null,
@@ -798,10 +813,62 @@ async function getDeepseekBalance(force = false) {
       available: data?.is_available !== false,
     };
   } catch {
-    latestDeepseek = { configured: true, error: '余额获取失败' };
+    latestDeepseek = { provider: 'deepseek', configured: true, error: '余额获取失败' };
   }
   latestDeepseekAt = Date.now();
   return latestDeepseek;
+}
+
+async function getOpenCodeUsage(force = false) {
+  const apiKey = readConfigObject()?.island?.opencodeApiKey;
+  if (!apiKey) {
+    return { provider: 'opencode', configured: false, error: '未配置 API Key' };
+  }
+  if (!force && latestOpenCode && Date.now() - latestOpenCodeAt < 60000) {
+    return latestOpenCode;
+  }
+  try {
+    const response = await net.fetch(OPENCODE_USAGE_API, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Accept': 'application/json',
+      },
+    });
+    if (!response.ok) {
+      latestOpenCode = { provider: 'opencode', configured: true, error: response.status === 401 ? 'API Key 无效' : `请求失败 (${response.status})` };
+      latestOpenCodeAt = Date.now();
+      return latestOpenCode;
+    }
+    const data = await response.json();
+    const usage = data?.usage || {};
+    const pick = (window: any) => {
+      if (!window || typeof window !== 'object') return undefined;
+      const percent = Number(window.percent);
+      return {
+        status: window.status || 'ok',
+        percent: Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : undefined,
+        resetsAt: window.resetsAt,
+      };
+    };
+    latestOpenCode = {
+      provider: 'opencode',
+      configured: true,
+      rolling: pick(usage.rolling),
+      weekly: pick(usage.weekly),
+      monthly: pick(usage.monthly),
+    };
+  } catch {
+    latestOpenCode = { provider: 'opencode', configured: true, error: '用量获取失败' };
+  }
+  latestOpenCodeAt = Date.now();
+  return latestOpenCode;
+}
+
+async function getBalanceData(force = false) {
+  const provider = currentBalanceProvider(readConfigObject());
+  if (provider === 'deepseek') return getDeepseekBalance(force);
+  if (provider === 'opencode') return getOpenCodeUsage(force);
+  return { provider: 'none', configured: false };
 }
 
 function getHardwareMonitorPath() {
@@ -2120,6 +2187,7 @@ function destroyDeepseekBall(animate = false) {
   const win = deepseekBallWindow;
   if (animate) {
     try { win.webContents.send('deepseek:merge'); } catch {}
+    try { win.webContents.send('balance:merge'); } catch {}
     setTimeout(() => {
       if (win && !win.isDestroyed()) win.destroy();
     }, 350);
@@ -2698,10 +2766,11 @@ function createTray() {
 
 // Dynamic island IPC
 ipcMain.handle('island:getState', () => getIslandPreferences());
-ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string, orbitGlow: boolean, barsEnabled: boolean, tasksEnabled: boolean, cockpitEnabled: boolean, deepseekEnabled: boolean) => {
+ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string, orbitGlow: boolean, barsEnabled: boolean, tasksEnabled: boolean, cockpitEnabled: boolean, balanceProvider: string) => {
   try {
     const raw = readConfig();
     const cfg = raw ? JSON.parse(raw) : {};
+    const provider = balanceProvider === 'opencode' ? 'opencode' : balanceProvider === 'deepseek' ? 'deepseek' : 'none';
     const island = {
       ...(cfg.island || {}),
       enabled: !!enabled,
@@ -2711,13 +2780,16 @@ ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position
       musicEnabled: musicEnabled !== false,
       tasksEnabled: tasksEnabled !== false,
       cockpitEnabled: cockpitEnabled === true,
-      deepseekEnabled: deepseekEnabled === true,
+      balanceProvider: provider,
+      deepseekEnabled: provider === 'deepseek',
       lyricBounce: lyricBounce !== false,
       orbitGlow: orbitGlow !== false,
       barsEnabled: barsEnabled !== false,
       displayState: displayState || 'collapsed',
     };
     writeConfig(JSON.stringify({ ...cfg, island }, null, 2));
+    latestDeepseek = null;
+    latestOpenCode = null;
     if (island.enabled) {
       islandUserHidden = false;
       createIslandWindow();
@@ -2737,7 +2809,7 @@ ipcMain.handle('island:set', (_e: any, enabled: boolean, style: string, position
       } else if (licenseGatePassed && resolveTaskList().length > 0 && !taskListHidden) {
         createTaskListWindow();
       }
-      if (!island.deepseekEnabled) {
+      if (provider === 'none') {
         destroyDeepseekBall(false);
       }
     } else {
@@ -2817,29 +2889,48 @@ ipcMain.handle('island:music:stop', () => {
 });
 ipcMain.handle('island:music:state', () => latestMusicState || { available: false });
 ipcMain.handle('island:cockpit:state', () => latestCockpitData || {});
-ipcMain.handle('island:deepseek:get', () => getDeepseekBalance());
-ipcMain.handle('island:deepseek:setKey', (_e: any, key: string) => {
+ipcMain.handle('island:balance:get', (_e: any, force?: boolean) => getBalanceData(force === true));
+function handleBalanceSetKey(provider: string, key: string) {
   const cfg = readConfigObject();
   if (!cfg) return { success: false };
+  const target = provider === 'opencode' ? 'opencode' : 'deepseek';
   writeConfig(JSON.stringify({
     ...cfg,
-    island: { ...(cfg.island || {}), deepseekApiKey: String(key || '').trim() },
+    island: {
+      ...(cfg.island || {}),
+      [target === 'opencode' ? 'opencodeApiKey' : 'deepseekApiKey']: String(key || '').trim(),
+    },
   }, null, 2));
   latestDeepseek = null;
+  latestOpenCode = null;
   return { success: true };
-});
-ipcMain.handle('island:deepseek:musicPlaying', (_e: any, playing: boolean) => {
+}
+ipcMain.handle('island:balance:setKey', (_e: any, provider: string, key: string) => handleBalanceSetKey(provider, key));
+ipcMain.handle('island:deepseek:setKey', (_e: any, key: string) => handleBalanceSetKey('deepseek', key));
+ipcMain.handle('island:opencode:setKey', (_e: any, key: string) => handleBalanceSetKey('opencode', key));
+function handleBalanceMusicPlaying(playing: boolean) {
   const cfg = readConfigObject();
-  const enabled = cfg?.island?.deepseekEnabled === true;
+  const enabled = currentBalanceProvider(cfg) !== 'none';
   if (playing && enabled && licenseGatePassed) {
     createDeepseekBall();
   } else {
     destroyDeepseekBall(true);
   }
   return true;
+}
+ipcMain.handle('island:balance:musicPlaying', (_e: any, playing: boolean) => handleBalanceMusicPlaying(playing));
+ipcMain.handle('island:balance:open', (_e: any, provider: string) => {
+  void shell.openExternal(provider === 'opencode' ? OPENCODE_WORKSPACE_URL : 'https://platform.deepseek.com');
+  return true;
 });
+ipcMain.handle('island:deepseek:get', () => getBalanceData());
+ipcMain.handle('island:deepseek:musicPlaying', (_e: any, playing: boolean) => handleBalanceMusicPlaying(playing));
 ipcMain.handle('island:deepseek:open', () => {
   void shell.openExternal('https://platform.deepseek.com');
+  return true;
+});
+ipcMain.handle('island:opencode:open', () => {
+  void shell.openExternal(OPENCODE_WORKSPACE_URL);
   return true;
 });
 ipcMain.handle('clipboard:write', (_e: any, text: string) => {

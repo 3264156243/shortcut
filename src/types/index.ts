@@ -12,6 +12,13 @@ export type PanelAnimation = 'bottom' | 'top' | 'left' | 'right' | 'center';
 export type IslandStyle = 'capsule' | 'glass' | 'paper';
 export type IslandPosition = 'top-center' | 'top-left' | 'top-right' | 'left-center' | 'right-center';
 export type IslandDisplayState = 'collapsed' | 'mini' | 'expanded';
+export type BalanceProvider = 'none' | 'deepseek' | 'opencode';
+
+export interface OpenCodeUsageWindow {
+  status?: string;
+  percent?: number;
+  resetsAt?: string;
+}
 
 export interface IslandPreferences {
   enabled: boolean;
@@ -22,7 +29,9 @@ export interface IslandPreferences {
   tasksEnabled?: boolean;
   cockpitEnabled?: boolean;
   deepseekEnabled?: boolean;
+  balanceProvider?: BalanceProvider;
   deepseekApiKey?: string;
+  opencodeApiKey?: string;
   lyricBounce?: boolean;
   orbitGlow?: boolean;
   barsEnabled?: boolean;
@@ -31,6 +40,29 @@ export interface IslandPreferences {
   y?: number;
   displayId?: number;
 }
+
+export interface DeepseekBalanceData {
+  provider: 'deepseek';
+  configured: boolean;
+  currency?: string;
+  balance?: number | null;
+  granted?: number | null;
+  toppedUp?: number | null;
+  available?: boolean;
+  error?: string;
+}
+
+export interface OpenCodeUsageData {
+  provider: 'opencode';
+  configured: boolean;
+  rolling?: OpenCodeUsageWindow;
+  weekly?: OpenCodeUsageWindow;
+  monthly?: OpenCodeUsageWindow;
+  available?: boolean;
+  error?: string;
+}
+
+export type BalanceData = DeepseekBalanceData | OpenCodeUsageData | { provider: 'none'; configured: false; error?: string };
 
 export interface MusicState {
   available: boolean;

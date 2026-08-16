@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Film, Smartphone } from 'lucide-react';
 import { useStore } from '../store';
-import { IslandDisplayState, IslandStyle, IslandPosition } from '../types';
+import { BalanceProvider, IslandDisplayState, IslandStyle, IslandPosition } from '../types';
 
 export default function IslandPanel() {
   const config = useStore((s) => s.config);
@@ -14,28 +14,37 @@ export default function IslandPanel() {
     tasksEnabled: true,
     cockpitEnabled: false,
     deepseekEnabled: false,
+    balanceProvider: 'none' as BalanceProvider,
     lyricBounce: true,
     orbitGlow: true,
     barsEnabled: true,
     displayState: 'collapsed' as IslandDisplayState,
   };
   const [deepseekKey, setDeepseekKey] = useState('');
+  const [opencodeKey, setOpencodeKey] = useState('');
 
   useEffect(() => {
     setDeepseekKey(island.deepseekApiKey || '');
   }, [island.deepseekApiKey]);
 
+  useEffect(() => {
+    setOpencodeKey(island.opencodeApiKey || '');
+  }, [island.opencodeApiKey]);
+
+  const balanceProvider = (island.balanceProvider || (island.deepseekEnabled === true ? 'deepseek' : 'none')) as BalanceProvider;
+
   const updateIsland = async (updates: Partial<typeof island>) => {
     const next = { ...island, ...updates };
     useStore.setState((s) => ({ config: { ...s.config, island: next } }));
-    const result = await window.electronAPI?.setIsland(next.enabled, next.style, next.position, next.autoHideFullscreen, next.musicEnabled !== false, next.lyricBounce !== false, next.displayState || 'collapsed', next.orbitGlow !== false, next.barsEnabled !== false, next.tasksEnabled !== false, next.cockpitEnabled === true, next.deepseekEnabled === true);
+    const nextProvider = (next.balanceProvider || (next.deepseekEnabled === true ? 'deepseek' : 'none')) as BalanceProvider;
+    const result = await window.electronAPI?.setIsland(next.enabled, next.style, next.position, next.autoHideFullscreen, next.musicEnabled !== false, next.lyricBounce !== false, next.displayState || 'collapsed', next.orbitGlow !== false, next.barsEnabled !== false, next.tasksEnabled !== false, next.cockpitEnabled === true, nextProvider);
     if (result && !result.success && result.error) {
       console.error(result.error);
     }
   };
 
-  const saveDeepseekKey = async () => {
-    await window.electronAPI?.setDeepseekKey(deepseekKey);
+  const saveBalanceKey = async (provider: BalanceProvider) => {
+    await window.electronAPI?.setBalanceKey?.(provider, provider === 'opencode' ? opencodeKey : deepseekKey);
     await useStore.getState().loadConfig();
   };
 
@@ -152,32 +161,56 @@ export default function IslandPanel() {
           </div>
         </div>
 
-        {/* DeepSeek 板块设置 */}
+        {/* 余额板块设置 */}
         <div style={sectionStyle}>
-          <div style={titleStyle}>DeepSeek 板块设置</div>
+          <div style={titleStyle}>余额板块设置</div>
           <div className="flex flex-col gap-3">
-            {toggleRow('DeepSeek余额', island.deepseekEnabled === true, (v) => void updateIsland({ deepseekEnabled: v }))}
-            <div className="flex gap-2">
-              <input
-                type="password"
-                value={deepseekKey}
-                onChange={(e) => setDeepseekKey(e.target.value)}
-                placeholder="填写 DeepSeek API Key"
-                className="flex-1 min-w-0 px-3 py-2 rounded-xl text-sm outline-none transition-all duration-150"
-                style={{
-                  background: 'var(--color-bg-card-hover)',
-                  border: '1px solid var(--color-border)',
-                  color: 'var(--color-text)',
-                }}
-              />
-              <button
-                onClick={() => void saveDeepseekKey()}
-                className="px-4 py-2 rounded-xl text-sm transition-all duration-150"
-                style={{ background: 'var(--color-accent)', color: 'white' }}
-              >
-                保存
-              </button>
+            <div>
+              <div className="mb-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>余额数据源</div>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  ['none', '不显示'],
+                  ['deepseek', 'DeepSeek'],
+                  ['opencode', 'OpenCode Go'],
+                ] as Array<[BalanceProvider, string]>).map(([value, label]) => (
+                  <button
+                    key={value}
+                    onClick={() => void updateIsland({ balanceProvider: value })}
+                    className="flex items-center justify-center py-2 rounded-xl text-xs transition-all duration-150"
+                    style={{
+                      background: balanceProvider === value ? 'var(--color-accent)' : 'var(--color-bg-card-hover)',
+                      border: '1px solid ' + (balanceProvider === value ? 'var(--color-accent)' : 'var(--color-border)'),
+                      color: balanceProvider === value ? 'white' : 'var(--color-text-secondary)',
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
+            {balanceProvider !== 'none' ? (
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={balanceProvider === 'opencode' ? opencodeKey : deepseekKey}
+                  onChange={(e) => (balanceProvider === 'opencode' ? setOpencodeKey(e.target.value) : setDeepseekKey(e.target.value))}
+                  placeholder={balanceProvider === 'opencode' ? '填写 OpenCode Go API Key' : '填写 DeepSeek API Key'}
+                  className="flex-1 min-w-0 px-3 py-2 rounded-xl text-sm outline-none transition-all duration-150"
+                  style={{
+                    background: 'var(--color-bg-card-hover)',
+                    border: '1px solid var(--color-border)',
+                    color: 'var(--color-text)',
+                  }}
+                />
+                <button
+                  onClick={() => void saveBalanceKey(balanceProvider)}
+                  className="px-4 py-2 rounded-xl text-sm transition-all duration-150"
+                  style={{ background: 'var(--color-accent)', color: 'white' }}
+                >
+                  保存
+                </button>
+              </div>
+            ) : null}
             <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
               <Film size={14} /> 每分钟自动刷新，播放音乐时右侧分离小球
             </div>

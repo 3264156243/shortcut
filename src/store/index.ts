@@ -195,7 +195,7 @@ declare global {
       openCodexFile: (which: string) => Promise<{ success: boolean; error?: string }>;
       openCodexPresetDir: (id: string) => Promise<{ success: boolean; error?: string }>;
       getIslandState: () => Promise<{ enabled: boolean; style: string; position: string; autoHideFullscreen: boolean; musicEnabled?: boolean }>;
-      setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string, orbitGlow: boolean, barsEnabled: boolean, tasksEnabled: boolean, cockpitEnabled: boolean, deepseekEnabled: boolean) => Promise<{ success: boolean; error?: string }>;
+      setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string, orbitGlow: boolean, barsEnabled: boolean, tasksEnabled: boolean, cockpitEnabled: boolean, balanceProvider: string) => Promise<{ success: boolean; error?: string }>;
       moveIsland: (screenX: number, screenY: number, deltaX: number, deltaY: number) => Promise<{ success: boolean; error?: string }>;
       getIslandBounds: () => Promise<{ x: number; y: number; width: number; height: number } | null>;
       moveIslandTo: (x: number, y: number) => Promise<{ success: boolean; error?: string }>;
@@ -206,10 +206,17 @@ declare global {
       stopMusicBridge: () => Promise<boolean>;
       getMusicState: () => Promise<unknown>;
       getIslandCockpitState: () => Promise<unknown>;
+      getBalanceData: () => Promise<unknown>;
+      setBalanceKey: (provider: string, key: string) => Promise<{ success: boolean; error?: string }>;
+      setBalanceMusicPlaying: (playing: boolean) => Promise<unknown>;
+      openBalancePlatform: (provider: string) => Promise<unknown>;
+      onBalanceMerge: (callback: () => void) => () => void;
       getDeepseekBalance: () => Promise<unknown>;
       setDeepseekKey: (key: string) => Promise<{ success: boolean; error?: string }>;
+      setOpenCodeKey: (key: string) => Promise<{ success: boolean; error?: string }>;
       setDeepseekMusicPlaying: (playing: boolean) => Promise<unknown>;
       openDeepseekPlatform: () => Promise<unknown>;
+      openOpenCodePlatform: () => Promise<unknown>;
       onDeepseekMerge: (callback: () => void) => () => void;
       copyText: (text: string) => Promise<unknown>;
       controlMusic: (action: string) => Promise<unknown>;

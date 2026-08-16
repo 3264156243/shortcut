@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Music, Pause, Play, SkipBack, SkipForward } from 'lucide-react';
 import './island.css';
-import type { CockpitData, IslandDisplayState, MusicState } from './types';
+import type { BalanceData, BalanceProvider, CockpitData, IslandDisplayState, MusicState } from './types';
 
 type IslandStyle = 'capsule' | 'glass' | 'paper';
 type IslandPosition = 'top-center' | 'top-left' | 'top-right' | 'left-center' | 'right-center';
@@ -15,7 +15,7 @@ interface IslandState {
   musicEnabled: boolean;
   tasksEnabled: boolean;
   cockpitEnabled: boolean;
-  deepseekEnabled: boolean;
+  balanceProvider: BalanceProvider;
   lyricBounce: boolean;
   orbitGlow: boolean;
   barsEnabled: boolean;
@@ -35,7 +35,7 @@ const DEFAULT_STATE: IslandState = {
   musicEnabled: true,
   tasksEnabled: true,
   cockpitEnabled: false,
-  deepseekEnabled: false,
+  balanceProvider: 'none',
   lyricBounce: true,
   orbitGlow: true,
   barsEnabled: true,
@@ -86,20 +86,51 @@ function formatMetric(value: number | null | undefined, unit = '%'): string {
   return value == null ? '?' : `${Math.round(value)}${unit}`;
 }
 
+function BalanceRing({ percent, size = 76, stroke = 7, tone = 1, valueClass = '' }: {
+  percent?: number;
+  size?: number;
+  stroke?: number;
+  tone?: number;
+  valueClass?: string;
+}) {
+  const raw = Number(percent);
+  const value = Number.isFinite(raw) ? Math.max(0, Math.min(100, raw)) : 0;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - value / 100);
+  const colors = ['#22d3ee', '#818cf8', '#f472b6'];
+  const color = colors[(tone - 1) % colors.length];
+  return (
+    <div className="island-ring" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <circle className="island-ring-track" cx={size / 2} cy={size / 2} r={radius} fill="none" strokeWidth={stroke} />
+        <circle
+          className="island-ring-fill"
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </svg>
+      <div className={['island-ring-value', valueClass].filter(Boolean).join(' ')}>
+        {Number.isFinite(raw) ? `${Math.round(raw)}%` : '?'}
+      </div>
+    </div>
+  );
+}
+
 function IslandApp() {
   const [state, setState] = useState<IslandState>(DEFAULT_STATE);
   const [time, setTime] = useState(nowText);
   const [music, setMusic] = useState<MusicState>({ available: false });
   const [cockpit, setCockpit] = useState<CockpitData>({});
-  const [deepseek, setDeepseek] = useState<{
-    currency?: string;
-    balance?: number | null;
-    available?: boolean;
-    configured?: boolean;
-    error?: string;
-    granted?: number | null;
-    toppedUp?: number | null;
-  } | null>(null);
+  const [balance, setBalance] = useState<BalanceData | null>(null);
   const [seekPreview, setSeekPreview] = useState<number | null>(null);
   const [arrival, setArrival] = useState(false);
   const positionAnchorRef = useRef<{ positionMs: number; at: number } | null>(null);
@@ -119,6 +150,7 @@ function IslandApp() {
         if (!raw) return;
         const parsed = JSON.parse(raw);
         const prefs = parsed?.island || {};
+        const legacyProvider: BalanceProvider = prefs.deepseekEnabled === true ? 'deepseek' : 'none';
         setState({
           enabled: prefs.enabled === true,
           style: prefs.style || 'capsule',
@@ -127,7 +159,7 @@ function IslandApp() {
           musicEnabled: prefs.musicEnabled !== false,
           tasksEnabled: prefs.tasksEnabled !== false,
           cockpitEnabled: prefs.cockpitEnabled === true,
-          deepseekEnabled: prefs.deepseekEnabled === true,
+          balanceProvider: prefs.balanceProvider === 'deepseek' || prefs.balanceProvider === 'opencode' ? prefs.balanceProvider : legacyProvider,
           lyricBounce: prefs.lyricBounce !== false,
           orbitGlow: prefs.orbitGlow !== false,
           barsEnabled: prefs.barsEnabled !== false,
@@ -151,7 +183,7 @@ function IslandApp() {
         musicEnabled: next.musicEnabled ?? current.musicEnabled,
         tasksEnabled: next.tasksEnabled ?? current.tasksEnabled,
         cockpitEnabled: next.cockpitEnabled ?? current.cockpitEnabled,
-        deepseekEnabled: next.deepseekEnabled ?? current.deepseekEnabled,
+        balanceProvider: (next.balanceProvider as BalanceProvider) ?? current.balanceProvider,
         lyricBounce: next.lyricBounce ?? current.lyricBounce,
         orbitGlow: next.orbitGlow ?? current.orbitGlow,
         barsEnabled: next.barsEnabled ?? current.barsEnabled,
@@ -203,16 +235,19 @@ function IslandApp() {
   }, []);
 
   useEffect(() => {
-    if (!state.deepseekEnabled) return;
+    if (state.balanceProvider === 'none') {
+      setBalance(null);
+      return;
+    }
     const fetchBalance = () => {
-      void window.electronAPI?.getDeepseekBalance?.().then((data: unknown) => {
-        if (data) setDeepseek(data as { currency: string; balance: number | null; available: boolean; configured?: boolean; error?: string });
+      void window.electronAPI?.getBalanceData?.().then((data: unknown) => {
+        if (data) setBalance(data as BalanceData);
       });
     };
     fetchBalance();
     const timer = window.setInterval(fetchBalance, 60000);
     return () => window.clearInterval(timer);
-  }, [state.deepseekEnabled]);
+  }, [state.balanceProvider]);
 
   const lyrics = useMemo(() => parseLyrics(music.lyrics), [music.lyrics]);
   const anchor = positionAnchorRef.current;
@@ -289,11 +324,14 @@ function IslandApp() {
   const mini = state.displayState === 'mini';
   const showMusic = state.musicEnabled && music.available;
   const showCockpit = state.cockpitEnabled && !showMusic;
-  const showDeepseek = state.deepseekEnabled && !showMusic && !showCockpit;
+  const showBalance = state.balanceProvider !== 'none' && !showMusic && !showCockpit;
+  const openBalancePlatform = () => {
+    void window.electronAPI?.openBalancePlatform?.(state.balanceProvider);
+  };
 
   useEffect(() => {
-    void window.electronAPI?.setDeepseekMusicPlaying?.(showMusic && state.deepseekEnabled);
-  }, [showMusic, state.deepseekEnabled]);
+    void window.electronAPI?.setBalanceMusicPlaying?.(showMusic && state.balanceProvider !== 'none');
+  }, [showMusic, state.balanceProvider]);
   const rootClass = [
     'island-root',
     state.style,
@@ -404,9 +442,13 @@ function IslandApp() {
             <span>GPU {formatMetric(cockpit.gpu?.usage)} {formatMetric(cockpit.gpu?.temperature, '°C')}</span>
             <span>内存 {formatMetric(cockpit.memory?.usage)} {formatMetric(cockpit.memory?.temperature, '°C')}</span>
           </div>
-        ) : showDeepseek ? (
-          <div className="island-deepseek-mini" onClick={() => void window.electronAPI?.openDeepseekPlatform?.()} title="打开 DeepSeek 平台">
-            <span>DeepSeek {deepseek && deepseek.configured === false ? '未配置' : deepseek && deepseek.balance != null ? `${deepseek.balance} ${deepseek.currency}` : '?'}</span>
+        ) : showBalance && state.balanceProvider === 'opencode' ? (
+          <div className="island-balance-mini" onClick={openBalancePlatform} title="OpenCode Go 5小时用量">
+            <BalanceRing percent={balance && balance.provider === 'opencode' ? balance.rolling?.percent : undefined} size={32} stroke={4} tone={1} valueClass="island-ring-value-mini" />
+          </div>
+        ) : showBalance ? (
+          <div className="island-deepseek-mini" onClick={openBalancePlatform} title="打开 DeepSeek 平台">
+            <span>DeepSeek {balance && balance.provider === 'deepseek' && balance.configured === false ? '未配置' : balance && balance.provider === 'deepseek' && balance.balance != null ? `${balance.balance} ${balance.currency}` : '?'}</span>
           </div>
         ) : (
           <>
@@ -488,14 +530,42 @@ function IslandApp() {
               ))}
             </div>
           </div>
-        ) : showDeepseek ? (
-          <div className="island-deepseek-panel" onClick={() => void window.electronAPI?.openDeepseekPlatform?.()} title="打开 DeepSeek 平台">
-            <div className="island-panel-title">DeepSeek 余额</div>
-            <div className="island-deepseek-balance">
-              {deepseek && deepseek.configured === false ? '未配置' : deepseek && deepseek.balance != null ? `${deepseek.balance} ${deepseek.currency}` : '?'}
+        ) : showBalance && state.balanceProvider === 'opencode' ? (
+          <div className="island-balance-panel" onClick={openBalancePlatform} title="打开 OpenCode Go 用量">
+            <div className="island-panel-title">OpenCode Go 用量</div>
+            <div className="island-balance-rings">
+              <div className="island-balance-ring-item">
+                <BalanceRing percent={balance && balance.provider === 'opencode' ? balance.rolling?.percent : undefined} size={76} stroke={7} tone={1} />
+                <div className="island-balance-ring-label">5小时</div>
+              </div>
+              <div className="island-balance-ring-item">
+                <BalanceRing percent={balance && balance.provider === 'opencode' ? balance.weekly?.percent : undefined} size={76} stroke={7} tone={2} />
+                <div className="island-balance-ring-label">本周</div>
+              </div>
+              <div className="island-balance-ring-item">
+                <BalanceRing percent={balance && balance.provider === 'opencode' ? balance.monthly?.percent : undefined} size={76} stroke={7} tone={3} />
+                <div className="island-balance-ring-label">本月</div>
+              </div>
             </div>
             <div className="island-deepseek-status">
-              {deepseek && deepseek.configured === false ? '请在SC球设置中填写 API Key' : deepseek?.error ? deepseek.error : deepseek ? (deepseek.available ? '可用' : '不可用') : '获取中...'}
+              {balance && balance.provider === 'opencode' && balance.configured === false ? '请在SC球设置中填写 API Key' : balance?.error ? balance.error : '每分钟自动刷新'}
+            </div>
+          </div>
+        ) : showBalance ? (
+          <div className="island-deepseek-panel" onClick={openBalancePlatform} title="打开 DeepSeek 平台">
+            <div className="island-panel-title">DeepSeek 余额</div>
+            <div className="island-deepseek-balance">
+              {balance && balance.provider === 'deepseek' && balance.configured === false ? '未配置' : balance && balance.provider === 'deepseek' && balance.balance != null ? `${balance.balance} ${balance.currency}` : '?'}
+            </div>
+            <div className="island-deepseek-status">
+              {(() => {
+                if (balance?.provider === 'deepseek') {
+                  if (!balance.configured) return '请在SC球设置中填写 API Key';
+                  if (balance.error) return balance.error;
+                  return balance.available ? '可用' : '不可用';
+                }
+                return balance?.error ? balance.error : '获取中...';
+              })()}
             </div>
           </div>
         ) : (
