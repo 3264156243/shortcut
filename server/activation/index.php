@@ -642,11 +642,15 @@ $loggedIn = !empty($_SESSION['admin']);
             <button class="switch off" id="guestToggle" type="button" aria-checked="false"></button>
           </div>
           <div class="row-line">
-            <div class="row-text">
-              <strong>免费试用 10 分钟</strong>
+            <div class="row-text" style="flex:1;">
+              <strong>免费试用</strong>
               <small>每个机器码有且仅有一次免费体验，试用期间按“免费试用”分组的权限生效，自动绑定机器码。</small>
+              <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+                <button class="switch off" id="trialToggle" type="button" aria-checked="false" style="flex:none;"></button>
+                <span class="muted">时长（分钟，1~1440）</span>
+                <input class="text-input" id="trialMinutesInput" type="number" min="1" max="1440" value="10" style="width:90px;" />
+              </div>
             </div>
-            <button class="switch off" id="trialToggle" type="button" aria-checked="false"></button>
           </div>
           <div class="row-line">
             <div class="row-text" style="flex:1;">
@@ -1098,6 +1102,11 @@ $loggedIn = !empty($_SESSION['admin']);
       setSwitch(document.getElementById('requireToggle'), !!policy.requireActivation);
       setSwitch(document.getElementById('guestToggle'), !!policy.guestEnabled);
       setSwitch(document.getElementById('trialToggle'), !!policy.trialEnabled);
+      document.getElementById('trialMinutesInput').value = policy.trialMinutes || 10;
+      document.getElementById('trialMinutesInput').onchange = () => {
+        state.policy.trialMinutes = parseInt(document.getElementById('trialMinutesInput').value, 10) || 10;
+        queuePolicySave(700);
+      };
       document.getElementById('contactLineInput').value = policy.contactLine || '';
       document.getElementById('contactLineInput').onchange = () => {
         state.policy.contactLine = document.getElementById('contactLineInput').value;
@@ -1210,6 +1219,7 @@ $loggedIn = !empty($_SESSION['admin']);
         requireActivation: document.getElementById('requireToggle').classList.contains('on'),
         guestEnabled: document.getElementById('guestToggle').classList.contains('on'),
         trialEnabled: document.getElementById('trialToggle').classList.contains('on'),
+        trialMinutes: parseInt(document.getElementById('trialMinutesInput').value, 10) || 10,
         contactLine: document.getElementById('contactLineInput').value || '',
         groups,
       };

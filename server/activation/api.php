@@ -71,6 +71,7 @@ switch ($action) {
             'activationPolicy' => $config['activationPolicy'],
             'guestEnabled' => $config['guestEnabled'],
             'trialEnabled' => !empty($config['trialEnabled']),
+            'trialMinutes' => max(1, min(1440, intval($config['trialMinutes'] ?? 10))),
             'trialUsed' => $trialUsed,
             'trialActive' => $trialActive,
             'trialExpiresAt' => $trialExpiresAt,
@@ -113,6 +114,9 @@ switch ($action) {
         }
         if (array_key_exists('trialEnabled', $input)) {
             $config['trialEnabled'] = !empty($input['trialEnabled']);
+        }
+        if (array_key_exists('trialMinutes', $input)) {
+            $config['trialMinutes'] = max(1, min(1440, intval($input['trialMinutes'])));
         }
         if (array_key_exists('contactLine', $input)) {
             $config['contactLine'] = trim(strval($input['contactLine']));
@@ -411,6 +415,7 @@ switch ($action) {
         }
         $code = 'TRIAL-' . strtoupper(substr(md5(uniqid('', true)), 0, 10));
         $now = time();
+        $trialMinutes = max(1, min(1440, intval($config['trialMinutes'] ?? 10)));
         $record = [
             'code' => $code,
             'kind' => 'trial',
@@ -421,7 +426,7 @@ switch ($action) {
             'status' => 'active',
             'machine' => $machine,
             'created_at' => date('c', $now),
-            'expires_at' => date('c', $now + 600),
+            'expires_at' => date('c', $now + $trialMinutes * 60),
             'last_check_at' => null,
         ];
         $codes[] = $record;
@@ -442,7 +447,7 @@ switch ($action) {
             'featureAccess' => feature_rules($config, 'trial'),
             'guestEnabled' => $config['guestEnabled'],
             'contactLine' => $config['contactLine'],
-            'message' => '免费试用已开启，10 分钟后自动到期',
+            'message' => '免费试用已开启，' . $trialMinutes . ' 分钟后自动到期',
         ]);
         break;
 

@@ -387,6 +387,7 @@ function normalize_activation_config($data = null) {
     }
 
     $trialEnabled = array_key_exists('trialEnabled', $config) ? !empty($config['trialEnabled']) : true;
+    $trialMinutes = isset($config['trialMinutes']) ? max(1, min(1440, intval($config['trialMinutes']))) : 10;
     if (!isset($seen['trial'])) {
         $groups[] = [
             'id' => 'trial',
@@ -427,6 +428,7 @@ function normalize_activation_config($data = null) {
         'requireActivation' => $requireActivation,
         'guestEnabled' => $guestEnabled,
         'trialEnabled' => $trialEnabled,
+        'trialMinutes' => $trialMinutes,
         'groups' => $groups,
         'activationPolicy' => $requireActivation ? ($guestEnabled ? 'premium_only' : 'all') : 'none',
         'moduleList' => $moduleList,

@@ -45,6 +45,7 @@ export default function ActivationPanel() {
   const [groups, setGroups] = useState<PolicyGroup[]>([]);
   const [moduleMeta, setModuleMeta] = useState<Record<string, string>>({});
   const [trialEnabled, setTrialEnabled] = useState(false);
+  const [trialMinutes, setTrialMinutes] = useState(10);
   const [trialUsed, setTrialUsed] = useState(false);
   const [trialActive, setTrialActive] = useState(false);
   const [trialExpiresAt, setTrialExpiresAt] = useState<string | null>(null);
@@ -59,6 +60,7 @@ export default function ActivationPanel() {
         setGroups(r.groups || []);
         setModuleMeta(r.moduleMeta || {});
         setTrialEnabled(r.trialEnabled === true);
+        setTrialMinutes(Number(r.trialMinutes) || 10);
         setTrialUsed(r.trialUsed === true);
         setTrialActive(r.trialActive === true);
         setTrialExpiresAt(r.trialExpiresAt || null);
@@ -250,12 +252,12 @@ export default function ActivationPanel() {
           <div className="mt-2 text-xs" style={{ color: state?.status === 'active' ? '#63d391' : 'var(--color-text-muted)' }}>{state.message}</div>
         )}
 
-        {/* 免费试用 */}
-        {!activated && trialEnabled && (
+        {/* 免费试用：试用中状态常显；未激活时才显示按钮/已使用 */}
+        {trialEnabled && (trialActive || !activated) && (
           <div className="mt-3 rounded-xl px-3 py-2.5" style={{ background: 'rgba(124,58,237,.08)', border: '1px dashed rgba(124,58,237,.4)' }}>
             {trialActive && trialExpiresAt ? (
               <div className="flex items-center justify-between">
-                <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>免费试用进行中，剩余约 {trialRemainMin} 分钟</span>
+                <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>免费试用进行中，剩余约 {trialRemainMin} 分钟{trialExpiresAt ? `（至 ${trialExpiresAt.slice(0, 16).replace('T', ' ')}）` : ''}</span>
                 <span className="text-[11px] font-medium" style={{ color: '#a78bfa' }}>试用中</span>
               </div>
             ) : trialUsed ? (
@@ -273,7 +275,7 @@ export default function ActivationPanel() {
                   className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-85 disabled:opacity-50"
                   style={{ background: 'var(--color-accent)', color: 'white' }}
                 >
-                  {trialBusy ? <Loader2 size={13} className="animate-spin" /> : '免费试用 10 分钟'}
+                  {trialBusy ? <Loader2 size={13} className="animate-spin" /> : `免费试用 ${trialMinutes} 分钟`}
                 </button>
               </div>
             )}
