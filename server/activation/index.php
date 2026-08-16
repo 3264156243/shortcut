@@ -566,7 +566,7 @@ $loggedIn = !empty($_SESSION['admin']);
           </div>
           <div class="row-line" id="guestRow" style="display:none;">
             <div class="row-text">
-              <strong>未激活用户可用版块</strong>
+              <strong>未激活用户可用板块</strong>
               <small>开启后，未激活用户可先使用“未激活用户”分组中开放的板块，剩余板块仍需激活。</small>
             </div>
             <button class="switch off" id="guestToggle" type="button" aria-checked="false"></button>
