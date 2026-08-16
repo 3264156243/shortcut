@@ -166,6 +166,10 @@ export default function App() {
           tier: gateInfo.tier,
           guestEnabled: gateInfo.guestEnabled,
           contactLine: gateInfo.contactLine,
+          code: gateInfo.code,
+          status: gateInfo.status,
+          expiresAt: gateInfo.expiresAt,
+          message: gateInfo.message,
         });
       }
       if (!gateInfo?.required) {
@@ -407,6 +411,10 @@ export default function App() {
             tier: license?.tier,
             guestEnabled: license?.guestEnabled,
             contactLine: license?.contactLine,
+            code: license?.code,
+            status: license?.status,
+            expiresAt: license?.expiresAt,
+            message: license?.message,
           });
           void api?.licenseGatePassed?.();
         }}

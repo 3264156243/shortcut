@@ -3171,12 +3171,21 @@ ipcMain.handle('fs:exists', (_e: any, filePath: string) => {
 ipcMain.handle('app:getVersion', () => app.getVersion());
 ipcMain.handle('license:getState', async () => ({ ...readLicense(), machineCode: await getMachineCode() }));
 ipcMain.handle('license:activate', async (_e: any, code: string) => {
-  const result = await checkLicense(String(code || '').trim());
+  const activeCode = String(code || '').trim();
+  const result = await checkLicense(activeCode);
   // 激活/换码成功后立即应用新权限，无需重启
   if (result.success === true) licenseGatePassed = true;
   syncModuleServices();
   await broadcastLicenseGate();
-  return result;
+  return { ...result, code: activeCode, status: result.success === true ? 'active' : 'invalid' };
+});
+ipcMain.handle('license:policy', async () => {
+  try {
+    const result = await licenseRequest('policy', { clientInfo: buildClientInfoPayload() });
+    return result;
+  } catch {
+    return { success: false, message: '无法连接激活服务器' };
+  }
 });
 
 async function broadcastLicenseGate() {
@@ -3190,6 +3199,9 @@ async function broadcastLicenseGate() {
     activated,
     checking: false,
     machineCode,
+    code: license?.code || '',
+    status: license?.status || 'invalid',
+    expiresAt: license?.expiresAt,
     activationPolicy: policy,
     moduleAccess: license?.moduleAccess || [],
     featureAccess: license?.featureAccess || [],
@@ -3212,7 +3224,8 @@ ipcMain.handle('license:gate', async () => {
   const machineCode = await getMachineCode();
   try {
     const result = await checkLicense();
-    const hasCode = !!readLicense()?.code;
+    const license = readLicense();
+    const hasCode = !!license?.code;
     const policy = result.activationPolicy || 'none';
     const activated = hasCode && result.success === true;
     const guestEnabled = result.guestEnabled === true;
@@ -3223,6 +3236,9 @@ ipcMain.handle('license:gate', async () => {
       checking: false,
       machineCode,
       guestEnabled,
+      code: license?.code || '',
+      status: license?.status || 'invalid',
+      expiresAt: license?.expiresAt,
       ...result,
     };
   } catch {
@@ -3235,6 +3251,9 @@ ipcMain.handle('license:gate', async () => {
       activated,
       checking: false,
       machineCode,
+      code: license?.code || '',
+      status: license?.status || 'invalid',
+      expiresAt: license?.expiresAt,
       activationPolicy: policy,
       moduleAccess: license?.moduleAccess,
       featureAccess: license?.featureAccess,

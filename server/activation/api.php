@@ -34,6 +34,30 @@ switch ($action) {
         respond(['success' => true, 'service' => 'shortcut-activation', 'time' => date('c')]);
         break;
 
+    case 'policy':
+        // 公开端点：返回全部分组的板块/子功能权限（客户端激活板块展示用）
+        $config = load_activation_config();
+        $groups = [];
+        foreach ($config['groups'] as $group) {
+            $groups[] = [
+                'id' => $group['id'],
+                'name' => $group['name'],
+                'system' => !empty($group['system']),
+                'enabled' => !empty($group['enabled']),
+                'permissions' => $group['permissions'],
+            ];
+        }
+        respond([
+            'success' => true,
+            'groups' => $groups,
+            'moduleMeta' => $GLOBALS['MODULE_META'],
+            'featureMeta' => $GLOBALS['FEATURE_META'],
+            'activationPolicy' => $config['activationPolicy'],
+            'guestEnabled' => $config['guestEnabled'],
+            'contactLine' => $config['contactLine'],
+        ]);
+        break;
+
     case 'login':
         global $ADMIN_PASSWORD;
         if (isset($input['adminPassword']) && $input['adminPassword'] === $ADMIN_PASSWORD) {

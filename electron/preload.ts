@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkLicense: () => ipcRenderer.invoke('license:check'),
   getLicenseGate: () => ipcRenderer.invoke('license:gate'),
   licenseGatePassed: () => ipcRenderer.invoke('license:gatePassed'),
+  getLicensePolicy: () => ipcRenderer.invoke('license:policy'),
   onLicenseChanged: (callback: (data: unknown) => void) => {
     const handler = (_event: unknown, data: unknown) => callback(data);
     ipcRenderer.on('license:changed', handler);

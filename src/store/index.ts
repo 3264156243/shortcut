@@ -57,7 +57,7 @@ interface AppState {
   setSearchQuery: (q: string) => void;
   setSelectedShortcut: (shortcutId: string | null) => void;
   setActiveModule: (moduleId: ModuleId) => void;
-  setLicenseAccess: (info: { activationPolicy?: ActivationPolicy; moduleAccess?: ModuleAccessRule[]; featureAccess?: FeatureAccessRule[]; tier?: ModuleAccessLevel; guestEnabled?: boolean; contactLine?: string }) => void;
+  setLicenseAccess: (info: { activationPolicy?: ActivationPolicy; moduleAccess?: ModuleAccessRule[]; featureAccess?: FeatureAccessRule[]; tier?: ModuleAccessLevel; guestEnabled?: boolean; contactLine?: string; code?: string; status?: string; expiresAt?: string; message?: string }) => void;
   setModuleEnabled: (id: ModuleId, enabled: boolean) => void;
   setModuleVisible: (id: ModuleId, visible: boolean) => void;
   setModuleOrder: (orderedIds: ModuleId[]) => void;
@@ -147,6 +147,7 @@ declare global {
       checkLicense: () => Promise<unknown>;
       getLicenseGate: () => Promise<unknown>;
       licenseGatePassed: () => Promise<unknown>;
+      getLicensePolicy: () => Promise<unknown>;
       onLicenseChanged: (callback: (data: unknown) => void) => () => void;
       getReminderData: () => Promise<unknown>;
       onReminderData: (callback: (data: unknown) => void) => () => void;
@@ -517,6 +518,10 @@ export const useStore = create<AppState>((set, get) => ({
           tier: info.tier,
           guestEnabled: info.guestEnabled,
           contactLine: info.contactLine,
+          code: info.code !== undefined ? info.code : s.config.license?.code,
+          status: info.status !== undefined ? info.status : s.config.license?.status,
+          expiresAt: info.expiresAt !== undefined ? info.expiresAt : s.config.license?.expiresAt,
+          message: info.message !== undefined ? info.message : s.config.license?.message,
         },
         activeModule: nextActive,
       };
