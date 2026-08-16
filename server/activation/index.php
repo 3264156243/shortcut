@@ -276,6 +276,21 @@ $loggedIn = !empty($_SESSION['admin']);
     .switch.off { background: #2a3447; }
 
     .toolbar { display: flex; align-items: center; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+    .save-status {
+      display: inline-flex;
+      align-items: center;
+      height: 30px;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .save-status.pending, .save-status.saving { color: var(--amber); border-color: rgba(245,184,75,.35); }
+    .save-status.saved { color: var(--green); border-color: rgba(54,207,138,.32); }
+    .save-status.bad { color: var(--red); border-color: rgba(255,92,92,.4); }
     #message {
       min-height: 22px;
       margin-bottom: 14px;
@@ -544,6 +559,7 @@ $loggedIn = !empty($_SESSION['admin']);
           <p id="pageSubtitle">设置是否必须激活，以及未激活用户可用范围</p>
         </div>
         <div class="top-actions">
+          <span class="save-status" id="saveStatus">已自动保存</span>
           <button class="btn" onclick="refresh()">刷新</button>
         </div>
       </header>
@@ -571,9 +587,6 @@ $loggedIn = !empty($_SESSION['admin']);
             </div>
             <button class="switch off" id="guestToggle" type="button" aria-checked="false"></button>
           </div>
-          <div class="toolbar">
-            <button class="btn primary" id="savePolicyBtn">保存策略</button>
-          </div>
         </div>
       </section>
 
@@ -587,9 +600,6 @@ $loggedIn = !empty($_SESSION['admin']);
             <button class="btn" id="addGroupBtn">新增分组</button>
           </div>
           <div id="groupList"></div>
-          <div class="toolbar">
-            <button class="btn primary" id="saveGroupsBtn">保存所有分组</button>
-          </div>
         </div>
       </section>
 
@@ -700,6 +710,11 @@ $loggedIn = !empty($_SESSION['admin']);
       editStatus: true,
       editGroupId: '',
       currentTab: 'policy',
+      saveTimer: null,
+      savingPolicy: false,
+      saveQueued: false,
+      policyDirty: false,
+      policyVersion: 0,
     };
 
     const MODULE_META = {
@@ -866,10 +881,36 @@ $loggedIn = !empty($_SESSION['admin']);
       document.getElementById('guestRow').style.display = requireOn ? '' : 'none';
     }
 
-    document.getElementById('requireToggle').addEventListener('click', updatePolicyVisual);
-    document.getElementById('guestToggle').addEventListener('click', () => {});
-    document.getElementById('savePolicyBtn').addEventListener('click', () => void savePolicy());
-    document.getElementById('saveGroupsBtn').addEventListener('click', () => void savePolicy('分组已保存'));
+    function setSaveStatus(text, kind) {
+      const el = document.getElementById('saveStatus');
+      if (!el) return;
+      el.textContent = text;
+      el.className = 'save-status' + (kind ? ' ' + kind : '');
+    }
+
+    function queuePolicySave(delay) {
+      state.policyVersion += 1;
+      state.policyDirty = true;
+      setSaveStatus('待保存', 'pending');
+      if (state.savingPolicy) {
+        state.saveQueued = true;
+        return;
+      }
+      clearTimeout(state.saveTimer);
+      state.saveTimer = setTimeout(() => void savePolicy(), delay == null ? 600 : delay);
+    }
+
+    document.getElementById('requireToggle').addEventListener('click', () => {
+      const btn = document.getElementById('requireToggle');
+      setSwitch(btn, !btn.classList.contains('on'));
+      updatePolicyVisual();
+      queuePolicySave(300);
+    });
+    document.getElementById('guestToggle').addEventListener('click', () => {
+      const btn = document.getElementById('guestToggle');
+      setSwitch(btn, !btn.classList.contains('on'));
+      queuePolicySave(300);
+    });
     document.getElementById('addGroupBtn').addEventListener('click', () => {
       document.getElementById('newGroupName').value = '';
       document.getElementById('groupModal').classList.add('show');
@@ -895,7 +936,8 @@ $loggedIn = !empty($_SESSION['admin']);
       });
       document.getElementById('groupModal').classList.remove('show');
       renderGroups();
-      showMessage('新分组已添加，记得保存', true);
+      queuePolicySave(100);
+      showMessage('新分组已添加，正在自动保存', true);
     });
 
     function renderPolicy() {
@@ -922,12 +964,14 @@ $loggedIn = !empty($_SESSION['admin']);
         nameInput.maxLength = 30;
         nameInput.addEventListener('input', () => {
           state.policy.groups[index].name = nameInput.value;
+          queuePolicySave(700);
         });
         const badge = document.createElement('span');
         badge.className = 'badge' + (group.system ? ' system' : '');
         badge.textContent = group.system ? '未激活用户组' : '授权分组';
         const enabledSwitch = makeSwitch(!!group.enabled, (next) => {
           state.policy.groups[index].enabled = next;
+          queuePolicySave(400);
         });
         const deleteBtn = document.createElement('button');
         if (!group.system) {
@@ -938,7 +982,8 @@ $loggedIn = !empty($_SESSION['admin']);
             askConfirm('确定删除分组“' + group.name + '”吗？已生成到该分组的激活码将失效。', () => {
               state.policy.groups.splice(index, 1);
               renderGroups();
-              showMessage('分组已移除，记得保存', true);
+              queuePolicySave(100);
+              showMessage('分组已移除，正在自动保存', true);
             });
           });
         }
@@ -956,6 +1001,7 @@ $loggedIn = !empty($_SESSION['admin']);
           text.textContent = label;
           const sw = makeSwitch(!!group.permissions[mid], (next) => {
             state.policy.groups[index].permissions[mid] = next;
+            queuePolicySave(400);
           });
           row.appendChild(text);
           row.appendChild(sw);
@@ -969,7 +1015,15 @@ $loggedIn = !empty($_SESSION['admin']);
     }
 
     async function savePolicy(successText) {
-      if (!state.policy) return;
+      if (!state.policy || state.savingPolicy) {
+        state.saveQueued = true;
+        return;
+      }
+      if (state.saveTimer) {
+        clearTimeout(state.saveTimer);
+        state.saveTimer = null;
+      }
+      const versionAtStart = state.policyVersion;
       const groups = state.policy.groups.map((group, index) => ({
         id: group.id,
         name: (group.name || '').trim() || ('用户组' + (index + 1)),
@@ -977,19 +1031,55 @@ $loggedIn = !empty($_SESSION['admin']);
         enabled: !!group.enabled,
         permissions: group.permissions,
       }));
-      const result = await api({
+      const payload = {
         action: 'savePolicy',
         requireActivation: document.getElementById('requireToggle').classList.contains('on'),
         guestEnabled: document.getElementById('guestToggle').classList.contains('on'),
         groups,
-      });
+      };
+      state.savingPolicy = true;
+      state.policyDirty = false;
+      setSaveStatus('保存中', 'saving');
+      const result = await api(payload);
+      state.savingPolicy = false;
       if (result.success) {
-        state.policy = result;
-        renderPolicy();
-        renderGroups();
-        showMessage(successText || result.message || '授权策略已保存', true);
+        if (state.policyVersion === versionAtStart) {
+          state.policy = result;
+          state.policyDirty = false;
+        } else {
+          state.policyDirty = true;
+          state.saveQueued = true;
+        }
+        setSaveStatus('已自动保存 ' + new Date().toLocaleTimeString('zh-CN', { hour12: false }), 'saved');
+        if (successText) showMessage(successText, true);
       } else {
+        setSaveStatus('保存失败', 'bad');
         showMessage(result.message || '保存失败', false);
+        return;
+      }
+      if (state.saveQueued) {
+        state.saveQueued = false;
+        clearTimeout(state.saveTimer);
+        state.saveTimer = setTimeout(() => void savePolicy(successText), 300);
+      }
+    }
+
+    async function flushPolicySave() {
+      if (state.saveTimer) {
+        clearTimeout(state.saveTimer);
+        state.saveTimer = null;
+      }
+      if (!state.savingPolicy && !state.saveQueued && !state.policyDirty) return;
+      while (state.savingPolicy) {
+        await new Promise((resolve) => setTimeout(resolve, 60));
+      }
+      if (state.policyDirty || state.saveQueued) {
+        state.saveQueued = false;
+        if (state.saveTimer) {
+          clearTimeout(state.saveTimer);
+          state.saveTimer = null;
+        }
+        await savePolicy();
       }
     }
 
@@ -1124,6 +1214,7 @@ $loggedIn = !empty($_SESSION['admin']);
     window.openEditCode = openEditCode;
 
     async function refresh() {
+      await flushPolicySave();
       const [policyResult, listResult] = await Promise.all([
         api({ action: 'getPolicy' }),
         api({ action: 'list' }),
