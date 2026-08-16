@@ -25,6 +25,13 @@ pnpm-debug.log*
 island-shot.png
 netease-*.png
 
+# Stale test/build leftovers (cleaned 2026-08-17, prevent recurrence)
+/release-test*/
+/release-next/
+/release-2.2.0/
+/123.txt
+/references/
+
 # Environment
 .env
 .env.*
