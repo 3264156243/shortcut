@@ -741,6 +741,7 @@ function buildClientInfoPayload(): any {
       { id: 'usage', label: '统计' },
       { id: 'island', label: 'SC球' },
       { id: 'codexProvider', label: '供应商' },
+      { id: 'voiceInput', label: '语音' },
     ],
   };
 }
@@ -3847,7 +3848,7 @@ if (!gotSingleInstanceLock) {
   setInterval(() => applyIslandVisibility(), 1500);
   syncModuleServices();
 
-  // 语音输入（Alt+H）初始化 + 麦克风权限
+  // 语音输入（右 Alt）初始化 + 麦克风权限
   try {
     session.defaultSession.setPermissionRequestHandler((_wc: any, permission: string, callback: (grant: boolean) => void) => {
       callback(permission === 'media');

@@ -50,11 +50,11 @@ export default function VoiceInputPanel() {
       <div style={cardStyle}>
         <h3 className="mb-1 text-sm font-medium" style={{ color: 'var(--color-text)' }}>使用说明</h3>
         <p className="mt-1 text-xs leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
-          按 <b>Alt+H</b> 弹出胶囊麦克风，说话时识别文字<strong>暂存进胶囊</strong>（不再实时写入光标，说多少句都不会断）。<br />
+          按 <b>右 Alt</b> 弹出胶囊麦克风，说话时识别文字<strong>暂存进胶囊</strong>（不再实时写入光标，说多少句都不会断）。<br />
           · 中间文字随说话持续累加，超出宽度向左滚动；左侧圆点显示状态（绿=识别中，黄=已暂停）。<br />
-          · <b>✓ / 回车</b>：对所有识别文字做<strong>结构整理</strong>（修正确定无疑的错别字、提取要点并按 1. 2. 3. 排列），完成后统一在光标处输入。<br />
+          · <b>✓ / 回车</b>：对所有识别文字做<strong>结构整理</strong>（合并重复、修正错别字、语句通顺，仅原文明确列举时才编号 1. 2. 3.），完成后统一在光标处输入。<br />
           · <b>✗ / ESC</b>：取消，不输入。 <b>空格</b>：暂停/继续识别。<br />
-          · 胶囊可拖动，位置自动记忆。
+          · 胶囊可拖动，位置自动记忆；语音输入时焦点在胶囊上，按键直达。
         </p>
         <button
           type="button"
@@ -62,7 +62,7 @@ export default function VoiceInputPanel() {
           className="mt-3 flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition-opacity hover:opacity-85"
           style={{ background: 'var(--color-accent)', color: 'white' }}
         >
-          <Mic size={15} /> 打开语音输入（Alt+H）
+          <Mic size={15} /> 打开语音输入（右 Alt）
         </button>
       </div>
 
@@ -70,7 +70,7 @@ export default function VoiceInputPanel() {
         <h3 className="mb-1 text-sm font-medium" style={{ color: 'var(--color-text)' }}>语音识别</h3>
         <div className="mt-2 flex flex-col gap-3">
           <label className="flex items-center justify-between cursor-pointer">
-            <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>启用语音输入（Alt+H）</span>
+            <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>启用语音输入（右 Alt 启动）</span>
             <input
               type="checkbox"
               checked={form.enabled !== false}

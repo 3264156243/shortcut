@@ -1,4 +1,4 @@
-// 语音输入模块：Alt+H 全局语音输入
+// 语音输入模块：右 Alt 全局语音输入
 // 识别：阿里云百炼 qwen-audio-3.0-asr-flash-streaming 流式 WebSocket（单流，计费最小）
 // 输入：SendInput Unicode 增量追加（与 Win 语音识别一致，不碰剪贴板）
 // 控制：空格=暂停/继续，回车=确认识别并关闭；启动前检测焦点是否在可输入控件
@@ -474,7 +474,8 @@ function cancelSession() {
 function openVoiceWindow() {
   const cfg = voiceConfig();
   if (voiceWindow && !voiceWindow.isDestroyed()) {
-    voiceWindow.showInactive();
+    voiceWindow.show();
+    voiceWindow.focus();
     voiceWindow.webContents.send('voice:getConfig', cfg);
     return;
   }
@@ -516,7 +517,8 @@ function openVoiceWindow() {
   }
   voiceWindow.once('ready-to-show', () => {
     if (voiceWindow && !voiceWindow.isDestroyed()) {
-      voiceWindow.showInactive();
+      voiceWindow.show();
+      voiceWindow.focus();
       voiceWindow.webContents.send('voice:getConfig', cfg);
     }
   });
@@ -539,19 +541,21 @@ function toggleVoiceWindow() {
   openVoiceWindow();
 }
 
+const VOICE_HOTKEY = 'AltRight'; // 启动/关闭语音胶囊：右侧 Alt 键
+
 function registerShortcut() {
   const cfg = voiceConfig();
   if (cfg.enabled === false) {
-    try { globalShortcut.unregister('Alt+H'); } catch {}
+    try { globalShortcut.unregister(VOICE_HOTKEY); } catch {}
     return;
   }
-  if (!globalShortcut.register('Alt+H', () => toggleVoiceWindow())) {
-    console.error('Failed to register Alt+H');
+  if (!globalShortcut.register(VOICE_HOTKEY, () => toggleVoiceWindow())) {
+    console.error('Failed to register ' + VOICE_HOTKEY);
   }
 }
 
 function unregisterShortcut() {
-  try { globalShortcut.unregister('Alt+H'); } catch {}
+  try { globalShortcut.unregister(VOICE_HOTKEY); } catch {}
 }
 
 export function initVoiceInput() {
