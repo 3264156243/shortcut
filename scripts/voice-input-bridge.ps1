@@ -94,19 +94,22 @@ public static class KbHook {
         return (GetAsyncKeyState(vk) & 0x8000) != 0;
     }
     static void Poll() {
-        bool lastSpace = false, lastEnter = false, lastEsc = false;
+        bool lastSpace = false, lastEnter = false, lastEsc = false, lastRAlt = false;
         while (running) {
             bool space = IsDown(0x20);
             bool enter = IsDown(0x0D);
             bool esc = IsDown(0x1B);
+            bool ralt = IsDown(0xA5);
             if (space && !lastSpace) {
                 try { KeyPressed(0x20); } catch { }
             }
             if (enter && !lastEnter) { try { KeyPressed(0x0D); } catch { } }
             if (esc && !lastEsc) { try { KeyPressed(0x1B); } catch { } }
+            if (ralt && !lastRAlt) { try { KeyPressed(0xA5); } catch { } }
             lastSpace = space;
             lastEnter = enter;
             lastEsc = esc;
+            lastRAlt = ralt;
             Thread.Sleep(20);
         }
     }
@@ -152,6 +155,7 @@ $action = [Action[int]]{
     if ($vk -eq 0x20) { [Console]::Out.WriteLine('EVENT|SPACE') }
     elseif ($vk -eq 0x0D) { [Console]::Out.WriteLine('EVENT|ENTER') }
     elseif ($vk -eq 0x1B) { [Console]::Out.WriteLine('EVENT|ESC') }
+    elseif ($vk -eq 0xA5) { [Console]::Out.WriteLine('EVENT|RALT') }
     [Console]::Out.Flush()
 }
 [KbHook]::add_KeyPressed($action)
