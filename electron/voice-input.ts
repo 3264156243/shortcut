@@ -46,6 +46,47 @@ function bridgeScriptPath(): string {
     : path.join(__dirname, '..', 'scripts', 'voice-input-bridge.ps1');
 }
 
+// ===== 调用统计：按天记录打开次数与转写字数 =====
+type DayStat = { calls: number; chars: number };
+type StatMap = Record<string, DayStat>;
+
+function todayKey(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function readVoiceStats(): StatMap {
+  const cfg = voiceConfig();
+  const s = cfg.stats;
+  return s && typeof s === 'object' ? s : {};
+}
+
+function recordVoiceStat(kind: 'call' | 'chars', amount = 0) {
+  try {
+    const key = todayKey();
+    const stats = readVoiceStats();
+    const day: DayStat = { calls: stats[key]?.calls || 0, chars: stats[key]?.chars || 0 };
+    if (kind === 'call') day.calls += 1;
+    else if (amount > 0) day.chars += amount;
+    stats[key] = day;
+    writeVoiceConfig({ stats });
+  } catch {}
+}
+
+function getVoiceStats() {
+  const stats = readVoiceStats();
+  const key = todayKey();
+  const today: DayStat = { calls: stats[key]?.calls || 0, chars: stats[key]?.chars || 0 };
+  let calls = 0;
+  let chars = 0;
+  for (const k of Object.keys(stats)) {
+    calls += stats[k]?.calls || 0;
+    chars += stats[k]?.chars || 0;
+  }
+  return { today, total: { calls, chars } };
+}
+
 let voiceWindow: BrowserWindow | null = null;
 let bridgeProcess: ChildProcess | null = null;
 let rawStream: any = null;
@@ -459,6 +500,7 @@ function confirmAndType() {
     }
     if (out && out.trim()) {
       bridgeWrite(`T|${Buffer.from(out.trim(), 'utf8').toString('base64')}`);
+      recordVoiceStat('chars', out.trim().length);
     }
     if (voiceWindow && !voiceWindow.isDestroyed()) voiceWindow.close();
   })();
@@ -527,6 +569,8 @@ function openVoiceWindow() {
       voiceWindow.webContents.send('voice:getConfig', cfg);
     }
   });
+  // 统计一次调用（每次真正新建并展示胶囊）
+  recordVoiceStat('call');
   voiceWindow.on('moved', () => {
     if (!voiceWindow || voiceWindow.isDestroyed()) return;
     const [wx, wy] = voiceWindow.getPosition();
@@ -572,6 +616,7 @@ function unregisterShortcut() {
 export function initVoiceInput() {
   registerShortcut();
   ipcMain.handle('voice:open', () => { openVoiceWindow(); return true; });
+  ipcMain.handle('voice:stats', () => getVoiceStats());
   ipcMain.handle('voice:getConfig', () => {
     registerShortcut();
     return voiceConfig();

@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 语音输入
   voiceGetConfig: () => ipcRenderer.invoke('voice:getConfig'),
   voiceOpen: () => ipcRenderer.invoke('voice:open'),
+  voiceGetStats: () => ipcRenderer.invoke('voice:stats'),
   voiceStart: () => ipcRenderer.invoke('voice:start'),
   voiceAudio: (chunk: ArrayBuffer) => ipcRenderer.send('voice:audio', chunk),
   voiceConfirm: () => ipcRenderer.invoke('voice:confirm'),

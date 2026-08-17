@@ -152,6 +152,7 @@ declare global {
       onLicenseChanged: (callback: (data: unknown) => void) => () => void;
       voiceGetConfig: () => Promise<unknown>;
       voiceOpen: () => Promise<unknown>;
+      voiceGetStats: () => Promise<unknown>;
       voiceStart: () => Promise<unknown>;
       voiceAudio: (chunk: ArrayBuffer) => void;
       voiceConfirm: () => Promise<unknown>;

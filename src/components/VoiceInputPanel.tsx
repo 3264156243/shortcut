@@ -1,14 +1,25 @@
 import { useEffect, useState } from 'react';
-import { CheckCircle2, Mic, Save } from 'lucide-react';
+import { CheckCircle2, FileText, Mic, PhoneCall, Save } from 'lucide-react';
 import { useStore } from '../store';
 import type { VoiceInputConfig } from '../types';
+
+interface VoiceStats {
+  today: { calls: number; chars: number };
+  total: { calls: number; chars: number };
+}
 
 export default function VoiceInputPanel() {
   const config = useStore((s) => s.config);
   const [form, setForm] = useState<VoiceInputConfig>({});
   const [savedTick, setSavedTick] = useState(0);
+  const [stats, setStats] = useState<VoiceStats | null>(null);
+
+  const refreshStats = () => {
+    void window.electronAPI?.voiceGetStats?.().then((r) => setStats(r as VoiceStats)).catch(() => {});
+  };
 
   useEffect(() => {
+    refreshStats();
     setForm({
       enabled: config.voiceInput?.enabled !== false,
       apiKey: config.voiceInput?.apiKey || '',
@@ -16,6 +27,7 @@ export default function VoiceInputPanel() {
       polishMode: config.voiceInput?.polishMode || 'llm',
       polishProvider: { ...(config.voiceInput?.polishProvider || {}) },
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.voiceInput]);
 
   const save = () => {
@@ -48,6 +60,30 @@ export default function VoiceInputPanel() {
       </div>
 
       <div style={cardStyle}>
+        <h3 className="mb-2 text-sm font-medium" style={{ color: 'var(--color-text)' }}>使用统计</h3>
+        <div className="grid grid-cols-2 gap-2.5">
+          <div className="rounded-xl px-3 py-2.5" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)' }}>
+            <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+              <PhoneCall size={11} /> 调用次数
+            </div>
+            <div className="mt-1 text-xl font-semibold" style={{ color: 'var(--color-text)' }}>
+              {stats ? stats.today.calls : '—'}
+            </div>
+            <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>今日 · 累计 {stats ? stats.total.calls : '—'} 次</div>
+          </div>
+          <div className="rounded-xl px-3 py-2.5" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)' }}>
+            <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+              <FileText size={11} /> 转写字数
+            </div>
+            <div className="mt-1 text-xl font-semibold" style={{ color: 'var(--color-text)' }}>
+              {stats ? stats.today.chars : '—'}
+            </div>
+            <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>今日 · 累计 {stats ? stats.total.chars : '—'} 字</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={cardStyle}>
         <h3 className="mb-1 text-sm font-medium" style={{ color: 'var(--color-text)' }}>使用说明</h3>
         <p className="mt-1 text-xs leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
           按 <b>Alt+H</b> 弹出胶囊麦克风，说话时识别文字<strong>暂存进胶囊</strong>（不再实时写入光标，说多少句都不会断）。<br />
@@ -58,7 +94,10 @@ export default function VoiceInputPanel() {
         </p>
         <button
           type="button"
-          onClick={() => void window.electronAPI?.voiceOpen?.()}
+          onClick={() => {
+            void window.electronAPI?.voiceOpen?.();
+            setTimeout(refreshStats, 500);
+          }}
           className="mt-3 flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition-opacity hover:opacity-85"
           style={{ background: 'var(--color-accent)', color: 'white' }}
         >
