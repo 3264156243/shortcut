@@ -13,81 +13,36 @@ html, body, #root { margin: 0; padding: 0; width: 100%; height: 100%; overflow: 
   --cap-danger: #f87171;
 }
 
-/* 弹窗容器：居中，形态在球↔胶囊间平滑过渡 */
 #root {
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
+/* 胶囊容器：常驻胶囊形态，可拖拽移动（无边框窗口） */
 .capsule-root {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
+  height: 100%;
   background: linear-gradient(135deg, var(--cap-bg-a), var(--cap-bg-b));
   border: 1px solid var(--cap-border);
+  border-radius: 18px;
+  padding: 6px 8px;
   box-shadow:
     0 12px 36px rgba(0, 0, 0, .55),
     inset 0 1px 0 rgba(255, 255, 255, .08);
   backdrop-filter: blur(20px) saturate(1.3);
   -webkit-backdrop-filter: blur(20px) saturate(1.3);
   overflow: hidden;
-  /* 可拖拽移动（窗口无边框） */
   -webkit-app-region: drag;
-  /* 形态平滑过渡：宽度、高度、圆角、内边距、透明度 */
-  transition:
-    width .42s cubic-bezier(.22, 1, .36, 1),
-    height .42s cubic-bezier(.22, 1, .36, 1),
-    border-radius .42s cubic-bezier(.22, 1, .36, 1),
-    padding .42s cubic-bezier(.22, 1, .36, 1),
-    opacity .42s ease;
+  animation: capsuleIn .3s cubic-bezier(.22, 1, .36, 1) both;
 }
 
-/* 入场：球形态（初始） */
-.capsule-root.ball {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  padding: 6px;
-  justify-content: center;
-  animation: ballIn .3s cubic-bezier(.22, 1, .36, 1) both;
-}
-@keyframes ballIn {
-  from { opacity: 0; transform: scale(.7); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-/* 展开：胶囊（识别到文字） */
-.capsule-root.expanded {
-  width: 100%;
-  height: 52px;
-  border-radius: 18px;
-  padding: 6px 8px;
-}
-
-/* 整理中：略微缩起 */
-.capsule-root.processing {
-  width: 190px;
-  height: 52px;
-  border-radius: 18px;
-  padding: 6px 10px;
-  justify-content: center;
-}
-
-/* 完成：缩回球（关闭前） */
-.capsule-root.closing {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  padding: 6px;
-  justify-content: center;
-  opacity: .92;
-  transition:
-    width .48s cubic-bezier(.5, 0, .75, .4),
-    height .48s cubic-bezier(.5, 0, .75, .4),
-    border-radius .48s cubic-bezier(.5, 0, .75, .4),
-    padding .48s cubic-bezier(.5, 0, .75, .4),
-    opacity .48s ease;
+@keyframes capsuleIn {
+  from { opacity: 0; transform: translateY(8px) scale(.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 /* 顶部渐变高光 */
@@ -147,17 +102,6 @@ html, body, #root { margin: 0; padding: 0; width: 100%; height: 100%; overflow: 
   transition: border-color .25s ease, background .25s ease;
 }
 .capsule-text-wrap:hover { border-color: rgba(255, 255, 255, .16); }
-
-/* 球形态：中间只显示麦克风 */
-.capsule-root.ball .capsule-text-wrap {
-  flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  justify-content: center;
-  background: transparent;
-  border: none;
-}
 
 /* 状态圆点：呼吸动画 */
 .capsule-state {

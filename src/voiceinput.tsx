@@ -26,21 +26,11 @@ function stopCapture() {
   mediaStream = null;
 }
 
-type Shape = 'ball' | 'expanded' | 'processing' | 'closing';
-
 function VoiceCapsule() {
   const [status, setStatus] = useState<'idle' | 'listening' | 'paused' | 'processing' | 'error'>('idle');
   const [message, setMessage] = useState('');
   const [session, setSession] = useState('');
-  const [shape, setShape] = useState<Shape>('ball');
   const startingRef = useRef(false);
-  const shapeRef = useRef<Shape>('ball');
-
-  // 形状状态机：球 → 说话展开 → 整理中缩起 → 完成缩成球
-  const applyShape = (s: Shape) => {
-    shapeRef.current = s;
-    setShape(s);
-  };
 
   const start = async () => {
     if (startingRef.current) return;
@@ -103,10 +93,6 @@ function VoiceCapsule() {
   useEffect(() => {
     const unSession = window.electronAPI?.onVoiceSession?.((text) => {
       setSession(text);
-      // 识别到文字 → 平滑展开为胶囊
-      if (text && shapeRef.current !== 'processing' && shapeRef.current !== 'closing') {
-        applyShape('expanded');
-      }
     });
     const unPolishError = window.electronAPI?.onVoicePolishError?.((text) => {
       setStatus('error');
@@ -116,7 +102,6 @@ function VoiceCapsule() {
       if (s?.state === 'error') {
         setStatus('error');
         setMessage(s?.message || '识别失败');
-        applyShape('expanded');
       } else if (s?.state === 'listening') {
         setStatus('listening');
         setMessage('');
@@ -126,16 +111,31 @@ function VoiceCapsule() {
       } else if (s?.state === 'processing') {
         setStatus('processing');
         setMessage(s?.message || '整理中…');
-        applyShape('processing');
       } else if (s?.state === 'done') {
-        // 完成：先缩成球再关闭（主进程延迟 close）
         setStatus('listening');
-        applyShape('closing');
-        setTimeout(() => applyShape('ball'), 480);
+        setMessage('');
       }
     });
+    // 胶囊获得焦点时的按键直达：空格=暂停/继续，回车=确认，ESC=取消
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === ' ') {
+        e.preventDefault();
+        e.stopPropagation();
+        void window.electronAPI?.voiceToggle?.();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        void window.electronAPI?.voiceConfirm?.();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        void window.electronAPI?.voiceCancel?.();
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
     void start();
     return () => {
+      window.removeEventListener('keydown', onKey, true);
       unSession?.();
       unPolishError?.();
       unStatus?.();
@@ -156,21 +156,16 @@ function VoiceCapsule() {
   const paused = status === 'paused';
   const hasText = session.length > 0;
 
-  // 球形态：只显示麦克风；展开后显示按钮与文字
-  const isBall = shape === 'ball' || shape === 'closing';
-
   return (
-    <div className={'capsule-root ' + shape}>
-      {!isBall && (
-        <button type="button" className="capsule-btn" onClick={cancel} title="取消，不输入（ESC）" disabled={processing}>
-          <X size={14} />
-        </button>
-      )}
+    <div className="capsule-root">
+      <button type="button" className="capsule-btn" onClick={cancel} title="取消，不输入（ESC）" disabled={processing}>
+        <X size={14} />
+      </button>
 
       <div className="capsule-text-wrap">
         {status === 'error' ? (
           <span className="capsule-text error" title={message}>{message}</span>
-        ) : shape === 'processing' || processing ? (
+        ) : processing ? (
           <span className="capsule-text processing">
             <Loader2 size={12} className="spin" /> 整理中…
           </span>
@@ -180,23 +175,21 @@ function VoiceCapsule() {
               {paused ? <Pause size={10} /> : <Mic size={10} />}
             </span>
             <span className="capsule-text" title={session || ''}>
-              {session || (status === 'idle' ? '正在启动…' : '聆听中…')}
+              {session || (status === 'idle' ? '正在启动…' : listening ? '聆听中…' : '—')}
             </span>
           </>
         )}
       </div>
 
-      {!isBall && (
-        <button
-          type="button"
-          className={'capsule-btn confirm' + (hasText && !processing ? ' armed' : '')}
-          onClick={confirm}
-          title="整理结构并输入到光标处（回车）"
-          disabled={processing || !hasText}
-        >
-          {processing ? <Loader2 size={14} className="spin" /> : <Check size={14} />}
-        </button>
-      )}
+      <button
+        type="button"
+        className={'capsule-btn confirm' + (hasText && !processing ? ' armed' : '')}
+        onClick={confirm}
+        title="整理结构并输入到光标处（回车）"
+        disabled={processing || !hasText}
+      >
+        {processing ? <Loader2 size={14} className="spin" /> : <Check size={14} />}
+      </button>
     </div>
   );
 }

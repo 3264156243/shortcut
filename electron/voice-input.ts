@@ -460,11 +460,7 @@ function confirmAndType() {
     if (out && out.trim()) {
       bridgeWrite(`T|${Buffer.from(out.trim(), 'utf8').toString('base64')}`);
     }
-    // 通知渲染层播放“缩成球”动画，动画结束后再关闭
-    sendToWindow('voice:status', { state: 'done', message: '已输入' });
-    setTimeout(() => {
-      if (voiceWindow && !voiceWindow.isDestroyed()) voiceWindow.close();
-    }, 520);
+    if (voiceWindow && !voiceWindow.isDestroyed()) voiceWindow.close();
   })();
 }
 
