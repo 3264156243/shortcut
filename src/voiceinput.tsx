@@ -31,7 +31,6 @@ function VoicePanel() {
   const [message, setMessage] = useState('');
   const [polish, setPolish] = useState('');
   const [polishError, setPolishError] = useState('');
-  const [raw, setRaw] = useState('');
   const startingRef = useRef(false);
   const polishRef = useRef('');
 
@@ -102,7 +101,6 @@ function VoicePanel() {
     const unPolishError = window.electronAPI?.onVoicePolishError?.((text) => {
       setPolishError(text);
     });
-    const unRaw = window.electronAPI?.onVoiceRaw?.((text) => setRaw(text));
     const unStatus = window.electronAPI?.onVoiceStatus?.((s: any) => {
       if (s?.state === 'error') {
         setStatus('error');
@@ -122,7 +120,6 @@ function VoicePanel() {
     return () => {
       unPolish?.();
       unPolishError?.();
-      unRaw?.();
       unStatus?.();
       stopCapture();
     };
@@ -159,16 +156,13 @@ function VoicePanel() {
           <div className="voice-loading"><Loader2 size={16} className="spin" /> 正在启动…</div>
         ) : (
           <>
-            <div className="voice-row voice-raw">
-              <span className="voice-label">{listening ? '原文' : (paused ? '原文（已暂停）' : '原文')}</span>
-              <span className="voice-text">{raw || (listening ? '正在聆听…' : '已结束')}</span>
-            </div>
             <div className="voice-row voice-polish">
-              <span className="voice-label">润色</span>
+              <span className="voice-label">润色（采纳后替换光标处原文）</span>
               <span className="voice-text polish">
                 {polish || (polishError ? polishError : listening ? '等待润色结果…' : paused ? '（暂停）' : '—')}
               </span>
             </div>
+            {message && <div className="voice-error" style={{ color: 'var(--voice-muted)' }}>{message}</div>}
           </>
         )}
       </div>

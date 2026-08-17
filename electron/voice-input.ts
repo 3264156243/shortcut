@@ -1,7 +1,8 @@
 // 语音输入模块：Alt+H 全局语音输入
-// 识别：阿里云百炼 qwen-audio-3.0-asr-flash-streaming 流式 WebSocket
-// 润色：可插拔 OpenAI 兼容 LLM（流式 SSE），场景预设/自定义提示词；兼容旧 ASR prompt 润色模式
-// 控制：空格=暂停/继续识别（识别暂停期间不产生费用），回车=确认并关闭，采纳按钮=润色覆盖
+// 识别：阿里云百炼 qwen-audio-3.0-asr-flash-streaming 流式 WebSocket（单流，计费最小）
+// 输入：SendInput Unicode 增量追加（与 Win 语音识别一致，不碰剪贴板）
+// 控制：空格=暂停/继续，回车=确认识别并关闭；启动前检测焦点是否在可输入控件
+// 润色：可插拔 OpenAI 兼容 LLM（enable_thinking:false 关闭思考，流式 SSE）
 import { BrowserWindow, app, ipcMain, globalShortcut, screen } from 'electron';
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
@@ -11,21 +12,25 @@ import * as fs from 'fs';
 const WebSocketClient = require('ws');
 
 const ASR_MODEL = 'qwen-audio-3.0-asr-flash-streaming';
+const SENTENCE_GAP_MS = 1200; // 停顿超过该时长才把当前句定稿
 
-const POLISH_SCENARIOS: Record<string, { label: string; prompt: string }> = {
+const POLISH_SCENARIOS: Record<string, { label: string; desc: string; prompt: string }> = {
   general: {
     label: '通用提示词优化',
-    prompt: '你是提示词优化专家。请把用户口语化的语音输入润色成结构清晰、逻辑严谨、信息完整、可直接交给 AI 执行的高质量提示词：修正口语化表达、补全标点、分点归纳、去掉重复与口头禅；不改变原意，不添加原文没有的信息。直接输出润色后的提示词文本，不要任何解释。',
+    desc: '重点：修正口语、补全标点、分点归纳、去重去口头禅，输出可直接交给 AI 的高质量提示词',
+    prompt: '你是提示词优化专家。请把用户口语化的语音输入润色成结构清晰、逻辑严谨、信息完整、可直接交给 AI 执行的高质量提示词：修正口语化表达、补全标点、分点归纳、去掉重复与口头禅；不改变原意，不添加原文没有的信息。你输出的是提示词文字本身，不要执行需求、不要生成需求对应的产物。直接输出润色后的提示词文本，不要任何解释。',
   },
   code: {
     label: '代码开发需求',
-    prompt: '你是资深软件开发助手。请把用户口语化的开发需求整理成可直接编码实现的需求描述：明确目标、输入输出、边界条件、技术约束，可列出要点；不改变原意，不添加原文没有的需求。直接输出整理后的需求文本，不要任何解释。',
+    desc: '重点：整理为可编码实现的需求——目标、输入输出、边界条件、技术约束，分点列出',
+    prompt: '你是资深软件开发助手。请把用户口语化的开发需求整理成可直接编码实现的需求描述：明确目标、输入输出、边界条件、技术约束，分点列出；不改变原意，不添加原文没有的需求。你输出的是提示词文字本身，不要写代码、不要生成需求对应的实现。直接输出整理后的需求文本，不要任何解释。',
   },
   writing: {
     label: '写作润色',
+    desc: '重点：口语转通顺连贯的书面文字，适当分段，保持原意与风格',
     prompt: '你是中文写作助手。请把口语化内容润色成通顺、连贯、有文采的书面文字，保持原意，适当分段。直接输出润色后的文字，不要任何解释。',
   },
-  custom: { label: '自定义提示词', prompt: '' },
+  custom: { label: '自定义提示词', desc: '使用你自己填写的 system 提示词', prompt: '' },
 };
 
 function configPath(): string {
@@ -64,17 +69,15 @@ function bridgeScriptPath(): string {
 let voiceWindow: BrowserWindow | null = null;
 let bridgeProcess: ChildProcess | null = null;
 let rawStream: any = null;
-let polishStream: any = null;
 let sessionRunning = false;
-let listening = false; // 是否正在向识别服务发送音频（false=暂停，不产生费用）
+let listening = false;
 let polishText = '';
-let pendingCommit = false;
-let segmentText = '';
-let segmentTimer: ReturnType<typeof setTimeout> | null = null;
-let pendingLen = 0; // 当前段已注入字符数（可被替换）
-let committedChars = 0; // 已定稿段注入字符数
-let sessionText = ''; // 本次会话累计文本（供润色）
+let currentPartial = ''; // 当前句已输入到光标处的文本
+let committedText = ''; // 已定稿句子文本
+let sessionText = ''; // 累计文本（供润色）
 let polishSeq = 0;
+let focusOk = false;
+let pendingBridgeResolve: ((line: string) => void) | null = null;
 
 function sendToWindow(channel: string, payload: unknown) {
   if (voiceWindow && !voiceWindow.isDestroyed()) {
@@ -111,6 +114,16 @@ function ensureBridge() {
           const l = line.trim();
           if (l === 'EVENT|SPACE') togglePause();
           else if (l === 'EVENT|ENTER') confirmAndClose();
+          else if (l === 'READY|HOOK') sendToWindow('voice:status', { state: 'ready', message: '按键控制已就绪（空格=暂停，回车=确认）' });
+          else if (l.startsWith('FOCUS|')) {
+            const parts = l.split('|');
+            focusOk = parts[1] === '1';
+            if (pendingBridgeResolve) {
+              const r = pendingBridgeResolve;
+              pendingBridgeResolve = null;
+              r(l);
+            }
+          }
         }
       });
     }
@@ -119,6 +132,19 @@ function ensureBridge() {
   } catch {
     bridgeProcess = null;
   }
+}
+
+function queryFocus(): Promise<boolean> {
+  ensureBridge();
+  if (!bridgeProcess) return Promise.resolve(true); // 桥不可用时放行
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => { pendingBridgeResolve = null; resolve(focusOk); }, 1200);
+    pendingBridgeResolve = (line: string) => {
+      clearTimeout(timer);
+      resolve(line.startsWith('FOCUS|1'));
+    };
+    bridgeWrite('F');
+  });
 }
 
 function resolveWebSocketUrl(workspaceValue: string): string {
@@ -144,16 +170,16 @@ function resolveWebSocketUrl(workspaceValue: string): string {
   return `wss://${workspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference`;
 }
 
-function createAsrStream(kind: 'raw' | 'polish', apiKey: string, workspaceId: string): any {
+function createAsrStream(apiKey: string, workspaceId: string): any {
   let url = '';
   try {
     url = resolveWebSocketUrl(workspaceId);
   } catch (err: any) {
     sendToWindow('voice:status', { state: 'error', message: err?.message || String(err) });
-    return { ws: null, taskId: '', kind, connected: false };
+    return { ws: null, taskId: '', connected: false };
   }
   const taskId = require('crypto').randomBytes(16).toString('hex');
-  const stream: any = { ws: null, taskId, kind, connected: false };
+  const stream: any = { ws: null, taskId, connected: false };
   let ws: any;
   try {
     ws = new WebSocketClient(url, { headers: { Authorization: `bearer ${apiKey}` } });
@@ -164,14 +190,6 @@ function createAsrStream(kind: 'raw' | 'polish', apiKey: string, workspaceId: st
   stream.ws = ws;
   ws.on('open', () => {
     stream.connected = true;
-    const input: any = {};
-    if (kind === 'polish') {
-      input.raw_input = {
-        context: [
-          { role: 'user', content: [{ type: 'input_text', text: POLISH_SCENARIOS.general.prompt }] },
-        ],
-      };
-    }
     const runTask = {
       header: { action: 'run-task', task_id: taskId, streaming: 'duplex' },
       payload: {
@@ -180,7 +198,7 @@ function createAsrStream(kind: 'raw' | 'polish', apiKey: string, workspaceId: st
         function: 'recognition',
         model: ASR_MODEL,
         parameters: { sample_rate: 16000, format: 'wav' },
-        input,
+        input: {},
       },
     };
     try { ws.send(JSON.stringify(runTask)); } catch {}
@@ -190,21 +208,14 @@ function createAsrStream(kind: 'raw' | 'polish', apiKey: string, workspaceId: st
     try { msg = JSON.parse(data.toString()); } catch { return; }
     const event = msg?.header?.event;
     if (event === 'task-started') {
-      if (kind === 'raw') {
-        sendToWindow('voice:status', { state: 'listening', message: '识别中…' });
-      }
+      sendToWindow('voice:status', { state: 'listening', message: '识别中…' });
       return;
     }
     if (event === 'result-generated') {
       const sentence = msg?.payload?.output?.sentence;
       if (!sentence || typeof sentence.text !== 'string') return;
       const isPartial = sentence.end_time == null;
-      if (kind === 'raw') {
-        applyRawResult(sentence.text, isPartial);
-      } else {
-        polishText = sentence.text;
-        sendToWindow('voice:polish', polishText);
-      }
+      applyRawResult(sentence.text, isPartial);
       return;
     }
     if (event === 'task-failed') {
@@ -218,64 +229,44 @@ function createAsrStream(kind: 'raw' | 'polish', apiKey: string, workspaceId: st
   ws.on('error', (err: Error) => {
     sendToWindow('voice:status', { state: 'error', message: `连接错误: ${err?.message || err}` });
   });
-  ws.on('close', () => {
-    stream.connected = false;
-  });
+  ws.on('close', () => { stream.connected = false; });
   return stream;
 }
 
-// ===== 断句组装：sentenceGapMs 可调，避免停顿即断句 =====
-function clearSegmentTimer() {
-  if (segmentTimer) {
-    clearTimeout(segmentTimer);
-    segmentTimer = null;
+// ===== 增量追加式注入：说了什么就往光标处追加什么 =====
+function injectDelta(delta: string) {
+  if (delta && delta.length > 0) {
+    bridgeWrite(`T|${Buffer.from(delta, 'utf8').toString('base64')}`);
   }
 }
 
-function injectReplace(text: string) {
-  if (pendingLen > 0) bridgeWrite(`B|${pendingLen}`);
-  if (text.length > 0) bridgeWrite(`T|${Buffer.from(text, 'utf8').toString('base64')}`);
-  pendingLen = text.length;
-}
-
-function commitSegment() {
-  clearSegmentTimer();
-  if (pendingCommit) {
-    pendingCommit = false;
-    committedChars += segmentText.length;
-    sessionText += segmentText;
-    segmentText = '';
-    pendingLen = 0;
-    triggerPolish();
+function updatePartial(newText: string) {
+  if (newText.startsWith(currentPartial)) {
+    // 正常增长：只追加增量
+    const delta = newText.slice(currentPartial.length);
+    injectDelta(delta);
+    currentPartial = newText;
+  } else {
+    // 识别修正：删当前句，重新输入
+    if (currentPartial.length > 0) bridgeWrite(`B|${currentPartial.length}`);
+    injectDelta(newText);
+    currentPartial = newText;
   }
 }
 
 function applyRawResult(text: string, isPartial: boolean) {
   if (!sessionRunning) return;
-  if (isPartial) {
-    if (pendingCommit) {
-      // 上一句还没到阈值又有新内容：先定稿上一句，再开始新段
-      pendingCommit = false;
-      committedChars += segmentText.length;
-      sessionText += segmentText;
-      segmentText = '';
-      clearSegmentTimer();
-    }
-    segmentText = text;
-    injectReplace(text);
-    sendToWindow('voice:raw', text);
-  } else {
-    pendingCommit = true;
-    segmentText = text;
-    injectReplace(text);
-    sendToWindow('voice:raw', text);
-    clearSegmentTimer();
-    const gap = Math.max(100, Number(voiceConfig().sentenceGapMs) || 1000);
-    segmentTimer = setTimeout(() => commitSegment(), gap);
+  updatePartial(text);
+  if (!isPartial) {
+    // 句子结束：定稿并入累计，当前句清空
+    committedText += text;
+    currentPartial = '';
+    sessionText = committedText;
+    triggerPolish();
   }
 }
 
-// ===== LLM 润色（OpenAI 兼容，流式 SSE）=====
+// ===== LLM 润色（OpenAI 兼容，流式 SSE，关闭思考）=====
 function scenarioPrompt(): string {
   const cfg = voiceConfig();
   const scenario = cfg.polishScenario || 'general';
@@ -304,6 +295,7 @@ async function polishWithLlm(text: string) {
       body: JSON.stringify({
         model,
         stream: true,
+        enable_thinking: false,
         messages: [
           { role: 'system', content: scenarioPrompt() },
           { role: 'user', content: text },
@@ -354,9 +346,7 @@ async function polishWithLlm(text: string) {
 
 function triggerPolish() {
   const cfg = voiceConfig();
-  const mode = cfg.polishMode || 'llm';
-  if (mode === 'off') return;
-  if (mode === 'asr') return; // 旧模式由第二条 ASR 流输出
+  if ((cfg.polishMode || 'llm') === 'off') return;
   const text = sessionText.trim();
   if (!text) return;
   polishSeq++;
@@ -366,31 +356,24 @@ function triggerPolish() {
 }
 
 // ===== 会话控制 =====
-function closeStreams() {
-  for (const stream of [rawStream, polishStream]) {
-    if (stream?.ws && stream.connected) {
-      try {
-        stream.ws.send(JSON.stringify({ header: { action: 'finish-task', task_id: stream.taskId }, payload: { input: {} } }));
-      } catch {}
-      try { stream.ws.close(); } catch {}
-    }
+function closeStream() {
+  if (rawStream?.ws && rawStream.connected) {
+    try {
+      rawStream.ws.send(JSON.stringify({ header: { action: 'finish-task', task_id: rawStream.taskId }, payload: { input: {} } }));
+    } catch {}
+    try { rawStream.ws.close(); } catch {}
   }
   rawStream = null;
-  polishStream = null;
 }
 
 function endSession() {
   if (!sessionRunning) return;
   sessionRunning = false;
   listening = false;
-  pendingCommit = false;
-  clearSegmentTimer();
-  closeStreams();
-  bridgeWrite('D'); // 卸载键盘钩子
-  bridgeWrite('R'); // 恢复剪贴板
-  committedChars = 0;
-  pendingLen = 0;
-  segmentText = '';
+  closeStream();
+  bridgeWrite('D');
+  committedText = '';
+  currentPartial = '';
   sessionText = '';
   polishText = '';
   sendToWindow('voice:status', { state: 'stopped', message: '已结束' });
@@ -400,7 +383,7 @@ function togglePause() {
   if (!sessionRunning) return;
   if (listening) {
     listening = false;
-    sendToWindow('voice:status', { state: 'paused', message: '已暂停（不产生识别费用），空格继续' });
+    sendToWindow('voice:status', { state: 'paused', message: '已暂停（空格继续）' });
   } else {
     listening = true;
     sendToWindow('voice:status', { state: 'listening', message: '识别中…' });
@@ -424,7 +407,7 @@ function openVoiceWindow() {
   const display = screen.getPrimaryDisplay();
   const area = display.workArea;
   const width = 360;
-  const height = 250;
+  const height = 210;
   const saved = cfg.windowPos;
   let x = Math.round(area.x + (area.width - width) / 2);
   let y = Math.round(area.y + area.height - height - 12);
@@ -442,7 +425,7 @@ function openVoiceWindow() {
     alwaysOnTop: true,
     skipTaskbar: true,
     hasShadow: false,
-    focusable: false, // 不抢焦点，文字注入到当前输入框
+    focusable: false,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -499,43 +482,39 @@ function unregisterShortcut() {
 
 export function initVoiceInput() {
   registerShortcut();
-  ipcMain.handle('voice:open', () => {
-    openVoiceWindow();
-    return true;
-  });
+  ipcMain.handle('voice:open', () => { openVoiceWindow(); return true; });
   ipcMain.handle('voice:getConfig', () => {
     registerShortcut();
     return voiceConfig();
   });
-  ipcMain.handle('voice:start', () => {
+  ipcMain.handle('voice:start', async () => {
     const cfg = voiceConfig();
     if (!cfg.apiKey || !cfg.workspaceId) {
       sendToWindow('voice:status', { state: 'error', message: '请在语音板块填写 百炼 API Key 与 Workspace ID' });
       return { success: false, message: '未配置 API Key / Workspace ID' };
     }
+    // 焦点检测：光标不在可输入控件时不启动
     ensureBridge();
+    const ok = await queryFocus();
+    if (!ok) {
+      sendToWindow('voice:status', { state: 'error', message: '请先把光标放到要输入的输入框内，再开始语音输入' });
+      return { success: false, message: '焦点不在输入框' };
+    }
     sessionRunning = true;
     listening = true;
     polishText = '';
     polishSeq = 0;
-    pendingCommit = false;
-    segmentText = '';
-    pendingLen = 0;
-    committedChars = 0;
+    currentPartial = '';
+    committedText = '';
     sessionText = '';
-    rawStream = createAsrStream('raw', cfg.apiKey, cfg.workspaceId);
-    const mode = cfg.polishMode || 'llm';
-    polishStream = mode === 'asr' ? createAsrStream('polish', cfg.apiKey, cfg.workspaceId) : null;
-    bridgeWrite('A'); // 安装键盘钩子：空格=暂停/继续，回车=确认并关闭
+    rawStream = createAsrStream(cfg.apiKey, cfg.workspaceId);
+    bridgeWrite('A');
     return { success: true };
   });
   ipcMain.on('voice:audio', (_e, chunk) => {
     if (!listening) return;
-    const streams = rawStream ? [rawStream, polishStream].filter(Boolean) : [];
-    for (const stream of streams) {
-      if (stream?.ws && stream.connected) {
-        try { stream.ws.send(Buffer.from(chunk)); } catch {}
-      }
+    if (rawStream?.ws && rawStream.connected) {
+      try { rawStream.ws.send(Buffer.from(chunk)); } catch {}
     }
   });
   ipcMain.handle('voice:stop', () => {
@@ -549,13 +528,13 @@ export function initVoiceInput() {
   });
   ipcMain.handle('voice:adopt', () => {
     if (!sessionRunning) return { success: false };
-    const total = committedChars + pendingLen;
+    const total = committedText.length + currentPartial.length;
     if (total > 0) bridgeWrite(`B|${total}`);
     if (polishText && polishText.length > 0) {
       bridgeWrite(`T|${Buffer.from(polishText, 'utf8').toString('base64')}`);
     }
-    committedChars = 0;
-    pendingLen = 0;
+    committedText = '';
+    currentPartial = '';
     return { success: true, text: polishText };
   });
   app.on('will-quit', () => {

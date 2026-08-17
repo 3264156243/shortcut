@@ -279,11 +279,10 @@ export interface VoiceInputConfig {
   enabled?: boolean;
   apiKey?: string;
   workspaceId?: string;
-  polishMode?: 'llm' | 'asr' | 'off';
+  polishMode?: 'llm' | 'off';
   polishProvider?: VoiceInputPolishProvider;
   polishScenario?: 'general' | 'code' | 'writing' | 'custom';
   polishCustomPrompt?: string;
-  sentenceGapMs?: number;
   windowPos?: { x: number; y: number } | null;
 }
 
@@ -374,6 +373,6 @@ export const DEFAULT_CONFIG: AppConfig = {
   },
   voiceInput: {
     enabled: true,
-    polishMode: 'asr',
+    polishMode: 'llm',
   },
 };
