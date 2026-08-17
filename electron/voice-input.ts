@@ -1,4 +1,4 @@
-﻿// 语音输入模块：Alt+H 全局语音输入（阿里云百炼 qwen-audio-3.0-asr-flash-streaming 流式识别 + prompt 润色）
+// 语音输入模块：Alt+H 全局语音输入（阿里云百炼 qwen-audio-3.0-asr-flash-streaming 流式识别 + prompt 润色）
 import { BrowserWindow, app, ipcMain, globalShortcut, screen } from 'electron';
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
@@ -87,7 +87,7 @@ function resolveWebSocketUrl(workspaceValue: string): string {
       throw new Error('WebSocket 地址不是百炼北京区工作区专属地址');
     }
     parsed.protocol = 'wss:';
-    parsed.pathname = '/api-ws/v1/inference/';
+    parsed.pathname = '/api-ws/v1/inference';
     return parsed.toString();
   }
   const matched = value.match(/llm-[a-z0-9]+/i);
@@ -95,7 +95,7 @@ function resolveWebSocketUrl(workspaceValue: string): string {
   if (!/^llm-[a-z0-9]+$/i.test(workspaceId)) {
     throw new Error('Workspace ID 格式错误，应类似 llm-xxxxxxxx');
   }
-  return `wss://${workspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference/`;
+  return `wss://${workspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference`;
 }
 
 function createAsrStream(kind: 'raw' | 'polish', apiKey: string, workspaceId: string): any {
@@ -133,7 +133,7 @@ function createAsrStream(kind: 'raw' | 'polish', apiKey: string, workspaceId: st
         task: 'asr',
         function: 'recognition',
         model: ASR_MODEL,
-        parameters: { sample_rate: 16000, format: 'pcm' },
+        parameters: { sample_rate: 16000, format: 'wav' },
         input,
       },
     };
@@ -199,7 +199,7 @@ function closeStreams() {
   for (const stream of [rawStream, polishStream]) {
     if (stream?.ws && stream.connected) {
       try {
-        stream.ws.send(JSON.stringify({ header: { action: 'finish-task', task_id: stream.taskId } }));
+        stream.ws.send(JSON.stringify({ header: { action: 'finish-task', task_id: stream.taskId }, payload: { input: {} } }));
       } catch {}
       try { stream.ws.close(); } catch {}
     }
