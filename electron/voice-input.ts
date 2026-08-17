@@ -51,10 +51,16 @@ let bridgeProcess: ChildProcess | null = null;
 let rawStream: any = null;
 let sessionRunning = false;
 let listening = false;
-// sessionText = 识别暂存文本（胶囊中显示，勾选后才处理并打入光标）
+// committedText = 已定稿（end_time）句子的拼接，只追加不重复
+let committedText = '';
+// currentPartial = 当前进行中句子的最新文本（覆盖式更新，不追加）
+let currentPartial = '';
+// 显示/确认用：committedText + currentPartial
 let sessionText = '';
-// 识别结果去重：避免重复推送
+// 识别结果去重：避免同一结果重复推送
 let lastRaw = '';
+// 上一句已定稿文本（去标点），用于 final 级去重
+let lastFinalNorm = '';
 let polishSeq = 0;
 // 结构处理中标记
 let processing = false;
@@ -218,7 +224,12 @@ function createAsrStream(apiKey: string, workspaceId: string): any {
 }
 
 // ===== 识别文本暂存：只说不动，文字进胶囊，勾选后才处理 =====
-// sessionText 累计所有识别文本（含 partial 与 final），重叠去重拼接，避免后半段丢失与重复句。
+// 模型：已定稿句子(committedText) 只追加一次；进行中句子(currentPartial) 覆盖式更新。
+// 去重：同一结果、同一句 final（去标点比较）都只保留一份，杜绝识别重复污染。
+function normalizeForDedup(s: string): string {
+  return s.replace(/[。．.!！?？,，、;；:：\s]/g, '');
+}
+
 function applyRawResult(text: string, isPartial: boolean) {
   if (!sessionRunning) return;
   const t = (text || '').trim();
@@ -228,29 +239,34 @@ function applyRawResult(text: string, isPartial: boolean) {
   if (t === lastRaw) return;
   lastRaw = t;
 
-  // 重复句去重：如果 t 与 sessionText 尾部已有的内容重复（相同句子被 ASR 重复推送），跳过
-  const tail = sessionText.slice(-Math.min(sessionText.length, t.length + 2));
-  if (tail && t && tail.includes(t)) {
-    return;
+  if (isPartial) {
+    // ===== 进行中句子：覆盖式更新（绝不动 committedText）=====
+    // 若 partial 恰好是 committedText 的延续（个别 ASR 会整段累计），只取新增部分
+    if (committedText && t.startsWith(committedText)) {
+      currentPartial = t.slice(committedText.length);
+    } else {
+      currentPartial = t;
+    }
+  } else {
+    // ===== 句子定稿 =====
+    const norm = normalizeForDedup(t);
+    // final 去重：与上一句定稿去标点后相同 → 忽略（ASR 重复推送同句）
+    if (lastFinalNorm && norm && norm === lastFinalNorm) {
+      return;
+    }
+    // 该句与当前 partial 相同内容（partial 已展示过）→ 只需并入 committed 一次
+    committedText = committedText ? committedText + t : t;
+    lastFinalNorm = norm;
+    currentPartial = '';
   }
 
-  // 合并：若 t 是 sessionText 的延续，只追加新增部分；否则判断是否重叠拼接
-  if (t.startsWith(sessionText)) {
-    // 同段继续增长（partial 逐步变长）
-    sessionText = t;
-  } else if (sessionText.startsWith(t)) {
-    // t 只是 sessionText 的子串（ASR 回退），保留更长的 sessionText
-    // 不处理
-  } else {
-    // 新句子开始（t 不含历史）：追加
-    sessionText = sessionText ? sessionText + t : t;
-  }
+  sessionText = committedText + currentPartial;
   sendToWindow('voice:session', sessionText);
 }
 
-// ===== 结构处理（勾选后调用）：修正错别字 + 提取要点 + 优化结构 =====
+// ===== 结构整理（勾选后调用）：合并重复 + 变通顺 + 修正错别字 + 多点结构化 =====
 function structurePrompt(): string {
-  return '你是一个语音转文字结构整理助手。用户给你一段语音识别出的文字，请做以下处理：\n1) 修正确定无疑的错别字；\n2) 合并文中完全重复的句子或内容（识别重复造成的，只保留一处）；\n3) 如果原文已经用"第一点/第二点/第1点"等词语明确标出要点，请保留原文的说法，不要重复添加序号编号；\n4) 如果原文没有明确编号，则提取多个要点，用换行和序号（1. 2. 3. …）分列排列，总起句（如"接下来我们进行三点修改"）保留在要点上方。\n**不要**改动要点本身的内容措辞、**不要**添加原文没有的信息、**不要**删除任何内容（重复句除外）。\n直接输出整理后的文字。\n\n示例：\n输入：接下来我们进行三点修改字体放大样式变多一点还有背景需要改一下\n输出：\n接下来我们进行三点修改：\n1. 字体放大\n2. 样式变多一点\n3. 背景需要改一下';
+  return '你是一个语音转文字整理助手。用户给你一段语音识别出的文字（可能含识别重复、口语化、错别字），请整理成通顺、结构清晰的文本：\n1) 合并文中完全重复的句子或内容（识别重复造成的，只保留一处）；\n2) 修正确定无疑的错别字；\n3) 让语句通顺自然，口语化的表达转为书面表达但不改变原意；\n4) 如果包含多个要点/需求，按要点生成结构化文字：用换行和序号（1. 2. 3. …）逐条列出，总起句（如"接下来我们进行三点修改"）保留在要点上方；\n5) 如果原文已经用"第一点/第二点/第1点"等明确标出要点，保留原文说法，不要重复添加序号。\n**不要**添加原文没有的信息、**不要**删除任何要点（重复句除外）。\n直接输出整理后的文字。\n\n示例：\n输入：接下来我们进行三点修改字体放大样式变多一点还有背景需要改一下\n输出：\n接下来我们进行三点修改：\n1. 字体放大\n2. 样式变多一点\n3. 背景需要改一下';
 }
 
 async function structureWithLlm(text: string): Promise<string> {
@@ -338,8 +354,11 @@ function endSession() {
   listening = false;
   closeStream();
   bridgeWrite('D');
+  committedText = '';
+  currentPartial = '';
   sessionText = '';
   lastRaw = '';
+  lastFinalNorm = '';
   processing = false;
   sendToWindow('voice:status', { state: 'stopped', message: '已结束' });
 }
@@ -504,8 +523,11 @@ export function initVoiceInput() {
     sessionRunning = true;
     listening = true;
     processing = false;
+    committedText = '';
+    currentPartial = '';
     sessionText = '';
     lastRaw = '';
+    lastFinalNorm = '';
     rawStream = createAsrStream(cfg.apiKey, cfg.workspaceId);
     bridgeWrite('A');
     return { success: true };
