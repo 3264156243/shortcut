@@ -368,15 +368,21 @@ async function structureWithLlm(text: string): Promise<string> {
     }
     if (!full && seq === polishSeq) {
       sendToWindow('voice:polishError', '结构处理接口无返回内容');
-      return formatStructuredResult(text, shouldStructure(text));
+      return formatStructuredResult(text, shouldStructure(text) || hasMultipleLines(text));
     }
-    return formatStructuredResult(full, shouldStructure(text));
+    return formatStructuredResult(full, shouldStructure(text) || hasMultipleLines(full));
   } catch (err: any) {
     if (seq === polishSeq) {
       sendToWindow('voice:polishError', `结构处理失败: ${err?.message || err}`);
     }
-    return formatStructuredResult(text, shouldStructure(text));
+    return formatStructuredResult(text, shouldStructure(text) || hasMultipleLines(text));
   }
+}
+
+// 模型输出是否已是多行（多要点/列表形态）→ 视为需要结构化编号
+function hasMultipleLines(s: string): boolean {
+  const lines = String(s || '').split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+  return lines.length >= 2;
 }
 
 // ===== 是否结构化：依据原文是否“明确列举/要点化” =====
@@ -401,13 +407,14 @@ function formatStructuredResult(raw: string, structure: boolean): string {
   lines = lines.filter((l, i) => lines[i - 1] !== l);
 
   if (!structure) {
-    // 不做编号：合并为一段通顺文字（保序，段落内用全角逗号衔接）
+    // 不做编号：合并为一段通顺文字（保序，段落内用全角逗号衔接，结尾仅一个句号）
     const parts: string[] = [];
     for (const l of lines) {
       const clean = l.replace(/^[^\u4e00-\u9fffA-Za-z0-9]{1,6}\s*[.、．)）]?/, '').trim();
-      if (clean) parts.push(clean);
+      if (clean) parts.push(clean.replace(/[。．.!！?？、；;：:]+$/, ''));
     }
-    return parts.join('，').replace(/[，、]+$/, '') + '。';
+    if (parts.length === 0) return '';
+    return parts.join('，') + '。';
   }
 
   // ===== 结构化编号 =====
@@ -415,7 +422,7 @@ function formatStructuredResult(raw: string, structure: boolean): string {
     let t = l.replace(/^[^\u4e00-\u9fffA-Za-z0-9]{1,4}\s*/u, (mt) => (mt.trim().length === 0 ? mt : ''));
     t = t.replace(/^(?:\d+\s*[.、．)）]|[^0-9\u4e00-\u9fff]{1,6}\s*[.、．)）]|\d+\s*$)/, '');
     t = t.replace(/^[^\u4e00-\u9fff]{1,10}\.\s*/, '');
-    return t.replace(/^\s+/, '');
+    return t.replace(/^\s+/, '').replace(/[。．.!！?？、；;：:]+$/, '');
   };
 
   if (lines.length > 1) {
