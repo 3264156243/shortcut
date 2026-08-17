@@ -265,8 +265,9 @@ function applyRawResult(text: string, isPartial: boolean) {
 }
 
 // ===== 结构整理（勾选后调用）：合并重复 + 变通顺 + 修正错别字 + 多点结构化 =====
+// 设计：编号完全由程序控制（模型只负责分行与清洗），避免模型输出乱码编号。
 function structurePrompt(): string {
-  return '你是一个语音转文字整理助手。用户给你一段语音识别出的文字（可能含识别重复、口语化、错别字），请整理成通顺、结构清晰的文本：\n1) 合并文中完全重复的句子或内容（识别重复造成的，只保留一处）；\n2) 修正确定无疑的错别字；\n3) 让语句通顺自然，口语化的表达转为书面表达但不改变原意；\n4) 如果包含多个要点/需求，按要点生成结构化文字：用换行和序号（1. 2. 3. …）逐条列出，总起句（如"接下来我们进行三点修改"）保留在要点上方；\n5) 如果原文已经用"第一点/第二点/第1点"等明确标出要点，保留原文说法，不要重复添加序号。\n**不要**添加原文没有的信息、**不要**删除任何要点（重复句除外）。\n直接输出整理后的文字。\n\n示例：\n输入：接下来我们进行三点修改字体放大样式变多一点还有背景需要改一下\n输出：\n接下来我们进行三点修改：\n1. 字体放大\n2. 样式变多一点\n3. 背景需要改一下';
+  return '你是一个语音转文字整理助手。用户给你一段语音识别出的文字（可能含重复、口语化、错别字）。请把它整理成通顺、干净的文本：\n1) 合并完全重复的内容，只保留一处；\n2) 修正确定无疑的错别字；\n3) 去掉口语口头禅和指路词（如"第一个是""第二个是""第一个任务就是""接下来""然后"等），把每一条实际内容提炼成简短要点；\n4) 如果包含多个要点，**每行一条**输出，**绝对不要添加任何编号、序号、数字、点号前缀**：\n修改样式\n完成项目\n整理文档\n如果原文有总起句（如"我有三个任务"），把总起句放在第一行单独一行，不加编号；\n5) 如果只有一段话没有多个要点，直接输出通顺的段落（单行），不要换行。\n**只输出最终结果**，不要任何解释、前言、引号、markdown 代码块、编号。';
 }
 
 async function structureWithLlm(text: string): Promise<string> {
@@ -328,13 +329,52 @@ async function structureWithLlm(text: string): Promise<string> {
       sendToWindow('voice:polishError', '结构处理接口无返回内容');
       return text;
     }
-    return full;
+    return formatStructuredResult(full);
   } catch (err: any) {
     if (seq === polishSeq) {
       sendToWindow('voice:polishError', `结构处理失败: ${err?.message || err}`);
     }
-    return text;
+    return formatStructuredResult(text);
   }
+}
+
+// ===== 结构结果强制清洗：编号由程序重排，模型乱码编号/前缀一律剥离 =====
+function formatStructuredResult(raw: string): string {
+  let s = (raw || '').trim();
+  // 去掉 markdown 代码块包裹
+  s = s.replace(/^```[a-zA-Z]*\n?/, '').replace(/\n?```$/, '');
+  // 去掉首尾引号（中文/英文）
+  s = s.replace(/^["'“”`]+/, '').replace(/["'“”`]+$/, '');
+  // 拆行
+  let lines = s.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+  // 去重相邻相同行
+  lines = lines.filter((l, i) => lines[i - 1] !== l);
+
+  // 剥离行首的任意编号/前缀（数字.、İK.、. 、- 、• 等）
+  const stripPrefix = (l: string) => {
+    let t = l.replace(/^[^\u4e00-\u9fffA-Za-z0-9]{1,4}\s*/u, (mt) => (mt.trim().length === 0 ? mt : ''));
+    // 更精确：去掉行首"数字+标点"、"一个或多个非中文字符+ '.'"
+    t = t.replace(/^(?:\d+\s*[.、．)）]|[^0-9\u4e00-\u9fff]{1,6}\s*[.、．)）]|\d+\s*$)/, '');
+    // 残余裸前缀（如 İK. Uluslararası.）
+    t = t.replace(/^[^\u4e00-\u9fff]{1,10}\.\s*/, '');
+    return t.replace(/^\s+/, '');
+  };
+
+  // 判断是否多要点：行数>1 或首行是总起句（短）
+  if (lines.length > 1) {
+    const cleaned = lines.map(stripPrefix).filter((l) => l.length > 0);
+    if (cleaned.length === 0) return raw.trim();
+    // 总起句判定：第一行较短（<24字）且不是独立要点形态时视为总起
+    const head = cleaned.length > 1 && cleaned[0].length <= 24 ? cleaned[0].replace(/[。．,!！?？、：:\s]+$/, '') : null;
+    const items = head ? cleaned.slice(1) : cleaned;
+    if (items.length > 0) {
+      const numbered = items.map((it, i) => `${i + 1}. ${it}`);
+      return head ? head + '：\n' + numbered.join('\n') : numbered.join('\n');
+    }
+  }
+
+  // 单行或无要点：原样返回（去掉多余尾标点）
+  return lines.join('').replace(/[。．,!！?？、]+$/, '');
 }
 
 // ===== 会话控制 =====
