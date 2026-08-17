@@ -1,4 +1,4 @@
-// 语音输入模块：Alt+H 全局语音输入（阿里云百炼 qwen-audio-3.0-asr-flash-streaming 流式识别 + prompt 润色）
+﻿// 语音输入模块：Alt+H 全局语音输入（阿里云百炼 qwen-audio-3.0-asr-flash-streaming 流式识别 + prompt 润色）
 import { BrowserWindow, app, ipcMain, globalShortcut, screen } from 'electron';
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
@@ -75,8 +75,37 @@ function ensureBridge() {
   }
 }
 
+function resolveWebSocketUrl(workspaceValue: string): string {
+  const value = String(workspaceValue || '').trim();
+  if (!value) throw new Error('Workspace ID 为空');
+  if (/\{\s*workspaceid\s*\}/i.test(value)) {
+    throw new Error('Workspace ID 不能填写 {WorkspaceId} 模板，请填写实际 llm-xxxxxx ID');
+  }
+  if (/^wss?:\/\//i.test(value)) {
+    const parsed = new URL(value);
+    if (!/^[^.]+\.cn-beijing\.maas\.aliyuncs\.com$/i.test(parsed.hostname)) {
+      throw new Error('WebSocket 地址不是百炼北京区工作区专属地址');
+    }
+    parsed.protocol = 'wss:';
+    parsed.pathname = '/api-ws/v1/inference/';
+    return parsed.toString();
+  }
+  const matched = value.match(/llm-[a-z0-9]+/i);
+  const workspaceId = matched ? matched[0] : value;
+  if (!/^llm-[a-z0-9]+$/i.test(workspaceId)) {
+    throw new Error('Workspace ID 格式错误，应类似 llm-xxxxxxxx');
+  }
+  return `wss://${workspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference/`;
+}
+
 function createAsrStream(kind: 'raw' | 'polish', apiKey: string, workspaceId: string): any {
-  const url = `wss://${workspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference`;
+  let url = '';
+  try {
+    url = resolveWebSocketUrl(workspaceId);
+  } catch (err: any) {
+    sendToWindow('voice:status', { state: 'error', message: err?.message || String(err) });
+    return { ws: null, taskId: '', kind, connected: false };
+  }
   const taskId = require('crypto').randomBytes(16).toString('hex');
   const stream: any = { ws: null, taskId, kind, connected: false };
   let ws: any;
@@ -337,3 +366,4 @@ export function initVoiceInput() {
 export function openVoiceWindowFromMain() {
   openVoiceWindow();
 }
+
