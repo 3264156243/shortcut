@@ -30,9 +30,9 @@ html, body, #root { margin: 0; padding: 0; width: 100%; height: 100%; overflow: 
   border: 1px solid var(--cap-border);
   border-radius: 18px;
   padding: 6px 8px;
-  box-shadow:
-    0 12px 36px rgba(0, 0, 0, .55),
-    inset 0 1px 0 rgba(255, 255, 255, .08);
+  /* 外阴影用 drop-shadow 跟随圆角，避免直角矩形阴影 */
+  filter: drop-shadow(0 12px 36px rgba(0, 0, 0, .55));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08);
   backdrop-filter: blur(20px) saturate(1.3);
   -webkit-backdrop-filter: blur(20px) saturate(1.3);
   overflow: hidden;

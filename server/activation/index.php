@@ -879,6 +879,7 @@ $loggedIn = !empty($_SESSION['admin']);
       usage: '应用使用记录',
       island: 'SC球',
       codexProvider: 'Codex供应商',
+      voiceInput: '语音输入',
     };
 
     async function api(payload) {

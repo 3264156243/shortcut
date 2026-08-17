@@ -16,6 +16,7 @@ $MODULE_META = [
     'usage' => '应用使用记录',
     'island' => 'SC球',
     'codexProvider' => 'Codex供应商',
+    'voiceInput' => '语音输入',
 ];
 
 $DEFAULT_MODULE_LIST = [
@@ -26,6 +27,7 @@ $DEFAULT_MODULE_LIST = [
     'usage' => '免费',
     'island' => '会员',
     'codexProvider' => '免费',
+    'voiceInput' => '免费',
 ];
 
 // 子功能级权限（挂在板块之下，可单独授权）

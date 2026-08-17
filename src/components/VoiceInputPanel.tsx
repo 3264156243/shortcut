@@ -64,21 +64,39 @@ export default function VoiceInputPanel() {
         <div className="grid grid-cols-2 gap-2.5">
           <div className="rounded-xl px-3 py-2.5" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)' }}>
             <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
-              <PhoneCall size={11} /> 调用次数
+              <PhoneCall size={11} /> 今日调用
             </div>
             <div className="mt-1 text-xl font-semibold" style={{ color: 'var(--color-text)' }}>
               {stats ? stats.today.calls : '—'}
             </div>
-            <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>今日 · 累计 {stats ? stats.total.calls : '—'} 次</div>
+            <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>次</div>
           </div>
           <div className="rounded-xl px-3 py-2.5" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)' }}>
             <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
-              <FileText size={11} /> 转写字数
+              <PhoneCall size={11} /> 历史调用
+            </div>
+            <div className="mt-1 text-xl font-semibold" style={{ color: 'var(--color-text)' }}>
+              {stats ? stats.total.calls : '—'}
+            </div>
+            <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>次</div>
+          </div>
+          <div className="rounded-xl px-3 py-2.5" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)' }}>
+            <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+              <FileText size={11} /> 今日转写
             </div>
             <div className="mt-1 text-xl font-semibold" style={{ color: 'var(--color-text)' }}>
               {stats ? stats.today.chars : '—'}
             </div>
-            <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>今日 · 累计 {stats ? stats.total.chars : '—'} 字</div>
+            <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>字</div>
+          </div>
+          <div className="rounded-xl px-3 py-2.5" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)' }}>
+            <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+              <FileText size={11} /> 历史转写
+            </div>
+            <div className="mt-1 text-xl font-semibold" style={{ color: 'var(--color-text)' }}>
+              {stats ? stats.total.chars : '—'}
+            </div>
+            <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>字</div>
           </div>
         </div>
       </div>
