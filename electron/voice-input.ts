@@ -264,10 +264,10 @@ function applyRawResult(text: string, isPartial: boolean) {
   sendToWindow('voice:session', sessionText);
 }
 
-// ===== 结构整理（勾选后调用）：合并重复 + 变通顺 + 修正错别字 + 多点结构化 =====
-// 设计：编号完全由程序控制（模型只负责分行与清洗），避免模型输出乱码编号。
+// ===== 结构整理（勾选后调用）：合并重复 + 变通顺 + 修正错别字，仅在明确列举时结构化 =====
+// 编号由程序依据原文是否“明确列举”决定，模型不自行编号。
 function structurePrompt(): string {
-  return '你是一个语音转文字整理助手。用户给你一段语音识别出的文字（可能含重复、口语化、错别字）。请把它整理成通顺、干净的文本：\n1) 合并完全重复的内容，只保留一处；\n2) 修正确定无疑的错别字；\n3) 去掉口语口头禅和指路词（如"第一个是""第二个是""第一个任务就是""接下来""然后"等），把每一条实际内容提炼成简短要点；\n4) 如果包含多个要点，**每行一条**输出，**绝对不要添加任何编号、序号、数字、点号前缀**：\n修改样式\n完成项目\n整理文档\n如果原文有总起句（如"我有三个任务"），把总起句放在第一行单独一行，不加编号；\n5) 如果只有一段话没有多个要点，直接输出通顺的段落（单行），不要换行。\n**只输出最终结果**，不要任何解释、前言、引号、markdown 代码块、编号。';
+  return '你是一个语音转文字整理助手。用户给你一段语音识别出的文字（可能含重复、口语化、错别字）。请把它整理成通顺、自然的文本：\n1) 合并完全重复的内容，只保留一处；\n2) 修正确定无疑的错别字；\n3) 让语句通顺自然，去掉口语口头禅（如"诶""嗯""然后"等），补全缺失的标点，但**保持原文的完整信息与自然表达，不要缩减、不要提炼、不要改写原意**；\n4) **不要添加任何编号、序号、数字、点号前缀**，也不要自己换行拆分；\n5) 直接输出整理后的整段文字。\n**只输出最终结果**，不要任何解释、前言、引号、markdown 代码块。';
 }
 
 async function structureWithLlm(text: string): Promise<string> {
@@ -327,19 +327,28 @@ async function structureWithLlm(text: string): Promise<string> {
     }
     if (!full && seq === polishSeq) {
       sendToWindow('voice:polishError', '结构处理接口无返回内容');
-      return text;
+      return formatStructuredResult(text, shouldStructure(text));
     }
-    return formatStructuredResult(full);
+    return formatStructuredResult(full, shouldStructure(text));
   } catch (err: any) {
     if (seq === polishSeq) {
       sendToWindow('voice:polishError', `结构处理失败: ${err?.message || err}`);
     }
-    return formatStructuredResult(text);
+    return formatStructuredResult(text, shouldStructure(text));
   }
 }
 
-// ===== 结构结果强制清洗：编号由程序重排，模型乱码编号/前缀一律剥离 =====
-function formatStructuredResult(raw: string): string {
+// ===== 是否结构化：依据原文是否“明确列举/要点化” =====
+// 只认强列举信号（第几点/几个任务/三点/第一是…），避免普通口语被误拆。
+function shouldStructure(original: string): boolean {
+  const s = original || '';
+  return /第[一二三四五六七八九十百\d]+[点项条个]|几点|[一二三四五六七八九十百]+点|[一二三四五六七八九十百]+个(任务|要点|需求|事项)|第一个是|第二个是|第三个是|第一点|第二点|第三点|1\.\s*[^0-9]|2\.\s*[^0-9]/.test(s);
+}
+
+// ===== 结构结果强制清洗 =====
+// shouldStructure=true：剥离乱码前缀并重排 1. 2. 3.
+// shouldStructure=false：只做清洗，合并为通顺段落，绝不编号。
+function formatStructuredResult(raw: string, structure: boolean): string {
   let s = (raw || '').trim();
   // 去掉 markdown 代码块包裹
   s = s.replace(/^```[a-zA-Z]*\n?/, '').replace(/\n?```$/, '');
@@ -350,21 +359,27 @@ function formatStructuredResult(raw: string): string {
   // 去重相邻相同行
   lines = lines.filter((l, i) => lines[i - 1] !== l);
 
-  // 剥离行首的任意编号/前缀（数字.、İK.、. 、- 、• 等）
+  if (!structure) {
+    // 不做编号：合并为一段通顺文字（保序，段落内用全角逗号衔接）
+    const parts: string[] = [];
+    for (const l of lines) {
+      const clean = l.replace(/^[^\u4e00-\u9fffA-Za-z0-9]{1,6}\s*[.、．)）]?/, '').trim();
+      if (clean) parts.push(clean);
+    }
+    return parts.join('，').replace(/[，、]+$/, '') + '。';
+  }
+
+  // ===== 结构化编号 =====
   const stripPrefix = (l: string) => {
     let t = l.replace(/^[^\u4e00-\u9fffA-Za-z0-9]{1,4}\s*/u, (mt) => (mt.trim().length === 0 ? mt : ''));
-    // 更精确：去掉行首"数字+标点"、"一个或多个非中文字符+ '.'"
     t = t.replace(/^(?:\d+\s*[.、．)）]|[^0-9\u4e00-\u9fff]{1,6}\s*[.、．)）]|\d+\s*$)/, '');
-    // 残余裸前缀（如 İK. Uluslararası.）
     t = t.replace(/^[^\u4e00-\u9fff]{1,10}\.\s*/, '');
     return t.replace(/^\s+/, '');
   };
 
-  // 判断是否多要点：行数>1 或首行是总起句（短）
   if (lines.length > 1) {
     const cleaned = lines.map(stripPrefix).filter((l) => l.length > 0);
     if (cleaned.length === 0) return raw.trim();
-    // 总起句判定：第一行较短（<24字）且不是独立要点形态时视为总起
     const head = cleaned.length > 1 && cleaned[0].length <= 24 ? cleaned[0].replace(/[。．,!！?？、：:\s]+$/, '') : null;
     const items = head ? cleaned.slice(1) : cleaned;
     if (items.length > 0) {
@@ -373,7 +388,6 @@ function formatStructuredResult(raw: string): string {
     }
   }
 
-  // 单行或无要点：原样返回（去掉多余尾标点）
   return lines.join('').replace(/[。．,!！?？、]+$/, '');
 }
 
