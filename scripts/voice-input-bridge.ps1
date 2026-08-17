@@ -73,57 +73,39 @@ public static class TextSender {
 }
 
 public static class KbHook {
-    public delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
-    [DllImport("user32.dll", SetLastError = true)]
-    static extern IntPtr SetWindowsHookExW(int idHook, HookProc lpfn, IntPtr hMod, uint dwThreadId);
-    [DllImport("user32.dll", SetLastError = true)]
-    static extern bool UnhookWindowsHookEx(IntPtr hhk);
     [DllImport("user32.dll")]
-    static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
-    [DllImport("user32.dll")]
-    static extern bool GetMessageW(ref MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax);
-    [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
-    static extern IntPtr GetModuleHandle(string lpModuleName);
-    [StructLayout(LayoutKind.Sequential)]
-    public struct MSG { public IntPtr hwnd; public uint message; public IntPtr wParam; public IntPtr lParam; public uint time; public int ptX; public int ptY; }
-    [StructLayout(LayoutKind.Sequential)]
-    public struct KBDLLHOOKSTRUCT { public uint vkCode; public uint scanCode; public uint flags; public uint time; public IntPtr dwExtraInfo; }
-    static IntPtr hHook = IntPtr.Zero;
-    static HookProc proc;
-    static Thread pump;
+    static extern short GetAsyncKeyState(int vKey);
     public static event Action<int> KeyPressed;
-    public static bool Installed { get { return hHook != IntPtr.Zero; } }
+    static Thread pump;
+    static bool running;
+    public static bool Installed { get { return running; } }
     public static void Install() {
-        if (hHook != IntPtr.Zero) return;
-        proc = new HookProc(Callback);
-        IntPtr hMod = IntPtr.Zero;
-        try {
-            using (var cur = System.Diagnostics.Process.GetCurrentProcess())
-            using (var mod = cur.MainModule) { hMod = GetModuleHandle(mod.ModuleName); }
-        } catch { }
-        hHook = SetWindowsHookExW(13, proc, hMod, 0);
-        if (hHook != IntPtr.Zero) {
-            pump = new Thread(Loop);
-            pump.IsBackground = true;
-            pump.Start();
-        }
+        if (running) return;
+        running = true;
+        pump = new Thread(Poll);
+        pump.Name = "KeyPoll";
+        pump.IsBackground = true;
+        pump.Start();
     }
     public static void Uninstall() {
-        if (hHook != IntPtr.Zero) { UnhookWindowsHookEx(hHook); hHook = IntPtr.Zero; }
+        running = false;
     }
-    static void Loop() {
-        MSG msg = new MSG();
-        while (GetMessageW(ref msg, IntPtr.Zero, 0, 0)) { }
+    static bool IsDown(int vk) {
+        return (GetAsyncKeyState(vk) & 0x8000) != 0;
     }
-    static IntPtr Callback(int nCode, IntPtr wParam, IntPtr lParam) {
-        if (nCode >= 0 && wParam == (IntPtr)0x100) {
-            KBDLLHOOKSTRUCT k = (KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(KBDLLHOOKSTRUCT));
-            if (k.vkCode == 0x20 || k.vkCode == 0x0D) {
-                try { KeyPressed((int)k.vkCode); } catch { }
-                return (IntPtr)1;
+    static void Poll() {
+        bool lastSpace = false, lastEnter = false;
+        while (running) {
+            bool space = IsDown(0x20);
+            bool enter = IsDown(0x0D);
+            if (space && !lastSpace) {
+                try { KeyPressed(0x20); } catch { }
             }
+            if (enter && !lastEnter) { try { KeyPressed(0x0D); } catch { } }
+            lastSpace = space;
+            lastEnter = enter;
+            Thread.Sleep(20);
         }
-        return CallNextHookEx(hHook, nCode, wParam, lParam);
     }
 }
 
@@ -189,7 +171,7 @@ $action = [Action[int]]{
             if ($n -gt 0) { [TextSender]::Backspace($n) }
             break
         }
-        'E' { [TextSender]::Enter(); break }
+        'E' { [KbHook]::Uninstall(); [TextSender]::Enter(); break }
         'A' {
             [KbHook]::Install()
             if ([KbHook]::Installed) { [Console]::Out.WriteLine('READY|HOOK'); [Console]::Out.Flush() }

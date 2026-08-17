@@ -108,6 +108,10 @@ function VoicePanel() {
       } else if (s?.state === 'listening') {
         setStatus('listening');
         setMessage('');
+      } else if (s?.state === 'ready') {
+        setStatus('listening');
+        if (s?.message) setMessage(s.message);
+        setTimeout(() => setMessage(''), 5000);
       } else if (s?.state === 'paused') {
         setStatus('paused');
         setMessage(s?.message || '已暂停');
@@ -168,7 +172,7 @@ function VoicePanel() {
       </div>
 
       <div className="voice-footer">
-        <button type="button" className="voice-btn primary" disabled={!polish || status !== 'listening'} onClick={adopt} title="用润色文本覆盖刚输入的文段">
+        <button type="button" className="voice-btn primary" disabled={!polish || (status !== 'listening' && status !== 'paused')} onClick={adopt} title="用润色文本覆盖刚输入的文段">
           <Check size={13} /> 采纳
         </button>
         <button type="button" className="voice-btn" onClick={enter} title="确认并结束（回车）">
