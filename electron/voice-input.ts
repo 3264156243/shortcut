@@ -72,10 +72,19 @@ let rawStream: any = null;
 let sessionRunning = false;
 let listening = false;
 let polishText = '';
-let currentPartial = ''; // 当前句已输入到光标处的文本
-let committedText = ''; // 已定稿句子文本
-let sessionText = ''; // 累计文本（供润色）
+// cursorText = 光标处本会话累计文本（含已定稿句子 + 当前进行中句子）
+let cursorText = '';
+// committedCursorLen = 光标处属于「已定稿句子」的字符数，这部分永不删除
+let committedCursorLen = 0;
+// currentPartial = 当前进行中（未 end_time）句子的文本
+let currentPartial = '';
+// 识别结果去重：避免输出重复
+let lastRaw = '';
+// 累计文本（供润色）
+let sessionText = '';
 let polishSeq = 0;
+// 润色防抖定时器：停顿才触发润色，避免连续识别反复重启
+let polishTimer: NodeJS.Timeout | null = null;
 let focusOk = false;
 let pendingBridgeResolve: ((line: string) => void) | null = null;
 
@@ -234,36 +243,60 @@ function createAsrStream(apiKey: string, workspaceId: string): any {
   return stream;
 }
 
-// ===== 增量追加式注入：说了什么就往光标处追加什么 =====
+// ===== 流式追加注入：说了什么就往光标处追加什么 =====
+// 只允许删「当前进行中的句子」，已定稿句子永不删除。
 function injectDelta(delta: string) {
   if (delta && delta.length > 0) {
     bridgeWrite(`T|${Buffer.from(delta, 'utf8').toString('base64')}`);
   }
 }
 
-function updatePartial(newText: string) {
-  if (newText.startsWith(currentPartial)) {
-    // 正常增长：只追加增量
-    const delta = newText.slice(currentPartial.length);
-    injectDelta(delta);
-    currentPartial = newText;
-  } else {
-    // 识别修正：删当前句，重新输入
-    if (currentPartial.length > 0) bridgeWrite(`B|${currentPartial.length}`);
-    injectDelta(newText);
-    currentPartial = newText;
-  }
-}
-
 function applyRawResult(text: string, isPartial: boolean) {
   if (!sessionRunning) return;
-  updatePartial(text);
-  if (!isPartial) {
-    // 句子结束：定稿并入累计，当前句清空
-    committedText += text;
+  const t = (text || '').trim();
+  if (!t) return;
+
+  // 完全重复的结果 → 忽略（防重复输入、防润色重复触发）
+  if (t === lastRaw) return;
+  lastRaw = t;
+
+  if (isPartial) {
+    // ===== 进行中句子的 partial =====
+    if (t.startsWith(currentPartial)) {
+      // 正常增长：只追加新尾部
+      const delta = t.slice(currentPartial.length);
+      injectDelta(delta);
+      cursorText += delta;
+      currentPartial = t;
+    } else {
+      // ASR 正在修正「当前句」：删掉当前句原输入，从头重打该句。
+      // （只删 currentPartial 的长度，绝不碰已定稿的 committed 部分）
+      bridgeWrite(`B|${currentPartial.length}`);
+      cursorText = cursorText.slice(0, committedCursorLen);
+      injectDelta(t);
+      cursorText += t;
+      currentPartial = t;
+    }
+  } else {
+    // ===== 句子已定稿（end_time）=====
+    // 由于 partial 已逐步输入该句，此处只需做「最终校准」：
+    // 找到该句最终文本与 currentPartial 的最长共同前缀差异；
+    // 若最终文本更长，追加差异；若不同，删当前句重打最终文本。
+    if (t.startsWith(currentPartial)) {
+      const delta = t.slice(currentPartial.length);
+      injectDelta(delta);
+      cursorText += delta;
+    } else {
+      bridgeWrite(`B|${currentPartial.length}`);
+      cursorText = cursorText.slice(0, committedCursorLen);
+      injectDelta(t);
+      cursorText += t;
+    }
+    // 该句定稿：缩进去重窗口，并更新累计
     currentPartial = '';
-    sessionText = committedText;
-    triggerPolish();
+    committedCursorLen = cursorText.length;
+    sessionText = cursorText;
+    schedulePolish();
   }
 }
 
@@ -345,15 +378,22 @@ async function polishWithLlm(text: string) {
   }
 }
 
-function triggerPolish() {
+function schedulePolish() {
   const cfg = voiceConfig();
   if ((cfg.polishMode || 'llm') === 'off') return;
+  if (polishTimer) clearTimeout(polishTimer);
   const text = sessionText.trim();
   if (!text) return;
-  polishSeq++;
-  polishText = '';
-  sendToWindow('voice:polish', '');
-  void polishWithLlm(text);
+  // 停顿约 1 秒才触发润色，避免连续识别时润色反复重启
+  polishTimer = setTimeout(() => {
+    polishTimer = null;
+    const current = sessionText.trim();
+    if (!current) return;
+    polishSeq++;
+    polishText = '';
+    sendToWindow('voice:polish', '');
+    void polishWithLlm(current);
+  }, 1000);
 }
 
 // ===== 会话控制 =====
@@ -373,9 +413,12 @@ function endSession() {
   listening = false;
   closeStream();
   bridgeWrite('D');
-  committedText = '';
+  if (polishTimer) { clearTimeout(polishTimer); polishTimer = null; }
+  cursorText = '';
   currentPartial = '';
   sessionText = '';
+  lastRaw = '';
+  committedCursorLen = 0;
   polishText = '';
   sendToWindow('voice:status', { state: 'stopped', message: '已结束' });
 }
@@ -505,9 +548,12 @@ export function initVoiceInput() {
     listening = true;
     polishText = '';
     polishSeq = 0;
+    cursorText = '';
     currentPartial = '';
-    committedText = '';
+    committedCursorLen = 0;
     sessionText = '';
+    lastRaw = '';
+    if (polishTimer) { clearTimeout(polishTimer); polishTimer = null; }
     rawStream = createAsrStream(cfg.apiKey, cfg.workspaceId);
     bridgeWrite('A');
     return { success: true };
@@ -529,13 +575,16 @@ export function initVoiceInput() {
   });
   ipcMain.handle('voice:adopt', () => {
     if (!sessionRunning) return { success: false };
-    const total = committedText.length + currentPartial.length;
+    // 用润色文本替换光标处本会话输入的整段原文
+    const total = cursorText.length;
     if (total > 0) bridgeWrite(`B|${total}`);
     if (polishText && polishText.length > 0) {
       bridgeWrite(`T|${Buffer.from(polishText, 'utf8').toString('base64')}`);
     }
-    committedText = '';
+    cursorText = polishText || '';
     currentPartial = '';
+    committedCursorLen = cursorText.length;
+    sessionText = cursorText;
     return { success: true, text: polishText };
   });
   app.on('will-quit', () => {
