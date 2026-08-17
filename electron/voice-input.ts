@@ -3,7 +3,7 @@
 // 输入：SendInput Unicode 增量追加（与 Win 语音识别一致，不碰剪贴板）
 // 控制：空格=暂停/继续，回车=确认识别并关闭；启动前检测焦点是否在可输入控件
 // 润色：可插拔 OpenAI 兼容 LLM（enable_thinking:false 关闭思考，流式 SSE）
-import { BrowserWindow, app, ipcMain, screen } from 'electron';
+import { BrowserWindow, app, ipcMain, globalShortcut, screen } from 'electron';
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -103,7 +103,6 @@ function ensureBridge() {
           if (l === 'EVENT|SPACE') togglePause();
           else if (l === 'EVENT|ENTER') confirmAndType();
           else if (l === 'EVENT|ESC') cancelSession();
-          else if (l === 'EVENT|RALT') toggleVoiceWindow();
           else if (l === 'READY|HOOK') sendToWindow('voice:status', { state: 'ready', message: '按键控制已就绪（空格=暂停，回车=确认）' });
           else if (l.startsWith('ERR|')) sendToWindow('voice:status', { state: 'error', message: `按键控制异常: ${l.slice(4)}` });
           else if (l.startsWith('FOCUS|')) {
@@ -408,7 +407,7 @@ function endSession() {
   sessionRunning = false;
   listening = false;
   closeStream();
-  // 保持桥轮询存活：右 Alt 作为全局启动键需持续可用（空格/回车/ESC 均有 sessionRunning 守卫）
+  bridgeWrite('D');
   committedText = '';
   currentPartial = '';
   sessionText = '';
@@ -482,9 +481,10 @@ function openVoiceWindow() {
   }
   const display = screen.getPrimaryDisplay();
   const area = display.workArea;
-  const width = 255;
-  const height = 40;
   const saved = cfg.windowPos;
+  const savedSize = cfg.windowSize;
+  const width = savedSize && Number.isFinite(savedSize.width) ? Math.max(220, Math.min(600, savedSize.width)) : 320;
+  const height = savedSize && Number.isFinite(savedSize.height) ? Math.max(44, Math.min(200, savedSize.height)) : 52;
   let x = Math.round(area.x + (area.width - width) / 2);
   let y = Math.round(area.y + area.height - height - 12);
   if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
@@ -496,8 +496,12 @@ function openVoiceWindow() {
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
-    resizable: false,
+    resizable: true,
     movable: true,
+    minWidth: 220,
+    minHeight: 44,
+    maxWidth: 600,
+    maxHeight: 200,
     alwaysOnTop: true,
     skipTaskbar: true,
     hasShadow: false,
@@ -528,6 +532,11 @@ function openVoiceWindow() {
     const [wx, wy] = voiceWindow.getPosition();
     writeVoiceConfig({ windowPos: { x: wx, y: wy } });
   });
+  voiceWindow.on('resized', () => {
+    if (!voiceWindow || voiceWindow.isDestroyed()) return;
+    const [ww, wh] = voiceWindow.getSize();
+    writeVoiceConfig({ windowSize: { width: ww, height: wh } });
+  });
   voiceWindow.on('closed', () => {
     voiceWindow = null;
     endSession();
@@ -542,17 +551,22 @@ function toggleVoiceWindow() {
   openVoiceWindow();
 }
 
-// 启动/关闭语音胶囊：右侧 Alt 键（通过桥轮询检测，绕过 RegisterHotKey 不支持裸修饰键的限制）
+// 启动/关闭语音胶囊：Alt+H（globalShortcut 组合键，可靠注册）
+const VOICE_HOTKEY = 'Alt+H';
+
 function registerShortcut() {
   const cfg = voiceConfig();
-  if (cfg.enabled === false) return;
-  // 启动桥并常驻轮询：右 Alt 随时可触发开/关胶囊
-  ensureBridge();
-  bridgeWrite('A');
+  if (cfg.enabled === false) {
+    try { globalShortcut.unregister(VOICE_HOTKEY); } catch {}
+    return;
+  }
+  if (!globalShortcut.register(VOICE_HOTKEY, () => toggleVoiceWindow())) {
+    console.error('Failed to register ' + VOICE_HOTKEY);
+  }
 }
 
 function unregisterShortcut() {
-  // 桥在 will-quit 时统一退出
+  try { globalShortcut.unregister(VOICE_HOTKEY); } catch {}
 }
 
 export function initVoiceInput() {

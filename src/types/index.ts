@@ -282,6 +282,7 @@ export interface VoiceInputConfig {
   polishMode?: 'llm' | 'off';
   polishProvider?: VoiceInputPolishProvider;
   windowPos?: { x: number; y: number } | null;
+  windowSize?: { width: number; height: number } | null;
 }
 
 export interface AppConfig {
