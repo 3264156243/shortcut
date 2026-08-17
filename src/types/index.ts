@@ -281,8 +281,6 @@ export interface VoiceInputConfig {
   workspaceId?: string;
   polishMode?: 'llm' | 'off';
   polishProvider?: VoiceInputPolishProvider;
-  polishScenario?: 'general' | 'code' | 'writing' | 'custom';
-  polishCustomPrompt?: string;
   windowPos?: { x: number; y: number } | null;
 }
 

@@ -51,10 +51,10 @@ export default function VoiceInputPanel() {
         <h3 className="mb-1 text-sm font-medium" style={{ color: 'var(--color-text)' }}>使用说明</h3>
         <p className="mt-1 text-xs leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
           按 <b>Alt+H</b> 弹出胶囊麦克风，说话时识别文字<strong>暂存进胶囊</strong>（不再实时写入光标，说多少句都不会断）。<br />
-          · 中间文字随说话持续累加，超出宽度向左滚动。<br />
-          · <b>✓</b>：对所有识别文字做<strong>结构整理</strong>（不改任何字，仅修正确定无疑的错别字、把多个要点排成 1. 2. 3. …），处理完成后统一在光标处输入。<br />
-          · <b>✗</b>：取消，不输入。<br />
-          · 空格 = 暂停/继续识别；回车 = 直接确认。胶囊可拖动，位置自动记忆。
+          · 中间文字随说话持续累加，超出宽度向左滚动；左侧圆点显示状态（绿=识别中，黄=已暂停）。<br />
+          · <b>✓ / 回车</b>：对所有识别文字做<strong>结构整理</strong>（修正确定无疑的错别字、提取要点并按 1. 2. 3. 排列），完成后统一在光标处输入。<br />
+          · <b>✗ / ESC</b>：取消，不输入。 <b>空格</b>：暂停/继续识别。<br />
+          · 胶囊可拖动，位置自动记忆。
         </p>
         <button
           type="button"

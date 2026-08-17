@@ -96,6 +96,7 @@ function ensureBridge() {
           const l = line.trim();
           if (l === 'EVENT|SPACE') togglePause();
           else if (l === 'EVENT|ENTER') confirmAndType();
+          else if (l === 'EVENT|ESC') cancelSession();
           else if (l === 'READY|HOOK') sendToWindow('voice:status', { state: 'ready', message: '按键控制已就绪（空格=暂停，回车=确认）' });
           else if (l.startsWith('ERR|')) sendToWindow('voice:status', { state: 'error', message: `按键控制异常: ${l.slice(4)}` });
           else if (l.startsWith('FOCUS|')) {
@@ -217,6 +218,7 @@ function createAsrStream(apiKey: string, workspaceId: string): any {
 }
 
 // ===== 识别文本暂存：只说不动，文字进胶囊，勾选后才处理 =====
+// sessionText 累计所有识别文本（含 partial 与 final），用重叠去重拼接，避免后半段丢失。
 function applyRawResult(text: string, isPartial: boolean) {
   if (!sessionRunning) return;
   const t = (text || '').trim();
@@ -226,16 +228,23 @@ function applyRawResult(text: string, isPartial: boolean) {
   if (t === lastRaw) return;
   lastRaw = t;
 
-  // 句子定稿后并入暂存文本；partial 只做累计预览（不进 sessionText）
-  if (!isPartial) {
+  // 合并：若 t 是 sessionText 的延续，只追加新增部分；否则判断是否重叠拼接
+  if (t.startsWith(sessionText)) {
+    // 同段继续增长（partial 逐步变长）
+    sessionText = t;
+  } else if (sessionText.startsWith(t)) {
+    // t 只是 sessionText 的子串（ASR 回退），保留更长的 sessionText
+    // 不处理
+  } else {
+    // 新句子开始（t 不含历史）：追加
     sessionText = sessionText ? sessionText + t : t;
-    sendToWindow('voice:session', sessionText);
   }
+  sendToWindow('voice:session', sessionText);
 }
 
-// ===== 结构处理（勾选后调用）：不改任何字，只排布结构 =====
+// ===== 结构处理（勾选后调用）：修正错别字 + 提取要点 + 优化结构 =====
 function structurePrompt(): string {
-  return '你是一个语音转文字后的结构整理助手。用户给你一段语音识别出的文字。请只做以下两件事：\n1) 修正明显的错别字（仅限确定无疑的听写错误）；\n2) 如果这段话包含多个要点，用换行和序号（1. 2. 3. …）把它们排列清楚。\n**绝对不要**改动任何词语本身、不要改写句子、不要润色文笔、不要添加或删除内容。除错别字外原文是什么就输出什么，只是把结构排布好。\n直接输出整理后的文字。';
+  return '你是一个语音转文字结构整理助手。用户给你一段语音识别出的文字，请做以下处理：\n1) 修正确定无疑的错别字；\n2) 提取这段话中的多个要点/修改项，用换行和序号（1. 2. 3. …）分列排列，保持总起句（如"接下来我们进行三点修改"）原样保留在要点上方；\n3) 优化结构：语句按逻辑分组，保持原文语气与所有内容。\n**不要**改动要点本身的内容措辞、**不要**添加原文没有的信息、**不要**删除任何内容。\n直接输出整理后的文字。\n\n示例：\n输入：接下来我们进行三点修改字体放大样式变多一点还有背景需要改一下\n输出：\n接下来我们进行三点修改：\n1. 字体放大\n2. 样式变多一点\n3. 背景需要改一下';
 }
 
 async function structureWithLlm(text: string): Promise<string> {
@@ -374,6 +383,12 @@ function confirmAndType() {
   })();
 }
 
+// ===== ESC 取消：不输入，直接关闭 =====
+function cancelSession() {
+  endSession();
+  if (voiceWindow && !voiceWindow.isDestroyed()) voiceWindow.close();
+}
+
 // ===== 窗口 =====
 function openVoiceWindow() {
   const cfg = voiceConfig();
@@ -385,7 +400,7 @@ function openVoiceWindow() {
   const display = screen.getPrimaryDisplay();
   const area = display.workArea;
   const width = 340;
-  const height = 56;
+  const height = 40;
   const saved = cfg.windowPos;
   let x = Math.round(area.x + (area.width - width) / 2);
   let y = Math.round(area.y + area.height - height - 12);

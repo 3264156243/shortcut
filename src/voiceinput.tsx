@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Check, Loader2, X } from 'lucide-react';
+import { Check, Loader2, Pause, Mic, X } from 'lucide-react';
 import './voiceinput.css';
 
 interface VoiceConfig {
@@ -30,7 +30,6 @@ function VoiceCapsule() {
   const [status, setStatus] = useState<'idle' | 'listening' | 'paused' | 'processing' | 'error'>('idle');
   const [message, setMessage] = useState('');
   const [session, setSession] = useState('');
-  const [polishError, setPolishError] = useState('');
   const startingRef = useRef(false);
 
   const start = async () => {
@@ -96,7 +95,6 @@ function VoiceCapsule() {
       setSession(text);
     });
     const unPolishError = window.electronAPI?.onVoicePolishError?.((text) => {
-      setPolishError(text);
       setStatus('error');
       setMessage(text);
     });
@@ -136,12 +134,14 @@ function VoiceCapsule() {
   };
 
   const processing = status === 'processing';
-  const listening = status === 'listening' || status === 'paused';
+  const listening = status === 'listening';
+  const paused = status === 'paused';
+  const hasText = session.length > 0;
 
   return (
     <div className="capsule-root">
-      <button type="button" className="capsule-btn" onClick={cancel} title="取消，不输入" disabled={processing}>
-        <X size={15} />
+      <button type="button" className="capsule-btn" onClick={cancel} title="取消，不输入（ESC）" disabled={processing}>
+        <X size={14} />
       </button>
 
       <div className="capsule-text-wrap">
@@ -152,20 +152,25 @@ function VoiceCapsule() {
             <Loader2 size={12} className="spin" /> 整理中…
           </span>
         ) : (
-          <span className={'capsule-text' + (listening ? ' live' : '')} title={session || ''}>
-            {session || (status === 'idle' ? '正在启动…' : listening ? '聆听中…' : '—')}
-          </span>
+          <>
+            <span className={'capsule-state ' + (paused ? 'paused' : '')} title={paused ? '已暂停（空格继续）' : '正在识别（空格暂停）'}>
+              {paused ? <Pause size={10} /> : <Mic size={10} />}
+            </span>
+            <span className="capsule-text" title={session || ''}>
+              {session || (status === 'idle' ? '正在启动…' : '聆听中…')}
+            </span>
+          </>
         )}
       </div>
 
       <button
         type="button"
-        className={'capsule-btn confirm' + (session ? ' armed' : '')}
+        className={'capsule-btn confirm' + (hasText && !processing ? ' armed' : '')}
         onClick={confirm}
-        title="整理结构并输入到光标处"
-        disabled={processing || !session}
+        title="整理结构并输入到光标处（回车）"
+        disabled={processing || !hasText}
       >
-        {processing ? <Loader2 size={15} className="spin" /> : <Check size={15} />}
+        {processing ? <Loader2 size={14} className="spin" /> : <Check size={14} />}
       </button>
     </div>
   );
