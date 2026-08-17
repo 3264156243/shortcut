@@ -12,26 +12,6 @@ import * as fs from 'fs';
 const WebSocketClient = require('ws');
 
 const ASR_MODEL = 'qwen-audio-3.0-asr-flash-streaming';
-const SENTENCE_GAP_MS = 1200; // 停顿超过该时长才把当前句定稿
-
-const POLISH_SCENARIOS: Record<string, { label: string; desc: string; prompt: string }> = {
-  general: {
-    label: '通用校对',
-    desc: '纠正错别字、优化用词、多要点自动排布，不改变原意和风格',
-    prompt: '你是一位语音输入校对助手。用户的语音输入可能包含错别字、不精确的用词或松散的口语。请在**完全不改变原意和整体表述**的前提下，做以下处理：\n1) 纠正明显的错别字或听写错误；\n2) 把不精确的用词替换为更准确的词汇；\n3) 如果用户提出了多个要点，自动用标点或换行进行组织排列。\n**不要重写**用户的话，**不要改变**用户的语调和风格，**不要添加**用户没说过的内容。\n直接输出处理后的文本。',
-  },
-  code: {
-    label: '技术需求校对',
-    desc: '纠正错别字、模糊技术词汇精确化、多点自动分列，不添加需求',
-    prompt: '你是一位技术需求校对助手。用户的语音输入可能包含错别字或不精确的技术描述。请在**不改变原意**的前提下：\n1) 纠正错别字；\n2) 将模糊的描述替换为更准确的技术词汇；\n3) 如果用户列出了多条，自动用分点格式整理。\n**不要重写**用户的话，**不要添加**用户没提过的需求。\n直接输出处理后的文本。',
-  },
-  writing: {
-    label: '文字校对',
-    desc: '纠正错别字、不通顺处调顺，保持原有意境和语感',
-    prompt: '你是一位写作校对助手。用户的语音输入可能包含错别字或不通顺的口语表达。请在**保持原意、风格和语感**的前提下：\n1) 纠正错别字；\n2) 将口语化的不通顺之处调整为书面语；\n3) 保持整体表述和文风不变。\n**不要重写**，**不要添加**内容。\n直接输出处理后文本。',
-  },
-  custom: { label: '自定义提示词', desc: '使用你自己填写的 system 提示词', prompt: '' },
-};
 
 function configPath(): string {
   return path.join(app.getPath('userData'), 'shortcut', 'config.json');
@@ -71,20 +51,13 @@ let bridgeProcess: ChildProcess | null = null;
 let rawStream: any = null;
 let sessionRunning = false;
 let listening = false;
-let polishText = '';
-// cursorText = 光标处本会话累计文本（含已定稿句子 + 当前进行中句子）
-let cursorText = '';
-// committedCursorLen = 光标处属于「已定稿句子」的字符数，这部分永不删除
-let committedCursorLen = 0;
-// currentPartial = 当前进行中（未 end_time）句子的文本
-let currentPartial = '';
-// 识别结果去重：避免输出重复
-let lastRaw = '';
-// 累计文本（供润色）
+// sessionText = 识别暂存文本（胶囊中显示，勾选后才处理并打入光标）
 let sessionText = '';
+// 识别结果去重：避免重复推送
+let lastRaw = '';
 let polishSeq = 0;
-// 润色防抖定时器：停顿才触发润色，避免连续识别反复重启
-let polishTimer: NodeJS.Timeout | null = null;
+// 结构处理中标记
+let processing = false;
 let focusOk = false;
 let pendingBridgeResolve: ((line: string) => void) | null = null;
 
@@ -122,7 +95,7 @@ function ensureBridge() {
         for (const line of lines) {
           const l = line.trim();
           if (l === 'EVENT|SPACE') togglePause();
-          else if (l === 'EVENT|ENTER') confirmAndClose();
+          else if (l === 'EVENT|ENTER') confirmAndType();
           else if (l === 'READY|HOOK') sendToWindow('voice:status', { state: 'ready', message: '按键控制已就绪（空格=暂停，回车=确认）' });
           else if (l.startsWith('ERR|')) sendToWindow('voice:status', { state: 'error', message: `按键控制异常: ${l.slice(4)}` });
           else if (l.startsWith('FOCUS|')) {
@@ -243,74 +216,29 @@ function createAsrStream(apiKey: string, workspaceId: string): any {
   return stream;
 }
 
-// ===== 流式追加注入：说了什么就往光标处追加什么 =====
-// 只允许删「当前进行中的句子」，已定稿句子永不删除。
-function injectDelta(delta: string) {
-  if (delta && delta.length > 0) {
-    bridgeWrite(`T|${Buffer.from(delta, 'utf8').toString('base64')}`);
-  }
-}
-
+// ===== 识别文本暂存：只说不动，文字进胶囊，勾选后才处理 =====
 function applyRawResult(text: string, isPartial: boolean) {
   if (!sessionRunning) return;
   const t = (text || '').trim();
   if (!t) return;
 
-  // 完全重复的结果 → 忽略（防重复输入、防润色重复触发）
+  // 完全重复的结果 → 忽略
   if (t === lastRaw) return;
   lastRaw = t;
 
-  if (isPartial) {
-    // ===== 进行中句子的 partial =====
-    if (t.startsWith(currentPartial)) {
-      // 正常增长：只追加新尾部
-      const delta = t.slice(currentPartial.length);
-      injectDelta(delta);
-      cursorText += delta;
-      currentPartial = t;
-    } else {
-      // ASR 正在修正「当前句」：删掉当前句原输入，从头重打该句。
-      // （只删 currentPartial 的长度，绝不碰已定稿的 committed 部分）
-      bridgeWrite(`B|${currentPartial.length}`);
-      cursorText = cursorText.slice(0, committedCursorLen);
-      injectDelta(t);
-      cursorText += t;
-      currentPartial = t;
-    }
-  } else {
-    // ===== 句子已定稿（end_time）=====
-    // 由于 partial 已逐步输入该句，此处只需做「最终校准」：
-    // 找到该句最终文本与 currentPartial 的最长共同前缀差异；
-    // 若最终文本更长，追加差异；若不同，删当前句重打最终文本。
-    if (t.startsWith(currentPartial)) {
-      const delta = t.slice(currentPartial.length);
-      injectDelta(delta);
-      cursorText += delta;
-    } else {
-      bridgeWrite(`B|${currentPartial.length}`);
-      cursorText = cursorText.slice(0, committedCursorLen);
-      injectDelta(t);
-      cursorText += t;
-    }
-    // 该句定稿：缩进去重窗口，并更新累计
-    currentPartial = '';
-    committedCursorLen = cursorText.length;
-    sessionText = cursorText;
-    schedulePolish();
+  // 句子定稿后并入暂存文本；partial 只做累计预览（不进 sessionText）
+  if (!isPartial) {
+    sessionText = sessionText ? sessionText + t : t;
+    sendToWindow('voice:session', sessionText);
   }
 }
 
-// ===== LLM 润色（OpenAI 兼容，流式 SSE，关闭思考）=====
-function scenarioPrompt(): string {
-  const cfg = voiceConfig();
-  const scenario = cfg.polishScenario || 'general';
-  if (scenario === 'custom') {
-    return (cfg.polishCustomPrompt || '').trim() || POLISH_SCENARIOS.general.prompt;
-  }
-  return (POLISH_SCENARIOS[scenario] || POLISH_SCENARIOS.general).prompt;
+// ===== 结构处理（勾选后调用）：不改任何字，只排布结构 =====
+function structurePrompt(): string {
+  return '你是一个语音转文字后的结构整理助手。用户给你一段语音识别出的文字。请只做以下两件事：\n1) 修正明显的错别字（仅限确定无疑的听写错误）；\n2) 如果这段话包含多个要点，用换行和序号（1. 2. 3. …）把它们排列清楚。\n**绝对不要**改动任何词语本身、不要改写句子、不要润色文笔、不要添加或删除内容。除错别字外原文是什么就输出什么，只是把结构排布好。\n直接输出整理后的文字。';
 }
 
-async function polishWithLlm(text: string) {
+async function structureWithLlm(text: string): Promise<string> {
   const cfg = voiceConfig();
   const p = cfg.polishProvider || {};
   const base = String(p.baseUrl || '').trim();
@@ -318,10 +246,11 @@ async function polishWithLlm(text: string) {
   const model = String(p.model || '').trim() || 'qwen-plus';
   if (!base || !key) {
     sendToWindow('voice:polishError', '未配置润色接口地址/密钥（语音板块→润色模式→LLM润色）');
-    return;
+    return text;
   }
   const url = /\/chat\/completions$/i.test(base) ? base : base.replace(/\/+$/, '') + '/chat/completions';
   const seq = ++polishSeq;
+  let full = '';
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -331,20 +260,19 @@ async function polishWithLlm(text: string) {
         stream: true,
         enable_thinking: false,
         messages: [
-          { role: 'system', content: scenarioPrompt() },
+          { role: 'system', content: structurePrompt() },
           { role: 'user', content: text },
         ],
       }),
     });
     if (!res.ok || !res.body) {
       const t = await res.text().catch(() => '');
-      if (seq === polishSeq) sendToWindow('voice:polishError', `润色接口错误 ${res.status}: ${t.slice(0, 200)}`);
-      return;
+      if (seq === polishSeq) sendToWindow('voice:polishError', `结构处理接口错误 ${res.status}: ${t.slice(0, 200)}`);
+      return text;
     }
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    let full = '';
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -361,39 +289,21 @@ async function polishWithLlm(text: string) {
           const delta = j?.choices?.[0]?.delta?.content;
           const msg = j?.choices?.[0]?.message?.content;
           const piece = delta != null ? delta : (msg != null ? msg : '');
-          if (piece) {
-            full += piece;
-            if (seq === polishSeq) sendToWindow('voice:polish', full);
-          }
+          if (piece) full += piece;
         } catch {}
       }
     }
     if (!full && seq === polishSeq) {
-      sendToWindow('voice:polishError', '润色接口无返回内容');
+      sendToWindow('voice:polishError', '结构处理接口无返回内容');
+      return text;
     }
+    return full;
   } catch (err: any) {
     if (seq === polishSeq) {
-      sendToWindow('voice:polishError', `润色失败: ${err?.message || err}`);
+      sendToWindow('voice:polishError', `结构处理失败: ${err?.message || err}`);
     }
+    return text;
   }
-}
-
-function schedulePolish() {
-  const cfg = voiceConfig();
-  if ((cfg.polishMode || 'llm') === 'off') return;
-  if (polishTimer) clearTimeout(polishTimer);
-  const text = sessionText.trim();
-  if (!text) return;
-  // 停顿约 1 秒才触发润色，避免连续识别时润色反复重启
-  polishTimer = setTimeout(() => {
-    polishTimer = null;
-    const current = sessionText.trim();
-    if (!current) return;
-    polishSeq++;
-    polishText = '';
-    sendToWindow('voice:polish', '');
-    void polishWithLlm(current);
-  }, 1000);
 }
 
 // ===== 会话控制 =====
@@ -413,13 +323,9 @@ function endSession() {
   listening = false;
   closeStream();
   bridgeWrite('D');
-  if (polishTimer) { clearTimeout(polishTimer); polishTimer = null; }
-  cursorText = '';
-  currentPartial = '';
   sessionText = '';
   lastRaw = '';
-  committedCursorLen = 0;
-  polishText = '';
+  processing = false;
   sendToWindow('voice:status', { state: 'stopped', message: '已结束' });
 }
 
@@ -434,10 +340,38 @@ function togglePause() {
   }
 }
 
-function confirmAndClose() {
-  if (sessionRunning) bridgeWrite('E');
-  endSession();
-  if (voiceWindow && !voiceWindow.isDestroyed()) voiceWindow.close();
+// ===== 勾选确认：结构处理 → 光标打入 → 关闭 =====
+function confirmAndType() {
+  if (!sessionRunning) return;
+  const text = sessionText.trim();
+  // 立即结束识别
+  sessionRunning = false;
+  listening = false;
+  closeStream();
+  bridgeWrite('D');
+  if (!text) {
+    if (voiceWindow && !voiceWindow.isDestroyed()) voiceWindow.close();
+    return;
+  }
+  if (processing) return;
+  processing = true;
+  sendToWindow('voice:status', { state: 'processing', message: '整理中…' });
+  void (async () => {
+    let out = text;
+    const cfg = voiceConfig();
+    const mode = cfg.polishMode || 'llm';
+    if (mode !== 'off') {
+      out = await structureWithLlm(text);
+    }
+    processing = false;
+    if (out && out.trim()) {
+      bridgeWrite(`T|${Buffer.from(out.trim(), 'utf8').toString('base64')}`);
+    }
+    sendToWindow('voice:status', { state: 'done', message: '已输入' });
+    setTimeout(() => {
+      if (voiceWindow && !voiceWindow.isDestroyed()) voiceWindow.close();
+    }, 300);
+  })();
 }
 
 // ===== 窗口 =====
@@ -450,8 +384,8 @@ function openVoiceWindow() {
   }
   const display = screen.getPrimaryDisplay();
   const area = display.workArea;
-  const width = 360;
-  const height = 210;
+  const width = 340;
+  const height = 56;
   const saved = cfg.windowPos;
   let x = Math.round(area.x + (area.width - width) / 2);
   let y = Math.round(area.y + area.height - height - 12);
@@ -546,14 +480,9 @@ export function initVoiceInput() {
     }
     sessionRunning = true;
     listening = true;
-    polishText = '';
-    polishSeq = 0;
-    cursorText = '';
-    currentPartial = '';
-    committedCursorLen = 0;
+    processing = false;
     sessionText = '';
     lastRaw = '';
-    if (polishTimer) { clearTimeout(polishTimer); polishTimer = null; }
     rawStream = createAsrStream(cfg.apiKey, cfg.workspaceId);
     bridgeWrite('A');
     return { success: true };
@@ -564,28 +493,16 @@ export function initVoiceInput() {
       try { rawStream.ws.send(Buffer.from(chunk)); } catch {}
     }
   });
-  ipcMain.handle('voice:stop', () => {
+  // 勾选：结构处理并打入光标
+  ipcMain.handle('voice:confirm', () => {
+    confirmAndType();
+    return { success: true };
+  });
+  // 取消：不输入，直接关闭
+  ipcMain.handle('voice:cancel', () => {
     endSession();
     if (voiceWindow && !voiceWindow.isDestroyed()) voiceWindow.close();
     return { success: true };
-  });
-  ipcMain.handle('voice:enter', () => {
-    confirmAndClose();
-    return { success: true };
-  });
-  ipcMain.handle('voice:adopt', () => {
-    if (!sessionRunning) return { success: false };
-    // 用润色文本替换光标处本会话输入的整段原文
-    const total = cursorText.length;
-    if (total > 0) bridgeWrite(`B|${total}`);
-    if (polishText && polishText.length > 0) {
-      bridgeWrite(`T|${Buffer.from(polishText, 'utf8').toString('base64')}`);
-    }
-    cursorText = polishText || '';
-    currentPartial = '';
-    committedCursorLen = cursorText.length;
-    sessionText = cursorText;
-    return { success: true, text: polishText };
   });
   app.on('will-quit', () => {
     unregisterShortcut();

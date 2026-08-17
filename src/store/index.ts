@@ -154,12 +154,11 @@ declare global {
       voiceOpen: () => Promise<unknown>;
       voiceStart: () => Promise<unknown>;
       voiceAudio: (chunk: ArrayBuffer) => void;
-      voiceStop: () => Promise<unknown>;
-      voiceEnter: () => Promise<unknown>;
-      voiceAdopt: () => Promise<unknown>;
+      voiceConfirm: () => Promise<unknown>;
+      voiceCancel: () => Promise<unknown>;
+      onVoiceSession: (callback: (text: string) => void) => () => void;
       onVoicePolish: (callback: (text: string) => void) => () => void;
       onVoicePolishError: (callback: (text: string) => void) => () => void;
-      onVoiceRaw: (callback: (text: string) => void) => () => void;
       onVoiceStatus: (callback: (data: unknown) => void) => () => void;
       getReminderData: () => Promise<unknown>;
       onReminderData: (callback: (data: unknown) => void) => () => void;

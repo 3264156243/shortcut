@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Check, CornerDownLeft, Loader2, Mic, Square, X } from 'lucide-react';
+import { Check, Loader2, X } from 'lucide-react';
 import './voiceinput.css';
 
 interface VoiceConfig {
@@ -26,13 +26,12 @@ function stopCapture() {
   mediaStream = null;
 }
 
-function VoicePanel() {
-  const [status, setStatus] = useState<'idle' | 'listening' | 'paused' | 'error' | 'stopped'>('idle');
+function VoiceCapsule() {
+  const [status, setStatus] = useState<'idle' | 'listening' | 'paused' | 'processing' | 'error'>('idle');
   const [message, setMessage] = useState('');
-  const [polish, setPolish] = useState('');
+  const [session, setSession] = useState('');
   const [polishError, setPolishError] = useState('');
   const startingRef = useRef(false);
-  const polishRef = useRef('');
 
   const start = async () => {
     if (startingRef.current) return;
@@ -42,7 +41,7 @@ function VoicePanel() {
       const cfg = (await window.electronAPI?.voiceGetConfig?.()) as VoiceConfig | undefined;
       if (!cfg?.apiKey || !cfg?.workspaceId) {
         setStatus('error');
-        setMessage('请先在「设置 → 语音输入」填写 百炼 API Key 与 Workspace ID');
+        setMessage('请先在「设置 → 语音输入」填写 API Key 与 Workspace ID');
         startingRef.current = false;
         return;
       }
@@ -93,13 +92,13 @@ function VoicePanel() {
   };
 
   useEffect(() => {
-    const unPolish = window.electronAPI?.onVoicePolish?.((text) => {
-      polishRef.current = text;
-      setPolish(text);
-      setPolishError('');
+    const unSession = window.electronAPI?.onVoiceSession?.((text) => {
+      setSession(text);
     });
     const unPolishError = window.electronAPI?.onVoicePolishError?.((text) => {
       setPolishError(text);
+      setStatus('error');
+      setMessage(text);
     });
     const unStatus = window.electronAPI?.onVoiceStatus?.((s: any) => {
       if (s?.state === 'error') {
@@ -108,21 +107,20 @@ function VoicePanel() {
       } else if (s?.state === 'listening') {
         setStatus('listening');
         setMessage('');
-      } else if (s?.state === 'ready') {
-        setStatus('listening');
-        if (s?.message) setMessage(s.message);
-        setTimeout(() => setMessage(''), 5000);
       } else if (s?.state === 'paused') {
         setStatus('paused');
         setMessage(s?.message || '已暂停');
-      } else if (s?.state === 'stopped') {
-        setStatus('stopped');
-        stopCapture();
+      } else if (s?.state === 'processing') {
+        setStatus('processing');
+        setMessage(s?.message || '整理中…');
+      } else if (s?.state === 'done') {
+        setStatus('listening');
+        setMessage('');
       }
     });
     void start();
     return () => {
-      unPolish?.();
+      unSession?.();
       unPolishError?.();
       unStatus?.();
       stopCapture();
@@ -130,63 +128,47 @@ function VoicePanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const adopt = () => {
-    if (polishRef.current) void window.electronAPI?.voiceAdopt?.();
+  const confirm = () => {
+    void window.electronAPI?.voiceConfirm?.();
   };
-  const enter = () => {
-    void window.electronAPI?.voiceEnter?.();
-    window.close();
-  };
-  const stop = () => {
-    void window.electronAPI?.voiceStop?.();
-    window.close();
+  const cancel = () => {
+    void window.electronAPI?.voiceCancel?.();
   };
 
-  const listening = status === 'listening';
-  const paused = status === 'paused';
+  const processing = status === 'processing';
+  const listening = status === 'listening' || status === 'paused';
 
   return (
-    <div className="voice-root">
-      <div className="voice-header" style={{ WebkitAppRegion: 'drag' } as any}>
-        <Mic size={14} style={{ color: listening ? '#f87171' : (paused ? '#fbbf24' : 'var(--voice-muted)') }} />
-        <span className="voice-title">语音输入</span>
-        <span className="voice-hint">{listening ? '空格暂停' : (paused ? '空格继续' : 'Alt+H 关闭')}</span>
-      </div>
+    <div className="capsule-root">
+      <button type="button" className="capsule-btn" onClick={cancel} title="取消，不输入" disabled={processing}>
+        <X size={15} />
+      </button>
 
-      <div className="voice-body">
+      <div className="capsule-text-wrap">
         {status === 'error' ? (
-          <div className="voice-error">{message}</div>
-        ) : status === 'idle' ? (
-          <div className="voice-loading"><Loader2 size={16} className="spin" /> 正在启动…</div>
+          <span className="capsule-text error" title={message}>{message}</span>
+        ) : processing ? (
+          <span className="capsule-text processing">
+            <Loader2 size={12} className="spin" /> 整理中…
+          </span>
         ) : (
-          <>
-            <div className="voice-row voice-polish">
-              <span className="voice-label">润色（采纳后替换光标处原文）</span>
-              <span className="voice-text polish">
-                {polish || (polishError ? polishError : listening ? '等待润色结果…' : paused ? '（暂停）' : '—')}
-              </span>
-            </div>
-            {message && <div className="voice-error" style={{ color: 'var(--voice-muted)' }}>{message}</div>}
-          </>
+          <span className={'capsule-text' + (listening ? ' live' : '')} title={session || ''}>
+            {session || (status === 'idle' ? '正在启动…' : listening ? '聆听中…' : '—')}
+          </span>
         )}
       </div>
 
-      <div className="voice-footer">
-        <button type="button" className="voice-btn primary" disabled={!polish || (status !== 'listening' && status !== 'paused')} onClick={adopt} title="用润色文本覆盖刚输入的文段">
-          <Check size={13} /> 采纳
-        </button>
-        <button type="button" className="voice-btn" onClick={enter} title="确认并结束（回车）">
-          <CornerDownLeft size={13} /> 回车
-        </button>
-        <button type="button" className="voice-btn" onClick={stop} title="结束">
-          <Square size={12} /> 停止
-        </button>
-        <button type="button" className="voice-btn close" onClick={stop} title="关闭">
-          <X size={13} />
-        </button>
-      </div>
+      <button
+        type="button"
+        className={'capsule-btn confirm' + (session ? ' armed' : '')}
+        onClick={confirm}
+        title="整理结构并输入到光标处"
+        disabled={processing || !session}
+      >
+        {processing ? <Loader2 size={15} className="spin" /> : <Check size={15} />}
+      </button>
     </div>
   );
 }
 
-createRoot(document.getElementById('root')!).render(<VoicePanel />);
+createRoot(document.getElementById('root')!).render(<VoiceCapsule />);

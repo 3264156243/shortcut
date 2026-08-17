@@ -42,9 +42,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   voiceOpen: () => ipcRenderer.invoke('voice:open'),
   voiceStart: () => ipcRenderer.invoke('voice:start'),
   voiceAudio: (chunk: ArrayBuffer) => ipcRenderer.send('voice:audio', chunk),
-  voiceStop: () => ipcRenderer.invoke('voice:stop'),
-  voiceEnter: () => ipcRenderer.invoke('voice:enter'),
-  voiceAdopt: () => ipcRenderer.invoke('voice:adopt'),
+  voiceConfirm: () => ipcRenderer.invoke('voice:confirm'),
+  voiceCancel: () => ipcRenderer.invoke('voice:cancel'),
+  onVoiceSession: (callback: (text: string) => void) => {
+    const handler = (_event: unknown, text: string) => callback(text);
+    ipcRenderer.on('voice:session', handler);
+    return () => ipcRenderer.removeListener('voice:session', handler);
+  },
   onVoicePolish: (callback: (text: string) => void) => {
     const handler = (_event: unknown, text: string) => callback(text);
     ipcRenderer.on('voice:polish', handler);
@@ -54,11 +58,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_event: unknown, text: string) => callback(text);
     ipcRenderer.on('voice:polishError', handler);
     return () => ipcRenderer.removeListener('voice:polishError', handler);
-  },
-  onVoiceRaw: (callback: (text: string) => void) => {
-    const handler = (_event: unknown, text: string) => callback(text);
-    ipcRenderer.on('voice:raw', handler);
-    return () => ipcRenderer.removeListener('voice:raw', handler);
   },
   onVoiceStatus: (callback: (data: unknown) => void) => {
     const handler = (_event: unknown, data: unknown) => callback(data);
