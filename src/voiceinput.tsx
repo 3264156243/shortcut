@@ -116,8 +116,26 @@ function VoiceCapsule() {
         setMessage('');
       }
     });
+    // 胶囊获得焦点时的按键直达：空格=暂停/继续，回车=确认，ESC=取消
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === ' ') {
+        e.preventDefault();
+        e.stopPropagation();
+        void window.electronAPI?.voiceToggle?.();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        void window.electronAPI?.voiceConfirm?.();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        void window.electronAPI?.voiceCancel?.();
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
     void start();
     return () => {
+      window.removeEventListener('keydown', onKey, true);
       unSession?.();
       unPolishError?.();
       unStatus?.();

@@ -44,6 +44,15 @@ const sections = [
     ],
   },
   {
+    title: '语音输入（胶囊）',
+    items: [
+      { keys: ['Alt', 'H'], description: '打开 / 关闭语音输入胶囊' },
+      { keys: ['Space'], description: '暂停 / 继续识别' },
+      { keys: ['Enter'], description: '确认：整理结构并输入到光标处' },
+      { keys: ['Esc'], description: '取消，不输入' },
+    ],
+  },
+  {
     title: '任务墙',
     items: [
       { keys: ['Space'], description: '切换到下一个任务墙' },

@@ -218,7 +218,7 @@ function createAsrStream(apiKey: string, workspaceId: string): any {
 }
 
 // ===== 识别文本暂存：只说不动，文字进胶囊，勾选后才处理 =====
-// sessionText 累计所有识别文本（含 partial 与 final），用重叠去重拼接，避免后半段丢失。
+// sessionText 累计所有识别文本（含 partial 与 final），重叠去重拼接，避免后半段丢失与重复句。
 function applyRawResult(text: string, isPartial: boolean) {
   if (!sessionRunning) return;
   const t = (text || '').trim();
@@ -227,6 +227,12 @@ function applyRawResult(text: string, isPartial: boolean) {
   // 完全重复的结果 → 忽略
   if (t === lastRaw) return;
   lastRaw = t;
+
+  // 重复句去重：如果 t 与 sessionText 尾部已有的内容重复（相同句子被 ASR 重复推送），跳过
+  const tail = sessionText.slice(-Math.min(sessionText.length, t.length + 2));
+  if (tail && t && tail.includes(t)) {
+    return;
+  }
 
   // 合并：若 t 是 sessionText 的延续，只追加新增部分；否则判断是否重叠拼接
   if (t.startsWith(sessionText)) {
@@ -244,7 +250,7 @@ function applyRawResult(text: string, isPartial: boolean) {
 
 // ===== 结构处理（勾选后调用）：修正错别字 + 提取要点 + 优化结构 =====
 function structurePrompt(): string {
-  return '你是一个语音转文字结构整理助手。用户给你一段语音识别出的文字，请做以下处理：\n1) 修正确定无疑的错别字；\n2) 提取这段话中的多个要点/修改项，用换行和序号（1. 2. 3. …）分列排列，保持总起句（如"接下来我们进行三点修改"）原样保留在要点上方；\n3) 优化结构：语句按逻辑分组，保持原文语气与所有内容。\n**不要**改动要点本身的内容措辞、**不要**添加原文没有的信息、**不要**删除任何内容。\n直接输出整理后的文字。\n\n示例：\n输入：接下来我们进行三点修改字体放大样式变多一点还有背景需要改一下\n输出：\n接下来我们进行三点修改：\n1. 字体放大\n2. 样式变多一点\n3. 背景需要改一下';
+  return '你是一个语音转文字结构整理助手。用户给你一段语音识别出的文字，请做以下处理：\n1) 修正确定无疑的错别字；\n2) 合并文中完全重复的句子或内容（识别重复造成的，只保留一处）；\n3) 如果原文已经用"第一点/第二点/第1点"等词语明确标出要点，请保留原文的说法，不要重复添加序号编号；\n4) 如果原文没有明确编号，则提取多个要点，用换行和序号（1. 2. 3. …）分列排列，总起句（如"接下来我们进行三点修改"）保留在要点上方。\n**不要**改动要点本身的内容措辞、**不要**添加原文没有的信息、**不要**删除任何内容（重复句除外）。\n直接输出整理后的文字。\n\n示例：\n输入：接下来我们进行三点修改字体放大样式变多一点还有背景需要改一下\n输出：\n接下来我们进行三点修改：\n1. 字体放大\n2. 样式变多一点\n3. 背景需要改一下';
 }
 
 async function structureWithLlm(text: string): Promise<string> {
@@ -373,13 +379,15 @@ function confirmAndType() {
       out = await structureWithLlm(text);
     }
     processing = false;
+    // 先隐藏胶囊（归还焦点给目标窗口），再打字，确保文字进入目标输入框
+    if (voiceWindow && !voiceWindow.isDestroyed()) {
+      voiceWindow.hide();
+      await new Promise((r) => setTimeout(r, 120));
+    }
     if (out && out.trim()) {
       bridgeWrite(`T|${Buffer.from(out.trim(), 'utf8').toString('base64')}`);
     }
-    sendToWindow('voice:status', { state: 'done', message: '已输入' });
-    setTimeout(() => {
-      if (voiceWindow && !voiceWindow.isDestroyed()) voiceWindow.close();
-    }, 300);
+    if (voiceWindow && !voiceWindow.isDestroyed()) voiceWindow.close();
   })();
 }
 
@@ -399,7 +407,7 @@ function openVoiceWindow() {
   }
   const display = screen.getPrimaryDisplay();
   const area = display.workArea;
-  const width = 340;
+  const width = 255;
   const height = 40;
   const saved = cfg.windowPos;
   let x = Math.round(area.x + (area.width - width) / 2);
@@ -418,7 +426,7 @@ function openVoiceWindow() {
     alwaysOnTop: true,
     skipTaskbar: true,
     hasShadow: false,
-    focusable: false,
+    focusable: true,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -513,10 +521,14 @@ export function initVoiceInput() {
     confirmAndType();
     return { success: true };
   });
+  // 暂停/继续（胶囊聚焦时按空格直达）
+  ipcMain.handle('voice:toggle', () => {
+    togglePause();
+    return { success: true };
+  });
   // 取消：不输入，直接关闭
   ipcMain.handle('voice:cancel', () => {
-    endSession();
-    if (voiceWindow && !voiceWindow.isDestroyed()) voiceWindow.close();
+    cancelSession();
     return { success: true };
   });
   app.on('will-quit', () => {

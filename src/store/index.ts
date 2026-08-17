@@ -155,6 +155,7 @@ declare global {
       voiceStart: () => Promise<unknown>;
       voiceAudio: (chunk: ArrayBuffer) => void;
       voiceConfirm: () => Promise<unknown>;
+      voiceToggle: () => Promise<unknown>;
       voiceCancel: () => Promise<unknown>;
       onVoiceSession: (callback: (text: string) => void) => () => void;
       onVoicePolish: (callback: (text: string) => void) => () => void;

@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   voiceStart: () => ipcRenderer.invoke('voice:start'),
   voiceAudio: (chunk: ArrayBuffer) => ipcRenderer.send('voice:audio', chunk),
   voiceConfirm: () => ipcRenderer.invoke('voice:confirm'),
+  voiceToggle: () => ipcRenderer.invoke('voice:toggle'),
   voiceCancel: () => ipcRenderer.invoke('voice:cancel'),
   onVoiceSession: (callback: (text: string) => void) => {
     const handler = (_event: unknown, text: string) => callback(text);
