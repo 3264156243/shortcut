@@ -21,6 +21,7 @@ import UsageManagePanel from './components/UsageManagePanel';
 import CodexProviderPanel from './components/CodexProviderPanel';
 import ActivationGate from './components/ActivationGate';
 import ActivationPanel from './components/ActivationPanel';
+import VoiceInputPanel from './components/VoiceInputPanel';
 import { ModuleId, PanelAnimation, UpdateState } from './types';
 import { useTranslation } from './hooks/useTranslation';
 import { getAvailableModuleIds } from './moduleRegistry';
@@ -558,6 +559,8 @@ export default function App() {
               <CodexProviderPanel />
             ) : activeModule === 'activation' ? (
               <ActivationPanel />
+            ) : activeModule === 'voiceInput' ? (
+              <VoiceInputPanel />
             ) : (
               <TranslatePanel />
             )}

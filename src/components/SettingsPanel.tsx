@@ -1,9 +1,9 @@
 import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Moon, Sun, Monitor, Download, Upload, Power, ChevronUp, ChevronDown, Eye, EyeOff, ArrowRightLeft, Mic } from 'lucide-react';
+import { X, Moon, Sun, Monitor, Download, Upload, Power, ChevronUp, ChevronDown, Eye, EyeOff, ArrowRightLeft } from 'lucide-react';
 import { CORE_MODULE_IDS, MODULE_REGISTRY, getModuleGroup, type ModuleMeta } from '../moduleRegistry';
-import type { ModuleConfigItem, VoiceInputConfig } from '../types';
+import type { ModuleConfigItem } from '../types';
 
 interface ModuleRowProps {
   meta: ModuleMeta;
@@ -130,16 +130,6 @@ export default function SettingsPanel() {
       return movedId === undefined ? entry.meta.id : moved[movedId];
     });
     setModuleOrder(orderedIds);
-  };
-
-  const updateVoiceInput = (updates: Partial<VoiceInputConfig>) => {
-    useStore.setState((s) => ({
-      config: {
-        ...s.config,
-        voiceInput: { enabled: true, polishMode: 'asr' as const, ...(s.config.voiceInput || {}), ...updates },
-      },
-    }));
-    void useStore.getState().saveConfig();
   };
 
   const sectionStyle: React.CSSProperties = {
@@ -291,75 +281,6 @@ export default function SettingsPanel() {
                     </div>
                   );
                 })}
-              </div>
-            </div>
-
-            {/* 语音输入 */}
-            <div style={sectionStyle}>
-              <div className="mb-1 flex items-center gap-2">
-                <Mic size={15} style={{ color: 'var(--color-accent)' }} />
-                <h3 className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>语音输入（Alt+H）</h3>
-              </div>
-              <p className="mb-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                按下 Alt+H 弹出麦克风小窗，边说边把识别原文实时打入当前输入框，面板实时展示润色文本，可一键采纳覆盖。
-              </p>
-              <div className="flex flex-col gap-3">
-                <label className="flex items-center justify-between cursor-pointer">
-                  <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>启用语音输入</span>
-                  <input
-                    type="checkbox"
-                    checked={config.voiceInput?.enabled !== false}
-                    onChange={(e) => updateVoiceInput({ enabled: e.target.checked })}
-                    className="w-4 h-4 accent-indigo-500"
-                  />
-                </label>
-                <div>
-                  <div className="mb-1.5 text-xs" style={{ color: 'var(--color-text-muted)' }}>百炼 API Key（阿里云百炼控制台获取）</div>
-                  <input
-                    type="password"
-                    value={config.voiceInput?.apiKey || ''}
-                    onChange={(e) => updateVoiceInput({ apiKey: e.target.value })}
-                    onBlur={() => void useStore.getState().saveConfig()}
-                    placeholder="sk-xxxxxxxx"
-                    className="w-full px-3 py-2 rounded-xl text-sm outline-none transition-all duration-150"
-                    style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
-                  />
-                </div>
-                <div>
-                  <div className="mb-1.5 text-xs" style={{ color: 'var(--color-text-muted)' }}>Workspace ID（qwen-audio 系列模型需要工作区专属接入点）</div>
-                  <input
-                    type="text"
-                    value={config.voiceInput?.workspaceId || ''}
-                    onChange={(e) => updateVoiceInput({ workspaceId: e.target.value.trim() })}
-                    onBlur={() => void useStore.getState().saveConfig()}
-                    placeholder="llm-xxxxxx"
-                    className="w-full px-3 py-2 rounded-xl text-sm outline-none transition-all duration-150"
-                    style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
-                  />
-                </div>
-                <div>
-                  <div className="mb-1.5 text-xs" style={{ color: 'var(--color-text-muted)' }}>润色模式</div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {([
-                      ['asr', '模型内置润色'],
-                      ['off', '关闭润色（仅识别）'],
-                    ] as Array<['asr' | 'off', string]>).map(([value, label]) => (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => updateVoiceInput({ polishMode: value })}
-                        className="flex items-center justify-center py-2 rounded-xl text-xs transition-all duration-150"
-                        style={{
-                          background: (config.voiceInput?.polishMode || 'asr') === value ? 'var(--color-accent)' : 'var(--color-bg-card-hover)',
-                          border: '1px solid ' + ((config.voiceInput?.polishMode || 'asr') === value ? 'var(--color-accent)' : 'var(--color-border)'),
-                          color: (config.voiceInput?.polishMode || 'asr') === value ? 'white' : 'var(--color-text-secondary)',
-                        }}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
               </div>
             </div>
           </div>

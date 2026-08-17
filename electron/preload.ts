@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 语音输入
   voiceGetConfig: () => ipcRenderer.invoke('voice:getConfig'),
+  voiceOpen: () => ipcRenderer.invoke('voice:open'),
   voiceStart: () => ipcRenderer.invoke('voice:start'),
   voiceAudio: (chunk: ArrayBuffer) => ipcRenderer.send('voice:audio', chunk),
   voiceStop: () => ipcRenderer.invoke('voice:stop'),

@@ -151,6 +151,7 @@ declare global {
       startTrial: () => Promise<unknown>;
       onLicenseChanged: (callback: (data: unknown) => void) => () => void;
       voiceGetConfig: () => Promise<unknown>;
+      voiceOpen: () => Promise<unknown>;
       voiceStart: () => Promise<unknown>;
       voiceAudio: (chunk: ArrayBuffer) => void;
       voiceStop: () => Promise<unknown>;

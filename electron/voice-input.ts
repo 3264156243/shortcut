@@ -12,7 +12,7 @@ const DEFAULT_POLISH_PROMPT =
   '你是语音听写助手。请把识别到的语音内容润色成通顺、结构清晰的文字：修正口语化表达、补全标点、适当分段；不要改变原意，不要添加原文没有的信息。直接输出润色后的文本，不要任何解释。';
 
 function configPath(): string {
-  return path.join(app.getPath('userData'), 'config.json');
+  return path.join(app.getPath('userData'), 'shortcut', 'config.json');
 }
 
 function readConfigObject(): any {
@@ -274,6 +274,10 @@ function unregisterShortcut() {
 
 export function initVoiceInput() {
   registerShortcut();
+  ipcMain.handle('voice:open', () => {
+    openVoiceWindow();
+    return true;
+  });
   // 配置变更时重注册快捷键（设置面板保存配置后广播 config:changed）
   ipcMain.handle('voice:getConfig', () => {
     registerShortcut();

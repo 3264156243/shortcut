@@ -6,6 +6,7 @@ import {
   Grid2X2,
   KeyRound,
   Languages,
+  Mic,
   Smartphone,
   type LucideIcon,
 } from 'lucide-react';
@@ -29,6 +30,7 @@ export const MODULE_REGISTRY: ModuleMeta[] = [
   { id: 'island', label: 'SC球', icon: Smartphone, group: 'more', defaultEnabled: true, defaultVisible: true },
   { id: 'codexProvider', label: '供应商', icon: Bot, group: 'more', defaultEnabled: true, defaultVisible: true },
   { id: 'activation', label: '激活', icon: KeyRound, group: 'more', defaultEnabled: true, defaultVisible: true },
+  { id: 'voiceInput', label: '语音', icon: Mic, group: 'more', defaultEnabled: true, defaultVisible: true },
 ];
 
 export const CORE_MODULE_IDS: ModuleId[] = ['shortcuts', 'tasks'];
