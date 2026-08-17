@@ -269,11 +269,22 @@ export interface TaskEditorDraft {
   originalRemindedAt?: string;
 }
 
+export interface VoiceInputPolishProvider {
+  baseUrl?: string;
+  apiKey?: string;
+  model?: string;
+}
+
 export interface VoiceInputConfig {
   enabled?: boolean;
   apiKey?: string;
   workspaceId?: string;
-  polishMode?: 'asr' | 'off';
+  polishMode?: 'llm' | 'asr' | 'off';
+  polishProvider?: VoiceInputPolishProvider;
+  polishScenario?: 'general' | 'code' | 'writing' | 'custom';
+  polishCustomPrompt?: string;
+  sentenceGapMs?: number;
+  windowPos?: { x: number; y: number } | null;
 }
 
 export interface AppConfig {

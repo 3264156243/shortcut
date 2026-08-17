@@ -27,9 +27,10 @@ function stopCapture() {
 }
 
 function VoicePanel() {
-  const [status, setStatus] = useState<'idle' | 'listening' | 'error' | 'stopped'>('idle');
+  const [status, setStatus] = useState<'idle' | 'listening' | 'paused' | 'error' | 'stopped'>('idle');
   const [message, setMessage] = useState('');
   const [polish, setPolish] = useState('');
+  const [polishError, setPolishError] = useState('');
   const [raw, setRaw] = useState('');
   const startingRef = useRef(false);
   const polishRef = useRef('');
@@ -96,6 +97,10 @@ function VoicePanel() {
     const unPolish = window.electronAPI?.onVoicePolish?.((text) => {
       polishRef.current = text;
       setPolish(text);
+      setPolishError('');
+    });
+    const unPolishError = window.electronAPI?.onVoicePolishError?.((text) => {
+      setPolishError(text);
     });
     const unRaw = window.electronAPI?.onVoiceRaw?.((text) => setRaw(text));
     const unStatus = window.electronAPI?.onVoiceStatus?.((s: any) => {
@@ -105,6 +110,9 @@ function VoicePanel() {
       } else if (s?.state === 'listening') {
         setStatus('listening');
         setMessage('');
+      } else if (s?.state === 'paused') {
+        setStatus('paused');
+        setMessage(s?.message || '已暂停');
       } else if (s?.state === 'stopped') {
         setStatus('stopped');
         stopCapture();
@@ -113,6 +121,7 @@ function VoicePanel() {
     void start();
     return () => {
       unPolish?.();
+      unPolishError?.();
       unRaw?.();
       unStatus?.();
       stopCapture();
@@ -133,13 +142,14 @@ function VoicePanel() {
   };
 
   const listening = status === 'listening';
+  const paused = status === 'paused';
 
   return (
     <div className="voice-root">
       <div className="voice-header" style={{ WebkitAppRegion: 'drag' } as any}>
-        <Mic size={14} style={{ color: listening ? '#f87171' : 'var(--voice-muted)' }} />
+        <Mic size={14} style={{ color: listening ? '#f87171' : (paused ? '#fbbf24' : 'var(--voice-muted)') }} />
         <span className="voice-title">语音输入</span>
-        <span className="voice-hint">Alt+H 关闭</span>
+        <span className="voice-hint">{listening ? '空格暂停' : (paused ? '空格继续' : 'Alt+H 关闭')}</span>
       </div>
 
       <div className="voice-body">
@@ -150,12 +160,14 @@ function VoicePanel() {
         ) : (
           <>
             <div className="voice-row voice-raw">
-              <span className="voice-label">原文</span>
+              <span className="voice-label">{listening ? '原文' : (paused ? '原文（已暂停）' : '原文')}</span>
               <span className="voice-text">{raw || (listening ? '正在聆听…' : '已结束')}</span>
             </div>
             <div className="voice-row voice-polish">
               <span className="voice-label">润色</span>
-              <span className="voice-text polish">{polish || (listening ? '等待润色结果…' : '—')}</span>
+              <span className="voice-text polish">
+                {polish || (polishError ? polishError : listening ? '等待润色结果…' : paused ? '（暂停）' : '—')}
+              </span>
             </div>
           </>
         )}
@@ -165,7 +177,7 @@ function VoicePanel() {
         <button type="button" className="voice-btn primary" disabled={!polish || status !== 'listening'} onClick={adopt} title="用润色文本覆盖刚输入的文段">
           <Check size={13} /> 采纳
         </button>
-        <button type="button" className="voice-btn" onClick={enter} title="结束并保留当前内容">
+        <button type="button" className="voice-btn" onClick={enter} title="确认并结束（回车）">
           <CornerDownLeft size={13} /> 回车
         </button>
         <button type="button" className="voice-btn" onClick={stop} title="结束">

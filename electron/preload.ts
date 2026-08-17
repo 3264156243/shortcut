@@ -50,6 +50,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('voice:polish', handler);
     return () => ipcRenderer.removeListener('voice:polish', handler);
   },
+  onVoicePolishError: (callback: (text: string) => void) => {
+    const handler = (_event: unknown, text: string) => callback(text);
+    ipcRenderer.on('voice:polishError', handler);
+    return () => ipcRenderer.removeListener('voice:polishError', handler);
+  },
   onVoiceRaw: (callback: (text: string) => void) => {
     const handler = (_event: unknown, text: string) => callback(text);
     ipcRenderer.on('voice:raw', handler);

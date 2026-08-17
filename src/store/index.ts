@@ -158,6 +158,7 @@ declare global {
       voiceEnter: () => Promise<unknown>;
       voiceAdopt: () => Promise<unknown>;
       onVoicePolish: (callback: (text: string) => void) => () => void;
+      onVoicePolishError: (callback: (text: string) => void) => () => void;
       onVoiceRaw: (callback: (text: string) => void) => () => void;
       onVoiceStatus: (callback: (data: unknown) => void) => () => void;
       getReminderData: () => Promise<unknown>;
