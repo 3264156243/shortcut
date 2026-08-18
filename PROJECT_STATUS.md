@@ -118,10 +118,10 @@
 
 ## 6. 接手后的执行顺序
 
-1. 确认所有 `ShortCut.exe` 已从托盘退出，执行 `npx tsc -p tsconfig.electron.json` 和 `npm run build`，按 `HANDOVER.md` 刷新 `release/win-unpacked/resources/app.asar`。
-2. 启动 `release/win-unpacked/ShortCut.exe`，确认左侧“文件快传”入口、选择文件按钮和文件消息 UI 可见。
-3. 用真实手机访问 `/mobile/`，至少验证：桌面发小文件到手机并下载；手机发小文件到桌面并下载；删除文件消息后两端消失且服务器分片被删除。
-4. 优先修复桌面下载整体进内存的问题，改成 Node 流式响应写入临时文件，完成后原子重命名。
+1. ✅ 确认所有 `ShortCut.exe` 已从托盘退出，执行 `npx tsc -p tsconfig.electron.json` 和 `npm run build`，按 `HANDOVER.md` 刷新 `release/win-unpacked/resources/app.asar`。——**已完成（本轮 01:14 刷新）**
+2. 启动 `release/win-unpacked/ShortCut.exe`，确认左侧“文件快传”入口、选择文件按钮和文件消息 UI 可见。——**冒烟已通过（进程稳定），UI 目检待人工**
+3. 用真实手机访问 `/mobile/`，至少验证：桌面发小文件到手机并下载；手机发小文件到桌面并下载；删除文件消息后两端消失且服务器分片被删除。——**尚未做真实端到端文件测试**
+4. ✅ 修复桌面下载整体进内存的问题，改成 Node 流式响应写入临时文件，完成后原子重命名。——**已完成，提交 `2cb2dbf`，app.asar 已刷入**
 5. 完成可靠传输协议：分片哈希、完整哈希、上传状态查询、缺片续传、取消/重试、速度、预计时间与本地历史。
 6. 实现共享文件：自定义/自动 6 位密码、最长 24 小时、所有客户端可领取、短时下载令牌。
 7. 把激活后台 `fileTransferPolicy` 真正接入同步服务端校验，并实现过期文件、孤立分片和空间配额清理。
@@ -160,6 +160,7 @@ Remove-SSHSession -SessionId $s.SessionId | Out-Null
 
 ## 更新记录
 
+- [2026-08-19] 刷新开发验收 `app.asar`（01:12 与 01:14 两次，含 `665ab70` 文件快传 UI + 流式下载修复），冒烟通过。修复桌面文件下载改为 Node 流式写临时文件 + Content-Length 校验 + 原子重命名，提交 `2cb2dbf`。核实服务器端 `server/sync/{api,config,file}.php` 已部署且 `php -l` 通过，`/mobile/`、`/taskwall/` HTTP 200 正常，`/sync/api.php` 405 属正常（仅 POST）。
 - [2026-08-18] 文件快传第二阶段基础实现提交 `665ab70`：统一移动框架入口，任务墙页可切换文件快传，领取密码移入快传页；桌面和移动端新增文件选择，服务端新增文件元数据、2 MB 分片上传和下载端点。代码已推送，服务端已部署并通过 PHP 语法检查；开发验收 `app.asar` 尚未刷新，真实双向文件测试尚未完成。
 - [2026-08-18] 建立文件快传正式计划 `docs/文件快传与通用移动联动开发计划.md`，明确统一绑定、云端中转、临时分享、WebRTC、SC球、权限和安卓壳扩展路线。
 - [2026-08-18] 提交 `48f1e69`：注册 `fileTransfer` 常用板块、统一移动首页、严格移动令牌、双向文本消息、文本共享密码和激活后台策略字段；移动站已部署。
