@@ -1,6 +1,6 @@
 import { ipcMain, Notification } from 'electron';
 import { randomBytes } from 'crypto';
-import { configureBinding, getOrCreateBind, getBindInfo } from './binding';
+import { configureBinding, getOrCreateBind, getBindInfo, publishBoardNames } from './binding';
 import { registerConsumer, pullAllBoards } from './engine';
 
 interface SyncInitOptions {
@@ -11,6 +11,22 @@ interface SyncInitOptions {
 }
 
 let ipcRegistered = false;
+let currentOptions: SyncInitOptions | null = null;
+let boardPublishTimer: ReturnType<typeof setTimeout> | null = null;
+
+function readBoardNames(options: SyncInitOptions): string[] {
+  const boards = options.readConfigObject()?.taskBoards;
+  return Array.isArray(boards) ? boards.map((board: any) => String(board?.name || '').trim()).filter(Boolean) : [];
+}
+
+export function scheduleBoardListPublish() {
+  if (!currentOptions) return;
+  if (boardPublishTimer) clearTimeout(boardPublishTimer);
+  boardPublishTimer = setTimeout(() => {
+    boardPublishTimer = null;
+    if (currentOptions) void publishBoardNames(readBoardNames(currentOptions));
+  }, 500);
+}
 
 function createTaskNote(task: any, zIndex: number) {
   const now = new Date().toISOString();
@@ -33,6 +49,7 @@ function createTaskNote(task: any, zIndex: number) {
 }
 
 export async function initSync(options: SyncInitOptions) {
+  currentOptions = options;
   configureBinding({ readConfigObject: options.readConfigObject, updateConfig: options.updateConfig });
 
   registerConsumer('taskwall', async (tasks) => {
@@ -82,6 +99,7 @@ export async function initSync(options: SyncInitOptions) {
     ipcRegistered = true;
     ipcMain.handle('sync:getBinding', async () => {
       const info = await getBindInfo();
+      if (info) void publishBoardNames(readBoardNames(options));
       return info ? { success: true, ...info } : { success: false, message: '暂时无法获取绑定信息' };
     });
     ipcMain.handle('sync:pullNow', async () => {
@@ -101,5 +119,6 @@ export async function initSync(options: SyncInitOptions) {
 
   if (!options.taskwallEnabled()) return [];
   await getOrCreateBind();
+  await publishBoardNames(readBoardNames(options));
   return pullAllBoards();
 }

@@ -25,7 +25,7 @@
         #26231f;
       background-size: 24px 24px;
     }
-    button, input, textarea { font: inherit; }
+    button, input, textarea, select { font: inherit; }
     button { cursor: pointer; }
     .shell { width: min(100%, 760px); margin: 0 auto; padding: 22px 18px 38px; }
     .topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
@@ -81,7 +81,7 @@
     .field { margin-bottom: 16px; }
     .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
     label { display: block; margin-bottom: 7px; font-size: 12px; font-weight: 700; color: #685a4b; }
-    input, textarea {
+    input, textarea, select {
       width: 100%;
       border: 1px solid rgba(90,68,43,.25);
       border-radius: 7px;
@@ -90,9 +90,10 @@
       background: rgba(255,252,242,.65);
       transition: border-color .16s, box-shadow .16s, background .16s;
     }
-    input { height: 42px; padding: 0 12px; }
+    input, select { height: 42px; padding: 0 12px; }
+    select { appearance: none; padding-right: 34px; background-image: linear-gradient(45deg, transparent 50%, #765f49 50%), linear-gradient(135deg, #765f49 50%, transparent 50%); background-position: calc(100% - 17px) 17px, calc(100% - 12px) 17px; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
     textarea { min-height: 98px; padding: 11px 12px; resize: vertical; line-height: 1.65; }
-    input:focus, textarea:focus {
+    input:focus, textarea:focus, select:focus {
       border-color: #a96b45;
       box-shadow: 0 0 0 3px rgba(169,107,69,.12);
       background: rgba(255,254,248,.86);
@@ -112,6 +113,9 @@
     .message { min-height: 20px; margin-top: 13px; font-size: 12px; text-align: center; color: #7e6f5e; }
     .message.error { color: #a23932; }
     .message.success { color: #337552; }
+    .bind-summary { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; padding: 9px 11px; border: 1px solid rgba(90,68,43,.16); border-radius: 7px; background: rgba(255,255,255,.28); color: #6a5847; font-size: 12px; }
+    .bind-code { font: 700 14px Consolas, monospace; letter-spacing: 2px; color: #9f493a; }
+    .text-button { margin-left: auto; border: 0; padding: 2px 0; background: transparent; color: #8b593d; font-size: 12px; }
     .bind-view { min-height: 370px; display: grid; place-items: center; }
     .bind-box { width: min(100%, 390px); text-align: center; }
     .bind-box h2 { font-size: 23px; margin-bottom: 8px; }
@@ -162,6 +166,10 @@
         <div id="taskView" class="hidden">
           <h2>新增任务</h2>
           <p class="hint">任务内容仅临时存储在 ShortCut 服务器，桌面端启动或点击“立即接收”后进入任务墙并从云端删除。</p>
+          <div class="bind-summary">
+            <span>当前桌面</span><strong id="currentBindCode" class="bind-code">--</strong>
+            <button id="refreshBoardsButton" class="text-button" type="button">刷新任务墙</button>
+          </div>
           <form id="taskForm">
             <div class="field">
               <label for="title">任务标题</label>
@@ -177,8 +185,8 @@
                 <input id="reminderAt" type="datetime-local" />
               </div>
               <div class="field">
-                <label for="boardName">目标任务墙（可选）</label>
-                <input id="boardName" maxlength="40" placeholder="默认任务墙" />
+                <label for="boardName">目标任务墙</label>
+                <select id="boardName"><option value="">正在读取桌面任务墙…</option></select>
               </div>
             </div>
             <div class="actions">
@@ -197,6 +205,7 @@
     const storageKey = 'shortcut-sync-bind-id';
     const el = (id) => document.getElementById(id);
     let bindId = '';
+    let bindCode = '';
 
     async function callApi(payload) {
       const controller = new AbortController();
@@ -224,18 +233,49 @@
       target.className = 'message' + (type ? ' ' + type : '');
     }
 
-    function setConnected(nextBindId) {
+    async function loadBoards() {
+      const select = el('boardName');
+      select.disabled = true;
+      try {
+        const data = await callApi({ action: 'board.list', board: 'taskwall', bindId });
+        const boards = data.success && Array.isArray(data.boards) ? data.boards.filter(Boolean) : [];
+        select.innerHTML = '';
+        if (boards.length === 0) {
+          const option = document.createElement('option');
+          option.value = '默认任务墙';
+          option.textContent = '默认任务墙（桌面列表尚未同步）';
+          select.appendChild(option);
+        } else {
+          boards.forEach((name) => {
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = name;
+            select.appendChild(option);
+          });
+        }
+      } catch {
+        select.innerHTML = '<option value="默认任务墙">默认任务墙（读取失败）</option>';
+      } finally {
+        select.disabled = false;
+      }
+    }
+
+    function setConnected(nextBindId, nextCode = '') {
       bindId = nextBindId;
+      bindCode = nextCode || bindCode;
       localStorage.setItem(storageKey, nextBindId);
       el('bindView').classList.add('hidden');
       el('taskView').classList.remove('hidden');
       el('status').classList.add('connected');
       el('status').lastElementChild.textContent = '已连接';
+      el('currentBindCode').textContent = bindCode || '已连接';
+      void loadBoards();
       setTimeout(() => el('title').focus(), 60);
     }
 
     function clearBinding() {
       bindId = '';
+      bindCode = '';
       localStorage.removeItem(storageKey);
       history.replaceState(null, '', location.pathname);
       el('taskView').classList.add('hidden');
@@ -251,7 +291,7 @@
       try {
         const data = await callApi({ action: 'bind.info', bindId: candidate });
         if (data.success && data.valid) {
-          setConnected(data.bindId || candidate);
+          setConnected(data.bindId || candidate, data.code || '');
           return true;
         }
       } catch {}
@@ -274,7 +314,7 @@
       try {
         const data = await callApi({ action: 'bind.resolve', code });
         if (!data.success || !data.bindId) throw new Error(data.message || '绑定码无效');
-        setConnected(data.bindId);
+        setConnected(data.bindId, data.code || code);
         setMessage(el('bindMessage'), '');
       } catch (error) {
         setMessage(el('bindMessage'), error.message || '连接失败', 'error');
@@ -284,6 +324,7 @@
     });
 
     el('unbindButton').addEventListener('click', clearBinding);
+    el('refreshBoardsButton').addEventListener('click', () => void loadBoards());
 
     el('taskForm').addEventListener('submit', async (event) => {
       event.preventDefault();

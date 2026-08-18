@@ -104,6 +104,11 @@ export default function BindCard() {
       <div className="flex items-center gap-2 mb-2">
         <Smartphone size={15} style={{ color: 'var(--color-accent)' }} />
         <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>联动绑定</span>
+        {info?.code && (
+          <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: 'rgba(52, 211, 153, .14)', color: '#34d399' }}>
+            已绑定 {info.code}
+          </span>
+        )}
         <button
           type="button"
           onClick={pullNow}

@@ -3006,6 +3006,9 @@ ipcMain.handle('config:read', () => readConfig());
 ipcMain.handle('config:write', (_e: any, data: string) => {
   writeConfig(data);
   syncModuleServices();
+  try {
+    require('./sync/init').scheduleBoardListPublish();
+  } catch {}
   return true;
 });
 

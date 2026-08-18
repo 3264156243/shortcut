@@ -114,3 +114,11 @@ export async function getBindInfo(): Promise<SyncBinding | null> {
   if (data?.success && data.valid === false) return createBinding();
   return stored;
 }
+
+export async function publishBoardNames(boardNames: string[]): Promise<boolean> {
+  const bindId = getStoredBindId();
+  if (!bindId) return false;
+  const boards = Array.from(new Set(boardNames.map((name) => String(name || '').trim()).filter(Boolean))).slice(0, 50);
+  const data = await request({ action: 'bind.boards.update', bindId, boards });
+  return data?.success === true;
+}

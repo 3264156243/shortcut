@@ -118,10 +118,37 @@ switch ($action) {
         }
         $resolved = resolve_code($code);
         if ($resolved) {
-            respond(['success' => true, 'bindId' => $resolved]);
+            $bind = get_bind($resolved);
+            respond([
+                'success' => true,
+                'bindId' => $resolved,
+                'code' => isset($bind['code']) ? $bind['code'] : strtoupper($code),
+                'boards' => isset($bind['boards']) && is_array($bind['boards']) ? $bind['boards'] : [],
+            ]);
         } else {
             respond(['success' => false, 'message' => '绑定码无效']);
         }
+        break;
+
+    case 'bind.boards.update':
+        if (!rate_limit_allow('bind.boards.update:' . client_ip(), 120, 60)) {
+            error_msg('任务墙同步过于频繁，请稍后再试');
+        }
+        if ($bindId === '' || !get_bind($bindId)) {
+            error_msg('绑定身份无效');
+        }
+        $rawBoards = isset($input['boards']) && is_array($input['boards']) ? array_slice($input['boards'], 0, 50) : [];
+        $boards = [];
+        foreach ($rawBoards as $name) {
+            $clean = limited_text($name, 40);
+            if ($clean !== '' && !in_array($clean, $boards, true)) {
+                $boards[] = $clean;
+            }
+        }
+        if (!update_bind_boards($bindId, $boards)) {
+            error_msg('任务墙列表同步失败');
+        }
+        respond(['success' => true, 'boards' => $boards]);
         break;
 
     // ===== 任务墙队列 =====
@@ -222,12 +249,12 @@ switch ($action) {
         if ($bindId === '') {
             error_msg('缺少 bindId');
         }
-        if (!get_bind($bindId)) {
+        $bind = get_bind($bindId);
+        if (!$bind) {
             error_msg('绑定身份无效');
         }
-        // 从队列中提取已用过的墙名（已消费的不可用，所以先只返回空列表）
-        // 简单实现：返回常用墙名列表，或空列表让手机自由输入
-        respond(['success' => true, 'boards' => []]);
+        $boards = isset($bind['boards']) && is_array($bind['boards']) ? $bind['boards'] : [];
+        respond(['success' => true, 'boards' => $boards]);
         break;
 
     default:

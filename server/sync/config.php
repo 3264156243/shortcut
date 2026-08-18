@@ -193,6 +193,18 @@ function get_bind($bindId) {
     return isset($binds[$bindId]) ? $binds[$bindId] : null;
 }
 
+function update_bind_boards($bindId, $boards) {
+    global $BINDS_FILE;
+    return json_lock_update($BINDS_FILE, function ($binds) use ($bindId, $boards) {
+        if (!isset($binds[$bindId])) {
+            return ['data' => $binds, 'result' => false];
+        }
+        $binds[$bindId]['boards'] = array_values($boards);
+        $binds[$bindId]['boards_updated_at'] = date('c');
+        return ['data' => $binds, 'result' => true];
+    });
+}
+
 // ===== 队列管理（通用，按 board + bindId）=====
 function queue_path($board, $bindId) {
     global $QUEUE_DIR;
