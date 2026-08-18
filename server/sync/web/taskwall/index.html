@@ -145,6 +145,9 @@
     .bind-summary { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; padding: 9px 11px; border: 1px solid rgba(90,68,43,.16); border-radius: 7px; background: rgba(255,255,255,.28); color: #6a5847; font-size: 12px; }
     .bind-code { font: 700 14px Consolas, monospace; letter-spacing: 2px; color: #9f493a; }
     .text-button { margin-left: auto; border: 0; padding: 2px 0; background: transparent; color: #8b593d; font-size: 12px; }
+    .module-nav { display: flex; gap: 8px; margin: 0 0 18px; padding: 8px; border: 1px solid rgba(90,68,43,.16); border-radius: 7px; background: rgba(255,255,255,.25); }
+    .module-nav button { flex: 1; min-height: 36px; border: 1px solid rgba(90,68,43,.16); border-radius: 6px; color: #665848; background: rgba(255,255,255,.38); font-size: 12px; }
+    .module-nav button.active { color: #fff; background: #9f493a; border-color: transparent; }
     .bind-view { min-height: 370px; display: grid; place-items: center; }
     .bind-box { width: min(100%, 390px); text-align: center; }
     .bind-box h2 { font-size: 23px; margin-bottom: 8px; }
@@ -216,6 +219,7 @@
             <span>当前桌面</span><strong id="currentBindCode" class="bind-code">--</strong>
             <button id="refreshBoardsButton" class="text-button" type="button">刷新任务墙</button>
           </div>
+          <nav class="module-nav" aria-label="移动联动板块"><button class="active" type="button">任务墙</button><button id="openTransferButton" type="button">文件快传</button></nav>
           <form id="taskForm">
             <div class="field">
               <label for="title">任务标题</label>
@@ -519,6 +523,7 @@
       }
     });
     el('scanButton').addEventListener('click', () => void startScanner());
+    el('openTransferButton').addEventListener('click', () => { location.href = '/mobile/?bind=' + encodeURIComponent(bindId) + '&next=transfer'; });
     el('scanCloseButton').addEventListener('click', stopScanner);
     el('scanOverlay').addEventListener('click', (event) => {
       if (event.target === el('scanOverlay')) stopScanner();

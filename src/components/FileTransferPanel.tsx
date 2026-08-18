@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { Clipboard, Copy, FilePlus2, RefreshCw, Send, Share2, Trash2 } from 'lucide-react';
+import { Clipboard, Copy, Download, FilePlus2, RefreshCw, Send, Share2, Trash2 } from 'lucide-react';
 import { useStore } from '../store';
 
 interface TransferMessage {
   id: string;
   type: 'text' | 'file' | 'image';
   text?: string;
+  fileId?: string;
+  name?: string;
+  size?: number;
   sender: 'desktop' | 'mobile' | 'share';
   createdAt: string;
 }
@@ -16,6 +19,7 @@ export default function FileTransferPanel() {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [bound, setBound] = useState(false);
   const [bindCode, setBindCode] = useState('');
   const [claimCode, setClaimCode] = useState('');
@@ -57,6 +61,24 @@ export default function FileTransferPanel() {
     const result = await window.electronAPI?.fileTransferDelete?.(id);
     if (!result?.success) return addToast(result?.message || '删除失败', 'error');
     setMessages((items) => items.filter((item) => item.id !== id));
+  };
+
+  const sendFile = async () => {
+    const filePath = await window.electronAPI?.openFile?.();
+    if (!filePath) return;
+    setUploading(true);
+    const result = await window.electronAPI?.fileTransferSendFile?.(filePath);
+    setUploading(false);
+    if (!result?.success) return addToast(result?.message || '文件发送失败', 'error');
+    addToast('文件已发送', 'success');
+    await refresh();
+  };
+
+  const downloadFile = async (message: TransferMessage) => {
+    if (!message.fileId || !message.name) return;
+    const result = await window.electronAPI?.fileTransferDownload?.(message.fileId, message.name);
+    if (!result?.success) return addToast(result?.message || '下载失败', 'error');
+    addToast(`已保存到下载目录：${message.name}`, 'success');
   };
 
   const claim = async () => {
@@ -104,7 +126,7 @@ export default function FileTransferPanel() {
           <div className="flex h-full flex-col items-center justify-center text-center" style={{ color: 'var(--color-text-muted)' }}>
             <Send size={30} strokeWidth={1.4} />
             <div className="mt-3 text-sm">还没有快传消息</div>
-            <div className="mt-1 text-xs">在下方发送文本，文件分片传输正在接入</div>
+            <div className="mt-1 text-xs">在下方发送文本或文件</div>
           </div>
         )}
         <div className="mx-auto flex max-w-3xl flex-col gap-3">
@@ -113,10 +135,12 @@ export default function FileTransferPanel() {
             return (
               <div key={message.id} className={`group flex ${mine ? 'justify-end' : 'justify-start'}`}>
                 <div className="max-w-[74%]">
-                  <div className="rounded-lg px-3 py-2.5 text-sm leading-6" style={{ background: mine ? 'var(--color-accent)' : 'var(--color-bg-card)', color: mine ? 'white' : 'var(--color-text)', border: mine ? '0' : '1px solid var(--color-border)' }}>{message.text}</div>
+                  <div className="rounded-lg px-3 py-2.5 text-sm leading-6" style={{ background: mine ? 'var(--color-accent)' : 'var(--color-bg-card)', color: mine ? 'white' : 'var(--color-text)', border: mine ? '0' : '1px solid var(--color-border)' }}>
+                    {message.type === 'file' ? <button type="button" onClick={() => void downloadFile(message)} className="flex items-center gap-2 text-left"><Download size={16} /><span><b className="block font-medium">{message.name}</b><small className="opacity-70">{formatBytes(message.size || 0)}</small></span></button> : message.text}
+                  </div>
                   <div className={`mt-1 flex items-center gap-1 text-[10px] ${mine ? 'justify-end' : ''}`} style={{ color: 'var(--color-text-muted)' }}>
                     <span>{new Date(message.createdAt).toLocaleString('zh-CN', { hour12: false })}</span>
-                    <button type="button" onClick={() => { void window.electronAPI?.copyText?.(message.text || ''); addToast('已复制', 'success'); }} title="复制" className="p-1"><Copy size={11} /></button>
+                    {message.type === 'text' && <button type="button" onClick={() => { void window.electronAPI?.copyText?.(message.text || ''); addToast('已复制', 'success'); }} title="复制" className="p-1"><Copy size={11} /></button>}
                     <button type="button" onClick={() => void deleteMessage(message.id)} title="删除" className="p-1"><Trash2 size={11} /></button>
                   </div>
                 </div>
@@ -139,7 +163,7 @@ export default function FileTransferPanel() {
           </div>
         )}
         <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-lg p-2" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
-          <button type="button" onClick={() => addToast('文件分片上传正在接入下一阶段', 'info')} title="选择文件" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md" style={{ background: 'var(--color-bg-card-hover)' }}><FilePlus2 size={17} /></button>
+          <button type="button" onClick={() => void sendFile()} disabled={uploading} title="选择文件" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md disabled:opacity-50" style={{ background: 'var(--color-bg-card-hover)' }}><FilePlus2 size={17} /></button>
           <textarea value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendText(); } }} placeholder="发送文本，Enter 发送，Shift+Enter 换行" rows={1} className="max-h-28 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-sm outline-none" />
           <button type="button" onClick={() => setShareOpen((open) => !open)} title="共享发送" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md" style={{ background: shareOpen ? 'var(--color-accent)' : 'var(--color-bg-card-hover)', color: shareOpen ? 'white' : undefined }}><Share2 size={16} /></button>
           <button type="button" onClick={() => void sendText()} disabled={!text.trim() || sending} title="发送" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white disabled:opacity-40" style={{ background: 'var(--color-accent)' }}><Send size={16} /></button>
@@ -147,4 +171,10 @@ export default function FileTransferPanel() {
       </footer>
     </div>
   );
+}
+
+function formatBytes(value: number) {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
 }

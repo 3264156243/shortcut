@@ -181,6 +181,8 @@ declare global {
       onTaskLocate: (callback: (data: unknown) => void) => () => void;
       fileTransferGetState: () => Promise<any>;
       fileTransferSendText: (text: string) => Promise<any>;
+      fileTransferSendFile: (filePath: string) => Promise<any>;
+      fileTransferDownload: (fileId: string, name: string) => Promise<any>;
       fileTransferDelete: (messageId: string) => Promise<any>;
       fileTransferShareText: (text: string, code: string, hours: number) => Promise<any>;
       fileTransferClaim: (code: string) => Promise<any>;

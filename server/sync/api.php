@@ -173,7 +173,42 @@ switch ($action) {
         require_transfer_identity($bindId, $input);
         $messageId = isset($input['messageId']) ? trim((string)$input['messageId']) : '';
         if (!preg_match('/^msg_[a-f0-9]{24}$/', $messageId)) error_msg('消息标识无效');
-        respond(['success' => true, 'deleted' => delete_message($bindId, $messageId)]);
+        $messages = list_messages($bindId);
+        $removedFile = null;
+        foreach ((array)$messages as $item) {
+            if ((string)($item['id'] ?? '') === $messageId && !empty($item['fileId'])) $removedFile = safe_file_id($item['fileId']);
+        }
+        $deleted = delete_message($bindId, $messageId);
+        if ($removedFile !== null) remove_file_storage($bindId, $removedFile);
+        respond(['success' => true, 'deleted' => $deleted]);
+        break;
+
+    case 'transfer.fileInit':
+        $side = require_transfer_identity($bindId, $input);
+        $name = isset($input['name']) ? $input['name'] : '';
+        $size = isset($input['size']) ? $input['size'] : 0;
+        if ((int)$size <= 0) error_msg('文件为空');
+        if ((int)$size > 1024 * 1024 * 1024) error_msg('单个文件不能超过 1 GB');
+        $meta = create_file_meta($bindId, $name, $size, isset($input['mime']) ? $input['mime'] : '', isset($input['chunkSize']) ? $input['chunkSize'] : 2 * 1024 * 1024, $side);
+        if (!$meta) error_msg('文件信息无效');
+        respond(['success' => true, 'file' => $meta]);
+        break;
+
+    case 'transfer.fileComplete':
+        $side = require_transfer_identity($bindId, $input);
+        $fileId = safe_file_id(isset($input['fileId']) ? $input['fileId'] : '');
+        $meta = $fileId ? load_file_meta($bindId, $fileId) : null;
+        if (!$meta) error_msg('文件上传会话不存在');
+        $uploaded = array_map('intval', (array)($meta['uploaded'] ?? []));
+        sort($uploaded);
+        $expected = range(0, max(0, (int)$meta['chunkCount'] - 1));
+        if ($uploaded !== $expected) error_msg('文件仍有分片未上传');
+        $message = file_message($meta, $side);
+        if (!append_message($bindId, $message)) error_msg('文件消息保存失败');
+        $meta['complete'] = true;
+        $meta['messageId'] = $message['id'];
+        save_file_meta($bindId, $meta);
+        respond(['success' => true, 'message' => $message]);
         break;
 
     case 'transfer.share':

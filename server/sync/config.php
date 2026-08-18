@@ -6,6 +6,7 @@ $QUEUE_DIR = $DATA_DIR . '/queues';
 $RATE_LIMIT_FILE = $DATA_DIR . '/rate-limits.json';
 $MESSAGE_DIR = $DATA_DIR . '/messages';
 $SHARES_FILE = $DATA_DIR . '/shares.json';
+$FILE_DIR = $DATA_DIR . '/files';
 $MAX_QUEUE_ITEMS = 500;
 
 // ===== 通用：flock 封装 =====
@@ -260,6 +261,65 @@ function delete_message($bindId, $messageId) {
         }));
         return ['data' => $next, 'result' => count($messages) !== count($next)];
     });
+}
+
+function safe_file_id($value) {
+    return preg_match('/^file_[a-f0-9]{24}$/', (string)$value) ? (string)$value : null;
+}
+
+function file_dir($bindId, $fileId = '') {
+    global $FILE_DIR;
+    $safeBind = preg_replace('/[^a-zA-Z0-9_-]/', '_', $bindId);
+    $dir = $FILE_DIR . '/' . $safeBind;
+    if ($fileId !== '') $dir .= '/' . preg_replace('/[^a-zA-Z0-9_-]/', '_', $fileId);
+    if (!is_dir($dir)) mkdir($dir, 0755, true);
+    return $dir;
+}
+
+function file_meta_path($bindId, $fileId) { return file_dir($bindId, $fileId) . '/meta.json'; }
+
+function save_file_meta($bindId, $meta) { return json_lock_write(file_meta_path($bindId, $meta['id']), $meta); }
+
+function load_file_meta($bindId, $fileId) {
+    $id = safe_file_id($fileId);
+    if ($id === null) return null;
+    $path = file_meta_path($bindId, $id);
+    return file_exists($path) ? json_lock_read($path) : null;
+}
+
+function remove_file_storage($bindId, $fileId) {
+    $dir = file_dir($bindId, $fileId);
+    if (!is_dir($dir)) return true;
+    $items = scandir($dir);
+    foreach ($items as $item) {
+        if ($item === '.' || $item === '..') continue;
+        $path = $dir . '/' . $item;
+        if (is_file($path)) @unlink($path);
+    }
+    @rmdir($dir);
+    return true;
+}
+
+function create_file_meta($bindId, $name, $size, $mime, $chunkSize, $side) {
+    $safeName = limited_filename($name);
+    if ($safeName === '') return false;
+    $size = max(0, min((int)$size, 1024 * 1024 * 1024));
+    $chunkSize = max(256 * 1024, min((int)$chunkSize, 5 * 1024 * 1024));
+    $mimeText = trim((string)$mime);
+    if (function_exists('mb_substr')) $mimeText = mb_substr($mimeText, 0, 120, 'UTF-8'); else $mimeText = substr($mimeText, 0, 120);
+    $meta = ['id' => 'file_' . bin2hex(random_bytes(12)), 'name' => $safeName, 'size' => $size, 'mime' => $mimeText, 'chunkSize' => $chunkSize, 'chunkCount' => max(1, (int)ceil($size / $chunkSize)), 'uploaded' => [], 'sender' => $side, 'createdAt' => date('c')];
+    return save_file_meta($bindId, $meta) ? $meta : false;
+}
+
+function limited_filename($value) {
+    $name = trim((string)$value);
+    $name = str_replace(["\\", '/', "\0"], '_', $name);
+    if (function_exists('mb_substr')) $name = mb_substr($name, 0, 180, 'UTF-8'); else $name = substr($name, 0, 180);
+    return $name;
+}
+
+function file_message($meta, $side) {
+    return ['id' => 'msg_' . bin2hex(random_bytes(12)), 'type' => 'file', 'fileId' => $meta['id'], 'name' => $meta['name'], 'size' => $meta['size'], 'mime' => $meta['mime'], 'sender' => $side, 'favorite' => false, 'createdAt' => date('c')];
 }
 
 function create_share($bindId, $message, $customCode, $hours) {

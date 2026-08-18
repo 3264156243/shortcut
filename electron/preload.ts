@@ -50,6 +50,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   syncPullNow: () => ipcRenderer.invoke('sync:pullNow'),
   fileTransferGetState: () => ipcRenderer.invoke('fileTransfer:getState'),
   fileTransferSendText: (text: string) => ipcRenderer.invoke('fileTransfer:sendText', text),
+  fileTransferSendFile: (filePath: string) => ipcRenderer.invoke('fileTransfer:sendFile', filePath),
+  fileTransferDownload: (fileId: string, name: string) => ipcRenderer.invoke('fileTransfer:download', fileId, name),
   fileTransferDelete: (messageId: string) => ipcRenderer.invoke('fileTransfer:delete', messageId),
   fileTransferShareText: (text: string, code: string, hours: number) => ipcRenderer.invoke('fileTransfer:shareText', text, code, hours),
   fileTransferClaim: (code: string) => ipcRenderer.invoke('fileTransfer:claim', code),
