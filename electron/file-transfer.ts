@@ -65,12 +65,53 @@ async function uploadFile(filePath: string) {
 async function downloadFile(fileId: string, name: string) {
   const binding = await getBindInfo();
   if (!binding?.bindId) return { success: false, message: '联动绑定尚未建立' };
-  const response = await fetch(`${FILE_URL}?action=download&bindId=${encodeURIComponent(binding.bindId)}&side=desktop&fileId=${encodeURIComponent(fileId)}`);
+
+  let response: Response;
+  try {
+    response = await fetch(`${FILE_URL}?action=download&bindId=${encodeURIComponent(binding.bindId)}&side=desktop&fileId=${encodeURIComponent(fileId)}`);
+  } catch (error: any) {
+    return { success: false, message: error?.message || '文件下载请求失败' };
+  }
   if (!response.ok || !response.body) return { success: false, message: '文件下载失败' };
-  const target = path.join(app.getPath('downloads'), path.basename(name || fileId));
-  const buffer = Buffer.from(await response.arrayBuffer());
-  await fs.writeFile(target, buffer);
-  return { success: true, path: target };
+
+  // 目标文件名安全化，避免路径穿越
+  const safeName = (name || fileId || 'download').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').trim() || 'download';
+  const target = path.join(app.getPath('downloads'), safeName);
+  const tmp = path.join(app.getPath('temp'), `download-${Date.now()}-${Math.random().toString(36).slice(2)}.part`);
+
+  // 流式写入临时文件（不整体读入内存）
+  let received = 0;
+  try {
+    const handle = await fs.open(tmp, 'w');
+    try {
+      const reader = (response.body as unknown as ReadableStream<Uint8Array>).getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value && value.length) {
+          await handle.write(value);
+          received += value.length;
+        }
+      }
+    } finally {
+      await handle.close();
+    }
+
+    // Content-Length 校验（有则比对，防止下载不完整）
+    const total = Number(response.headers.get('content-length') || 0);
+    if (total > 0 && received !== total) {
+      await fs.unlink(tmp).catch(() => {});
+      return { success: false, message: '文件下载不完整' };
+    }
+
+    // 原子重命名到目标
+    await fs.rename(tmp, target);
+  } catch (error: any) {
+    await fs.unlink(tmp).catch(() => {});
+    return { success: false, message: error?.message || '文件保存失败' };
+  }
+
+  return { success: true, path: target, size: received };
 }
 
 export function initFileTransfer() {
