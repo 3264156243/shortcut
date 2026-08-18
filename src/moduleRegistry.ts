@@ -7,6 +7,7 @@ import {
   KeyRound,
   Languages,
   Mic,
+  Send,
   Smartphone,
   type LucideIcon,
 } from 'lucide-react';
@@ -26,6 +27,7 @@ export const MODULE_REGISTRY: ModuleMeta[] = [
   { id: 'tasks', label: '任务', icon: CheckSquare, group: 'primary', defaultEnabled: true, defaultVisible: true },
   { id: 'cockpit', label: '驾驶舱', icon: Gauge, group: 'primary', defaultEnabled: true, defaultVisible: true },
   { id: 'translate', label: '翻译', icon: Languages, group: 'primary', defaultEnabled: true, defaultVisible: true },
+  { id: 'fileTransfer', label: '快传', icon: Send, group: 'primary', defaultEnabled: true, defaultVisible: true },
   { id: 'usage', label: '统计', icon: BarChart3, group: 'more', defaultEnabled: true, defaultVisible: true },
   { id: 'island', label: 'SC球', icon: Smartphone, group: 'more', defaultEnabled: true, defaultVisible: true },
   { id: 'codexProvider', label: '供应商', icon: Bot, group: 'more', defaultEnabled: true, defaultVisible: true },
@@ -55,12 +57,18 @@ export function normalizeModuleConfig(raw?: ModuleConfigItem[]): ModuleConfigIte
   for (const meta of MODULE_REGISTRY) {
     if (seen.has(meta.id)) continue;
     seen.add(meta.id);
-    list.push({
+    const item: ModuleConfigItem = {
       id: meta.id,
       enabled: meta.defaultEnabled,
       visible: meta.defaultVisible,
       group: meta.group,
-    });
+    };
+    if (meta.id === 'fileTransfer') {
+      const translateIndex = list.findIndex((entry) => entry.id === 'translate');
+      list.splice(translateIndex >= 0 ? translateIndex + 1 : list.length, 0, item);
+    } else {
+      list.push(item);
+    }
   }
   return list;
 }

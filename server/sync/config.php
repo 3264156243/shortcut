@@ -4,6 +4,8 @@ $DATA_DIR = __DIR__ . '/data';
 $BINDS_FILE = $DATA_DIR . '/binds.json';
 $QUEUE_DIR = $DATA_DIR . '/queues';
 $RATE_LIMIT_FILE = $DATA_DIR . '/rate-limits.json';
+$MESSAGE_DIR = $DATA_DIR . '/messages';
+$SHARES_FILE = $DATA_DIR . '/shares.json';
 $MAX_QUEUE_ITEMS = 500;
 
 // ===== 通用：flock 封装 =====
@@ -203,6 +205,97 @@ function update_bind_boards($bindId, $boards) {
         $binds[$bindId]['boards_updated_at'] = date('c');
         return ['data' => $binds, 'result' => true];
     });
+}
+
+function issue_mobile_token($bindId, $deviceName) {
+    global $BINDS_FILE;
+    $plainToken = bin2hex(random_bytes(24));
+    $deviceId = bin2hex(random_bytes(12));
+    $updated = json_lock_update($BINDS_FILE, function ($binds) use ($bindId, $deviceName, $plainToken, $deviceId) {
+        if (!isset($binds[$bindId])) return ['data' => $binds, 'result' => false];
+        $binds[$bindId]['mobile'] = [
+            'device_id' => $deviceId,
+            'device_name' => $deviceName !== '' ? $deviceName : '我的手机',
+            'token_hash' => hash('sha256', $plainToken),
+            'bound_at' => date('c'),
+            'last_seen_at' => date('c'),
+        ];
+        return ['data' => $binds, 'result' => true];
+    });
+    return $updated ? ['token' => $plainToken, 'deviceId' => $deviceId, 'deviceName' => $deviceName !== '' ? $deviceName : '我的手机'] : false;
+}
+
+function validate_mobile_token($bindId, $token) {
+    $bind = get_bind($bindId);
+    $hash = isset($bind['mobile']['token_hash']) ? (string)$bind['mobile']['token_hash'] : '';
+    return $hash !== '' && $token !== '' && hash_equals($hash, hash('sha256', $token));
+}
+
+function message_path($bindId) {
+    global $MESSAGE_DIR;
+    $safe = preg_replace('/[^a-zA-Z0-9_-]/', '_', $bindId);
+    if (!is_dir($MESSAGE_DIR)) mkdir($MESSAGE_DIR, 0755, true);
+    return $MESSAGE_DIR . '/' . $safe . '.json';
+}
+
+function list_messages($bindId) {
+    $path = message_path($bindId);
+    return file_exists($path) ? json_lock_read($path) : [];
+}
+
+function append_message($bindId, $message) {
+    $path = message_path($bindId);
+    return json_lock_update($path, function ($messages) use ($message) {
+        $messages[] = $message;
+        if (count($messages) > 1000) $messages = array_slice($messages, -1000);
+        return ['data' => $messages, 'result' => $message];
+    });
+}
+
+function delete_message($bindId, $messageId) {
+    $path = message_path($bindId);
+    return json_lock_update($path, function ($messages) use ($messageId) {
+        $next = array_values(array_filter($messages, function ($item) use ($messageId) {
+            return (string)($item['id'] ?? '') !== $messageId;
+        }));
+        return ['data' => $next, 'result' => count($messages) !== count($next)];
+    });
+}
+
+function create_share($bindId, $message, $customCode, $hours) {
+    global $SHARES_FILE;
+    return json_lock_update($SHARES_FILE, function ($shares) use ($bindId, $message, $customCode, $hours) {
+        $activeCodes = [];
+        $now = time();
+        foreach ($shares as $share) {
+            if (strtotime((string)($share['expires_at'] ?? '')) > $now) $activeCodes[] = (string)($share['code'] ?? '');
+        }
+        $code = strtoupper(trim($customCode));
+        if ($code === '') {
+            do { $code = generate_bind_code($activeCodes); } while ($code !== null && in_array($code, $activeCodes, true));
+        }
+        if ($code === null || !preg_match('/^[A-Z0-9]{6}$/', $code) || in_array($code, $activeCodes, true)) return ['data' => $shares, 'result' => false];
+        $share = [
+            'id' => 'shr_' . bin2hex(random_bytes(12)),
+            'code' => $code,
+            'bind_id' => $bindId,
+            'message' => $message,
+            'created_at' => date('c'),
+            'expires_at' => date('c', $now + max(1, min(24, (int)$hours)) * 3600),
+        ];
+        $shares[] = $share;
+        return ['data' => $shares, 'result' => $share];
+    });
+}
+
+function claim_share($code) {
+    global $SHARES_FILE;
+    $shares = file_exists($SHARES_FILE) ? json_lock_read($SHARES_FILE) : [];
+    $code = strtoupper(trim($code));
+    foreach ((array)$shares as $share) {
+        if ((string)($share['code'] ?? '') === $code && strtotime((string)($share['expires_at'] ?? '')) > time()) return $share;
+    }
+    return null;
 }
 
 // ===== 队列管理（通用，按 board + bindId）=====

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#24221f" />
+  <title>ShortCut 移动联动</title>
+  <style>
+    :root { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; color: #f6efe5; background: #24221f; }
+    * { box-sizing: border-box; letter-spacing: 0; }
+    body { margin: 0; min-height: 100dvh; background: linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.02) 1px,transparent 1px),#24221f; background-size: 24px 24px; }
+    button,input,textarea { font: inherit; } button { cursor: pointer; }
+    .app { width: min(100%,720px); min-height: 100dvh; margin: auto; display: flex; flex-direction: column; }
+    header { height: 66px; flex: 0 0 auto; display: flex; align-items: center; gap: 11px; padding: 0 16px; border-bottom: 1px solid rgba(255,255,255,.08); background: rgba(36,34,31,.94); }
+    .logo { width: 38px; height: 38px; border-radius: 8px; object-fit: cover; }
+    .brand { min-width: 0; } .brand strong { display: block; font-size: 15px; } .brand span { color: #aaa198; font-size: 11px; }
+    .device { margin-left: auto; color: #c9bfb4; font-size: 11px; }
+    main { min-height: 0; flex: 1; display: flex; flex-direction: column; }
+    .screen { display: none; min-height: 0; flex: 1; } .screen.active { display: flex; }
+    .bind { align-items: center; justify-content: center; padding: 22px 16px; }
+    .paper { width: min(100%,430px); padding: 34px 24px 26px; color: #4b4035; background: repeating-linear-gradient(to bottom,transparent 0,transparent 34px,rgba(126,99,63,.12) 35px),#f3e8c9; border: 1px solid rgba(92,68,38,.18); border-radius: 6px; box-shadow: 0 20px 55px rgba(0,0,0,.3); }
+    h1,h2,p { margin-top: 0; } h1 { font-size: 22px; } .hint { color: #817363; font-size: 12px; line-height: 1.7; }
+    label { display: block; margin: 15px 0 7px; color: #695b4d; font-size: 12px; font-weight: 700; }
+    input,textarea { width: 100%; outline: 0; border: 1px solid rgba(90,68,43,.26); border-radius: 7px; color: #41372d; background: rgba(255,253,245,.72); }
+    input { height: 45px; padding: 0 12px; } textarea { min-height: 70px; padding: 10px 12px; resize: none; }
+    .code { text-align: center; text-transform: uppercase; font: 700 22px Consolas,monospace; letter-spacing: 4px; }
+    .primary,.secondary { min-height: 46px; border: 0; border-radius: 7px; padding: 0 16px; font-weight: 700; }
+    .primary { color: white; background: #9f493a; } .secondary { color: #625446; background: rgba(255,255,255,.45); border: 1px solid rgba(90,68,43,.18); }
+    .full { width: 100%; margin-top: 18px; } .message { min-height: 20px; margin-top: 12px; text-align: center; font-size: 12px; } .error { color: #a23932; }
+    .home { flex-direction: column; padding: 18px 16px 28px; }
+    .home h1 { margin-bottom: 4px; } .home > p { color: #aaa198; font-size: 12px; }
+    .nav-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-top: 16px; }
+    .nav-item { min-height: 112px; padding: 16px; text-align: left; border: 1px solid rgba(255,255,255,.09); border-radius: 8px; color: #f6efe5; background: #33302c; }
+    .nav-item b { display: block; margin-bottom: 7px; font-size: 16px; } .nav-item span { color: #aaa198; font-size: 11px; line-height: 1.6; }
+    .claim { margin-top: 12px; padding: 14px; border: 1px solid rgba(255,255,255,.09); border-radius: 8px; background: #33302c; }
+    .claim-row { display: flex; gap: 8px; } .claim input { color: #f6efe5; background: #292622; border-color: rgba(255,255,255,.1); }
+    .transfer { flex-direction: column; }
+    .toolbar { height: 50px; flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 0 14px; border-bottom: 1px solid rgba(255,255,255,.08); }
+    .icon-btn { width: 34px; height: 34px; border: 0; border-radius: 7px; color: #eee4da; background: #33302c; }
+    .toolbar b { font-size: 14px; } .toolbar span { margin-left: auto; color: #aaa198; font-size: 10px; }
+    .messages { min-height: 0; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 11px; padding: 16px; }
+    .bubble-row { display: flex; } .bubble-row.mine { justify-content: flex-end; }
+    .bubble-wrap { max-width: 78%; } .bubble { padding: 10px 12px; border-radius: 8px; color: #f5ede4; background: #3a3631; border: 1px solid rgba(255,255,255,.08); white-space: pre-wrap; word-break: break-word; line-height: 1.6; font-size: 14px; }
+    .mine .bubble { background: #9f493a; border-color: transparent; } .meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; color: #948b82; font-size: 9px; } .mine .meta { justify-content: flex-end; }
+    .text-btn { border: 0; padding: 0; color: inherit; background: transparent; font-size: 10px; }
+    .composer { flex: 0 0 auto; padding: 10px; border-top: 1px solid rgba(255,255,255,.08); background: #2c2925; }
+    .compose-row { display: flex; align-items: flex-end; gap: 8px; padding: 7px; border: 1px solid rgba(255,255,255,.09); border-radius: 8px; background: #36322d; }
+    .compose-row textarea { min-height: 38px; max-height: 110px; padding: 8px; color: #f6efe5; background: transparent; border: 0; } .send { width: 42px; height: 38px; padding: 0; }
+    .hidden { display: none!important; }
+    @media(max-width:480px){ .nav-grid { grid-template-columns: 1fr; } .paper { padding: 30px 18px 22px; } }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header><img class="logo" src="/taskwall/icon.png" alt="ShortCut"><div class="brand"><strong>ShortCut 移动联动</strong><span>任务、文本与文件在设备间流动</span></div><div id="deviceLabel" class="device">未绑定</div></header>
+  <main>
+    <section id="bindScreen" class="screen bind active"><div class="paper"><h1>连接你的电脑</h1><p class="hint">扫描桌面端二维码会自动填入绑定身份，也可以输入设置中显示的 6 位绑定码。新手机绑定后，旧移动端会自动失效。</p><label>绑定码</label><input id="bindCode" class="code" maxlength="6" placeholder="ABC123"><label>设备名称</label><input id="deviceName" maxlength="30" value="我的手机"><button id="bindButton" class="primary full">连接电脑</button><div id="bindMessage" class="message"></div></div></section>
+    <section id="homeScreen" class="screen home"><h1>移动联动</h1><p>选择要使用的功能，所有板块共用当前绑定。</p><div class="nav-grid"><button id="openTransfer" class="nav-item"><b>文件快传</b><span>以聊天方式发送文本和文件，支持局域网优先与云端中转。</span></button><button id="openTaskwall" class="nav-item"><b>任务墙</b><span>把任务发送到桌面端已有任务墙。</span></button></div><div class="claim"><b>接收共享内容</b><p class="hint">输入其他用户提供的 6 位接收密码。</p><div class="claim-row"><input id="homeClaimCode" class="code" maxlength="6" placeholder="6 位密码"><button id="homeClaimButton" class="primary">领取</button></div><div id="homeMessage" class="message"></div></div></section>
+    <section id="transferScreen" class="screen transfer"><div class="toolbar"><button id="backHome" class="icon-btn" title="返回">‹</button><b>文件快传</b><span id="transferStatus">云端消息</span><button id="refreshMessages" class="icon-btn" title="刷新">↻</button></div><div id="messages" class="messages"></div><div class="composer"><div class="compose-row"><button id="addFile" class="icon-btn" title="选择文件">＋</button><input id="fileInput" class="hidden" type="file" multiple><textarea id="messageInput" placeholder="发送文本"></textarea><button id="sendMessage" class="primary send" title="发送">↑</button></div></div></section>
+  </main>
+</div>
+<script>
+  const API='/sync/api.php', storageKey='shortcut-mobile-binding-v1';
+  const $=(id)=>document.getElementById(id); let auth=null, pollTimer=0;
+  const saved=()=>{try{return JSON.parse(localStorage.getItem(storageKey)||'null')}catch{return null}};
+  const save=(value)=>{auth=value;localStorage.setItem(storageKey,JSON.stringify(value))};
+  async function api(payload){const c=new AbortController(),t=setTimeout(()=>c.abort(),15000);try{const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:c.signal});const d=await r.json();if(!r.ok)throw new Error(d.message||'请求失败');return d}finally{clearTimeout(t)}}
+  function show(id){for(const node of document.querySelectorAll('.screen'))node.classList.toggle('active',node.id===id);if(id!=='transferScreen')clearInterval(pollTimer)}
+  function msg(id,text,error=false){const e=$(id);e.textContent=text||'';e.className='message'+(error?' error':'')}
+  async function bind(){const params=new URLSearchParams(location.search),code=$('bindCode').value.trim().toUpperCase(),bindId=params.get('bind')||'';if(!bindId&&code.length!==6)return msg('bindMessage','请输入 6 位绑定码',true);$('bindButton').disabled=true;try{const d=await api({action:'mobile.bind',bindId,code,deviceName:$('deviceName').value.trim()||'我的手机'});if(!d.success)throw new Error(d.message||'绑定失败');save({bindId:d.bindId,mobileToken:d.mobileToken,deviceName:d.deviceName,code:d.code});const next=params.get('next');history.replaceState(null,'',location.pathname);if(next==='taskwall'){location.href='/taskwall/';return}enterHome()}catch(e){msg('bindMessage',e.message||'绑定失败',true)}finally{$('bindButton').disabled=false}}
+  function enterHome(){$('deviceLabel').textContent=auth?.deviceName||'已绑定';show('homeScreen')}
+  async function loadMessages(){if(!auth)return;const d=await api({action:'transfer.messages',bindId:auth.bindId,side:'mobile',mobileToken:auth.mobileToken});if(!d.success){if(/失效/.test(d.message||'')){localStorage.removeItem(storageKey);auth=null;show('bindScreen')}throw new Error(d.message||'读取失败')}const box=$('messages');box.innerHTML='';for(const item of d.messages||[]){const mine=item.sender==='mobile',row=document.createElement('div');row.className='bubble-row'+(mine?' mine':'');const wrap=document.createElement('div');wrap.className='bubble-wrap';const bubble=document.createElement('div');bubble.className='bubble';bubble.textContent=item.text||item.name||'文件消息';const meta=document.createElement('div');meta.className='meta';const time=document.createElement('span');time.textContent=new Date(item.createdAt).toLocaleString('zh-CN',{hour12:false});const copy=document.createElement('button');copy.className='text-btn';copy.textContent='复制';copy.onclick=async()=>{await navigator.clipboard.writeText(item.text||'');copy.textContent='已复制';setTimeout(()=>copy.textContent='复制',1200)};meta.append(time,copy);wrap.append(bubble,meta);row.append(wrap);box.append(row)}box.scrollTop=box.scrollHeight}
+  async function sendText(){const text=$('messageInput').value.trim();if(!text)return;const d=await api({action:'transfer.sendText',bindId:auth.bindId,side:'mobile',mobileToken:auth.mobileToken,text});if(!d.success)throw new Error(d.message||'发送失败');$('messageInput').value='';await loadMessages()}
+  async function claim(){const code=$('homeClaimCode').value.trim().toUpperCase();if(code.length!==6)return msg('homeMessage','请输入 6 位接收密码',true);try{const d=await api({action:'transfer.claim',code});if(!d.success)throw new Error(d.message||'领取失败');if(d.message?.type==='text'){await navigator.clipboard.writeText(d.message.text||'');msg('homeMessage','文本已复制到剪贴板')}else msg('homeMessage','共享文件已领取，文件下载功能正在接入')}catch(e){msg('homeMessage',e.message||'领取失败',true)}}
+  $('bindCode').oninput=e=>e.target.value=e.target.value.replace(/[^a-z0-9]/gi,'').toUpperCase().slice(0,6);$('homeClaimCode').oninput=$('bindCode').oninput;$('bindButton').onclick=()=>void bind();$('openTaskwall').onclick=()=>location.href='/taskwall/?bind='+encodeURIComponent(auth.bindId);$('openTransfer').onclick=()=>{show('transferScreen');void loadMessages();pollTimer=setInterval(()=>void loadMessages().catch(()=>{}),3000)};$('backHome').onclick=enterHome;$('refreshMessages').onclick=()=>void loadMessages();$('sendMessage').onclick=()=>void sendText().catch(e=>alert(e.message));$('messageInput').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();void sendText().catch(x=>alert(x.message))}};$('homeClaimButton').onclick=()=>void claim();$('addFile').onclick=()=>$('fileInput').click();$('fileInput').onchange=()=>msg('homeMessage','文件分片上传将在下一阶段启用');
+  auth=saved();const directBind=new URLSearchParams(location.search).get('bind');if(auth?.bindId&&auth?.mobileToken)enterHome();else{if(directBind)$('bindCode').placeholder='扫码身份已读取';show('bindScreen')}
+</script>
+</body></html>

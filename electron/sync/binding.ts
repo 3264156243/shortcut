@@ -48,7 +48,7 @@ function getStoredBinding(): SyncBinding | null {
   return {
     bindId: sync.bindId,
     code: sync.bindCode || '',
-    bindUrl: sync.bindUrl || ('https://shortcut.326415.xyz/taskwall/?bind=' + encodeURIComponent(sync.bindId)),
+    bindUrl: sync.bindUrl || ('https://shortcut.326415.xyz/mobile/?bind=' + encodeURIComponent(sync.bindId)),
   };
 }
 
@@ -73,7 +73,7 @@ async function createBinding(): Promise<SyncBinding | null> {
   const binding = {
     bindId: data.bindId,
     code: data.code || '',
-    bindUrl: data.bindUrl || ('https://shortcut.326415.xyz/taskwall/?bind=' + encodeURIComponent(data.bindId)),
+    bindUrl: data.bindUrl || ('https://shortcut.326415.xyz/mobile/?bind=' + encodeURIComponent(data.bindId)),
   };
   storeBinding(binding);
   return binding;

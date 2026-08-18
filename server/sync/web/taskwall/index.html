@@ -269,9 +269,12 @@
   <script>
     const API = '/sync/api.php';
     const storageKey = 'shortcut-sync-bind-id';
+    const mobileStorageKey = 'shortcut-mobile-binding-v1';
     const el = (id) => document.getElementById(id);
     let bindId = '';
     let bindCode = '';
+    let mobileAuth = null;
+    try { mobileAuth = JSON.parse(localStorage.getItem(mobileStorageKey) || 'null'); } catch {}
     let scanStream = null;
     let scanFrame = 0;
     let scanBusy = false;
@@ -331,6 +334,10 @@
     }
 
     function setConnected(nextBindId, nextCode = '') {
+      if (!mobileAuth?.mobileToken || mobileAuth.bindId !== nextBindId) {
+        location.href = '/mobile/?bind=' + encodeURIComponent(nextBindId) + '&next=taskwall';
+        return;
+      }
       bindId = nextBindId;
       bindCode = nextCode || bindCode;
       localStorage.setItem(storageKey, nextBindId);
@@ -552,6 +559,8 @@
           action: 'push',
           board: 'taskwall',
           bindId,
+          side: 'mobile',
+          mobileToken: mobileAuth.mobileToken,
           text: title,
           longText,
           details: longText ? el('details').value.trim() : '',
@@ -579,6 +588,9 @@
 
     (async () => {
       const params = new URLSearchParams(location.search);
+      if (mobileAuth?.bindId && mobileAuth?.mobileToken && !params.get('bind')) {
+        if (await validateBindId(mobileAuth.bindId)) return;
+      }
       const candidate = params.get('bind') || localStorage.getItem(storageKey) || '';
       if (!(await validateBindId(candidate))) clearBinding();
     })();

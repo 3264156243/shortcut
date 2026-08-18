@@ -45,6 +45,7 @@ switch ($action) {
                 'system' => !empty($group['system']),
                 'enabled' => !empty($group['enabled']),
                 'permissions' => $group['permissions'],
+                'fileTransferPolicy' => $group['fileTransferPolicy'] ?? normalize_transfer_policy(),
             ];
         }
         $trialUsed = false;
@@ -142,6 +143,7 @@ switch ($action) {
                     'system' => !empty($group['system']),
                     'enabled' => array_key_exists('enabled', $group) ? !empty($group['enabled']) : true,
                     'permissions' => $permissions,
+                    'fileTransferPolicy' => normalize_transfer_policy($group['fileTransferPolicy'] ?? null),
                 ];
             }
             $config['groups'] = $groups;

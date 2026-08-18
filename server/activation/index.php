@@ -876,6 +876,7 @@ $loggedIn = !empty($_SESSION['admin']);
       tasks: '任务墙',
       cockpit: '驾驶舱',
       translate: '翻译',
+      fileTransfer: '文件快传',
       usage: '应用使用记录',
       island: 'SC球',
       codexProvider: 'Codex供应商',
@@ -1176,6 +1177,35 @@ $loggedIn = !empty($_SESSION['admin']);
           row.appendChild(text);
           row.appendChild(sw);
           grid.appendChild(row);
+          if (mid === 'fileTransfer') {
+            const policy = group.fileTransferPolicy || { maxFileMb: 500, cloudQuotaMb: 2048, shareEnabled: true, maxShareHours: 24 };
+            group.fileTransferPolicy = policy;
+            const policyBox = document.createElement('div');
+            policyBox.className = 'perm-row perm-row-feature';
+            policyBox.style.display = 'grid';
+            policyBox.style.gridTemplateColumns = '1fr 1fr';
+            policyBox.style.gap = '8px';
+            const makeNumber = (labelText, key, min, max) => {
+              const wrap = document.createElement('label');
+              wrap.className = 'field';
+              const label = document.createElement('span');
+              label.className = 'label';
+              label.textContent = labelText;
+              const input = document.createElement('input');
+              input.className = 'text-input';
+              input.type = 'number'; input.min = String(min); input.max = String(max); input.value = String(policy[key]);
+              input.addEventListener('change', () => { policy[key] = Math.max(min, Math.min(max, parseInt(input.value, 10) || min)); input.value = String(policy[key]); queuePolicySave(400); });
+              wrap.append(label, input);
+              return wrap;
+            };
+            policyBox.append(makeNumber('单文件上限 MB', 'maxFileMb', 1, 10240), makeNumber('云空间配额 MB', 'cloudQuotaMb', 1, 102400), makeNumber('最长分享小时', 'maxShareHours', 1, 24));
+            const shareWrap = document.createElement('div');
+            shareWrap.className = 'field';
+            const shareLabel = document.createElement('span'); shareLabel.className = 'label'; shareLabel.textContent = '允许接收密码分享';
+            shareWrap.append(shareLabel, makeSwitch(policy.shareEnabled !== false, (next) => { policy.shareEnabled = next; queuePolicySave(400); }));
+            policyBox.appendChild(shareWrap);
+            grid.appendChild(policyBox);
+          }
           for (const [fid, fmeta] of Object.entries(featureMeta)) {
             if (!fmeta || fmeta.module !== mid) continue;
             const frow = document.createElement('div');
@@ -1214,6 +1244,7 @@ $loggedIn = !empty($_SESSION['admin']);
         system: !!group.system,
         enabled: !!group.enabled,
         permissions: group.permissions,
+        fileTransferPolicy: group.fileTransferPolicy || {},
       }));
       const payload = {
         action: 'savePolicy',

@@ -22,6 +22,7 @@ import CodexProviderPanel from './components/CodexProviderPanel';
 import ActivationGate from './components/ActivationGate';
 import ActivationPanel from './components/ActivationPanel';
 import VoiceInputPanel from './components/VoiceInputPanel';
+import FileTransferPanel from './components/FileTransferPanel';
 import { ModuleId, PanelAnimation, UpdateState } from './types';
 import { useTranslation } from './hooks/useTranslation';
 import { getAvailableModuleIds } from './moduleRegistry';
@@ -561,6 +562,8 @@ export default function App() {
               <ActivationPanel />
             ) : activeModule === 'voiceInput' ? (
               <VoiceInputPanel />
+            ) : activeModule === 'fileTransfer' ? (
+              <FileTransferPanel />
             ) : (
               <TranslatePanel />
             )}

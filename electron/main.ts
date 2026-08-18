@@ -739,6 +739,7 @@ function buildClientInfoPayload(): any {
       { id: 'tasks', label: '任务' },
       { id: 'cockpit', label: '驾驶舱' },
       { id: 'translate', label: '翻译' },
+      { id: 'fileTransfer', label: '文件快传' },
       { id: 'usage', label: '统计' },
       { id: 'island', label: 'SC球' },
       { id: 'codexProvider', label: '供应商' },
@@ -3899,6 +3900,12 @@ if (!gotSingleInstanceLock) {
     });
   } catch (err: any) {
     console.error('sync init failed:', err?.message || err);
+  }
+  try {
+    const { initFileTransfer } = require('./file-transfer');
+    initFileTransfer();
+  } catch (err: any) {
+    console.error('file transfer init failed:', err?.message || err);
   }
 
   // 每 10 分钟复查激活状态：后台禁用激活码/调整权限后客户端口可生效

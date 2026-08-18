@@ -13,6 +13,7 @@ $MODULE_META = [
     'tasks' => '任务墙',
     'cockpit' => '驾驶舱',
     'translate' => '翻译',
+    'fileTransfer' => '文件快传',
     'usage' => '应用使用记录',
     'island' => 'SC球',
     'codexProvider' => 'Codex供应商',
@@ -24,6 +25,7 @@ $DEFAULT_MODULE_LIST = [
     'tasks' => '免费',
     'cockpit' => '免费',
     'translate' => '免费',
+    'fileTransfer' => '免费',
     'usage' => '免费',
     'island' => '会员',
     'codexProvider' => '免费',
@@ -221,6 +223,16 @@ function full_permissions($allowed = true) {
     return $permissions;
 }
 
+function normalize_transfer_policy($raw = null) {
+    $data = is_array($raw) ? $raw : [];
+    return [
+        'maxFileMb' => max(1, min(10240, intval($data['maxFileMb'] ?? 500))),
+        'cloudQuotaMb' => max(1, min(102400, intval($data['cloudQuotaMb'] ?? 2048))),
+        'shareEnabled' => array_key_exists('shareEnabled', $data) ? !empty($data['shareEnabled']) : true,
+        'maxShareHours' => max(1, min(24, intval($data['maxShareHours'] ?? 24))),
+    ];
+}
+
 function default_groups() {
     $all = full_permissions(true);
     return [
@@ -230,6 +242,7 @@ function default_groups() {
             'system' => true,
             'enabled' => true,
             'permissions' => $all,
+            'fileTransferPolicy' => normalize_transfer_policy(),
         ],
         [
             'id' => 'trial',
@@ -237,6 +250,7 @@ function default_groups() {
             'system' => true,
             'enabled' => true,
             'permissions' => $all,
+            'fileTransferPolicy' => normalize_transfer_policy(),
         ],
         [
             'id' => 'default',
@@ -244,6 +258,7 @@ function default_groups() {
             'system' => false,
             'enabled' => true,
             'permissions' => $all,
+            'fileTransferPolicy' => normalize_transfer_policy(),
         ],
     ];
 }
@@ -375,6 +390,7 @@ function normalize_activation_config($data = null) {
             'system' => !empty($group['system']),
             'enabled' => isset($group['enabled']) ? (bool)$group['enabled'] : true,
             'permissions' => $permissions,
+            'fileTransferPolicy' => normalize_transfer_policy($group['fileTransferPolicy'] ?? null),
         ];
     }
 
@@ -385,6 +401,7 @@ function normalize_activation_config($data = null) {
             'system' => true,
             'enabled' => true,
             'permissions' => full_permissions(false),
+            'fileTransferPolicy' => normalize_transfer_policy(),
         ]);
     }
 
@@ -397,6 +414,7 @@ function normalize_activation_config($data = null) {
             'system' => true,
             'enabled' => $trialEnabled,
             'permissions' => full_permissions(true),
+            'fileTransferPolicy' => normalize_transfer_policy(),
         ];
     } else {
         // 试用分组启用状态跟随 trialEnabled 开关

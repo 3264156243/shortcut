@@ -179,6 +179,11 @@ declare global {
       onTaskListData: (callback: (data: unknown) => void) => () => void;
       onConfigChanged: (callback: () => void) => () => void;
       onTaskLocate: (callback: (data: unknown) => void) => () => void;
+      fileTransferGetState: () => Promise<any>;
+      fileTransferSendText: (text: string) => Promise<any>;
+      fileTransferDelete: (messageId: string) => Promise<any>;
+      fileTransferShareText: (text: string, code: string, hours: number) => Promise<any>;
+      fileTransferClaim: (code: string) => Promise<any>;
       getOpenAtLogin: () => Promise<boolean>;
       setOpenAtLogin: (enabled: boolean) => Promise<boolean>;
       getInstalledSoftware: () => Promise<Array<{ name: string; path: string; icon: string }>>;

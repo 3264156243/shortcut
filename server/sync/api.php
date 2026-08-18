@@ -49,6 +49,16 @@ function limited_text($value, $maxLength) {
     return substr($text, 0, $maxLength);
 }
 
+function require_transfer_identity($bindId, $input) {
+    if ($bindId === '' || !get_bind($bindId)) error_msg('绑定身份无效');
+    $side = isset($input['side']) ? trim((string)$input['side']) : 'desktop';
+    if ($side === 'mobile') {
+        $token = isset($input['mobileToken']) ? trim((string)$input['mobileToken']) : '';
+        if (!validate_mobile_token($bindId, $token)) error_msg('移动端绑定已失效，请重新绑定');
+    }
+    return $side === 'mobile' ? 'mobile' : 'desktop';
+}
+
 switch ($action) {
 
     // ===== 绑定管理（通用，不分 board）=====
@@ -65,7 +75,7 @@ switch ($action) {
             'success' => true,
             'bindId' => $bind['bind_id'],
             'code' => $bind['code'],
-            'bindUrl' => 'https://shortcut.326415.xyz/taskwall/?bind=' . urlencode($bind['bind_id']),
+            'bindUrl' => 'https://shortcut.326415.xyz/mobile/?bind=' . urlencode($bind['bind_id']),
         ]);
         break;
 
@@ -85,7 +95,7 @@ switch ($action) {
             'valid' => true,
             'bindId' => $bindId,
             'code' => isset($bind['code']) ? $bind['code'] : '',
-            'bindUrl' => 'https://shortcut.326415.xyz/taskwall/?bind=' . urlencode($bindId),
+            'bindUrl' => 'https://shortcut.326415.xyz/mobile/?bind=' . urlencode($bindId),
         ]);
         break;
 
@@ -130,6 +140,60 @@ switch ($action) {
         }
         break;
 
+    case 'mobile.bind':
+        if (!rate_limit_allow('mobile.bind:' . client_ip(), 15, 3600)) error_msg('绑定过于频繁，请稍后再试');
+        $code = isset($input['code']) ? trim((string)$input['code']) : '';
+        $resolved = $bindId !== '' && get_bind($bindId) ? $bindId : resolve_code($code);
+        if (!$resolved) error_msg('绑定码无效');
+        $deviceName = isset($input['deviceName']) ? limited_text($input['deviceName'], 30) : '我的手机';
+        $mobile = issue_mobile_token($resolved, $deviceName);
+        if (!$mobile) error_msg('移动端绑定失败');
+        $bind = get_bind($resolved);
+        respond(['success' => true, 'bindId' => $resolved, 'code' => $bind['code'] ?? '', 'mobileToken' => $mobile['token'], 'deviceId' => $mobile['deviceId'], 'deviceName' => $mobile['deviceName']]);
+        break;
+
+    case 'transfer.messages':
+        $side = require_transfer_identity($bindId, $input);
+        $messages = list_messages($bindId);
+        if (!is_array($messages)) error_msg('消息读取失败');
+        respond(['success' => true, 'messages' => $messages, 'side' => $side]);
+        break;
+
+    case 'transfer.sendText':
+        if (!rate_limit_allow('transfer.text:' . client_ip(), 120, 60)) error_msg('发送过于频繁');
+        $side = require_transfer_identity($bindId, $input);
+        $text = isset($input['text']) ? limited_text($input['text'], 10000) : '';
+        if ($text === '') error_msg('文本内容为空');
+        $message = ['id' => 'msg_' . bin2hex(random_bytes(12)), 'type' => 'text', 'text' => $text, 'sender' => $side, 'favorite' => false, 'createdAt' => date('c')];
+        if (!append_message($bindId, $message)) error_msg('消息保存失败');
+        respond(['success' => true, 'message' => $message]);
+        break;
+
+    case 'transfer.delete':
+        require_transfer_identity($bindId, $input);
+        $messageId = isset($input['messageId']) ? trim((string)$input['messageId']) : '';
+        if (!preg_match('/^msg_[a-f0-9]{24}$/', $messageId)) error_msg('消息标识无效');
+        respond(['success' => true, 'deleted' => delete_message($bindId, $messageId)]);
+        break;
+
+    case 'transfer.share':
+        require_transfer_identity($bindId, $input);
+        $text = isset($input['text']) ? limited_text($input['text'], 10000) : '';
+        if ($text === '') error_msg('当前仅支持共享文本，文件分片功能正在接入');
+        $message = ['type' => 'text', 'text' => $text];
+        $share = create_share($bindId, $message, isset($input['code']) ? $input['code'] : '', isset($input['hours']) ? $input['hours'] : 1);
+        if (!$share) error_msg('接收密码已被占用或格式无效');
+        respond(['success' => true, 'code' => $share['code'], 'expiresAt' => $share['expires_at']]);
+        break;
+
+    case 'transfer.claim':
+        $code = isset($input['code']) ? trim((string)$input['code']) : '';
+        if (!preg_match('/^[A-Z0-9]{6}$/i', $code)) error_msg('请输入 6 位接收密码');
+        $share = claim_share($code);
+        if (!$share) error_msg('接收密码无效或已过期');
+        respond(['success' => true, 'message' => $share['message'], 'expiresAt' => $share['expires_at']]);
+        break;
+
     case 'bind.boards.update':
         if (!rate_limit_allow('bind.boards.update:' . client_ip(), 120, 60)) {
             error_msg('任务墙同步过于频繁，请稍后再试');
@@ -165,6 +229,10 @@ switch ($action) {
         $bind = get_bind($bindId);
         if (!$bind) {
             error_msg('绑定身份无效');
+        }
+        if (isset($input['side']) && $input['side'] === 'mobile') {
+            $token = isset($input['mobileToken']) ? trim((string)$input['mobileToken']) : '';
+            if (!validate_mobile_token($bindId, $token)) error_msg('移动端绑定已失效，请重新绑定');
         }
         $text = isset($input['text']) ? limited_text($input['text'], 120) : '';
         if ($text === '') {

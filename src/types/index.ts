@@ -77,7 +77,7 @@ export interface MusicState {
   durationMs?: number;
 }
 
-export type ModuleId = 'shortcuts' | 'tasks' | 'cockpit' | 'usage' | 'usageManage' | 'translate' | 'island' | 'codexProvider' | 'activation' | 'voiceInput';
+export type ModuleId = 'shortcuts' | 'tasks' | 'cockpit' | 'usage' | 'usageManage' | 'translate' | 'fileTransfer' | 'island' | 'codexProvider' | 'activation' | 'voiceInput';
 export type ModuleAccessLevel = 'free' | 'member' | 'super';
 export type ActivationPolicy = 'all' | 'premium_only' | 'none';
 
@@ -312,6 +312,13 @@ export interface AppConfig {
     bindCode?: string;
     bindUrl?: string;
   };
+  fileTransfer?: {
+    downloadDirectory?: string;
+    autoCopyText?: boolean;
+    islandNotify?: boolean;
+    islandProgress?: boolean;
+    islandDropSend?: boolean;
+  };
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -359,6 +366,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     { id: 'tasks', enabled: true, visible: true },
     { id: 'cockpit', enabled: true, visible: true },
     { id: 'translate', enabled: true, visible: true },
+    { id: 'fileTransfer', enabled: true, visible: true, group: 'primary' },
     { id: 'usage', enabled: true, visible: true },
     { id: 'island', enabled: true, visible: true },
     { id: 'codexProvider', enabled: true, visible: true },

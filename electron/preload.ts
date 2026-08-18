@@ -48,6 +48,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   voiceCancel: () => ipcRenderer.invoke('voice:cancel'),
   syncGetBinding: () => ipcRenderer.invoke('sync:getBinding'),
   syncPullNow: () => ipcRenderer.invoke('sync:pullNow'),
+  fileTransferGetState: () => ipcRenderer.invoke('fileTransfer:getState'),
+  fileTransferSendText: (text: string) => ipcRenderer.invoke('fileTransfer:sendText', text),
+  fileTransferDelete: (messageId: string) => ipcRenderer.invoke('fileTransfer:delete', messageId),
+  fileTransferShareText: (text: string, code: string, hours: number) => ipcRenderer.invoke('fileTransfer:shareText', text, code, hours),
+  fileTransferClaim: (code: string) => ipcRenderer.invoke('fileTransfer:claim', code),
   onVoiceSession: (callback: (text: string) => void) => {
     const handler = (_event: unknown, text: string) => callback(text);
     ipcRenderer.on('voice:session', handler);
