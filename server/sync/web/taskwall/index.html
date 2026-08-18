@@ -4,600 +4,145 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#26231f" />
-  <meta name="referrer" content="no-referrer" />
   <title>ShortCut 手机任务墙</title>
   <style>
-    :root {
-      color-scheme: dark;
-      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
-      background: #26231f;
-      color: #f6efe5;
-    }
+    :root { color-scheme: dark; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #26231f; color: #f6efe5; }
     * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      min-height: 100dvh;
-      overflow-x: hidden;
-      background:
-        linear-gradient(rgba(255,255,255,.022) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px),
-        #26231f;
-      background-size: 24px 24px;
-    }
-    button, input, textarea, select { font: inherit; }
-    button { cursor: pointer; }
-    .shell { width: min(100%, 760px); margin: 0 auto; padding: 22px 18px 38px; }
-    .topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
-    .brand-icon { width: 42px; height: 42px; border-radius: 11px; object-fit: cover; }
+    body { margin: 0; min-height: 100vh; min-height: 100dvh; background: linear-gradient(rgba(255,255,255,.022) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px), #26231f; background-size: 24px 24px; }
+    button, input, textarea, select { font: inherit; } button { cursor: pointer; }
+    .shell { width: min(100%, 580px); margin: 0 auto; padding: 18px 14px 38px; }
+    .topbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+    .back { width: 38px; height: 38px; border: 0; border-radius: 9px; color: #eee4da; background: #33302c; font-size: 18px; flex: 0 0 auto; }
     .brand { min-width: 0; }
-    .brand h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: 0; }
-    .brand p { margin: 4px 0 0; color: #aaa198; font-size: 12px; }
-    .status {
-      margin-left: auto;
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      color: #c8beb3;
-      font-size: 12px;
-      white-space: nowrap;
-    }
+    .brand h1 { margin: 0; font-size: 18px; }
+    .brand p { margin: 3px 0 0; color: #aaa198; font-size: 11px; }
+    .status { margin-left: auto; display: inline-flex; align-items: center; gap: 7px; color: #c8beb3; font-size: 11px; }
     .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #8f877e; }
     .status.connected .status-dot { background: #63b582; box-shadow: 0 0 0 4px rgba(99,181,130,.12); }
-    .wall {
-      position: relative;
-      min-height: 520px;
-      padding: 38px clamp(16px, 5vw, 44px) 34px;
-      border: 1px solid rgba(255,255,255,.08);
-      background: #33302c;
-      box-shadow: 0 22px 60px rgba(0,0,0,.28), inset 0 1px rgba(255,255,255,.035);
-      border-radius: 8px;
-    }
-    .paper {
-      position: relative;
-      color: #4f4438;
-      background:
-        repeating-linear-gradient(to bottom, transparent 0, transparent 33px, rgba(126,99,63,.13) 34px),
-        #f3e8c9;
-      border: 1px solid rgba(92,68,38,.16);
-      box-shadow: 0 12px 26px rgba(0,0,0,.22);
-      padding: 38px clamp(18px, 5vw, 36px) 28px;
-      min-height: 390px;
-      transform: rotate(-.35deg);
-    }
-    .paper::before, .paper::after {
-      content: "";
-      position: absolute;
-      top: -15px;
-      width: 88px;
-      height: 30px;
-      background: rgba(193, 91, 64, .76);
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,.15);
-    }
-    .paper::before { left: 12%; transform: rotate(-5deg); }
-    .paper::after { right: 12%; transform: rotate(4deg); background: rgba(222, 155, 57, .72); }
-    .paper h2 { margin: 0 0 5px; font-size: 22px; letter-spacing: 0; }
-    .paper .hint { margin: 0 0 22px; font-size: 12px; color: #817363; }
-    .field { margin-bottom: 16px; }
-    .type-switches { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 4px 0 16px; }
-    .type-switch {
-      min-height: 48px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      padding: 0 13px;
-      border: 1px solid rgba(90,68,43,.2);
-      border-radius: 7px;
-      color: #665848;
-      background: rgba(255,255,255,.3);
-      font-weight: 700;
-    }
-    .type-switch::after {
-      content: "";
-      width: 34px;
-      height: 20px;
-      flex: 0 0 auto;
-      border-radius: 10px;
-      background: rgba(91,75,58,.24);
-      box-shadow: inset 0 0 0 1px rgba(90,68,43,.14);
-      transition: background .16s, box-shadow .16s;
-    }
+    .paper { position: relative; color: #4f4438; background: repeating-linear-gradient(to bottom, transparent 0, transparent 33px, rgba(126,99,63,.13) 34px), #f3e8c9; border: 1px solid rgba(92,68,38,.16); box-shadow: 0 12px 26px rgba(0,0,0,.22); padding: 34px clamp(16px,4vw,30px) 26px; border-radius: 8px; }
+    .paper::before, .paper::after { content: ""; position: absolute; top: -15px; width: 70px; height: 26px; background: rgba(193,91,64,.76); box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); }
+    .paper::before { left: 10%; transform: rotate(-5deg); } .paper::after { right: 10%; transform: rotate(4deg); background: rgba(222,155,57,.72); }
+    .paper h2 { margin: 0 0 5px; font-size: 20px; }
+    .paper .hint { margin: 0 0 20px; font-size: 12px; color: #817363; }
+    .bind-summary { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; padding: 9px 11px; border: 1px solid rgba(90,68,43,.16); border-radius: 7px; background: rgba(255,255,255,.28); color: #6a5847; font-size: 11px; }
+    .bind-code { font: 700 13px Consolas,monospace; letter-spacing: 1px; color: #9f493a; }
+    .text-button { margin-left: auto; border: 0; padding: 2px 0; background: transparent; color: #8b593d; font-size: 11px; }
+    label { display: block; margin-bottom: 7px; font-size: 12px; font-weight: 700; color: #685a4b; }
+    input, textarea, select { width: 100%; border: 1px solid rgba(90,68,43,.25); border-radius: 7px; outline: none; color: #41372d; background: rgba(255,252,242,.65); }
+    input, select { height: 42px; padding: 0 12px; }
+    select { appearance: none; padding-right: 32px; background-image: linear-gradient(45deg, transparent 50%, #765f49 50%), linear-gradient(135deg, #765f49 50%, transparent 50%); background-position: calc(100% - 15px) 16px, calc(100% - 10px) 16px; background-size: 5px 5px,5px 5px; background-repeat: no-repeat; }
+    textarea { min-height: 96px; padding: 11px 12px; resize: vertical; line-height: 1.6; }
+    .field { margin-bottom: 15px; }
+    .type-switches { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 4px 0 14px; }
+    .type-switch { min-height: 46px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 12px; border: 1px solid rgba(90,68,43,.2); border-radius: 7px; color: #665848; background: rgba(255,255,255,.3); font-weight: 700; font-size: 13px; }
+    .type-switch::after { content: ""; width: 32px; height: 18px; flex: 0 0 auto; border-radius: 9px; background: rgba(91,75,58,.24); transition: background .16s; }
     .type-switch.active { color: #8c3e32; border-color: rgba(159,73,58,.42); background: rgba(159,73,58,.09); }
     .type-switch.active::after { background: #9f493a; box-shadow: inset 14px 0 0 #f8eee2; }
-    .optional-field { overflow: hidden; transition: opacity .16s; }
-    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    .field-row:has(#reminderField.hidden) { grid-template-columns: 1fr; }
-    label { display: block; margin-bottom: 7px; font-size: 12px; font-weight: 700; color: #685a4b; }
-    input, textarea, select {
-      width: 100%;
-      border: 1px solid rgba(90,68,43,.25);
-      border-radius: 7px;
-      outline: none;
-      color: #41372d;
-      background: rgba(255,252,242,.65);
-      transition: border-color .16s, box-shadow .16s, background .16s;
-    }
-    input, select { height: 42px; padding: 0 12px; }
-    select { appearance: none; padding-right: 34px; background-image: linear-gradient(45deg, transparent 50%, #765f49 50%), linear-gradient(135deg, #765f49 50%, transparent 50%); background-position: calc(100% - 17px) 17px, calc(100% - 12px) 17px; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
-    textarea { min-height: 98px; padding: 11px 12px; resize: vertical; line-height: 1.65; }
-    input:focus, textarea:focus, select:focus {
-      border-color: #a96b45;
-      box-shadow: 0 0 0 3px rgba(169,107,69,.12);
-      background: rgba(255,254,248,.86);
-    }
-    .actions { display: flex; align-items: center; gap: 10px; margin-top: 22px; }
-    .primary, .secondary {
-      height: 42px;
-      border-radius: 7px;
-      border: 0;
-      padding: 0 18px;
-      transition: transform .14s, opacity .14s, background .14s;
-    }
-    .primary { flex: 1; color: white; background: #9f493a; font-weight: 700; box-shadow: 0 5px 14px rgba(99,44,33,.22); }
-    #submitButton { min-height: 54px; font-size: 16px; }
-    .primary:active, .secondary:active { transform: translateY(1px); }
-    .primary:disabled { cursor: wait; opacity: .56; }
-    .secondary { color: #665848; background: rgba(255,255,255,.42); border: 1px solid rgba(90,68,43,.18); }
-    .message { min-height: 20px; margin-top: 13px; font-size: 12px; text-align: center; color: #7e6f5e; }
-    .message.error { color: #a23932; }
-    .message.success { color: #337552; }
-    .bind-summary { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; padding: 9px 11px; border: 1px solid rgba(90,68,43,.16); border-radius: 7px; background: rgba(255,255,255,.28); color: #6a5847; font-size: 12px; }
-    .bind-code { font: 700 14px Consolas, monospace; letter-spacing: 2px; color: #9f493a; }
-    .text-button { margin-left: auto; border: 0; padding: 2px 0; background: transparent; color: #8b593d; font-size: 12px; }
-    .module-nav { display: flex; gap: 8px; margin: 0 0 18px; padding: 8px; border: 1px solid rgba(90,68,43,.16); border-radius: 7px; background: rgba(255,255,255,.25); }
-    .module-nav button { flex: 1; min-height: 36px; border: 1px solid rgba(90,68,43,.16); border-radius: 6px; color: #665848; background: rgba(255,255,255,.38); font-size: 12px; }
-    .module-nav button.active { color: #fff; background: #9f493a; border-color: transparent; }
-    .bind-view { min-height: 370px; display: grid; place-items: center; }
-    .bind-box { width: min(100%, 390px); text-align: center; }
-    .bind-box h2 { font-size: 23px; margin-bottom: 8px; }
-    .bind-box p { margin: 0 0 22px; font-size: 13px; color: #7a6d5f; line-height: 1.7; }
-    .code-input { text-align: center; font: 700 24px Consolas, monospace; text-transform: uppercase; letter-spacing: 5px; }
-    .bind-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .scan-overlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 18px; background: rgba(22,20,18,.78); backdrop-filter: blur(8px); }
-    .scan-panel { width: min(100%, 430px); padding: 18px; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; background: #33302c; box-shadow: 0 24px 70px rgba(0,0,0,.4); }
-    .scan-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-    .scan-head h2 { margin: 0; font-size: 18px; }
-    .scan-close { width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; color: #f6efe5; background: rgba(255,255,255,.08); font-size: 22px; line-height: 1; }
-    .scan-camera { position: relative; overflow: hidden; aspect-ratio: 1; border-radius: 8px; background: #171512; }
-    .scan-camera video { width: 100%; height: 100%; object-fit: cover; }
-    .scan-frame { position: absolute; inset: 17%; border: 2px solid rgba(255,244,221,.85); border-radius: 8px; box-shadow: 0 0 0 999px rgba(0,0,0,.2); pointer-events: none; }
-    .scan-line { position: absolute; left: 20%; right: 20%; top: 20%; height: 2px; background: #d56f55; box-shadow: 0 0 10px rgba(213,111,85,.9); animation: scanMove 2.2s ease-in-out infinite alternate; }
-    .scan-tip { min-height: 20px; margin: 13px 2px 0; color: #c8beb3; font-size: 12px; text-align: center; }
+    .optional-field { transition: opacity .16s; }
     .hidden { display: none !important; }
-    .success-flash { animation: paperPulse .55s ease; }
-    @keyframes paperPulse { 50% { transform: rotate(-.35deg) scale(1.012); filter: brightness(1.04); } }
-    @keyframes scanMove { to { top: 79%; } }
-    @media (max-width: 560px) {
-      .shell { padding: 16px 12px 26px; }
-      .topbar { margin-bottom: 17px; }
-      .brand-icon { width: 38px; height: 38px; }
-      .brand p { display: none; }
-      .wall { padding: 32px 10px 22px; min-height: calc(100dvh - 92px); }
-      .paper { padding: 34px 15px 24px; min-height: calc(100dvh - 144px); transform: none; }
-      .paper::before { left: 7%; }
-      .paper::after { right: 7%; }
-      .field-row { grid-template-columns: 1fr; gap: 0; }
-      .type-switches { grid-template-columns: 1fr; }
-      .bind-actions { grid-template-columns: 1fr; }
-      .actions { align-items: stretch; flex-direction: column; }
-      .primary, .secondary { width: 100%; }
-      .status span:last-child { display: none; }
-    }
+    #submitButton { width: 100%; min-height: 52px; border: 0; border-radius: 8px; color: #fff; background: #9f493a; font-size: 16px; font-weight: 700; box-shadow: 0 5px 14px rgba(99,44,33,.22); }
+    .message { min-height: 18px; margin-top: 12px; text-align: center; font-size: 12px; color: #7e6f5e; }
+    .message.error { color: #a23932; } .message.success { color: #337552; }
+    @media (max-width: 420px) { .type-switches { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
   <main class="shell">
     <header class="topbar">
-      <img class="brand-icon" src="./icon.png" alt="ShortCut" />
-      <div class="brand"><h1>ShortCut 任务墙</h1><p>从手机把任务钉到桌面</p></div>
-      <div id="status" class="status"><i class="status-dot"></i><span>等待绑定</span></div>
+      <button id="backBtn" class="back" type="button">‹</button>
+      <div class="brand"><h1>任务墙</h1><p>把任务从手机钉到桌面</p></div>
+      <div id="status" class="status"><i class="status-dot"></i><span id="statusText">连接中…</span></div>
     </header>
 
-    <section class="wall">
-      <div id="paper" class="paper">
-        <div id="bindView" class="bind-view">
-          <div class="bind-box">
-            <h2>连接桌面端</h2>
-            <p>在 ShortCut 设置里的“联动绑定”查看 6 位绑定码，也可以直接扫描设置页二维码进入。</p>
-            <div class="field">
-              <label for="bindCode">6 位绑定码</label>
-              <input id="bindCode" class="code-input" maxlength="6" autocomplete="one-time-code" inputmode="text" placeholder="ABC123" />
-            </div>
-            <div class="bind-actions">
-              <button id="bindButton" class="primary" type="button">绑定码连接</button>
-              <button id="scanButton" class="secondary" type="button">扫码绑定</button>
-            </div>
-            <div id="bindMessage" class="message"></div>
-          </div>
-        </div>
-
-        <div id="taskView" class="hidden">
-          <h2>新增任务</h2>
-          <p class="hint">任务内容仅临时存储在 ShortCut 服务器，桌面端启动或点击“立即接收”后进入任务墙并从云端删除。</p>
-          <div class="bind-summary">
-            <span>当前桌面</span><strong id="currentBindCode" class="bind-code">--</strong>
-            <button id="refreshBoardsButton" class="text-button" type="button">刷新任务墙</button>
-          </div>
-          <nav class="module-nav" aria-label="移动联动板块"><button class="active" type="button">任务墙</button><button id="openTransferButton" type="button">文件快传</button></nav>
-          <form id="taskForm">
-            <div class="field">
-              <label for="title">任务标题</label>
-              <input id="title" maxlength="120" required placeholder="要完成什么？" />
-            </div>
-            <div class="type-switches" aria-label="任务类型">
-              <button id="longTextToggle" class="type-switch" type="button" aria-pressed="false">长文本</button>
-              <button id="reminderToggle" class="type-switch" type="button" aria-pressed="false">待办提醒</button>
-            </div>
-            <div id="detailsField" class="field optional-field hidden">
-              <label for="details">详细内容（可选）</label>
-              <textarea id="details" maxlength="2000" placeholder="补充说明、清单或备注"></textarea>
-            </div>
-            <div class="field-row">
-              <div id="reminderField" class="field optional-field hidden">
-                <label for="reminderAt">提醒时间</label>
-                <input id="reminderAt" type="datetime-local" />
-              </div>
-              <div class="field">
-                <label for="boardName">目标任务墙</label>
-                <select id="boardName"><option value="">正在读取桌面任务墙…</option></select>
-              </div>
-            </div>
-            <div class="actions">
-              <button id="submitButton" class="primary" type="submit">钉到桌面任务墙</button>
-              <button id="unbindButton" class="secondary" type="button">更换绑定</button>
-            </div>
-            <div id="taskMessage" class="message"></div>
-          </form>
-        </div>
+    <section class="paper">
+      <h2>新增任务</h2>
+      <p class="hint">任务内容仅临时存储在 ShortCut 服务器，桌面端启动或点击「立即接收」后进入任务墙并从云端删除。</p>
+      <div class="bind-summary">
+        <span>当前桌面</span><strong id="currentBindCode" class="bind-code">--</strong>
+        <button id="refreshBoardsButton" class="text-button" type="button">刷新任务墙</button>
       </div>
+      <form id="taskForm">
+        <div class="field">
+          <label for="title">任务标题</label>
+          <input id="title" maxlength="120" required placeholder="要完成什么？" />
+        </div>
+        <div class="type-switches" aria-label="任务类型">
+          <button id="longTextToggle" class="type-switch" type="button" aria-pressed="false">长文本</button>
+          <button id="reminderToggle" class="type-switch" type="button" aria-pressed="false">待办提醒</button>
+        </div>
+        <div id="detailsField" class="field optional-field hidden">
+          <label for="details">详细内容（可选）</label>
+          <textarea id="details" maxlength="2000" placeholder="补充说明、清单或备注"></textarea>
+        </div>
+        <div id="reminderField" class="field optional-field hidden">
+          <label for="reminderAt">提醒时间</label>
+          <input id="reminderAt" type="datetime-local" />
+        </div>
+        <div class="field">
+          <label for="boardName">目标任务墙</label>
+          <select id="boardName"><option value="">正在读取桌面任务墙…</option></select>
+        </div>
+        <button id="submitButton" type="submit">钉到桌面任务墙</button>
+        <div id="taskMessage" class="message"></div>
+      </form>
     </section>
   </main>
 
-  <div id="scanOverlay" class="scan-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="scanTitle">
-    <div class="scan-panel">
-      <div class="scan-head">
-        <h2 id="scanTitle">扫描桌面端二维码</h2>
-        <button id="scanCloseButton" class="scan-close" type="button" aria-label="关闭扫码">×</button>
-      </div>
-      <div class="scan-camera">
-        <video id="scanVideo" playsinline muted></video>
-        <div class="scan-frame"></div>
-        <div class="scan-line"></div>
-      </div>
-      <p id="scanMessage" class="scan-tip">将桌面端二维码放入框内</p>
-      <canvas id="scanCanvas" class="hidden"></canvas>
-    </div>
-  </div>
-
   <script>
-    const API = '/sync/api.php';
-    const storageKey = 'shortcut-sync-bind-id';
-    const mobileStorageKey = 'shortcut-mobile-binding-v1';
-    const el = (id) => document.getElementById(id);
-    let bindId = '';
-    let bindCode = '';
-    let mobileAuth = null;
-    try { mobileAuth = JSON.parse(localStorage.getItem(mobileStorageKey) || 'null'); } catch {}
-    let scanStream = null;
-    let scanFrame = 0;
-    let scanBusy = false;
-    let jsQrLoading = null;
+    const API='/sync/api.php';
+    const storageKey='shortcut-mobile-binding-v1';
+    const el=(id)=>document.getElementById(id);
+    let bindId='', bindCode='', mobileAuth=null;
+    try{mobileAuth=JSON.parse(localStorage.getItem(storageKey)||'null')}catch{}
 
-    async function callApi(payload) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 12000);
-      try {
-        const response = await fetch(API, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          signal: controller.signal,
-        });
-        const data = await response.json().catch(() => null);
-        if (!response.ok || !data) throw new Error('服务暂时不可用');
-        return data;
-      } catch (error) {
-        if (error && error.name === 'AbortError') throw new Error('请求超时，请检查网络');
-        throw error;
-      } finally {
-        clearTimeout(timer);
-      }
+    async function callApi(payload){const c=new AbortController(),t=setTimeout(()=>c.abort(),12000);try{const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:c.signal});const d=await r.json().catch(()=>null);if(!r.ok||!d)throw new Error('服务暂时不可用');return d}catch(e){if(e&&e.name==='AbortError')throw new Error('请求超时');throw e}finally{clearTimeout(t)}}
+    function setMessage(target,text,type){target.textContent=text||'';target.className='message'+(type?' '+type:'')}
+    function goBind(){location.href='/bind/?next='+encodeURIComponent(location.pathname)}
+
+    async function loadBoards(){
+      const select=el('boardName');select.disabled=true;
+      try{const d=await callApi({action:'board.list',board:'taskwall',bindId});select.innerHTML='';const boards=d.success&&Array.isArray(d.boards)?d.boards.filter(Boolean):[];if(!boards.length){const o=document.createElement('option');o.value='默认任务墙';o.textContent='默认任务墙';select.appendChild(o)}else boards.forEach(name=>{const o=document.createElement('option');o.value=name;o.textContent=name;select.appendChild(o)})}catch{select.innerHTML='<option value="默认任务墙">默认任务墙</option>'}finally{select.disabled=false}
     }
 
-    function setMessage(target, text, type) {
-      target.textContent = text || '';
-      target.className = 'message' + (type ? ' ' + type : '');
-    }
-
-    async function loadBoards() {
-      const select = el('boardName');
-      select.disabled = true;
-      try {
-        const data = await callApi({ action: 'board.list', board: 'taskwall', bindId });
-        const boards = data.success && Array.isArray(data.boards) ? data.boards.filter(Boolean) : [];
-        select.innerHTML = '';
-        if (boards.length === 0) {
-          const option = document.createElement('option');
-          option.value = '默认任务墙';
-          option.textContent = '默认任务墙（桌面列表尚未同步）';
-          select.appendChild(option);
-        } else {
-          boards.forEach((name) => {
-            const option = document.createElement('option');
-            option.value = name;
-            option.textContent = name;
-            select.appendChild(option);
-          });
-        }
-      } catch {
-        select.innerHTML = '<option value="默认任务墙">默认任务墙（读取失败）</option>';
-      } finally {
-        select.disabled = false;
-      }
-    }
-
-    function setConnected(nextBindId, nextCode = '') {
-      if (!mobileAuth?.mobileToken || mobileAuth.bindId !== nextBindId) {
-        location.href = '/mobile/?bind=' + encodeURIComponent(nextBindId) + '&next=taskwall';
-        return;
-      }
-      bindId = nextBindId;
-      bindCode = nextCode || bindCode;
-      localStorage.setItem(storageKey, nextBindId);
-      el('bindView').classList.add('hidden');
-      el('taskView').classList.remove('hidden');
+    function setConnected(){
+      bindId=mobileAuth.bindId;
+      bindCode=mobileAuth.code||'--';
       el('status').classList.add('connected');
-      el('status').lastElementChild.textContent = '已连接';
-      el('currentBindCode').textContent = bindCode || '已连接';
+      el('statusText').textContent='已连接';
+      el('currentBindCode').textContent=bindCode;
       void loadBoards();
-      setTimeout(() => el('title').focus(), 60);
+      setTimeout(()=>el('title').focus(),60);
     }
 
-    function clearBinding() {
-      bindId = '';
-      bindCode = '';
-      localStorage.removeItem(storageKey);
-      history.replaceState(null, '', location.pathname);
-      el('taskView').classList.add('hidden');
-      el('bindView').classList.remove('hidden');
-      el('status').classList.remove('connected');
-      el('status').lastElementChild.textContent = '等待绑定';
-      el('bindCode').value = '';
-      setTimeout(() => el('bindCode').focus(), 60);
-    }
+    function setTypeEnabled(toggleId,fieldId,enabled){const t=el(toggleId);t.classList.toggle('active',enabled);t.setAttribute('aria-pressed',enabled?'true':'false');el(fieldId).classList.toggle('hidden',!enabled)}
 
-    async function validateBindId(candidate) {
-      if (!candidate) return false;
-      try {
-        const data = await callApi({ action: 'bind.info', bindId: candidate });
-        if (data.success && data.valid) {
-          setConnected(data.bindId || candidate, data.code || '');
-          return true;
-        }
-      } catch {}
-      return false;
-    }
+    el('longTextToggle').addEventListener('click',()=>setTypeEnabled('longTextToggle','detailsField',el('longTextToggle').getAttribute('aria-pressed')!=='true'));
+    el('reminderToggle').addEventListener('click',()=>setTypeEnabled('reminderToggle','reminderField',el('reminderToggle').getAttribute('aria-pressed')!=='true'));
+    el('refreshBoardsButton').addEventListener('click',()=>void loadBoards());
+    el('backBtn').addEventListener('click',()=>{ if(mobileAuth?.bindId) location.href='/bind/'; else goBind(); });
 
-    async function connectWithScannedValue(rawValue) {
-      const value = String(rawValue || '').trim();
-      if (!value) return false;
-      let scannedBindId = '';
-      let scannedCode = '';
-      try {
-        const url = new URL(value, location.origin);
-        scannedBindId = url.searchParams.get('bind') || '';
-        scannedCode = url.searchParams.get('code') || '';
-      } catch {}
-      if (!scannedCode && /^[A-Z0-9]{6}$/i.test(value)) scannedCode = value.toUpperCase();
-      if (scannedBindId) {
-        const data = await callApi({ action: 'bind.info', bindId: scannedBindId });
-        if (data.success && data.valid) {
-          setConnected(data.bindId || scannedBindId, data.code || '');
-          return true;
-        }
-      }
-      if (scannedCode) {
-        const data = await callApi({ action: 'bind.resolve', code: scannedCode });
-        if (data.success && data.bindId) {
-          setConnected(data.bindId, data.code || scannedCode);
-          return true;
-        }
-      }
-      throw new Error('未识别到有效的 ShortCut 绑定二维码');
-    }
-
-    function loadJsQrFallback() {
-      if (window.jsQR) return Promise.resolve();
-      if (jsQrLoading) return jsQrLoading;
-      jsQrLoading = new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js';
-        script.onload = resolve;
-        script.onerror = () => reject(new Error('当前浏览器不支持扫码识别'));
-        document.head.appendChild(script);
-      });
-      return jsQrLoading;
-    }
-
-    function stopScanner() {
-      cancelAnimationFrame(scanFrame);
-      scanFrame = 0;
-      scanBusy = false;
-      if (scanStream) scanStream.getTracks().forEach((track) => track.stop());
-      scanStream = null;
-      el('scanVideo').srcObject = null;
-      el('scanOverlay').classList.add('hidden');
-    }
-
-    async function scanLoop(detector) {
-      if (!scanStream || scanBusy) return;
-      const video = el('scanVideo');
-      if (video.readyState >= 2) {
-        scanBusy = true;
-        try {
-          let value = '';
-          if (detector) {
-            const results = await detector.detect(video);
-            value = results[0]?.rawValue || '';
-          } else if (window.jsQR) {
-            const canvas = el('scanCanvas');
-            const width = video.videoWidth;
-            const height = video.videoHeight;
-            if (width && height) {
-              canvas.width = width;
-              canvas.height = height;
-              const context = canvas.getContext('2d', { willReadFrequently: true });
-              context.drawImage(video, 0, 0, width, height);
-              const pixels = context.getImageData(0, 0, width, height);
-              value = window.jsQR(pixels.data, width, height, { inversionAttempts: 'dontInvert' })?.data || '';
-            }
-          }
-          if (value) {
-            el('scanMessage').textContent = '已识别，正在连接…';
-            await connectWithScannedValue(value);
-            stopScanner();
-            return;
-          }
-        } catch (error) {
-          if (String(error?.message || '').includes('ShortCut')) el('scanMessage').textContent = error.message;
-        } finally {
-          scanBusy = false;
-        }
-      }
-      if (scanStream) scanFrame = requestAnimationFrame(() => void scanLoop(detector));
-    }
-
-    async function startScanner() {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        return setMessage(el('bindMessage'), '当前浏览器无法调用摄像头，请使用绑定码连接', 'error');
-      }
-      el('scanOverlay').classList.remove('hidden');
-      el('scanMessage').textContent = '正在启动摄像头…';
-      try {
-        let detector = null;
-        if ('BarcodeDetector' in window) {
-          const formats = typeof BarcodeDetector.getSupportedFormats === 'function'
-            ? await BarcodeDetector.getSupportedFormats()
-            : ['qr_code'];
-          if (formats.includes('qr_code')) detector = new BarcodeDetector({ formats: ['qr_code'] });
-        }
-        if (!detector) await loadJsQrFallback();
-        scanStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 1280 } },
-          audio: false,
-        });
-        el('scanVideo').srcObject = scanStream;
-        await el('scanVideo').play();
-        el('scanMessage').textContent = '将桌面端二维码放入框内';
-        void scanLoop(detector);
-      } catch (error) {
-        stopScanner();
-        const denied = error?.name === 'NotAllowedError';
-        setMessage(el('bindMessage'), denied ? '摄像头权限被拒绝，请允许访问后重试' : (error?.message || '摄像头启动失败'), 'error');
-      }
-    }
-
-    el('bindCode').addEventListener('input', (event) => {
-      event.target.value = event.target.value.replace(/[^0-9a-z]/gi, '').toUpperCase().slice(0, 6);
-    });
-
-    el('bindCode').addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') el('bindButton').click();
-    });
-
-    el('bindButton').addEventListener('click', async () => {
-      const code = el('bindCode').value.trim();
-      if (code.length !== 6) return setMessage(el('bindMessage'), '请输入完整的 6 位绑定码', 'error');
-      el('bindButton').disabled = true;
-      setMessage(el('bindMessage'), '正在连接…');
-      try {
-        const data = await callApi({ action: 'bind.resolve', code });
-        if (!data.success || !data.bindId) throw new Error(data.message || '绑定码无效');
-        setConnected(data.bindId, data.code || code);
-        setMessage(el('bindMessage'), '');
-      } catch (error) {
-        setMessage(el('bindMessage'), error.message || '连接失败', 'error');
-      } finally {
-        el('bindButton').disabled = false;
-      }
-    });
-    el('scanButton').addEventListener('click', () => void startScanner());
-    el('openTransferButton').addEventListener('click', () => { location.href = '/mobile/?bind=' + encodeURIComponent(bindId) + '&next=transfer'; });
-    el('scanCloseButton').addEventListener('click', stopScanner);
-    el('scanOverlay').addEventListener('click', (event) => {
-      if (event.target === el('scanOverlay')) stopScanner();
-    });
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden && scanStream) stopScanner();
-    });
-
-    el('unbindButton').addEventListener('click', clearBinding);
-    el('refreshBoardsButton').addEventListener('click', () => void loadBoards());
-
-    function setTypeEnabled(toggleId, fieldId, enabled) {
-      const toggle = el(toggleId);
-      toggle.classList.toggle('active', enabled);
-      toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
-      el(fieldId).classList.toggle('hidden', !enabled);
-    }
-
-    el('longTextToggle').addEventListener('click', () => {
-      setTypeEnabled('longTextToggle', 'detailsField', el('longTextToggle').getAttribute('aria-pressed') !== 'true');
-    });
-    el('reminderToggle').addEventListener('click', () => {
-      setTypeEnabled('reminderToggle', 'reminderField', el('reminderToggle').getAttribute('aria-pressed') !== 'true');
-    });
-
-    el('taskForm').addEventListener('submit', async (event) => {
+    el('taskForm').addEventListener('submit',async event=>{
       event.preventDefault();
-      const title = el('title').value.trim();
-      if (!title) return;
-      el('submitButton').disabled = true;
-      setMessage(el('taskMessage'), '正在提交…');
-      try {
-        const longText = el('longTextToggle').getAttribute('aria-pressed') === 'true';
-        const reminderEnabled = el('reminderToggle').getAttribute('aria-pressed') === 'true';
-        const localReminder = el('reminderAt').value;
-        if (reminderEnabled && !localReminder) throw new Error('开启待办提醒后请选择提醒时间');
-        const data = await callApi({
-          action: 'push',
-          board: 'taskwall',
-          bindId,
-          side: 'mobile',
-          mobileToken: mobileAuth.mobileToken,
-          text: title,
-          longText,
-          details: longText ? el('details').value.trim() : '',
-          reminderEnabled,
-          reminderAt: reminderEnabled && localReminder ? new Date(localReminder).toISOString() : '',
-          boardName: el('boardName').value.trim(),
-        });
-        if (!data.success) throw new Error(data.message || '提交失败');
-        el('title').value = '';
-        el('details').value = '';
-        el('reminderAt').value = '';
-        setTypeEnabled('longTextToggle', 'detailsField', false);
-        setTypeEnabled('reminderToggle', 'reminderField', false);
-        setMessage(el('taskMessage'), '已钉到云端，等待桌面端接收', 'success');
-        el('paper').classList.remove('success-flash');
-        requestAnimationFrame(() => el('paper').classList.add('success-flash'));
-        setTimeout(() => el('title').focus(), 80);
-      } catch (error) {
-        if (/绑定身份无效/.test(error.message || '')) clearBinding();
-        setMessage(el('taskMessage'), error.message || '提交失败，请稍后再试', 'error');
-      } finally {
-        el('submitButton').disabled = false;
-      }
+      const title=el('title').value.trim();if(!title)return;
+      el('submitButton').disabled=true;setMessage(el('taskMessage'),'正在提交…');
+      try{
+        const longText=el('longTextToggle').getAttribute('aria-pressed')==='true';
+        const reminderEnabled=el('reminderToggle').getAttribute('aria-pressed')==='true';
+        const localReminder=el('reminderAt').value;
+        if(reminderEnabled&&!localReminder)throw new Error('开启待办提醒后请选择提醒时间');
+        const d=await callApi({action:'push',board:'taskwall',bindId,side:'mobile',mobileToken:mobileAuth.mobileToken,text:title,longText,details:longText?el('details').value.trim():'',reminderEnabled,reminderAt:reminderEnabled&&localReminder?new Date(localReminder).toISOString():'',boardName:el('boardName').value.trim()});
+        if(!d.success)throw new Error(d.message||'提交失败');
+        el('title').value='';el('details').value='';el('reminderAt').value='';
+        setTypeEnabled('longTextToggle','detailsField',false);setTypeEnabled('reminderToggle','reminderField',false);
+        setMessage(el('taskMessage'),'已钉到云端，等待桌面端接收','success');
+        setTimeout(()=>el('title').focus(),80);
+      }catch(error){setMessage(el('taskMessage'),error.message||'提交失败，请稍后再试','error')}
+      finally{el('submitButton').disabled=false}
     });
 
-    (async () => {
-      const params = new URLSearchParams(location.search);
-      if (mobileAuth?.bindId && mobileAuth?.mobileToken && !params.get('bind')) {
-        if (await validateBindId(mobileAuth.bindId)) return;
-      }
-      const candidate = params.get('bind') || localStorage.getItem(storageKey) || '';
-      if (!(await validateBindId(candidate))) clearBinding();
+    (async()=>{
+      if(mobileAuth?.bindId&&mobileAuth?.mobileToken){ const d=await callApi({action:'bind.info',bindId:mobileAuth.bindId}).catch(()=>null); if(d&&d.success&&d.valid){setConnected();return;} if(d&&d.valid===false){localStorage.removeItem(storageKey);mobileAuth=null;} }
+      goBind();
     })();
   </script>
 </body>

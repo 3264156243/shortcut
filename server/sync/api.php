@@ -213,12 +213,47 @@ switch ($action) {
 
     case 'transfer.share':
         require_transfer_identity($bindId, $input);
+        // 支持共享文本或文件消息（通过 messageId 引用消息列表中的一条）
         $text = isset($input['text']) ? limited_text($input['text'], 10000) : '';
-        if ($text === '') error_msg('当前仅支持共享文本，文件分片功能正在接入');
-        $message = ['type' => 'text', 'text' => $text];
+        $message = null;
+        $messageId = isset($input['messageId']) ? preg_replace('/[^a-f0-9]/', '', (string)$input['messageId']) : '';
+        if ($text !== '') {
+            $message = ['type' => 'text', 'text' => $text];
+        } elseif ($messageId !== '' && preg_match('/^msg_[a-f0-9]{24}$/', 'msg_' . $messageId)) {
+            $fullId = 'msg_' . $messageId;
+            foreach ((array)list_messages($bindId) as $item) {
+                if ((string)($item['id'] ?? '') === $fullId) {
+                    $message = [
+                        'type' => $item['type'] ?? 'text',
+                        'text' => $item['text'] ?? '',
+                        'fileId' => $item['fileId'] ?? '',
+                        'name' => $item['name'] ?? '',
+                        'size' => $item['size'] ?? 0,
+                        'mime' => $item['mime'] ?? '',
+                    ];
+                    break;
+                }
+            }
+        }
+        if (!$message) error_msg('请提供要共享的文本或选择一个文件消息');
         $share = create_share($bindId, $message, isset($input['code']) ? $input['code'] : '', isset($input['hours']) ? $input['hours'] : 1);
         if (!$share) error_msg('接收密码已被占用或格式无效');
         respond(['success' => true, 'code' => $share['code'], 'expiresAt' => $share['expires_at']]);
+        break;
+
+    case 'transfer.shares':
+        require_transfer_identity($bindId, $input);
+        $shares = list_shares($bindId);
+        respond(['success' => true, 'shares' => $shares]);
+        break;
+
+    case 'transfer.shareDelete':
+        require_transfer_identity($bindId, $input);
+        $id = isset($input['id']) ? trim((string)$input['id']) : '';
+        if (!preg_match('/^shr_[a-f0-9]{24}$/', $id)) error_msg('共享标识无效');
+        $deleted = delete_share($bindId, $id);
+        if (!$deleted) error_msg('共享不存在或已删除');
+        respond(['success' => true, 'deleted' => true]);
         break;
 
     case 'transfer.claim':

@@ -322,31 +322,90 @@ function file_message($meta, $side) {
     return ['id' => 'msg_' . bin2hex(random_bytes(12)), 'type' => 'file', 'fileId' => $meta['id'], 'name' => $meta['name'], 'size' => $meta['size'], 'mime' => $meta['mime'], 'sender' => $side, 'favorite' => false, 'createdAt' => date('c')];
 }
 
-function create_share($bindId, $message, $customCode, $hours) {
+function create_share($bindId, $message, $customCode, $hours, $allowsFile = true) {
     global $SHARES_FILE;
-    return json_lock_update($SHARES_FILE, function ($shares) use ($bindId, $message, $customCode, $hours) {
-        $activeCodes = [];
+    return json_lock_update($SHARES_FILE, function ($shares) use ($bindId, $message, $customCode, $hours, $allowsFile) {
+        $code = strtoupper(trim($customCode));
+        // 自动生成或校验自定义 6 位码
+        if ($code !== '') {
+            if (!preg_match('/^[A-Z0-9]{6}$/', $code)) return ['data' => $shares, 'result' => false];
+        }
         $now = time();
         foreach ($shares as $share) {
-            if (strtotime((string)($share['expires_at'] ?? '')) > $now) $activeCodes[] = (string)($share['code'] ?? '');
+            if ((string)($share['code'] ?? '') === $code && strtotime((string)($share['expires_at'] ?? '')) > $now) {
+                return ['data' => $shares, 'result' => false]; // 已被占用的码
+            }
         }
-        $code = strtoupper(trim($customCode));
         if ($code === '') {
-            do { $code = generate_bind_code($activeCodes); } while ($code !== null && in_array($code, $activeCodes, true));
+            $activeCodes = [];
+            foreach ($shares as $share) {
+                if (strtotime((string)($share['expires_at'] ?? '')) > $now) $activeCodes[] = (string)($share['code'] ?? '');
+            }
+            $attempts = 0;
+            do { $code = generate_bind_code($activeCodes); $attempts++; }
+            while ((in_array($code, $activeCodes, true) || $code === null) && $attempts < 50);
+            if ($code === null) return ['data' => $shares, 'result' => false];
         }
-        if ($code === null || !preg_match('/^[A-Z0-9]{6}$/', $code) || in_array($code, $activeCodes, true)) return ['data' => $shares, 'result' => false];
+        // 时长上限 24 小时（小时数支持小数，最长 24）
+        $hoursNum = max(0.5, min(24, (float)$hours));
         $share = [
             'id' => 'shr_' . bin2hex(random_bytes(12)),
             'code' => $code,
             'bind_id' => $bindId,
             'message' => $message,
             'created_at' => date('c'),
-            'expires_at' => date('c', $now + max(1, min(24, (int)$hours)) * 3600),
+            'expires_at' => date('c', $now + round($hoursNum * 3600)),
         ];
         $shares[] = $share;
         return ['data' => $shares, 'result' => $share];
     });
 }
+
+function list_shares($bindId) {
+    global $SHARES_FILE;
+    if (!file_exists($SHARES_FILE)) return [];
+    $shares = json_lock_read($SHARES_FILE);
+    $now = time();
+    $mine = [];
+    foreach ((array)$shares as $share) {
+        if ((string)($share['bind_id'] ?? '') === $bindId && strtotime((string)($share['expires_at'] ?? '')) > $now) {
+            $mine[] = [
+                'id' => $share['id'] ?? '',
+                'code' => $share['code'] ?? '',
+                'expiresAt' => $share['expires_at'] ?? '',
+                'type' => $share['message']['type'] ?? 'text',
+                'name' => $share['message']['name'] ?? '',
+                'size' => $share['message']['size'] ?? 0,
+                'text' => isset($share['message']['text']) ? limited_share_text($share['message']['text']) : '',
+                'createdAt' => $share['created_at'] ?? '',
+            ];
+        }
+    }
+    return $mine;
+}
+
+function limited_share_text($text) {
+    $t = trim((string)$text);
+    if (function_exists('mb_substr')) return mb_substr($t, 0, 60, 'UTF-8');
+    return substr($t, 0, 60);
+}
+
+function delete_share($bindId, $shareId) {
+    global $SHARES_FILE;
+    return json_lock_update($SHARES_FILE, function ($shares) use ($bindId, $shareId) {
+        $exists = false;
+        $next = [];
+        foreach ($shares as $share) {
+            if ((string)($share['id'] ?? '') === $shareId && (string)($share['bind_id'] ?? '') === $bindId) {
+                $exists = true;
+                continue;
+            }
+            $next[] = $share;
+        }
+        return ['data' => $next, 'result' => $exists];
+    });
+}
+
 
 function claim_share($code) {
     global $SHARES_FILE;
