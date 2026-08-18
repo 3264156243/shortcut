@@ -150,9 +150,21 @@
     .bind-box h2 { font-size: 23px; margin-bottom: 8px; }
     .bind-box p { margin: 0 0 22px; font-size: 13px; color: #7a6d5f; line-height: 1.7; }
     .code-input { text-align: center; font: 700 24px Consolas, monospace; text-transform: uppercase; letter-spacing: 5px; }
+    .bind-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .scan-overlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 18px; background: rgba(22,20,18,.78); backdrop-filter: blur(8px); }
+    .scan-panel { width: min(100%, 430px); padding: 18px; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; background: #33302c; box-shadow: 0 24px 70px rgba(0,0,0,.4); }
+    .scan-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+    .scan-head h2 { margin: 0; font-size: 18px; }
+    .scan-close { width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; color: #f6efe5; background: rgba(255,255,255,.08); font-size: 22px; line-height: 1; }
+    .scan-camera { position: relative; overflow: hidden; aspect-ratio: 1; border-radius: 8px; background: #171512; }
+    .scan-camera video { width: 100%; height: 100%; object-fit: cover; }
+    .scan-frame { position: absolute; inset: 17%; border: 2px solid rgba(255,244,221,.85); border-radius: 8px; box-shadow: 0 0 0 999px rgba(0,0,0,.2); pointer-events: none; }
+    .scan-line { position: absolute; left: 20%; right: 20%; top: 20%; height: 2px; background: #d56f55; box-shadow: 0 0 10px rgba(213,111,85,.9); animation: scanMove 2.2s ease-in-out infinite alternate; }
+    .scan-tip { min-height: 20px; margin: 13px 2px 0; color: #c8beb3; font-size: 12px; text-align: center; }
     .hidden { display: none !important; }
     .success-flash { animation: paperPulse .55s ease; }
     @keyframes paperPulse { 50% { transform: rotate(-.35deg) scale(1.012); filter: brightness(1.04); } }
+    @keyframes scanMove { to { top: 79%; } }
     @media (max-width: 560px) {
       .shell { padding: 16px 12px 26px; }
       .topbar { margin-bottom: 17px; }
@@ -164,6 +176,7 @@
       .paper::after { right: 7%; }
       .field-row { grid-template-columns: 1fr; gap: 0; }
       .type-switches { grid-template-columns: 1fr; }
+      .bind-actions { grid-template-columns: 1fr; }
       .actions { align-items: stretch; flex-direction: column; }
       .primary, .secondary { width: 100%; }
       .status span:last-child { display: none; }
@@ -188,7 +201,10 @@
               <label for="bindCode">6 位绑定码</label>
               <input id="bindCode" class="code-input" maxlength="6" autocomplete="one-time-code" inputmode="text" placeholder="ABC123" />
             </div>
-            <button id="bindButton" class="primary" type="button">连接任务墙</button>
+            <div class="bind-actions">
+              <button id="bindButton" class="primary" type="button">绑定码连接</button>
+              <button id="scanButton" class="secondary" type="button">扫码绑定</button>
+            </div>
             <div id="bindMessage" class="message"></div>
           </div>
         </div>
@@ -234,12 +250,32 @@
     </section>
   </main>
 
+  <div id="scanOverlay" class="scan-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="scanTitle">
+    <div class="scan-panel">
+      <div class="scan-head">
+        <h2 id="scanTitle">扫描桌面端二维码</h2>
+        <button id="scanCloseButton" class="scan-close" type="button" aria-label="关闭扫码">×</button>
+      </div>
+      <div class="scan-camera">
+        <video id="scanVideo" playsinline muted></video>
+        <div class="scan-frame"></div>
+        <div class="scan-line"></div>
+      </div>
+      <p id="scanMessage" class="scan-tip">将桌面端二维码放入框内</p>
+      <canvas id="scanCanvas" class="hidden"></canvas>
+    </div>
+  </div>
+
   <script>
     const API = '/sync/api.php';
     const storageKey = 'shortcut-sync-bind-id';
     const el = (id) => document.getElementById(id);
     let bindId = '';
     let bindCode = '';
+    let scanStream = null;
+    let scanFrame = 0;
+    let scanBusy = false;
+    let jsQrLoading = null;
 
     async function callApi(payload) {
       const controller = new AbortController();
@@ -332,6 +368,125 @@
       return false;
     }
 
+    async function connectWithScannedValue(rawValue) {
+      const value = String(rawValue || '').trim();
+      if (!value) return false;
+      let scannedBindId = '';
+      let scannedCode = '';
+      try {
+        const url = new URL(value, location.origin);
+        scannedBindId = url.searchParams.get('bind') || '';
+        scannedCode = url.searchParams.get('code') || '';
+      } catch {}
+      if (!scannedCode && /^[A-Z0-9]{6}$/i.test(value)) scannedCode = value.toUpperCase();
+      if (scannedBindId) {
+        const data = await callApi({ action: 'bind.info', bindId: scannedBindId });
+        if (data.success && data.valid) {
+          setConnected(data.bindId || scannedBindId, data.code || '');
+          return true;
+        }
+      }
+      if (scannedCode) {
+        const data = await callApi({ action: 'bind.resolve', code: scannedCode });
+        if (data.success && data.bindId) {
+          setConnected(data.bindId, data.code || scannedCode);
+          return true;
+        }
+      }
+      throw new Error('未识别到有效的 ShortCut 绑定二维码');
+    }
+
+    function loadJsQrFallback() {
+      if (window.jsQR) return Promise.resolve();
+      if (jsQrLoading) return jsQrLoading;
+      jsQrLoading = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js';
+        script.onload = resolve;
+        script.onerror = () => reject(new Error('当前浏览器不支持扫码识别'));
+        document.head.appendChild(script);
+      });
+      return jsQrLoading;
+    }
+
+    function stopScanner() {
+      cancelAnimationFrame(scanFrame);
+      scanFrame = 0;
+      scanBusy = false;
+      if (scanStream) scanStream.getTracks().forEach((track) => track.stop());
+      scanStream = null;
+      el('scanVideo').srcObject = null;
+      el('scanOverlay').classList.add('hidden');
+    }
+
+    async function scanLoop(detector) {
+      if (!scanStream || scanBusy) return;
+      const video = el('scanVideo');
+      if (video.readyState >= 2) {
+        scanBusy = true;
+        try {
+          let value = '';
+          if (detector) {
+            const results = await detector.detect(video);
+            value = results[0]?.rawValue || '';
+          } else if (window.jsQR) {
+            const canvas = el('scanCanvas');
+            const width = video.videoWidth;
+            const height = video.videoHeight;
+            if (width && height) {
+              canvas.width = width;
+              canvas.height = height;
+              const context = canvas.getContext('2d', { willReadFrequently: true });
+              context.drawImage(video, 0, 0, width, height);
+              const pixels = context.getImageData(0, 0, width, height);
+              value = window.jsQR(pixels.data, width, height, { inversionAttempts: 'dontInvert' })?.data || '';
+            }
+          }
+          if (value) {
+            el('scanMessage').textContent = '已识别，正在连接…';
+            await connectWithScannedValue(value);
+            stopScanner();
+            return;
+          }
+        } catch (error) {
+          if (String(error?.message || '').includes('ShortCut')) el('scanMessage').textContent = error.message;
+        } finally {
+          scanBusy = false;
+        }
+      }
+      if (scanStream) scanFrame = requestAnimationFrame(() => void scanLoop(detector));
+    }
+
+    async function startScanner() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        return setMessage(el('bindMessage'), '当前浏览器无法调用摄像头，请使用绑定码连接', 'error');
+      }
+      el('scanOverlay').classList.remove('hidden');
+      el('scanMessage').textContent = '正在启动摄像头…';
+      try {
+        let detector = null;
+        if ('BarcodeDetector' in window) {
+          const formats = typeof BarcodeDetector.getSupportedFormats === 'function'
+            ? await BarcodeDetector.getSupportedFormats()
+            : ['qr_code'];
+          if (formats.includes('qr_code')) detector = new BarcodeDetector({ formats: ['qr_code'] });
+        }
+        if (!detector) await loadJsQrFallback();
+        scanStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 1280 } },
+          audio: false,
+        });
+        el('scanVideo').srcObject = scanStream;
+        await el('scanVideo').play();
+        el('scanMessage').textContent = '将桌面端二维码放入框内';
+        void scanLoop(detector);
+      } catch (error) {
+        stopScanner();
+        const denied = error?.name === 'NotAllowedError';
+        setMessage(el('bindMessage'), denied ? '摄像头权限被拒绝，请允许访问后重试' : (error?.message || '摄像头启动失败'), 'error');
+      }
+    }
+
     el('bindCode').addEventListener('input', (event) => {
       event.target.value = event.target.value.replace(/[^0-9a-z]/gi, '').toUpperCase().slice(0, 6);
     });
@@ -355,6 +510,14 @@
       } finally {
         el('bindButton').disabled = false;
       }
+    });
+    el('scanButton').addEventListener('click', () => void startScanner());
+    el('scanCloseButton').addEventListener('click', stopScanner);
+    el('scanOverlay').addEventListener('click', (event) => {
+      if (event.target === el('scanOverlay')) stopScanner();
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && scanStream) stopScanner();
     });
 
     el('unbindButton').addEventListener('click', clearBinding);
