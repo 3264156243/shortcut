@@ -79,7 +79,35 @@
     .paper h2 { margin: 0 0 5px; font-size: 22px; letter-spacing: 0; }
     .paper .hint { margin: 0 0 22px; font-size: 12px; color: #817363; }
     .field { margin-bottom: 16px; }
+    .type-switches { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 4px 0 16px; }
+    .type-switch {
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 0 13px;
+      border: 1px solid rgba(90,68,43,.2);
+      border-radius: 7px;
+      color: #665848;
+      background: rgba(255,255,255,.3);
+      font-weight: 700;
+    }
+    .type-switch::after {
+      content: "";
+      width: 34px;
+      height: 20px;
+      flex: 0 0 auto;
+      border-radius: 10px;
+      background: rgba(91,75,58,.24);
+      box-shadow: inset 0 0 0 1px rgba(90,68,43,.14);
+      transition: background .16s, box-shadow .16s;
+    }
+    .type-switch.active { color: #8c3e32; border-color: rgba(159,73,58,.42); background: rgba(159,73,58,.09); }
+    .type-switch.active::after { background: #9f493a; box-shadow: inset 14px 0 0 #f8eee2; }
+    .optional-field { overflow: hidden; transition: opacity .16s; }
     .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .field-row:has(#reminderField.hidden) { grid-template-columns: 1fr; }
     label { display: block; margin-bottom: 7px; font-size: 12px; font-weight: 700; color: #685a4b; }
     input, textarea, select {
       width: 100%;
@@ -107,6 +135,7 @@
       transition: transform .14s, opacity .14s, background .14s;
     }
     .primary { flex: 1; color: white; background: #9f493a; font-weight: 700; box-shadow: 0 5px 14px rgba(99,44,33,.22); }
+    #submitButton { min-height: 54px; font-size: 16px; }
     .primary:active, .secondary:active { transform: translateY(1px); }
     .primary:disabled { cursor: wait; opacity: .56; }
     .secondary { color: #665848; background: rgba(255,255,255,.42); border: 1px solid rgba(90,68,43,.18); }
@@ -134,6 +163,7 @@
       .paper::before { left: 7%; }
       .paper::after { right: 7%; }
       .field-row { grid-template-columns: 1fr; gap: 0; }
+      .type-switches { grid-template-columns: 1fr; }
       .actions { align-items: stretch; flex-direction: column; }
       .primary, .secondary { width: 100%; }
       .status span:last-child { display: none; }
@@ -175,13 +205,17 @@
               <label for="title">任务标题</label>
               <input id="title" maxlength="120" required placeholder="要完成什么？" />
             </div>
-            <div class="field">
+            <div class="type-switches" aria-label="任务类型">
+              <button id="longTextToggle" class="type-switch" type="button" aria-pressed="false">长文本</button>
+              <button id="reminderToggle" class="type-switch" type="button" aria-pressed="false">待办提醒</button>
+            </div>
+            <div id="detailsField" class="field optional-field hidden">
               <label for="details">详细内容（可选）</label>
               <textarea id="details" maxlength="2000" placeholder="补充说明、清单或备注"></textarea>
             </div>
             <div class="field-row">
-              <div class="field">
-                <label for="reminderAt">提醒时间（可选）</label>
+              <div id="reminderField" class="field optional-field hidden">
+                <label for="reminderAt">提醒时间</label>
                 <input id="reminderAt" type="datetime-local" />
               </div>
               <div class="field">
@@ -326,6 +360,20 @@
     el('unbindButton').addEventListener('click', clearBinding);
     el('refreshBoardsButton').addEventListener('click', () => void loadBoards());
 
+    function setTypeEnabled(toggleId, fieldId, enabled) {
+      const toggle = el(toggleId);
+      toggle.classList.toggle('active', enabled);
+      toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+      el(fieldId).classList.toggle('hidden', !enabled);
+    }
+
+    el('longTextToggle').addEventListener('click', () => {
+      setTypeEnabled('longTextToggle', 'detailsField', el('longTextToggle').getAttribute('aria-pressed') !== 'true');
+    });
+    el('reminderToggle').addEventListener('click', () => {
+      setTypeEnabled('reminderToggle', 'reminderField', el('reminderToggle').getAttribute('aria-pressed') !== 'true');
+    });
+
     el('taskForm').addEventListener('submit', async (event) => {
       event.preventDefault();
       const title = el('title').value.trim();
@@ -333,20 +381,27 @@
       el('submitButton').disabled = true;
       setMessage(el('taskMessage'), '正在提交…');
       try {
+        const longText = el('longTextToggle').getAttribute('aria-pressed') === 'true';
+        const reminderEnabled = el('reminderToggle').getAttribute('aria-pressed') === 'true';
         const localReminder = el('reminderAt').value;
+        if (reminderEnabled && !localReminder) throw new Error('开启待办提醒后请选择提醒时间');
         const data = await callApi({
           action: 'push',
           board: 'taskwall',
           bindId,
           text: title,
-          details: el('details').value.trim(),
-          reminderAt: localReminder ? new Date(localReminder).toISOString() : '',
+          longText,
+          details: longText ? el('details').value.trim() : '',
+          reminderEnabled,
+          reminderAt: reminderEnabled && localReminder ? new Date(localReminder).toISOString() : '',
           boardName: el('boardName').value.trim(),
         });
         if (!data.success) throw new Error(data.message || '提交失败');
         el('title').value = '';
         el('details').value = '';
         el('reminderAt').value = '';
+        setTypeEnabled('longTextToggle', 'detailsField', false);
+        setTypeEnabled('reminderToggle', 'reminderField', false);
         setMessage(el('taskMessage'), '已钉到云端，等待桌面端接收', 'success');
         el('paper').classList.remove('success-flash');
         requestAnimationFrame(() => el('paper').classList.add('success-flash'));

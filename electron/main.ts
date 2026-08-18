@@ -90,6 +90,7 @@ let usageMonitorBuffer = '';
 let usageRecord: any = null;
 let usageRecordLastTick = 0;
 let usageIconCache = new Map<string, string | null>();
+const USAGE_ICON_CACHE_LIMIT = 160;
 let usageFlushTimer: ReturnType<typeof setInterval> | null = null;
 let usageCurrent: { exe: string; name: string; title: string; startedAt: number } | null = null;
 
@@ -1229,11 +1230,19 @@ function loadUsageRecord(): any {
     const raw = fs.readFileSync(getUsageRecordPath(), 'utf8');
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object') {
+      const days = parsed.days && typeof parsed.days === 'object' ? parsed.days : {};
+      for (const day of Object.values(days) as any[]) {
+        if (!Array.isArray(day?.apps)) continue;
+        day.apps = day.apps.map((entry: any) => {
+          const { icon: _legacyIcon, ...rest } = entry || {};
+          return rest;
+        });
+      }
       return {
         enabled: parsed.enabled !== false,
         ignored: Array.isArray(parsed.ignored) ? parsed.ignored.filter((item: unknown) => typeof item === 'string') : [],
         backgroundApps: Array.isArray(parsed.backgroundApps) ? parsed.backgroundApps.filter((item: unknown) => typeof item === 'string') : [],
-        days: parsed.days && typeof parsed.days === 'object' ? parsed.days : {},
+        days,
       };
     }
   } catch {}
@@ -1302,16 +1311,30 @@ function isUsageSystemPath(processPath: string): boolean {
 async function cacheUsageIcon(processPath: string) {
   if (!processPath || usageIconCache.has(processPath)) return;
   const icon = await getIconDataUrl(processPath);
+  if (usageIconCache.size >= USAGE_ICON_CACHE_LIMIT) {
+    const oldestKey = usageIconCache.keys().next().value;
+    if (oldestKey) usageIconCache.delete(oldestKey);
+  }
   usageIconCache.set(processPath, icon);
 }
 
 function attachUsageIcons(day: any) {
-  const apps = Array.isArray(day?.apps) ? day.apps : [];
+  // 图标只用于当前响应，不能写回常驻历史数据，否则 base64 会按天重复并被每分钟持久化。
+  const payload = {
+    ...day,
+    apps: Array.isArray(day?.apps) ? day.apps.map((entry: any) => {
+      const { icon: _persistedIcon, ...rest } = entry || {};
+      return rest;
+    }) : [],
+    sites: Array.isArray(day?.sites) ? day.sites.map((entry: any) => ({ ...entry })) : [],
+    hourly: Array.isArray(day?.hourly) ? [...day.hourly] : Array(24).fill(0),
+  };
+  const apps = payload.apps;
   for (const entry of apps) {
     entry.icon = entry.path ? (usageIconCache.get(entry.path) ?? null) : null;
     if (entry.path && !usageIconCache.has(entry.path)) void cacheUsageIcon(entry.path);
   }
-  return day;
+  return payload;
 }
 
 function getUsageDayPayload(dateKey: string) {

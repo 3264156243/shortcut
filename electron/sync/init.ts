@@ -34,9 +34,9 @@ function createTaskNote(task: any, zIndex: number) {
   return {
     id: task.id || 'rmt_' + randomBytes(12).toString('hex'),
     text: task.text || '',
-    longText: !!task.details || undefined,
-    details: task.details || undefined,
-    reminderAt: task.reminderAt || undefined,
+    longText: task.longText === true || undefined,
+    details: task.longText === true ? (task.details || '') : undefined,
+    reminderAt: task.reminderEnabled === true ? (task.reminderAt || undefined) : undefined,
     done: false,
     x: 4 + Math.random() * 58,
     y: 5 + Math.random() * 52,

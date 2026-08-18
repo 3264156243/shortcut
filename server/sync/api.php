@@ -171,8 +171,10 @@ switch ($action) {
             error_msg('任务标题不能为空');
         }
         // 可选字段
-        $details = isset($input['details']) ? limited_text($input['details'], 2000) : '';
-        $reminderAt = isset($input['reminderAt']) ? limited_text($input['reminderAt'], 64) : '';
+        $longText = isset($input['longText']) && $input['longText'] === true;
+        $reminderEnabled = isset($input['reminderEnabled']) && $input['reminderEnabled'] === true;
+        $details = $longText && isset($input['details']) ? limited_text($input['details'], 2000) : '';
+        $reminderAt = $reminderEnabled && isset($input['reminderAt']) ? limited_text($input['reminderAt'], 64) : '';
         $boardName = isset($input['boardName']) ? limited_text($input['boardName'], 40) : '';
         if ($reminderAt !== '' && strtotime($reminderAt) === false) {
             error_msg('提醒时间格式无效');
@@ -181,7 +183,9 @@ switch ($action) {
         $task = [
             'id' => 'rmt_' . bin2hex(random_bytes(12)),
             'text' => $text,
+            'longText' => $longText,
             'details' => $details,
+            'reminderEnabled' => $reminderEnabled,
             'reminderAt' => $reminderAt,
             'boardName' => $boardName,
             'createdAt' => date('c'),

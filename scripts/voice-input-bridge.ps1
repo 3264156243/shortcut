@@ -51,10 +51,12 @@ public static class TextSender {
     }
 
     public static void TypeText(string text) {
+        // 前台窗口刚恢复焦点时，首个按键最容易被系统或目标程序吞掉。
+        Thread.Sleep(70);
         foreach (char ch in text) {
             KeyInput(0, (ushort)ch, KEYEVENTF_UNICODE);
             KeyInput(0, (ushort)ch, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP);
-            Thread.Sleep(4);
+            Thread.Sleep(7);
         }
     }
     public static void Backspace(int n) {

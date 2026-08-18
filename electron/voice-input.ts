@@ -178,6 +178,16 @@ function queryFocus(): Promise<boolean> {
   });
 }
 
+async function waitForEditableFocus(): Promise<boolean> {
+  // 窗口隐藏后 Windows 需要一点时间把前台焦点还给原输入框。
+  await new Promise((resolve) => setTimeout(resolve, 180));
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    if (await queryFocus()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 90));
+  }
+  return false;
+}
+
 function resolveWebSocketUrl(workspaceValue: string): string {
   const value = String(workspaceValue || '').trim();
   if (!value) throw new Error('Workspace ID 为空');
@@ -346,26 +356,29 @@ async function structureWithLlm(text: string): Promise<string> {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    const consumeLine = (line: string) => {
+      const l = line.trim();
+      if (!l.startsWith('data:')) return;
+      const data = l.slice(5).trim();
+      if (!data || data === '[DONE]') return;
+      try {
+        const j = JSON.parse(data);
+        const delta = j?.choices?.[0]?.delta?.content;
+        const msg = j?.choices?.[0]?.message?.content;
+        const piece = delta != null ? delta : (msg != null ? msg : '');
+        if (piece) full += piece;
+      } catch {}
+    };
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
-      for (const line of lines) {
-        const l = line.trim();
-        if (!l.startsWith('data:')) continue;
-        const data = l.slice(5).trim();
-        if (data === '[DONE]') continue;
-        try {
-          const j = JSON.parse(data);
-          const delta = j?.choices?.[0]?.delta?.content;
-          const msg = j?.choices?.[0]?.message?.content;
-          const piece = delta != null ? delta : (msg != null ? msg : '');
-          if (piece) full += piece;
-        } catch {}
-      }
+      for (const line of lines) consumeLine(line);
     }
+    buffer += decoder.decode();
+    if (buffer.trim()) consumeLine(buffer);
     if (!full && seq === polishSeq) {
       sendToWindow('voice:polishError', '结构处理接口无返回内容');
       return formatStructuredResult(text, shouldStructure(text) || hasMultipleLines(text));
@@ -503,9 +516,11 @@ function confirmAndType() {
     // 先隐藏胶囊（归还焦点给目标窗口），再打字，确保文字进入目标输入框
     if (voiceWindow && !voiceWindow.isDestroyed()) {
       voiceWindow.hide();
-      await new Promise((r) => setTimeout(r, 120));
     }
     if (out && out.trim()) {
+      await waitForEditableFocus();
+      // 焦点刚恢复时再留出一个消息循环，避免最前面的字符被目标程序吞掉。
+      await new Promise((resolve) => setTimeout(resolve, 80));
       bridgeWrite(`T|${Buffer.from(out.trim(), 'utf8').toString('base64')}`);
       recordVoiceStat('chars', out.trim().length);
     }
