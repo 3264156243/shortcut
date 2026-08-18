@@ -160,6 +160,7 @@ Remove-SSHSession -SessionId $s.SessionId | Out-Null
 
 ## 更新记录
 
+- [2026-08-19] 桌面端文件快传新增「我的共享」列表与删除（`fileTransfer:shareList`/`shareDelete`），与移动端共享弹窗闭环，提交 `06f2379` 已推送，验收版已刷新。**目标（移动端联动重构）4 点全部达成并部署**：绑定抽离独立 `/bind/`、任务墙精简仅返回按钮、文件快传独立 `/transfer/` 带共享弹窗、响应式完善、摄像头/上传适配；服务端 `transfer.shares`/`shareDelete`/`share`(messageId 引用文件)。遗留高级项（非本轮目标）：共享文件**跨绑定下载令牌**、桌面端「我的共享列表」已补但共享文件下载领取界面可再完善。
 - [2026-08-19] 移动端联动重构 + 共享弹窗 + 真机适配，提交 `c6a5bf2` 已推送。**URL 结构变更（重要）**：绑定抽离到新独立页 `/bind/`（含扫码/绑定显示/更换绑定）；文件快传独立页 `/transfer/`（带「共享内容」弹窗：文本/选文件共享、共享时长、自定义密码、我的共享列表、删除）；`/taskwall/` 精简为单功能仅保留返回按钮；`/mobile/` 改为重定向入口（兼容 `?bind=` 直链）。服务端扩展 `transfer.shares`(共享列表)/`transfer.shareDelete`(删除)/`transfer.share`(支持 messageId 引用文件消息)。真机适配：bind 页摄像头多重降级约束（后置→默认→纯 getUserMedia，BarcodeDetector 失败回退 jsQR），transfer 页 fileInput.click 在用户手势内触发。**部署**：线上 `server/sync/{api,config}.php` 已更新（php -l 通过），`/bind/`、`/transfer/`、`/taskwall/`、`/mobile/` 均 HTTP 200 为新版；`transfer.shares`/`transfer.shareDelete` 无效绑定冒烟返回正确。经服务器核实：站点根是 `/www/wwwroot/ShortCut`，移动站物理目录在 `{bind,transfer,taskwall,mobile}`（=URL），`server/sync/web/` 只是源码副本，**改动需同步到根下目录**（本次已 cp）。
 - [2026-08-19] 刷新开发验收 `app.asar`（01:12 与 01:14 两次，含 `665ab70` 文件快传 UI + 流式下载修复），冒烟通过。修复桌面文件下载改为 Node 流式写临时文件 + Content-Length 校验 + 原子重命名，提交 `2cb2dbf`。核实服务器端 `server/sync/{api,config,file}.php` 已部署且 `php -l` 通过，`/mobile/`、`/taskwall/` HTTP 200 正常，`/sync/api.php` 405 属正常（仅 POST）。
 - [2026-08-18] 文件快传第二阶段基础实现提交 `665ab70`：统一移动框架入口，任务墙页可切换文件快传，领取密码移入快传页；桌面和移动端新增文件选择，服务端新增文件元数据、2 MB 分片上传和下载端点。代码已推送，服务端已部署并通过 PHP 语法检查；开发验收 `app.asar` 尚未刷新，真实双向文件测试尚未完成。
