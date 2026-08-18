@@ -27,6 +27,31 @@ function file_authorize($bindId, $side, $token) {
     return $side === 'mobile' ? 'mobile' : 'desktop';
 }
 
+// ===== 下载（支持两种方式）=====
+// 1) token 方式：他人通过共享领取的一次性下载令牌，无需绑定身份
+if ($action === 'download' && trim((string)file_input('token')) !== '') {
+    $token = trim((string)file_input('token'));
+    $shared = consume_share_download_token($token);
+    if (!$shared || $shared['fileId'] === '') file_fail('下载令牌无效或已过期', 403);
+    $bindId = $shared['bindId'];
+    $fileId = $shared['fileId'];
+    $meta = load_file_meta($bindId, $fileId);
+    if (!$meta || empty($meta['complete'])) file_fail('文件尚未准备好', 404);
+    $dir = file_dir($bindId, $fileId);
+    $name = $shared['name'] ?: $meta['name'];
+    $encoded = rawurlencode($name);
+    header('Content-Type: ' . ($shared['mime'] ?: $meta['mime'] ?: 'application/octet-stream'));
+    header('Content-Disposition: attachment; filename="download"; filename*=UTF-8\'\'' . $encoded);
+    header('Content-Length: ' . (int)($shared['size'] ?: $meta['size']));
+    header('X-Content-Type-Options: nosniff');
+    for ($i = 0; $i < (int)$meta['chunkCount']; $i++) {
+        $part = $dir . '/chunk-' . $i . '.part';
+        if (!is_file($part)) { http_response_code(500); exit; }
+        readfile($part);
+    }
+    exit;
+}
+
 $action = trim((string)file_input('action'));
 $bindId = trim((string)file_input('bindId'));
 $side = file_authorize($bindId, trim((string)file_input('side', 'desktop')), trim((string)file_input('mobileToken')));

@@ -261,7 +261,19 @@ switch ($action) {
         if (!preg_match('/^[A-Z0-9]{6}$/i', $code)) error_msg('请输入 6 位接收密码');
         $share = claim_share($code);
         if (!$share) error_msg('接收密码无效或已过期');
-        respond(['success' => true, 'message' => $share['message'], 'expiresAt' => $share['expires_at']]);
+        $message = $share['message'];
+        $downloadToken = '';
+        // 文件共享：签发一次性下载令牌（他人无需绑定即可下载）
+        if ((string)($message['type'] ?? '') === 'file' && !empty($message['fileId'])) {
+            $downloadToken = issue_share_download_token((string)($share['id'] ?? ''));
+            if ($downloadToken === null) error_msg('共享文件已领取，请让共享者重新共享');
+        }
+        respond([
+            'success' => true,
+            'message' => $message,
+            'expiresAt' => $share['expires_at'],
+            'downloadToken' => $downloadToken,
+        ]);
         break;
 
     case 'bind.boards.update':

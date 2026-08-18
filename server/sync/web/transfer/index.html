@@ -197,6 +197,28 @@
   async function doShareText(){const text=$('shareText').value.trim();if(!text)return toast('shareMsg','请输入要共享的文本');const d=await api({action:'transfer.share',bindId:auth.bindId,mobileToken:auth.mobileToken,side:'mobile',text,code:$('shareCode').value.trim().toUpperCase(),hours:$('shareHours').value});if(!d.success)return toast('shareMsg',d.message||'共享失败');$('shareText').value='';$('shareCode').value='';toast('shareMsg','共享成功，接收密码 '+d.code,'true');await loadShares()}
   async function doShareFile(){ensureAuth();const d=await api({action:'transfer.messages',bindId:auth.bindId,side:'mobile',mobileToken:auth.mobileToken});if(!d.success)return;const files=(d.messages||[]).filter(m=>m.type==='file');if(!files.length)return toast('shareMsg','没有可共享的文件消息');const name=prompt('要共享的文件：\n'+files.map((f,i)=>'['+(i+1)+'] '+f.name).join('\n'),'');if(!name)return;const idx=parseInt(name,10)-1;if(!files[idx])return toast('shareMsg','序号无效');const d2=await api({action:'transfer.share',bindId:auth.bindId,mobileToken:auth.mobileToken,side:'mobile',messageId:files[idx].id.replace(/^msg_/,''),code:$('shareCode').value.trim().toUpperCase(),hours:$('shareHours').value});if(!d2.success)return toast('shareMsg',d2.message||'共享失败');toast('shareMsg','文件已共享，接收密码 '+d2.code,'true');await loadShares()}
 
+  // ===== 领取（输入密码获取共享）=====
+  async function claim(){
+    if(!auth?.bindId) return goBind();
+    const code=$('claimCode').value.trim().toUpperCase();if(code.length!==6)return toast('message','请输入 6 位接收密码');
+    toast('message','正在领取…');
+    try{
+      const d=await api({action:'transfer.claim',code});
+      if(!d.success) throw new Error(d.message||'领取失败');
+      const m=d.message||{};
+      if(m.type==='file'&&m.fileId){
+        if(d.downloadToken){
+          const q=new URLSearchParams({action:'download',token:d.downloadToken});
+          const a=document.createElement('a');a.href='/sync/file.php?'+q.toString();a.download=m.name||'file';document.body.appendChild(a);a.click();a.remove();
+          toast('message','已开始下载：'+(m.name||'文件'),'true');
+        } else toast('message','共享文件已被领取，请让共享者重新共享',true);
+      } else if(m.text){
+        await navigator.clipboard.writeText(m.text||'');toast('message','共享文本已复制到剪贴板','true');
+      } else toast('message','领取成功','true');
+      $('claimCode').value='';
+    }catch(e){toast('message',e.message||'领取失败')}
+  }
+
   // ===== 事件 =====
   $('addFileBtn').addEventListener('click',()=>{ if(!ensureAuth())return; $('fileInput').click(); });
   $('fileInput').addEventListener('change',async e=>{ if(!auth)return; try{for(const f of e.target.files)await uploadFile(f);await loadMessages()}catch(x){toast('message',x.message||'文件发送失败')}finally{e.target.value=''} });
@@ -208,8 +230,11 @@
   $('shareOverlay').addEventListener('click',e=>{if(e.target===$('shareOverlay'))closeShare()});
   $('shareNowBtn').addEventListener('click',()=>void doShareText());
   $('shareFileBtn').addEventListener('click',()=>void doShareFile());
-  $('backBtn').addEventListener('click',()=>{ if(auth?.bindId) location.href='/taskwall/'; else location.href='/bind/'; });
   $('shareCode').addEventListener('input',e=>e.target.value=e.target.value.replace(/[^a-z0-9]/gi,'').toUpperCase().slice(0,6));
+  $('claimCode').addEventListener('input',e=>e.target.value=e.target.value.replace(/[^a-z0-9]/gi,'').toUpperCase().slice(0,6));
+  $('claimCode').addEventListener('keydown',e=>{if(e.key==='Enter')void claim()});
+  $('claimBtn').addEventListener('click',()=>void claim());
+  $('backBtn').addEventListener('click',()=>{ if (window.history.length > 1) window.history.back(); else location.href='/bind/'; });
 
   (function init(){ if(auth?.bindId&&auth?.mobileToken){$('boundChip').textContent=(auth.deviceName||'已绑定')+' · '+auth.code; $('boundChip').classList.add('colored'); void loadMessages(); pollTimer=setInterval(()=>void loadMessages().catch(()=>{}),3000);} else goBind(); })();
   window.addEventListener('pagehide',()=>clearInterval(pollTimer));

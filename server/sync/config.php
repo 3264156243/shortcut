@@ -417,6 +417,59 @@ function claim_share($code) {
     return null;
 }
 
+// 为文件共享签发一次性下载令牌（短时有效，领取后作废）
+function issue_share_download_token($shareId) {
+    global $SHARES_FILE;
+    $created = false;
+    $result = json_lock_update($SHARES_FILE, function ($shares) use ($shareId, &$created) {
+        foreach ($shares as &$share) {
+            if ((string)($share['id'] ?? '') === $shareId && (string)($share['message']['type'] ?? '') === 'file') {
+                $share['download_token'] = 'dl_' . bin2hex(random_bytes(24));
+                $share['download_token_expires'] = date('c', time() + 900); // 15 分钟
+                $created = true;
+                return ['data' => $shares, 'result' => $share['download_token']];
+            }
+        }
+        return ['data' => $shares, 'result' => null];
+    });
+    if (!$created) return null;
+    return $result;
+}
+
+// 用下载令牌定位文件共享（未领取/未过期），返回 [bindId, fileId, meta name/size/mime]
+function consume_share_download_token($token) {
+    global $SHARES_FILE;
+    $token = trim((string)$token);
+    if (!preg_match('/^dl_[a-f0-9]{48}$/', $token)) return null;
+    $now = time();
+    $found = null;
+    $next = [];
+    json_lock_update($SHARES_FILE, function ($shares) use ($token, $now, &$found, &$next) {
+        foreach ($shares as $share) {
+            $t = (string)($share['download_token'] ?? '');
+            if ((string)($share['id'] ?? '') !== '' && $found === null
+                && $t === $token
+                && strtotime((string)($share['download_token_expires'] ?? '')) > $now
+                && strtotime((string)($share['expires_at'] ?? '')) > $now) {
+                $found = [
+                    'bindId' => (string)($share['bind_id'] ?? ''),
+                    'fileId' => (string)($share['message']['fileId'] ?? ''),
+                    'name' => (string)($share['message']['name'] ?? 'file'),
+                    'size' => (int)($share['message']['size'] ?? 0),
+                    'mime' => (string)($share['message']['mime'] ?? 'application/octet-stream'),
+                ];
+                // 一次性：领取即清除令牌
+                unset($share['download_token']);
+                unset($share['download_token_expires']);
+            }
+            $next[] = $share;
+        }
+        return ['data' => $next];
+    });
+    return $found;
+}
+
+
 // ===== 队列管理（通用，按 board + bindId）=====
 function queue_path($board, $bindId) {
     global $QUEUE_DIR;

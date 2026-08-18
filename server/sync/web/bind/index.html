@@ -52,7 +52,9 @@
     .scan-tip { min-height: 20px; margin-top: 12px; color: #c8beb3; font-size: 12px; text-align: center; }
     .scan-tip.error { color: #e5a19a; }
     .scan-tip.success { color: #8ac49f; }
+    .scan-fallback { width: 100%; min-height: 42px; margin-top: 12px; border: 1px solid rgba(255,255,255,.14); border-radius: 8px; color: #f6efe5; background: #3a3631; font-weight: 700; }
     canvas.hidden { display: none; }
+    .hidden-input { display: none; }
     .message { min-height: 18px; margin-top: 12px; text-align: center; font-size: 12px; color: #c8beb3; }
     .message.error { color: #e5a19a; }
     .message.success { color: #8ac49f; }
@@ -110,6 +112,8 @@
       </div>
       <div class="scan-camera"><video id="scanVideo" playsinline muted></video><div class="scan-frame"></div><div class="scan-line"></div></div>
       <p id="scanMessage" class="scan-tip">将桌面端二维码放入框内</p>
+      <button id="scanImageButton" class="scan-fallback" type="button">摄像头不可用时，从相册选二维码图片</button>
+      <input id="scanImageInput" class="hidden-input" type="file" accept="image/*" />
       <canvas id="scanCanvas" class="hidden"></canvas>
     </div>
   </div>
@@ -246,10 +250,33 @@
       }
       if (scanStream) scanFrame = requestAnimationFrame(() => void scanLoop(detector));
     }
+    async function recognizeImageFromFile(file) {
+      if (!file) { $('scanMessage').textContent = '未选择图片'; return; }
+      $('scanMessage').textContent = '正在识别图片…';
+      try {
+        await loadJsQrFallback();
+        const img = new Image();
+        await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = URL.createObjectURL(file); });
+        const cv = document.createElement('canvas');
+        const scale = Math.min(1, 1600 / img.width);
+        cv.width = Math.round(img.width * scale); cv.height = Math.round(img.height * scale);
+        const ctx = cv.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0, cv.width, cv.height);
+        const px = ctx.getImageData(0, 0, cv.width, cv.height);
+        const value = window.jsQR(px.data, cv.width, cv.height, { inversionAttempts: 'both' })?.data || '';
+        if (!value) { stopScanner(); $('scanMessage').textContent = '图片中未识别到二维码'; return; }
+        $('scanMessage').textContent = '已识别，正在连接…';
+        if (await connectWithScannedValue(value)) { stopScanner(); render(); }
+        else { stopScanner(); $('scanMessage').textContent = '未识别到有效二维码'; }
+      } catch (e) {
+        stopScanner(); $('scanMessage').textContent = '图片识别失败：' + (e?.message || '未知错误');
+      }
+    }
+
     async function startScanner() {
-      // 修复：优先 requirement，降级分辨率，隐藏问题；无 getUserMedia 时给明确提示
+      // 修复：优先 requirement，降级分辨率，隐藏问题；无 getUserMedia 时提示用图片/绑定码
       if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
-        return msg('bindMessage', '当前浏览器/系统无法调用摄像头，请使用绑定码连接', true);
+        return msg('bindMessage', '当前浏览器/系统无法调用摄像头，可点「从相册选二维码图片」，或用绑定码连接', true);
       }
       $('scanOverlay').classList.remove('hidden');
       $('scanMessage').textContent = '正在启动摄像头…';
@@ -260,10 +287,10 @@
           try { const formats = typeof BarcodeDetector.getSupportedFormats === 'function' ? await BarcodeDetector.getSupportedFormats() : ['qr_code']; if (formats.includes('qr_code')) detector = new BarcodeDetector({ formats: ['qr_code'] }); } catch { detector = null; }
         }
         if (!detector) await loadJsQrFallback();
-        // 摄像头：尝试后置，失败回退默认，再降低约束
+        // 摄像头：最宽松约束优先，逐步加后置倾向；任一失败都不致命，给出可用的流即可
         const constraints = [
-          { video: { facingMode: { ideal: 'environment' } }, audio: false },
           { video: true, audio: false },
+          { video: { facingMode: { ideal: 'environment' } }, audio: false },
         ];
         let stream = null;
         for (const con of constraints) {
@@ -286,10 +313,12 @@
     $('bindButton').addEventListener('click', () => void doBind());
     $('scanButton').addEventListener('click', () => void startScanner());
     $('scanCloseButton').addEventListener('click', stopScanner);
+    $('scanImageButton').addEventListener('click', () => { $('scanImageInput').click(); });
+    $('scanImageInput').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) void recognizeImageFromFile(f); e.target.value = ''; });
     $('scanOverlay').addEventListener('click', (e) => { if (e.target === $('scanOverlay')) stopScanner(); });
     document.addEventListener('visibilitychange', () => { if (document.hidden && scanStream) stopScanner(); });
     $('unbindButton').addEventListener('click', () => { if (confirm('确定更换绑定吗？')) clearBinding(); });
-    $('backBtn').addEventListener('click', () => { if (mobileAuth?.bindId) location.href = '/taskwall/'; else window.history.back(); });
+    $('backBtn').addEventListener('click', () => { if (window.history.length > 1) window.history.back(); else location.href = '/mobile/'; });
 
     (function init() {
       const params = new URLSearchParams(location.search);
