@@ -185,6 +185,8 @@ declare global {
       fileTransferDownload: (fileId: string, name: string) => Promise<any>;
       fileTransferDelete: (messageId: string) => Promise<any>;
       fileTransferShareText: (text: string, code: string, hours: number) => Promise<any>;
+      fileTransferShareList: () => Promise<any>;
+      fileTransferShareDelete: (id: string) => Promise<any>;
       fileTransferClaim: (code: string) => Promise<any>;
       getOpenAtLogin: () => Promise<boolean>;
       setOpenAtLogin: (enabled: boolean) => Promise<boolean>;

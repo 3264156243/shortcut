@@ -54,6 +54,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fileTransferDownload: (fileId: string, name: string) => ipcRenderer.invoke('fileTransfer:download', fileId, name),
   fileTransferDelete: (messageId: string) => ipcRenderer.invoke('fileTransfer:delete', messageId),
   fileTransferShareText: (text: string, code: string, hours: number) => ipcRenderer.invoke('fileTransfer:shareText', text, code, hours),
+  fileTransferShareList: () => ipcRenderer.invoke('fileTransfer:shareList'),
+  fileTransferShareDelete: (id: string) => ipcRenderer.invoke('fileTransfer:shareDelete', id),
   fileTransferClaim: (code: string) => ipcRenderer.invoke('fileTransfer:claim', code),
   onVoiceSession: (callback: (text: string) => void) => {
     const handler = (_event: unknown, text: string) => callback(text);

@@ -128,5 +128,7 @@ export function initFileTransfer() {
   ipcMain.handle('fileTransfer:download', (_event, fileId: string, name: string) => downloadFile(fileId, name));
   ipcMain.handle('fileTransfer:delete', (_event, messageId: string) => withBinding('transfer.delete', { messageId }));
   ipcMain.handle('fileTransfer:shareText', (_event, text: string, code: string, hours: number) => withBinding('transfer.share', { text, code, hours }));
+  ipcMain.handle('fileTransfer:shareList', () => withBinding('transfer.shares'));
+  ipcMain.handle('fileTransfer:shareDelete', (_event, id: string) => withBinding('transfer.shareDelete', { id }));
   ipcMain.handle('fileTransfer:claim', (_event, code: string) => request({ action: 'transfer.claim', code }));
 }

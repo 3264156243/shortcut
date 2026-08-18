@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Clipboard, Copy, Download, FilePlus2, RefreshCw, Send, Share2, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Clipboard, Copy, Download, FilePlus2, RefreshCw, Send, Share2, Trash2 } from 'lucide-react';
 import { useStore } from '../store';
 
 interface TransferMessage {
@@ -10,6 +10,17 @@ interface TransferMessage {
   name?: string;
   size?: number;
   sender: 'desktop' | 'mobile' | 'share';
+  createdAt: string;
+}
+
+interface TransferShare {
+  id: string;
+  code: string;
+  expiresAt: string;
+  type: 'text' | 'file';
+  text?: string;
+  name?: string;
+  size?: number;
   createdAt: string;
 }
 
@@ -26,6 +37,8 @@ export default function FileTransferPanel() {
   const [shareOpen, setShareOpen] = useState(false);
   const [shareCode, setShareCode] = useState('');
   const [shareHours, setShareHours] = useState(1);
+  const [shares, setShares] = useState<TransferShare[]>([]);
+  const [sharesOpen, setSharesOpen] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
 
   const refresh = async () => {
@@ -102,6 +115,26 @@ export default function FileTransferPanel() {
     setShareOpen(false);
     setShareCode(result.code || '');
     addToast(`接收密码：${result.code}`, 'success');
+    await loadShares();
+  };
+
+  const loadShares = async () => {
+    const result = await window.electronAPI?.fileTransferShareList?.();
+    if (result?.success) setShares(Array.isArray(result.shares) ? result.shares : []);
+  };
+
+  const deleteShare = async (id: string) => {
+    if (!window.confirm('确定删除这条共享？')) return;
+    const result = await window.electronAPI?.fileTransferShareDelete?.(id);
+    if (!result?.success) return addToast(result?.message || '删除失败', 'error');
+    setShares((items) => items.filter((item) => item.id !== id));
+    addToast('共享已删除', 'success');
+  };
+
+  const toggleShares = async () => {
+    const next = !sharesOpen;
+    setSharesOpen(next);
+    if (next) await loadShares();
   };
 
   return (
@@ -152,6 +185,33 @@ export default function FileTransferPanel() {
       </div>
 
       <footer className="shrink-0 p-4" style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)' }}>
+        {sharesOpen && (
+          <div className="mx-auto mb-3 max-w-3xl rounded-lg p-3" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
+            <div className="mb-2 flex items-center gap-2 text-xs font-semibold" style={{ color: 'var(--color-text)' }}>
+              <Share2 size={13} style={{ color: 'var(--color-accent)' }} /> 我的共享
+              <span className="text-[10px] font-normal" style={{ color: 'var(--color-text-muted)' }}>{shares.length} 条未删除</span>
+            </div>
+            {shares.length === 0 ? (
+              <div className="py-2 text-center text-xs" style={{ color: 'var(--color-text-muted)' }}>暂无共享</div>
+            ) : (
+              <div className="flex max-h-52 flex-col gap-1.5 overflow-y-auto">
+                {shares.map((share) => (
+                  <div key={share.id} className="flex items-center gap-2 rounded-md px-2.5 py-2" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)' }}>
+                    <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-white" style={{ background: share.type === 'file' ? '#4f6d5c' : '#6b5d50' }}>
+                      {share.type === 'file' ? '文件' : '文本'}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-xs" style={{ color: 'var(--color-text)' }}>
+                      {share.name || share.text || '共享内容'}
+                    </span>
+                    <span className="shrink-0 text-[10px] font-mono" style={{ color: '#d8b46a' }}>{share.code}</span>
+                    <span className="shrink-0 text-[10px]" style={{ color: 'var(--color-text-muted)' }}>至 {new Date(share.expiresAt).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                    <button type="button" onClick={() => void deleteShare(share.id)} title="删除共享" className="shrink-0 p-1 text-[#e5a19a] transition-opacity hover:opacity-70"><Trash2 size={13} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {shareOpen && (
           <div className="mx-auto mb-3 flex max-w-3xl items-center gap-2 rounded-lg p-2" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
             <Share2 size={14} style={{ color: 'var(--color-accent)' }} />
@@ -166,6 +226,7 @@ export default function FileTransferPanel() {
           <button type="button" onClick={() => void sendFile()} disabled={uploading} title="选择文件" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md disabled:opacity-50" style={{ background: 'var(--color-bg-card-hover)' }}><FilePlus2 size={17} /></button>
           <textarea value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendText(); } }} placeholder="发送文本，Enter 发送，Shift+Enter 换行" rows={1} className="max-h-28 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-sm outline-none" />
           <button type="button" onClick={() => setShareOpen((open) => !open)} title="共享发送" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md" style={{ background: shareOpen ? 'var(--color-accent)' : 'var(--color-bg-card-hover)', color: shareOpen ? 'white' : undefined }}><Share2 size={16} /></button>
+          <button type="button" onClick={() => void toggleShares()} title="我的共享" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md" style={{ background: sharesOpen ? 'var(--color-accent)' : 'var(--color-bg-card-hover)', color: sharesOpen ? 'white' : undefined }}>{sharesOpen ? <ChevronDown size={16} /> : <ChevronUp size={16} />}</button>
           <button type="button" onClick={() => void sendText()} disabled={!text.trim() || sending} title="发送" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white disabled:opacity-40" style={{ background: 'var(--color-accent)' }}><Send size={16} /></button>
         </div>
       </footer>
