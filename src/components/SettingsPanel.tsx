@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Moon, Sun, Monitor, Download, Upload, Power, ChevronUp, ChevronDown, Eye, EyeOff, ArrowRightLeft } from 'lucide-react';
 import { CORE_MODULE_IDS, MODULE_REGISTRY, getModuleGroup, type ModuleMeta } from '../moduleRegistry';
 import type { ModuleConfigItem } from '../types';
+import BindCard from './BindCard';
 
 interface ModuleRowProps {
   meta: ModuleMeta;
@@ -283,6 +284,9 @@ export default function SettingsPanel() {
                 })}
               </div>
             </div>
+
+            {/* 联动绑定 */}
+            <BindCard />
           </div>
         </motion.div>
       </motion.div>

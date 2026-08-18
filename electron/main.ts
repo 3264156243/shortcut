@@ -3859,6 +3859,22 @@ if (!gotSingleInstanceLock) {
     console.error('voice input init failed:', err?.message || err);
   }
 
+  // 联动绑定 + 同步引擎初始化
+  try {
+    const { initSync } = require('./sync/init');
+    void initSync({
+      readConfigObject,
+      updateConfig: (updater: (config: any) => any) => {
+        const current = readConfigObject() || {};
+        writeConfig(JSON.stringify(updater(current), null, 2));
+      },
+      notifyConfigChanged,
+      taskwallEnabled: () => readModuleEnabled('tasks'),
+    });
+  } catch (err: any) {
+    console.error('sync init failed:', err?.message || err);
+  }
+
   // 每 10 分钟复查激活状态：后台禁用激活码/调整权限后客户端口可生效
   setInterval(() => {
     void checkLicense()

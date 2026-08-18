@@ -1,0 +1,235 @@
+<?php
+
+error_reporting(0);
+ini_set('display_errors', '0');
+
+header('Content-Type: application/json; charset=utf-8');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('X-Content-Type-Options: nosniff');
+header('Cache-Control: no-store, no-cache, must-revalidate');
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(204);
+    exit;
+}
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode(['success' => false, 'message' => '仅支持 POST 请求'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+require __DIR__ . '/config.php';
+
+$input = json_decode(file_get_contents('php://input'), true);
+if (!is_array($input)) {
+    $input = [];
+}
+$action = isset($input['action']) ? trim($input['action']) : '';
+$board = isset($input['board']) ? trim($input['board']) : 'system';
+$bindId = isset($input['bindId']) ? trim($input['bindId']) : '';
+
+function respond($data) {
+    echo json_encode($data, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+function error_msg($msg) {
+    respond(['success' => false, 'message' => $msg]);
+}
+
+function client_ip() {
+    return isset($_SERVER['REMOTE_ADDR']) ? (string)$_SERVER['REMOTE_ADDR'] : 'unknown';
+}
+
+function limited_text($value, $maxLength) {
+    $text = trim((string)$value);
+    if (function_exists('mb_substr')) {
+        return mb_substr($text, 0, $maxLength, 'UTF-8');
+    }
+    return substr($text, 0, $maxLength);
+}
+
+switch ($action) {
+
+    // ===== 绑定管理（通用，不分 board）=====
+    case 'bind.create':
+        if (!rate_limit_allow('bind.create:' . client_ip(), 5, 3600)) {
+            error_msg('创建绑定过于频繁，请稍后再试');
+        }
+        // 客户端申请一个新绑定身份
+        $bind = create_bind();
+        if (!is_array($bind)) {
+            error_msg('暂时无法创建绑定，请稍后再试');
+        }
+        respond([
+            'success' => true,
+            'bindId' => $bind['bind_id'],
+            'code' => $bind['code'],
+            'bindUrl' => 'https://shortcut.326415.xyz/taskwall/?bind=' . urlencode($bind['bind_id']),
+        ]);
+        break;
+
+    case 'bind.info':
+        if (!rate_limit_allow('bind.info:' . client_ip(), 120, 60)) {
+            error_msg('查询过于频繁，请稍后再试');
+        }
+        if ($bindId === '') {
+            error_msg('缺少 bindId');
+        }
+        $bind = get_bind($bindId);
+        if (!$bind) {
+            respond(['success' => true, 'valid' => false]);
+        }
+        respond([
+            'success' => true,
+            'valid' => true,
+            'bindId' => $bindId,
+            'code' => isset($bind['code']) ? $bind['code'] : '',
+            'bindUrl' => 'https://shortcut.326415.xyz/taskwall/?bind=' . urlencode($bindId),
+        ]);
+        break;
+
+    case 'bind.query':
+        if (!rate_limit_allow('bind.query:' . client_ip(), 60, 60)) {
+            error_msg('查询过于频繁，请稍后再试');
+        }
+        // 查询绑定码是否有效
+        $code = isset($input['code']) ? trim($input['code']) : '';
+        if ($code === '') {
+            error_msg('绑定码为空');
+        }
+        $resolved = resolve_code($code);
+        if ($resolved) {
+            $bind = get_bind($resolved);
+            respond(['success' => true, 'valid' => true, 'bindId' => $resolved]);
+        } else {
+            respond(['success' => true, 'valid' => false, 'message' => '绑定码无效']);
+        }
+        break;
+
+    case 'bind.resolve':
+        if (!rate_limit_allow('bind.resolve:' . client_ip(), 30, 60)) {
+            error_msg('验证过于频繁，请稍后再试');
+        }
+        // 绑定码 → bindId（手机提交前获取真实 ID）
+        $code = isset($input['code']) ? trim($input['code']) : '';
+        if ($code === '') {
+            error_msg('绑定码为空');
+        }
+        $resolved = resolve_code($code);
+        if ($resolved) {
+            respond(['success' => true, 'bindId' => $resolved]);
+        } else {
+            respond(['success' => false, 'message' => '绑定码无效']);
+        }
+        break;
+
+    // ===== 任务墙队列 =====
+    case 'push':
+        if (!rate_limit_allow('push:' . client_ip(), 30, 60)) {
+            error_msg('提交过于频繁，请稍后再试');
+        }
+        if ($board !== 'taskwall') {
+            error_msg('暂不支持的板块');
+        }
+        if ($bindId === '') {
+            error_msg('缺少 bindId');
+        }
+        $bind = get_bind($bindId);
+        if (!$bind) {
+            error_msg('绑定身份无效');
+        }
+        $text = isset($input['text']) ? limited_text($input['text'], 120) : '';
+        if ($text === '') {
+            error_msg('任务标题不能为空');
+        }
+        // 可选字段
+        $details = isset($input['details']) ? limited_text($input['details'], 2000) : '';
+        $reminderAt = isset($input['reminderAt']) ? limited_text($input['reminderAt'], 64) : '';
+        $boardName = isset($input['boardName']) ? limited_text($input['boardName'], 40) : '';
+        if ($reminderAt !== '' && strtotime($reminderAt) === false) {
+            error_msg('提醒时间格式无效');
+        }
+
+        $task = [
+            'id' => 'rmt_' . bin2hex(random_bytes(12)),
+            'text' => $text,
+            'details' => $details,
+            'reminderAt' => $reminderAt,
+            'boardName' => $boardName,
+            'createdAt' => date('c'),
+        ];
+        if (!enqueue_task($board, $bindId, $task)) {
+            error_msg('待同步任务已达到上限，请先打开桌面端接收');
+        }
+        respond(['success' => true, 'taskId' => $task['id']]);
+        break;
+
+    case 'pull':
+        if (!rate_limit_allow('pull:' . client_ip(), 120, 60)) {
+            error_msg('拉取过于频繁，请稍后再试');
+        }
+        if ($board !== 'taskwall') {
+            error_msg('暂不支持的板块');
+        }
+        if ($bindId === '') {
+            error_msg('缺少 bindId');
+        }
+        $bind = get_bind($bindId);
+        if (!$bind) {
+            error_msg('绑定身份无效');
+        }
+        $tasks = peek_all($board, $bindId);
+        if (!is_array($tasks)) {
+            error_msg('暂时无法拉取任务，请稍后再试');
+        }
+        respond([
+            'success' => true,
+            'tasks' => $tasks,
+            'count' => count($tasks),
+        ]);
+        break;
+
+    case 'ack':
+        if (!rate_limit_allow('ack:' . client_ip(), 120, 60)) {
+            error_msg('确认过于频繁，请稍后再试');
+        }
+        if ($board !== 'taskwall') {
+            error_msg('暂不支持的板块');
+        }
+        if ($bindId === '' || !get_bind($bindId)) {
+            error_msg('绑定身份无效');
+        }
+        $taskIds = isset($input['taskIds']) && is_array($input['taskIds'])
+            ? array_values(array_filter(array_slice($input['taskIds'], 0, 500), function ($id) {
+                return is_string($id) && preg_match('/^rmt_[a-f0-9]{24}$/', $id);
+            }))
+            : [];
+        if (!$taskIds) {
+            error_msg('缺少待确认任务');
+        }
+        $removed = acknowledge_tasks($board, $bindId, $taskIds);
+        if ($removed === false) {
+            error_msg('暂时无法确认任务，请稍后再试');
+        }
+        respond(['success' => true, 'removed' => $removed]);
+        break;
+
+    case 'board.list':
+        if ($board !== 'taskwall') {
+            error_msg('暂不支持的板块');
+        }
+        if ($bindId === '') {
+            error_msg('缺少 bindId');
+        }
+        if (!get_bind($bindId)) {
+            error_msg('绑定身份无效');
+        }
+        // 从队列中提取已用过的墙名（已消费的不可用，所以先只返回空列表）
+        // 简单实现：返回常用墙名列表，或空列表让手机自由输入
+        respond(['success' => true, 'boards' => []]);
+        break;
+
+    default:
+        error_msg('未知操作');
+}

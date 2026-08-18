@@ -158,6 +158,8 @@ declare global {
       voiceConfirm: () => Promise<unknown>;
       voiceToggle: () => Promise<unknown>;
       voiceCancel: () => Promise<unknown>;
+      syncGetBinding: () => Promise<unknown>;
+      syncPullNow: () => Promise<unknown>;
       onVoiceSession: (callback: (text: string) => void) => () => void;
       onVoicePolish: (callback: (text: string) => void) => () => void;
       onVoicePolishError: (callback: (text: string) => void) => () => void;

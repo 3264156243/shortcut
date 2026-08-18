@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#26231f" />
+  <meta name="referrer" content="no-referrer" />
+  <title>ShortCut 手机任务墙</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+      background: #26231f;
+      color: #f6efe5;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      min-height: 100dvh;
+      overflow-x: hidden;
+      background:
+        linear-gradient(rgba(255,255,255,.022) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px),
+        #26231f;
+      background-size: 24px 24px;
+    }
+    button, input, textarea { font: inherit; }
+    button { cursor: pointer; }
+    .shell { width: min(100%, 760px); margin: 0 auto; padding: 22px 18px 38px; }
+    .topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+    .brand-icon { width: 42px; height: 42px; border-radius: 11px; object-fit: cover; }
+    .brand { min-width: 0; }
+    .brand h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: 0; }
+    .brand p { margin: 4px 0 0; color: #aaa198; font-size: 12px; }
+    .status {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: #c8beb3;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #8f877e; }
+    .status.connected .status-dot { background: #63b582; box-shadow: 0 0 0 4px rgba(99,181,130,.12); }
+    .wall {
+      position: relative;
+      min-height: 520px;
+      padding: 38px clamp(16px, 5vw, 44px) 34px;
+      border: 1px solid rgba(255,255,255,.08);
+      background: #33302c;
+      box-shadow: 0 22px 60px rgba(0,0,0,.28), inset 0 1px rgba(255,255,255,.035);
+      border-radius: 8px;
+    }
+    .paper {
+      position: relative;
+      color: #4f4438;
+      background:
+        repeating-linear-gradient(to bottom, transparent 0, transparent 33px, rgba(126,99,63,.13) 34px),
+        #f3e8c9;
+      border: 1px solid rgba(92,68,38,.16);
+      box-shadow: 0 12px 26px rgba(0,0,0,.22);
+      padding: 38px clamp(18px, 5vw, 36px) 28px;
+      min-height: 390px;
+      transform: rotate(-.35deg);
+    }
+    .paper::before, .paper::after {
+      content: "";
+      position: absolute;
+      top: -15px;
+      width: 88px;
+      height: 30px;
+      background: rgba(193, 91, 64, .76);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.15);
+    }
+    .paper::before { left: 12%; transform: rotate(-5deg); }
+    .paper::after { right: 12%; transform: rotate(4deg); background: rgba(222, 155, 57, .72); }
+    .paper h2 { margin: 0 0 5px; font-size: 22px; letter-spacing: 0; }
+    .paper .hint { margin: 0 0 22px; font-size: 12px; color: #817363; }
+    .field { margin-bottom: 16px; }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    label { display: block; margin-bottom: 7px; font-size: 12px; font-weight: 700; color: #685a4b; }
+    input, textarea {
+      width: 100%;
+      border: 1px solid rgba(90,68,43,.25);
+      border-radius: 7px;
+      outline: none;
+      color: #41372d;
+      background: rgba(255,252,242,.65);
+      transition: border-color .16s, box-shadow .16s, background .16s;
+    }
+    input { height: 42px; padding: 0 12px; }
+    textarea { min-height: 98px; padding: 11px 12px; resize: vertical; line-height: 1.65; }
+    input:focus, textarea:focus {
+      border-color: #a96b45;
+      box-shadow: 0 0 0 3px rgba(169,107,69,.12);
+      background: rgba(255,254,248,.86);
+    }
+    .actions { display: flex; align-items: center; gap: 10px; margin-top: 22px; }
+    .primary, .secondary {
+      height: 42px;
+      border-radius: 7px;
+      border: 0;
+      padding: 0 18px;
+      transition: transform .14s, opacity .14s, background .14s;
+    }
+    .primary { flex: 1; color: white; background: #9f493a; font-weight: 700; box-shadow: 0 5px 14px rgba(99,44,33,.22); }
+    .primary:active, .secondary:active { transform: translateY(1px); }
+    .primary:disabled { cursor: wait; opacity: .56; }
+    .secondary { color: #665848; background: rgba(255,255,255,.42); border: 1px solid rgba(90,68,43,.18); }
+    .message { min-height: 20px; margin-top: 13px; font-size: 12px; text-align: center; color: #7e6f5e; }
+    .message.error { color: #a23932; }
+    .message.success { color: #337552; }
+    .bind-view { min-height: 370px; display: grid; place-items: center; }
+    .bind-box { width: min(100%, 390px); text-align: center; }
+    .bind-box h2 { font-size: 23px; margin-bottom: 8px; }
+    .bind-box p { margin: 0 0 22px; font-size: 13px; color: #7a6d5f; line-height: 1.7; }
+    .code-input { text-align: center; font: 700 24px Consolas, monospace; text-transform: uppercase; letter-spacing: 5px; }
+    .hidden { display: none !important; }
+    .success-flash { animation: paperPulse .55s ease; }
+    @keyframes paperPulse { 50% { transform: rotate(-.35deg) scale(1.012); filter: brightness(1.04); } }
+    @media (max-width: 560px) {
+      .shell { padding: 16px 12px 26px; }
+      .topbar { margin-bottom: 17px; }
+      .brand-icon { width: 38px; height: 38px; }
+      .brand p { display: none; }
+      .wall { padding: 32px 10px 22px; min-height: calc(100dvh - 92px); }
+      .paper { padding: 34px 15px 24px; min-height: calc(100dvh - 144px); transform: none; }
+      .paper::before { left: 7%; }
+      .paper::after { right: 7%; }
+      .field-row { grid-template-columns: 1fr; gap: 0; }
+      .actions { align-items: stretch; flex-direction: column; }
+      .primary, .secondary { width: 100%; }
+      .status span:last-child { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <img class="brand-icon" src="./icon.png" alt="ShortCut" />
+      <div class="brand"><h1>ShortCut 任务墙</h1><p>从手机把任务钉到桌面</p></div>
+      <div id="status" class="status"><i class="status-dot"></i><span>等待绑定</span></div>
+    </header>
+
+    <section class="wall">
+      <div id="paper" class="paper">
+        <div id="bindView" class="bind-view">
+          <div class="bind-box">
+            <h2>连接桌面端</h2>
+            <p>在 ShortCut 设置里的“联动绑定”查看 6 位绑定码，也可以直接扫描设置页二维码进入。</p>
+            <div class="field">
+              <label for="bindCode">6 位绑定码</label>
+              <input id="bindCode" class="code-input" maxlength="6" autocomplete="one-time-code" inputmode="text" placeholder="ABC123" />
+            </div>
+            <button id="bindButton" class="primary" type="button">连接任务墙</button>
+            <div id="bindMessage" class="message"></div>
+          </div>
+        </div>
+
+        <div id="taskView" class="hidden">
+          <h2>新增任务</h2>
+          <p class="hint">任务内容仅临时存储在 ShortCut 服务器，桌面端启动或点击“立即接收”后进入任务墙并从云端删除。</p>
+          <form id="taskForm">
+            <div class="field">
+              <label for="title">任务标题</label>
+              <input id="title" maxlength="120" required placeholder="要完成什么？" />
+            </div>
+            <div class="field">
+              <label for="details">详细内容（可选）</label>
+              <textarea id="details" maxlength="2000" placeholder="补充说明、清单或备注"></textarea>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="reminderAt">提醒时间（可选）</label>
+                <input id="reminderAt" type="datetime-local" />
+              </div>
+              <div class="field">
+                <label for="boardName">目标任务墙（可选）</label>
+                <input id="boardName" maxlength="40" placeholder="默认任务墙" />
+              </div>
+            </div>
+            <div class="actions">
+              <button id="submitButton" class="primary" type="submit">钉到桌面任务墙</button>
+              <button id="unbindButton" class="secondary" type="button">更换绑定</button>
+            </div>
+            <div id="taskMessage" class="message"></div>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const API = '/sync/api.php';
+    const storageKey = 'shortcut-sync-bind-id';
+    const el = (id) => document.getElementById(id);
+    let bindId = '';
+
+    async function callApi(payload) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 12000);
+      try {
+        const response = await fetch(API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+        const data = await response.json().catch(() => null);
+        if (!response.ok || !data) throw new Error('服务暂时不可用');
+        return data;
+      } catch (error) {
+        if (error && error.name === 'AbortError') throw new Error('请求超时，请检查网络');
+        throw error;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    function setMessage(target, text, type) {
+      target.textContent = text || '';
+      target.className = 'message' + (type ? ' ' + type : '');
+    }
+
+    function setConnected(nextBindId) {
+      bindId = nextBindId;
+      localStorage.setItem(storageKey, nextBindId);
+      el('bindView').classList.add('hidden');
+      el('taskView').classList.remove('hidden');
+      el('status').classList.add('connected');
+      el('status').lastElementChild.textContent = '已连接';
+      setTimeout(() => el('title').focus(), 60);
+    }
+
+    function clearBinding() {
+      bindId = '';
+      localStorage.removeItem(storageKey);
+      history.replaceState(null, '', location.pathname);
+      el('taskView').classList.add('hidden');
+      el('bindView').classList.remove('hidden');
+      el('status').classList.remove('connected');
+      el('status').lastElementChild.textContent = '等待绑定';
+      el('bindCode').value = '';
+      setTimeout(() => el('bindCode').focus(), 60);
+    }
+
+    async function validateBindId(candidate) {
+      if (!candidate) return false;
+      try {
+        const data = await callApi({ action: 'bind.info', bindId: candidate });
+        if (data.success && data.valid) {
+          setConnected(data.bindId || candidate);
+          return true;
+        }
+      } catch {}
+      return false;
+    }
+
+    el('bindCode').addEventListener('input', (event) => {
+      event.target.value = event.target.value.replace(/[^0-9a-z]/gi, '').toUpperCase().slice(0, 6);
+    });
+
+    el('bindCode').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') el('bindButton').click();
+    });
+
+    el('bindButton').addEventListener('click', async () => {
+      const code = el('bindCode').value.trim();
+      if (code.length !== 6) return setMessage(el('bindMessage'), '请输入完整的 6 位绑定码', 'error');
+      el('bindButton').disabled = true;
+      setMessage(el('bindMessage'), '正在连接…');
+      try {
+        const data = await callApi({ action: 'bind.resolve', code });
+        if (!data.success || !data.bindId) throw new Error(data.message || '绑定码无效');
+        setConnected(data.bindId);
+        setMessage(el('bindMessage'), '');
+      } catch (error) {
+        setMessage(el('bindMessage'), error.message || '连接失败', 'error');
+      } finally {
+        el('bindButton').disabled = false;
+      }
+    });
+
+    el('unbindButton').addEventListener('click', clearBinding);
+
+    el('taskForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const title = el('title').value.trim();
+      if (!title) return;
+      el('submitButton').disabled = true;
+      setMessage(el('taskMessage'), '正在提交…');
+      try {
+        const localReminder = el('reminderAt').value;
+        const data = await callApi({
+          action: 'push',
+          board: 'taskwall',
+          bindId,
+          text: title,
+          details: el('details').value.trim(),
+          reminderAt: localReminder ? new Date(localReminder).toISOString() : '',
+          boardName: el('boardName').value.trim(),
+        });
+        if (!data.success) throw new Error(data.message || '提交失败');
+        el('title').value = '';
+        el('details').value = '';
+        el('reminderAt').value = '';
+        setMessage(el('taskMessage'), '已钉到云端，等待桌面端接收', 'success');
+        el('paper').classList.remove('success-flash');
+        requestAnimationFrame(() => el('paper').classList.add('success-flash'));
+        setTimeout(() => el('title').focus(), 80);
+      } catch (error) {
+        if (/绑定身份无效/.test(error.message || '')) clearBinding();
+        setMessage(el('taskMessage'), error.message || '提交失败，请稍后再试', 'error');
+      } finally {
+        el('submitButton').disabled = false;
+      }
+    });
+
+    (async () => {
+      const params = new URLSearchParams(location.search);
+      const candidate = params.get('bind') || localStorage.getItem(storageKey) || '';
+      if (!(await validateBindId(candidate))) clearBinding();
+    })();
+  </script>
+</body>
+</html>

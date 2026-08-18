@@ -307,6 +307,11 @@ export interface AppConfig {
   scTaskList: ScTaskListItem[];
   modules: ModuleConfigItem[];
   voiceInput?: VoiceInputConfig;
+  sync?: {
+    bindId?: string;
+    bindCode?: string;
+    bindUrl?: string;
+  };
 }
 
 export const DEFAULT_CONFIG: AppConfig = {

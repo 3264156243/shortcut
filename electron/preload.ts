@@ -46,6 +46,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   voiceConfirm: () => ipcRenderer.invoke('voice:confirm'),
   voiceToggle: () => ipcRenderer.invoke('voice:toggle'),
   voiceCancel: () => ipcRenderer.invoke('voice:cancel'),
+  syncGetBinding: () => ipcRenderer.invoke('sync:getBinding'),
+  syncPullNow: () => ipcRenderer.invoke('sync:pullNow'),
   onVoiceSession: (callback: (text: string) => void) => {
     const handler = (_event: unknown, text: string) => callback(text);
     ipcRenderer.on('voice:session', handler);
