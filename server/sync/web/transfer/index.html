@@ -111,6 +111,13 @@
     <input id="shareFileInput" class="hidden-file" type="file" />
     <div id="shareMsg" class=""></div>
 
+    <label class="field-label">领取共享（输入端接收密码）</label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input id="claimCode" class="field-full" maxlength="6" placeholder="6 位接收密码" style="flex:1;min-height:42px;text-transform:uppercase" />
+      <button id="claimBtn" class="secondary" type="button" style="min-height:42px;flex:0 0 auto">领取</button>
+    </div>
+    <div id="claimMsg" class=""></div>
+
     <label class="field-label">我的共享（未删除）</label>
     <div id="shareList" class="share-list"></div>
   </div>
@@ -223,8 +230,8 @@
   // ===== 领取（输入密码获取共享）=====
   async function claim(){
     if(!auth?.bindId) return goBind();
-    const code=$('claimCode').value.trim().toUpperCase();if(code.length!==6)return toast('message','请输入 6 位接收密码');
-    toast('message','正在领取…');
+    const code=$('claimCode').value.trim().toUpperCase();if(code.length!==6)return toast('claimMsg','请输入 6 位接收密码');
+    toast('claimMsg','正在领取…');
     try{
       const d=await api({action:'transfer.claim',code});
       if(!d.success) throw new Error(d.message||'领取失败');
@@ -233,13 +240,13 @@
         if(d.downloadToken){
           const q=new URLSearchParams({action:'download',token:d.downloadToken});
           const a=document.createElement('a');a.href='/sync/file.php?'+q.toString();a.download=m.name||'file';document.body.appendChild(a);a.click();a.remove();
-          toast('message','已开始下载：'+(m.name||'文件'),'true');
-        } else toast('message','共享文件已被领取，请让共享者重新共享',true);
+          toast('claimMsg','已开始下载：'+(m.name||'文件'),'true');
+        } else toast('claimMsg','共享文件已被领取，请让共享者重新共享',true);
       } else if(m.text){
-        await navigator.clipboard.writeText(m.text||'');toast('message','共享文本已复制到剪贴板','true');
-      } else toast('message','领取成功','true');
+        await navigator.clipboard.writeText(m.text||'');toast('claimMsg','共享文本已复制到剪贴板','true');
+      } else toast('claimMsg','领取成功','true');
       $('claimCode').value='';
-    }catch(e){toast('message',e.message||'领取失败')}
+    }catch(e){toast('claimMsg',e.message||'领取失败')}
   }
 
   // ===== 事件 =====
