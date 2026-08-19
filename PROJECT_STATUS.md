@@ -1,4 +1,4 @@
-# ShortCut 项目开发状态存档（多工具共同维护）
+﻿# ShortCut 项目开发状态存档（多工具共同维护）
 
 > **本文件是多工具/多会话共同维护的项目进度记录。**
 > 切换工具或转移会话前：读取本文件 → 把当前完成项并入下方"已完成"、更新"进行中"到最新、追加未提交改动、刷新下一步顺序，然后保存。
@@ -160,6 +160,8 @@ Remove-SSHSession -SessionId $s.SessionId | Out-Null
 
 ## 更新记录
 
+- [2026-08-19] 修复 transfer 文件共享结构被破坏的根因：JS 引用了不存在的 DOM (claimCode/claimBtn 在 toolsbar 中已被移除但脚本仍调用) 导致脚本 TypeError 中断、所有事件失效。重构为「主页面=文件互传 + 共享=独立弹窗」：底部『共享内容』按钮弹出弹窗，内含 创建共享(文本/文件上传/时长/密码) + 领取共享(输密码) + 我的共享历史(列表/删除)；领取反馈改为弹窗内 claimMsg。提交 2741909 已部署验证。
+
 - [2026-08-19] 移动端重构为四页结构，提交 `614eedb` 已推送并部署到服务器：`/mobile/` = 跳转Hub（提供任务墙 / 文件共享 / 验证绑定三入口卡片 + 绑定状态条）；`/bind/` = 验证绑定页；`/taskwall/` = 任务墙页；`/transfer/` = 文件共享页。**三板块左上角返回按钮均跳转 `/mobile/`（Hub）**。修正 transfer 共享弹窗：共享文件改为**上传按钮**（选本地文件→分片上传→fileComplete→按 fileId 建共享），不再"选已有消息"。线上四页面 HTTP 200 已确认更新。
 - [2026-08-19] 桌面端文件快传新增「我的共享」列表与删除（`fileTransfer:shareList`/`shareDelete`），与移动端共享弹窗闭环，提交 `06f2379` 已推送，验收版已刷新。**目标（移动端联动重构）4 点全部达成并部署**：绑定抽离独立 `/bind/`、任务墙精简仅返回按钮、文件快传独立 `/transfer/` 带共享弹窗、响应式完善、摄像头/上传适配；服务端 `transfer.shares`/`shareDelete`/`share`(messageId 引用文件)。遗留高级项（非本轮目标）：共享文件**跨绑定下载令牌**、桌面端「我的共享列表」已补但共享文件下载领取界面可再完善。
 - [2026-08-19] 移动端联动重构 + 共享弹窗 + 真机适配，提交 `c6a5bf2` 已推送。**URL 结构变更（重要）**：绑定抽离到新独立页 `/bind/`（含扫码/绑定显示/更换绑定）；文件快传独立页 `/transfer/`（带「共享内容」弹窗：文本/选文件共享、共享时长、自定义密码、我的共享列表、删除）；`/taskwall/` 精简为单功能仅保留返回按钮；`/mobile/` 改为重定向入口（兼容 `?bind=` 直链）。服务端扩展 `transfer.shares`(共享列表)/`transfer.shareDelete`(删除)/`transfer.share`(支持 messageId 引用文件消息)。真机适配：bind 页摄像头多重降级约束（后置→默认→纯 getUserMedia，BarcodeDetector 失败回退 jsQR），transfer 页 fileInput.click 在用户手势内触发。**部署**：线上 `server/sync/{api,config}.php` 已更新（php -l 通过），`/bind/`、`/transfer/`、`/taskwall/`、`/mobile/` 均 HTTP 200 为新版；`transfer.shares`/`transfer.shareDelete` 无效绑定冒烟返回正确。经服务器核实：站点根是 `/www/wwwroot/ShortCut`，移动站物理目录在 `{bind,transfer,taskwall,mobile}`（=URL），`server/sync/web/` 只是源码副本，**改动需同步到根下目录**（本次已 cp）。
@@ -175,3 +177,4 @@ Remove-SSHSession -SessionId $s.SessionId | Out-Null
 - [2026-08-18] 核对激活后台自动板块同步正常，服务器已保存 `voiceInput` 权限。移动任务墙联动属于任务墙子功能而非独立板块，若需单独授权应新增 `tasks.mobileSync` 功能权限。
 - [2026-08-18] 创建本文档：整理 V2.4.4 发布历史 + 语音输入已完成项 + 移动端联动开发进行中状态（含未提交文件清单、服务端 code 半成品提示、下一步顺序、关键命令）。
 - [2026-08-18] 移动端联动本地代码完成并审查：补齐绑定二维码、移动 Web 页、原子 JSON 写入、CORS/限流、配置刷新；消费协议升级为 pull + ack 防任务丢失。目标版本改为 V2.4.5，暂未升版本或构建正式安装包。
+
