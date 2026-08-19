@@ -30,6 +30,7 @@
     .unbound-tip { margin-top: 4px; padding: 12px 14px; color: #c8beb3; font-size: 12px; background: #2b2420; border: 1px solid rgba(213,111,85,.25); border-radius: 10px; line-height: 1.7; }
     .unbound-tip a { color: #e0957e; font-weight: 700; text-decoration: none; }
     .foot { margin-top: 22px; color: #6f6861; font-size: 10px; text-align: center; }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
@@ -82,6 +83,10 @@
       $('bindPill').textContent = '管理';
       $('bindStrip').style.cursor = 'pointer';
       $('bindStrip').onclick = () => location.href = '/bind/';
+      // 已绑定：顶部已有绑定信息+管理入口，隐藏下方面板中的验证绑定卡片与未绑定提示
+      var bindCard = $('cardBind');
+      if (bindCard) bindCard.parentNode.removeChild(bindCard);
+      $('unboundTip').classList.add('hidden');
     } else {
       $('bindPill').textContent = '去绑定';
       $('bindStrip').onclick = () => location.href = '/bind/';
