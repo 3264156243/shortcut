@@ -318,7 +318,7 @@
     $('scanOverlay').addEventListener('click', (e) => { if (e.target === $('scanOverlay')) stopScanner(); });
     document.addEventListener('visibilitychange', () => { if (document.hidden && scanStream) stopScanner(); });
     $('unbindButton').addEventListener('click', () => { if (confirm('确定更换绑定吗？')) clearBinding(); });
-    $('backBtn').addEventListener('click', () => { if (window.history.length > 1) window.history.back(); else location.href = '/mobile/'; });
+    $('backBtn').addEventListener('click', () => { location.href='/mobile/'; });
 
     (function init() {
       const params = new URLSearchParams(location.search);

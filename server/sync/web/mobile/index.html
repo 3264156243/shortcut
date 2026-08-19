@@ -2,36 +2,91 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#26231f" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#24221f" />
   <title>ShortCut 移动联动</title>
   <style>
-    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #26231f; color: #f6efe5; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
-    .box { text-align: center; padding: 30px 22px; }
-    h1 { font-size: 20px; margin: 0 0 8px; }
-    p { color: #aaa198; font-size: 13px; margin: 0 0 22px; }
-    a.links { display: block; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .loading { width: 26px; height: 26px; margin: 0 auto 6px; border: 3px solid #444; border-top-color: #9f493a; border-radius: 50%; animation: spin .8s linear infinite; }
+    :root { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; color: #f6efe5; background: #24221f; }
+    * { box-sizing: border-box; letter-spacing: 0; }
+    body { margin: 0; min-height: 100dvh; background: linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.02) 1px,transparent 1px),#24221f; background-size: 24px 24px; }
+    button { font: inherit; cursor: pointer; }
+    .app { width: min(100%, 560px); min-height: 100dvh; margin: auto; padding: 20px 16px 36px; }
+    h1 { font-size: 22px; margin: 6px 0 4px; }
+    .sub { color: #aaa198; font-size: 13px; margin-bottom: 6px; }
+    .bind-strip { display: flex; align-items: center; gap: 10px; margin: 16px 0 22px; padding: 13px 14px; border: 1px solid rgba(255,255,255,.09); border-radius: 12px; background: #2c2925; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: #8f877e; }
+    .dot.ok { background: #63b582; box-shadow: 0 0 0 4px rgba(99,181,130,.12); }
+    .bind-meta { min-width: 0; flex: 1; font-size: 12px; color: #aaa198; }
+    .bind-meta b { display: block; color: #f6efe5; font-size: 13px; }
+    .pill { padding: 5px 10px; border: 1px solid rgba(255,255,255,.14); border-radius: 999px; font-size: 11px; color: #c8beb3; }
+    .nav-list { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+    .nav-card { display: flex; align-items: center; gap: 14px; padding: 18px 16px; color: #f6efe5; text-decoration: none; border: 1px solid rgba(255,255,255,.09); border-radius: 12px; background: #33302c; transition: transform .12s ease, background .12s ease; }
+    .nav-card:active { transform: scale(.98); background: #3a3631; }
+    .nav-ico { width: 46px; height: 46px; border-radius: 11px; display: grid; place-items: center; font-size: 22px; background: #3f3b36; }
+    .nav-card .txt { flex: 1; }
+    .nav-card .txt b { display: block; font-size: 16px; }
+    .nav-card .txt span { color: #aaa198; font-size: 12px; }
+    .nav-card .arrow { color: #948b82; font-size: 20px; }
+    .unbound-tip { margin-top: 4px; padding: 12px 14px; color: #c8beb3; font-size: 12px; background: #2b2420; border: 1px solid rgba(213,111,85,.25); border-radius: 10px; line-height: 1.7; }
+    .unbound-tip a { color: #e0957e; font-weight: 700; text-decoration: none; }
+    .foot { margin-top: 22px; color: #6f6861; font-size: 10px; text-align: center; }
   </style>
 </head>
 <body>
-  <div class="box">
-    <div class="loading"></div>
-    <p>正在跳转到绑定页面…</p>
+  <div class="app">
+    <h1>ShortCut 移动联动</h1>
+    <p class="sub">在手机与桌面之间同步任务、文件与文本</p>
+
+    <div id="bindStrip" class="bind-strip">
+      <i id="bindDot" class="dot"></i>
+      <div class="bind-meta"><b id="bindTitle">未绑定</b><span id="bindDetail">绑定桌面端后可用联动功能</span></div>
+      <span id="bindPill" class="pill">去绑定</span>
+    </div>
+
+    <nav class="nav-list">
+      <a id="cardTaskwall" class="nav-card" href="/taskwall/">
+        <span class="nav-ico">🗂️</span>
+        <span class="txt"><b>任务墙</b><span>把任务从手机钉到桌面任务墙</span></span>
+        <span class="arrow">›</span>
+      </a>
+      <a id="cardTransfer" class="nav-card" href="/transfer/">
+        <span class="nav-ico">📤</span>
+        <span class="txt"><b>文件共享</b><span>发送/领取文件与文本，共享给他人</span></span>
+        <span class="arrow">›</span>
+      </a>
+      <a id="cardBind" class="nav-card" href="/bind/">
+        <span class="nav-ico">🔗</span>
+        <span class="txt"><b>验证绑定</b><span>查看 / 更换桌面端绑定</span></span>
+        <span class="arrow">›</span>
+      </a>
+    </nav>
+
+    <div id="unboundTip" class="unbound-tip hidden">
+      尚未绑定桌面端。请在桌面 ShortCut「联动绑定」获取 6 位绑定码或二维码，然后<a href="/bind/">前往绑定</a>。
+    </div>
+
+    <p class="foot">ShortCut · 移动联动平台</p>
   </div>
+
   <script>
-    // 统一移动联动入口：绑定身份抽离到独立绑定页 /bind/
-    // 保留 /mobile/?bind=xxx 扫码直链兼容
-    (function () {
-      var params = new URLSearchParams(location.search);
-      var bind = params.get('bind') || '';
-      var next = params.get('next') || '';
-      var target = '/bind/';
-      if (bind) target += '?bind=' + encodeURIComponent(bind);
-      if (next) target += (bind ? '&' : '?') + 'next=' + encodeURIComponent(next);
-      setTimeout(function () { location.replace(target); }, 120);
-    })();
+    const storageKey = 'shortcut-mobile-binding-v1';
+    const $ = (id) => document.getElementById(id);
+    let auth = null;
+    try { auth = JSON.parse(localStorage.getItem(storageKey) || 'null'); } catch {}
+    const bound = !!(auth && auth.bindId && auth.mobileToken);
+
+    if (bound) {
+      $('bindDot').classList.add('ok');
+      $('bindTitle').textContent = auth.deviceName || '已绑定';
+      $('bindDetail').textContent = (auth.code ? '绑定码 ' + auth.code : auth.bindId);
+      $('bindPill').textContent = '管理';
+      $('bindStrip').style.cursor = 'pointer';
+      $('bindStrip').onclick = () => location.href = '/bind/';
+    } else {
+      $('bindPill').textContent = '去绑定';
+      $('bindStrip').onclick = () => location.href = '/bind/';
+      $('unboundTip').classList.remove('hidden');
+    }
   </script>
 </body>
 </html>

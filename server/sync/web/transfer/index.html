@@ -103,11 +103,12 @@
       <option value="24" selected>24 小时</option>
     </select>
     <label class="field-label">共享内容</label>
-    <textarea id="shareText" class="field-full" placeholder="输入要共享的文本，或选择一条文件消息"></textarea>
+    <textarea id="shareText" class="field-full" placeholder="输入要共享的文本"></textarea>
     <div class="grid2">
-      <button id="shareFileBtn" class="secondary" type="button">选一条文件共享</button>
+      <button id="shareFileBtn" class="secondary" type="button">上传文件共享</button>
       <button id="shareNowBtn" class="secondary" type="button">共享文本</button>
     </div>
+    <input id="shareFileInput" class="hidden-file" type="file" />
     <div id="shareMsg" class=""></div>
 
     <label class="field-label">我的共享（未删除）</label>
@@ -195,7 +196,29 @@
   function openShare(){ensureAuth();$('shareOverlay').classList.remove('hidden');void loadShares()}
   function closeShare(){$('shareOverlay').classList.add('hidden')}
   async function doShareText(){const text=$('shareText').value.trim();if(!text)return toast('shareMsg','请输入要共享的文本');const d=await api({action:'transfer.share',bindId:auth.bindId,mobileToken:auth.mobileToken,side:'mobile',text,code:$('shareCode').value.trim().toUpperCase(),hours:$('shareHours').value});if(!d.success)return toast('shareMsg',d.message||'共享失败');$('shareText').value='';$('shareCode').value='';toast('shareMsg','共享成功，接收密码 '+d.code,'true');await loadShares()}
-  async function doShareFile(){ensureAuth();const d=await api({action:'transfer.messages',bindId:auth.bindId,side:'mobile',mobileToken:auth.mobileToken});if(!d.success)return;const files=(d.messages||[]).filter(m=>m.type==='file');if(!files.length)return toast('shareMsg','没有可共享的文件消息');const name=prompt('要共享的文件：\n'+files.map((f,i)=>'['+(i+1)+'] '+f.name).join('\n'),'');if(!name)return;const idx=parseInt(name,10)-1;if(!files[idx])return toast('shareMsg','序号无效');const d2=await api({action:'transfer.share',bindId:auth.bindId,mobileToken:auth.mobileToken,side:'mobile',messageId:files[idx].id.replace(/^msg_/,''),code:$('shareCode').value.trim().toUpperCase(),hours:$('shareHours').value});if(!d2.success)return toast('shareMsg',d2.message||'共享失败');toast('shareMsg','文件已共享，接收密码 '+d2.code,'true');await loadShares()}
+  // ===== 共享：上传文件并生成接收密码 =====
+  async function shareLocalFile(file){
+    if(!auth) return goBind();
+    toast('shareMsg','正在上传文件…');
+    try{
+      const init=await api({action:'transfer.fileInit',bindId:auth.bindId,side:'mobile',mobileToken:auth.mobileToken,name:file.name,size:file.size,mime:file.type,chunkSize:2*1024*1024});
+      if(!init.success) throw new Error(init.message||'创建上传失败');
+      for(let i=0;i<init.file.chunkCount;i++){
+        const fd=new FormData();fd.append('action','uploadChunk');fd.append('bindId',auth.bindId);fd.append('side','mobile');fd.append('mobileToken',auth.mobileToken);fd.append('fileId',init.file.id);fd.append('chunkIndex',String(i));fd.append('chunk',file.slice(i*2*1024*1024,Math.min(file.size,(i+1)*2*1024*1024)),file.name+'.part');
+        const r=await fetch('/sync/file.php',{method:'POST',body:fd});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.message||'分片上传失败');
+      }
+      const done=await api({action:'transfer.fileComplete',bindId:auth.bindId,side:'mobile',mobileToken:auth.mobileToken,fileId:init.file.id});
+      if(!done.success)throw new Error(done.message||'文件发送失败');
+      const msg=done.message||{};
+      const messageId=(msg.id||'').replace(/^msg_/,'');
+      if(!messageId) throw new Error('文件上传后未取得标识');
+      const share=await api({action:'transfer.share',bindId:auth.bindId,mobileToken:auth.mobileToken,side:'mobile',messageId,code:$('shareCode').value.trim().toUpperCase(),hours:$('shareHours').value});
+      if(!share.success) throw new Error(share.message||'共享失败');
+      toast('shareMsg','文件已共享，接收密码 '+share.code,'true');
+      $('shareCode').value='';
+      await loadShares();
+    }catch(e){toast('shareMsg',e.message||'文件共享失败')}
+  }
 
   // ===== 领取（输入密码获取共享）=====
   async function claim(){
@@ -229,12 +252,13 @@
   $('shareClose').addEventListener('click',closeShare);
   $('shareOverlay').addEventListener('click',e=>{if(e.target===$('shareOverlay'))closeShare()});
   $('shareNowBtn').addEventListener('click',()=>void doShareText());
-  $('shareFileBtn').addEventListener('click',()=>void doShareFile());
+  $('shareFileBtn').addEventListener('click',()=>{ if(!ensureAuth())return; $('shareFileInput').click(); });
+  $('shareFileInput').addEventListener('change',async e=>{ if(!auth||!e.target.files?.length)return; try{for(const f of e.target.files)await shareLocalFile(f)}catch(x){toast('shareMsg',x.message||'文件共享失败')}finally{e.target.value=''} });
   $('shareCode').addEventListener('input',e=>e.target.value=e.target.value.replace(/[^a-z0-9]/gi,'').toUpperCase().slice(0,6));
   $('claimCode').addEventListener('input',e=>e.target.value=e.target.value.replace(/[^a-z0-9]/gi,'').toUpperCase().slice(0,6));
   $('claimCode').addEventListener('keydown',e=>{if(e.key==='Enter')void claim()});
   $('claimBtn').addEventListener('click',()=>void claim());
-  $('backBtn').addEventListener('click',()=>{ if (window.history.length > 1) window.history.back(); else location.href='/bind/'; });
+  $('backBtn').addEventListener('click',()=>{ location.href='/mobile/'; });
 
   (function init(){ if(auth?.bindId&&auth?.mobileToken){$('boundChip').textContent=(auth.deviceName||'已绑定')+' · '+auth.code; $('boundChip').classList.add('colored'); void loadMessages(); pollTimer=setInterval(()=>void loadMessages().catch(()=>{}),3000);} else goBind(); })();
   window.addEventListener('pagehide',()=>clearInterval(pollTimer));

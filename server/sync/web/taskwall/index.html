@@ -119,7 +119,7 @@
     el('longTextToggle').addEventListener('click',()=>setTypeEnabled('longTextToggle','detailsField',el('longTextToggle').getAttribute('aria-pressed')!=='true'));
     el('reminderToggle').addEventListener('click',()=>setTypeEnabled('reminderToggle','reminderField',el('reminderToggle').getAttribute('aria-pressed')!=='true'));
     el('refreshBoardsButton').addEventListener('click',()=>void loadBoards());
-    el('backBtn').addEventListener('click',()=>{ if (window.history.length > 1) window.history.back(); else location.href = '/bind/'; });
+    el('backBtn').addEventListener('click',()=>{ location.href='/mobile/'; });
 
     el('taskForm').addEventListener('submit',async event=>{
       event.preventDefault();
