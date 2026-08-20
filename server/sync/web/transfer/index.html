@@ -4,98 +4,105 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#24221f" />
-  <title>ShortCut 文件快传</title>
+  <title>ShortCut 文件共享</title>
   <style>
     :root { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; color: #f6efe5; background: #24221f; }
     * { box-sizing: border-box; letter-spacing: 0; }
-    body { margin: 0; min-height: 100vh; min-height: 100dvh; background: linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.02) 1px,transparent 1px),#24221f; background-size: 24px 24px; }
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body { min-height: 100dvh; background: linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.02) 1px,transparent 1px),#24221f; background-size: 24px 24px; }
     button,input,textarea,select { font: inherit; } button { cursor: pointer; }
-    .app { width: min(100%,720px); min-height: 100dvh; margin: auto; display: flex; flex-direction: column; }
-    header { height: 60px; flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 0 14px; border-bottom: 1px solid rgba(255,255,255,.08); background: rgba(36,34,31,.94); }
-    .back { width: 34px; height: 34px; border: 0; border-radius: 8px; color: #eee4da; background: #33302c; font-size: 18px; }
-    .title { font-size: 15px; font-weight: 700; }
-    .status { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    .app { width: min(100%,720px); min-height: 100dvh; margin: 0 auto; display: flex; flex-direction: column; }
+    .header { height: 60px; flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 0 14px; border-bottom: 1px solid rgba(255,255,255,.08); background: rgba(36,34,31,.94); }
+    .icon-btn { width: 36px; height: 36px; border: 0; border-radius: 8px; color: #eee4da; background: #33302c; font-size: 18px; display: flex; align-items: center; justify-content: center; }
+    .title { font-size: 15px; font-weight: 700; flex: 1; }
     .chip { padding: 4px 9px; border: 1px solid rgba(255,255,255,.12); border-radius: 999px; color: #c8beb3; background: #33302c; font-size: 10px; }
-    .chip.colored { color: #8ac49f; }
-    main { min-height: 0; flex: 1; display: flex; flex-direction: column; }
+    .chip.colored { color: #8ac49f; border-color: rgba(99,181,130,.3); }
     .composer { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,.08); background: #2c2925; }
     .composer textarea { flex: 1; min-height: 40px; max-height: 100px; padding: 9px; resize: vertical; color: #f6efe5; background: #36322d; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; outline: none; }
-    .round-btn { flex: none; width: 42px; height: 40px; border: 0; border-radius: 8px; font-size: 20px; color: #eee4da; background: #3a3631; }
+    .round-btn { flex: none; width: 40px; height: 40px; border: 0; border-radius: 8px; font-size: 18px; color: #eee4da; background: #3a3631; display: flex; align-items: center; justify-content: center; }
     .round-btn.primary { color: #fff; background: #9f493a; }
     .messages { min-height: 0; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 14px; -webkit-overflow-scrolling: touch; }
     .row { display: flex; } .row.mine { justify-content: flex-end; }
     .wrap { max-width: 80%; }
     .bubble { padding: 10px 12px; border-radius: 8px; color: #f5ede4; background: #3a3631; border: 1px solid rgba(255,255,255,.08); white-space: pre-wrap; word-break: break-word; line-height: 1.6; font-size: 14px; }
     .mine .bubble { background: #9f493a; border-color: transparent; }
-    .meta { display: flex; align-items: center; gap: 10px; margin-top: 4px; color: #948b82; font-size: 9px; } .mine .meta { justify-content: flex-end; }
-    .file-bubble { display: flex; align-items: center; gap: 10px; min-width: 200px; }
-    .file-icon { font-size: 20px; } .f-info { min-width: 0; flex: 1; } .f-info b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; } .f-info small { opacity: .7; }
-    .link-btn { border: 0; padding: 0; color: inherit; background: transparent; font-size: 10px; font-weight: 700; }
-    .toolsbar { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-top: 1px solid rgba(255,255,255,.08); background: #26231f; }
-    .share-enter { margin-left: auto; }
-    /* 列表项 */
-    .afford { border: 0; padding: 0; background: transparent; color: #0a0a09; }
-    /* 共享弹窗 */
-    .overlay { position: fixed; inset: 0; z-index: 40; display: grid; align-items: end; background: rgba(0,0,0,.5); }
+    .meta { display: flex; align-items: center; gap: 10px; margin-top: 4px; color: #948b82; font-size: 11px; } .mine .meta { justify-content: flex-end; }
+    .meta button { border: 0; padding: 0; background: transparent; color: #b9afa4; font-size: 11px; }
+    .file-bubble { display: flex; align-items: center; gap: 10px; min-width: 210px; }
+    .file-icon { font-size: 22px; } .f-info { min-width: 0; flex: 1; } .f-info b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; } .f-info small { opacity: .7; }
+    .toolsbar { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 14px; border-top: 1px solid rgba(255,255,255,.08); background: #26231f; }
+    .toolsbar .note { color: #948b82; font-size: 10px; }
+    .bar-btn { min-height: 34px; border: 1px solid rgba(255,255,255,.12); border-radius: 8px; padding: 0 14px; font-size: 12px; color: #eee4da; background: #3a3631; font-weight: 700; }
+    .bar-btn.accent { color: #fff; background: #9f493a; border-color: transparent; }
+    .status-line { padding: 4px 14px 6px; min-height: 20px; font-size: 12px; }
+    .status-line.error { color: #e5a19a; } .status-line.ok { color: #8ac49f; }
+    /* ===== 共享弹窗（overlay）===== */
+    .overlay { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.55); }
     .overlay.hidden { display: none; }
-    .sheet { width: 100%; max-height: 86dvh; overflow-y: auto; padding: 16px 18px calc(16px + env(safe-area-inset-bottom)); border-radius: 16px 16px 0 0; background: #2c2925; border-top: 1px solid rgba(255,255,255,.1); }
-    .sheet-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .sheet { position: absolute; left: 0; right: 0; bottom: 0; max-height: 86dvh; overflow-y: auto; padding: 16px 18px calc(16px + env(safe-area-inset-bottom)); border-radius: 16px 16px 0 0; background: #2c2925; border-top: 1px solid rgba(255,255,255,.1); -webkit-overflow-scrolling: touch; }
+    .sheet-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
     .sheet-head h2 { margin: 0; font-size: 17px; flex: 1; }
-    .sheet-close { width: 34px; height: 34px; border: 0; border-radius: 50%; color: #f6efe5; background: rgba(255,255,255,.1); font-size: 18px; }
+    .sheet-close { width: 34px; height: 34px; border: 0; border-radius: 50%; color: #f6efe5; background: rgba(255,255,255,.12); font-size: 18px; flex: 0 0 auto; }
     .field-label { display: block; margin: 12px 0 6px; color: #aaa198; font-size: 11px; font-weight: 700; }
     .field-full { width: 100%; padding: 10px 12px; color: #f6efe5; background: #36322d; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; outline: none; }
-    textarea.field-full { min-height: 74px; resize: vertical; }
-    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .primary, .secondary { min-height: 44px; border: 0; border-radius: 8px; padding: 0 14px; font-weight: 700; }
-    .primary { color: #fff; background: #9f493a; width: 100%; margin-top: 14px; }
-    .secondary { color: #eee4da; background: #3a3631; border: 1px solid rgba(255,255,255,.12); }
-    .danger { color: #e5a19a; background: #3a2b29; border: 1px solid rgba(229,161,154,.25); }
-    .share-list { margin-top: 6px; display: flex; flex-direction: column; gap: 8px; }
+    textarea.field-full { min-height: 70px; resize: vertical; }
+    input.field-full { height: 42px; }
+    .split { display: flex; gap: 8px; align-items: center; }
+    .split .grow { flex: 1; min-width: 0; }
+    .btn { min-height: 42px; border: 0; border-radius: 8px; padding: 0 14px; font-weight: 700; }
+    .btn.sm { min-height: 40px; }
+    .btn.primary { color: #fff; background: #9f493a; width: 100%; margin-top: 14px; }
+    .btn.secondary { color: #eee4da; background: #3a3631; border: 1px solid rgba(255,255,255,.12); }
+    .btn.secondary.grow { flex: 1; }
+    .btn.danger { color: #e5a19a; background: #3a2b29; border: 1px solid rgba(229,161,154,.25); }
+    .sep { height: 1px; background: rgba(255,255,255,.08); margin: 16px 0; }
+    .share-list { display: flex; flex-direction: column; gap: 8px; }
     .share-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid rgba(255,255,255,.08); border-radius: 9px; background: #33302c; }
     .share-tag { flex: none; padding: 2px 7px; border-radius: 6px; font-size: 10px; color: #fff; background: #6b5d50; }
     .share-tag.file { background: #4f6d5c; }
     .share-meta { min-width: 0; flex: 1; } .share-meta b { display: block; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .share-meta span { color: #948b82; font-size: 10px; }
-    .share-code { font: 700 12px Consolas,monospace; color: #d8b46a; }
-    .empty { color: #948b82; font-size: 12px; text-align: center; padding: 14px 0; }
-    .hidden-file { display: none; }
-    .toast-pick { color: #c8beb3; }
-    .error-msg { color: #e5a19a; font-size: 12px; margin-top: 8px; }
-    .ok-msg { color: #8ac49f; font-size: 12px; margin-top: 8px; }
-    @media (max-width: 400px) { .grid2 { grid-template-columns: 1fr; } }
+    .empty { color: #948b82; font-size: 12px; text-align: center; padding: 12px 0; }
+    .hidden { display: none !important; }
+    .hidden-file { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+    .msg { min-height: 16px; margin-top: 6px; font-size: 12px; }
+    .msg.error { color: #e5a19a; } .msg.ok { color: #8ac49f; }
   </style>
 </head>
 <body>
 <div class="app">
-  <header>
-    <button id="backBtn" class="back" title="返回" type="button">‹</button>
-    <span class="title">文件快传</span>
-    <div class="status"><span id="boundChip" class="chip">未绑定</span><button id="refreshBtn" class="round-btn" style="font-size:16px;width:34px;height:34px" title="刷新">↻</button></div>
-  </header>
+  <div class="header">
+    <button id="backBtn" class="icon-btn" title="返回">‹</button>
+    <span class="title">文件共享</span>
+    <span id="boundChip" class="chip">未绑定</span>
+  </div>
+
   <div class="composer">
     <button id="addFileBtn" class="round-btn" title="选择文件">＋</button>
     <input id="fileInput" class="hidden-file" type="file" multiple />
     <textarea id="messageInput" placeholder="发送文本"></textarea>
     <button id="sendBtn" class="round-btn primary" title="发送">↑</button>
   </div>
-  <main>
-    <div id="messages" class="messages"></div>
-  </main>
+
+  <div id="messages" class="messages"></div>
+
   <div class="toolsbar">
-    <span style="color:#948b82;font-size:10px">消息云端保留，删除后两端消失</span>
-    <button id="shareBtn" class="secondary share-enter" style="min-height:34px;padding:0 12px;font-size:12px" type="button">共享内容</button>
+    <span class="note">消息云端保留，删除后两端消失</span>
+    <button id="shareBtn" class="bar-btn accent" type="button">共享内容</button>
   </div>
-  <div id="message" class="message" style="padding:0 14px 8px;min-height:0"></div>
+  <div id="statusLine" class="status-line"></div>
 </div>
 
-<!-- 共享弹窗 -->
+<!-- ===== 共享弹窗 ===== -->
 <div id="shareOverlay" class="overlay hidden">
   <div class="sheet">
     <div class="sheet-head">
       <h2>共享内容</h2>
       <button id="shareClose" class="sheet-close" type="button">×</button>
     </div>
+
+    <!-- 创建共享 -->
     <label class="field-label">接收密码（6 位，留空自动生成）</label>
-    <input id="shareCode" class="field-full" maxlength="6" placeholder="留空自动生成" style="text-transform:uppercase" />
+    <input id="shareCode" class="field-full" maxlength="6" placeholder="留空自动生成" />
     <label class="field-label">共享时长（小时）</label>
     <select id="shareHours" class="field-full">
       <option value="1">1 小时</option>
@@ -104,171 +111,290 @@
     </select>
     <label class="field-label">共享内容</label>
     <textarea id="shareText" class="field-full" placeholder="输入要共享的文本"></textarea>
-    <div class="grid2">
-      <button id="shareFileBtn" class="secondary" type="button">上传文件共享</button>
-      <button id="shareNowBtn" class="secondary" type="button">共享文本</button>
+    <div class="split" style="margin-top:10px">
+      <button id="shareFileBtn" class="btn secondary grow" type="button" style="margin-top:0;width:auto">上传文件共享</button>
+      <button id="shareNowBtn" class="btn secondary grow" type="button" style="margin-top:0;width:auto">共享文本</button>
     </div>
     <input id="shareFileInput" class="hidden-file" type="file" />
-    <div id="shareMsg" class=""></div>
+    <div id="shareMsg" class="msg"></div>
 
-    <label class="field-label">领取共享（输入端接收密码）</label>
-    <div style="display:flex;gap:8px;align-items:center">
-      <input id="claimCode" class="field-full" maxlength="6" placeholder="6 位接收密码" style="flex:1;min-height:42px;text-transform:uppercase" />
-      <button id="claimBtn" class="secondary" type="button" style="min-height:42px;flex:0 0 auto">领取</button>
+    <div class="sep"></div>
+
+    <!-- 领取共享 -->
+    <label class="field-label">领取共享（输入接收密码）</label>
+    <div class="split">
+      <input id="claimCode" class="field-full grow" maxlength="6" placeholder="6 位接收密码" />
+      <button id="claimBtn" class="btn secondary" type="button" style="width:auto;margin-top:0">领取</button>
     </div>
-    <div id="claimMsg" class=""></div>
+    <div id="claimMsg" class="msg"></div>
 
+    <div class="sep"></div>
+
+    <!-- 我的共享 -->
     <label class="field-label">我的共享（未删除）</label>
     <div id="shareList" class="share-list"></div>
   </div>
 </div>
 
-<input id="pickFileMsg" class="hidden" />
-
 <script>
-  const API='/sync/api.php', storageKey='shortcut-mobile-binding-v1';
-  const $=(id)=>document.getElementById(id); let auth=null, pollTimer=0;
-  try{auth=JSON.parse(localStorage.getItem(storageKey)||'null')}catch{}
-  async function api(payload){const c=new AbortController(),t=setTimeout(()=>c.abort(),15000);try{const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:c.signal});const d=await r.json();if(!r.ok)throw new Error(d.message||'请求失败');return d}finally{clearTimeout(t)}}
-  function toast(id,text,ok=false){const e=$(id);e.textContent=text||'';e.className=ok?'ok-msg':'error-msg'}
-  function goBind(){location.href='/bind/?next='+encodeURIComponent(location.pathname)}
+(function () {
+  const API = '/sync/api.php';
+  const storageKey = 'shortcut-mobile-binding-v1';
+  const $ = (id) => document.getElementById(id);
+  let auth = null;
+  let pollTimer = 0;
+  try { auth = JSON.parse(localStorage.getItem(storageKey) || 'null'); } catch (e) {}
 
-  // ===== 认证守卫 =====
-  function ensureAuth(){ if(!auth?.bindId||!auth?.mobileToken){ goBind(); return false;} return true; }
-
-  // ===== 消息加载 =====
-  async function loadMessages(){
-    if(!ensureAuth())return;
-    try{
-      const d=await api({action:'transfer.messages',bindId:auth.bindId,side:'mobile',mobileToken:auth.mobileToken});
-      if(!d.success){ if(/失效/.test(d.message||'')){localStorage.removeItem(storageKey);auth=null;goBind();} throw new Error(d.message||'读取失败') }
-      const box=$('messages'); box.innerHTML='';
-      (d.messages||[]).forEach(item=>{
-        const mine=item.sender==='mobile',row=document.createElement('div');row.className='row'+(mine?' mine':'');
-        const wrap=document.createElement('div');wrap.className='wrap';const bubble=document.createElement('div');bubble.className='bubble';
-        if(item.type==='file'){
-          bubble.classList.add('file-bubble');
-          bubble.innerHTML='<span class="file-icon">▣</span><span class="f-info"><b>'+esc(item.name||'文件')+'</b><small>'+formatBytes(item.size||0)+'</small></span>';
-          const dl=document.createElement('button');dl.className='link-btn';dl.textContent='下载';dl.onclick=()=>downloadFile(item);bubble.appendChild(dl);
-        } else bubble.textContent=item.text||'';
-        const meta=document.createElement('div');meta.className='meta';
-        const t=document.createElement('span');t.textContent=new Date(item.createdAt).toLocaleString('zh-CN',{hour12:false});meta.append(t);
-        if(item.type==='text'){const c=document.createElement('button');c.className='link-btn';c.textContent='复制';c.onclick=async()=>{await navigator.clipboard.writeText(item.text||'');c.textContent='已复制';setTimeout(()=>c.textContent='复制',1200)};meta.append(c)}
-        const del=document.createElement('button');del.className='link-btn';del.textContent='删除';del.onclick=()=>void deleteMsg(item);meta.append(del);
-        wrap.append(bubble,meta);row.append(wrap);box.append(row);
-      });
-      box.scrollTop=box.scrollHeight;
-    }catch(e){ }
+  function api(payload) {
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), 15000);
+    return fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: c.signal })
+      .then((r) => r.json().then((d) => {
+        if (!r.ok || !d) throw new Error(d && d.message || '服务暂时不可用');
+        return d;
+      }))
+      .finally(() => clearTimeout(t));
   }
-  function esc(s){return String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
-  function formatBytes(n){if(n<1024)return n+' B';if(n<1048576)return(n/1024).toFixed(1)+' KB';return(n/1048576).toFixed(1)+' MB'}
-
-  async function sendText(){const text=$('messageInput').value.trim();if(!text)return;const d=await api({action:'transfer.sendText',bindId:auth.bindId,side:'mobile',mobileToken:auth.mobileToken,text});if(!d.success)throw new Error(d.message||'发送失败');$('messageInput').value='';await loadMessages()}
-  async function deleteMsg(item){if(!confirm('删除这条消息？'))return;await api({action:'transfer.delete',bindId:auth.bindId,mobileToken:auth.mobileToken,side:'mobile',messageId:item.id});await loadMessages()}
-  function downloadFile(item){const q=new URLSearchParams({action:'download',bindId:auth.bindId,side:'mobile',mobileToken:auth.mobileToken,fileId:item.fileId});const a=document.createElement('a');a.href='/sync/file.php?'+q.toString();a.download=item.name||'file';document.body.appendChild(a);a.click();a.remove()}
-
-  // ===== 文件上传（修复：确保 input.click 在用户手势内，及 iOS 兼容）=====
-  async function uploadFile(file){
-    if(!file)return; const chunkSize=2*1024*1024;
-    const init=await api({action:'transfer.fileInit',bindId:auth.bindId,side:'mobile',mobileToken:auth.mobileToken,name:file.name,size:file.size,mime:file.type,chunkSize});
-    if(!init.success)throw new Error(init.message||'创建上传失败');
-    for(let i=0;i<init.file.chunkCount;i++){
-      const fd=new FormData();fd.append('action','uploadChunk');fd.append('bindId',auth.bindId);fd.append('side','mobile');fd.append('mobileToken',auth.mobileToken);fd.append('fileId',init.file.id);fd.append('chunkIndex',String(i));fd.append('chunk',file.slice(i*chunkSize,Math.min(file.size,(i+1)*chunkSize)),file.name+'.part');
-      const r=await fetch('/sync/file.php',{method:'POST',body:fd});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.message||'分片上传失败');
-    }
-    const done=await api({action:'transfer.fileComplete',bindId:auth.bindId,side:'mobile',mobileToken:auth.mobileToken,fileId:init.file.id});if(!done.success)throw new Error(done.message||'文件发送失败');
+  function toast(elId, text, ok) {
+    const e = $(elId);
+    if (e) { e.textContent = text || ''; e.className = 'msg ' + (ok ? 'ok' : 'error'); }
   }
+  function goBind() { location.href = '/bind/?next=' + encodeURIComponent(location.pathname); }
+  function esc(s) { return String(s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+  function fmtByte(n) { if (n < 1024) return n + ' B'; if (n < 1048576) return (n / 1024).toFixed(1) + ' KB'; return (n / 1048576).toFixed(1) + ' MB'; }
 
-  // ===== 共享弹窗 =====
-  async function loadShares(){
-    if(!auth)return;
-    try{
-      const d=await api({action:'transfer.shares',bindId:auth.bindId,mobileToken:auth.mobileToken,side:'mobile'});
-      if(!d.success)throw new Error(d.message||'读取共享失败');
-      const box=$('shareList');box.innerHTML='';
-      if(!(d.shares||[]).length){box.innerHTML='<div class="empty">暂无共享</div>';return}
-      d.shares.forEach(sh=>{
-        const it=document.createElement('div');it.className='share-item';
-        const tag=document.createElement('span');tag.className='share-tag'+(sh.type==='file'?' file':'');tag.textContent=sh.type==='file'?'文件':'文本';
-        const meta=document.createElement('span');meta.className='share-meta';
-        const name=document.createElement('b');name.textContent=sh.name||sh.text||(sh.type==='file'?'文件':'文本');
-        const sub=document.createElement('span');sub.textContent='密码 '+sh.code+' · 至 '+new Date(sh.expiresAt).toLocaleString('zh-CN',{hour12:false,month:'2-digit',day:'2-digit'});
-        meta.append(name,sub);
-        const del=document.createElement('button');del.className='secondary danger';del.style.minHeight='auto';del.style.padding='6px 10px';del.style.fontSize='11px';del.textContent='删除';del.onclick=()=>void deleteShare(sh.id);
-        it.append(tag,meta,del);box.append(it);
-      });
-    }catch(e){ }
-  }
-  async function deleteShare(id){if(!confirm('删除这条共享？'))return;const d=await api({action:'transfer.shareDelete',bindId:auth.bindId,mobileToken:auth.mobileToken,side:'mobile',id});if(!d.success)return toast('shareMsg',d.message||'删除失败');await loadShares()}
-  function openShare(){ensureAuth();$('shareOverlay').classList.remove('hidden');void loadShares()}
-  function closeShare(){$('shareOverlay').classList.add('hidden')}
-  async function doShareText(){const text=$('shareText').value.trim();if(!text)return toast('shareMsg','请输入要共享的文本');const d=await api({action:'transfer.share',bindId:auth.bindId,mobileToken:auth.mobileToken,side:'mobile',text,code:$('shareCode').value.trim().toUpperCase(),hours:$('shareHours').value});if(!d.success)return toast('shareMsg',d.message||'共享失败');$('shareText').value='';$('shareCode').value='';toast('shareMsg','共享成功，接收密码 '+d.code,'true');await loadShares()}
-  // ===== 共享：上传文件并生成接收密码 =====
-  async function shareLocalFile(file){
-    if(!auth) return goBind();
-    toast('shareMsg','正在上传文件…');
-    try{
-      const init=await api({action:'transfer.fileInit',bindId:auth.bindId,side:'mobile',mobileToken:auth.mobileToken,name:file.name,size:file.size,mime:file.type,chunkSize:2*1024*1024});
-      if(!init.success) throw new Error(init.message||'创建上传失败');
-      for(let i=0;i<init.file.chunkCount;i++){
-        const fd=new FormData();fd.append('action','uploadChunk');fd.append('bindId',auth.bindId);fd.append('side','mobile');fd.append('mobileToken',auth.mobileToken);fd.append('fileId',init.file.id);fd.append('chunkIndex',String(i));fd.append('chunk',file.slice(i*2*1024*1024,Math.min(file.size,(i+1)*2*1024*1024)),file.name+'.part');
-        const r=await fetch('/sync/file.php',{method:'POST',body:fd});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.message||'分片上传失败');
+  // ===== 认证 =====
+  function ensured() { if (!auth || !auth.bindId || !auth.mobileToken) { goBind(); return false; } return true; }
+
+  // ===== 消息 =====
+  function renderMessages(list) {
+    const box = $('messages');
+    box.innerHTML = '';
+    (list || []).forEach((item) => {
+      const mine = item.sender === 'mobile';
+      const row = document.createElement('div');
+      row.className = 'row' + (mine ? ' mine' : '');
+      const wrap = document.createElement('div');
+      wrap.className = 'wrap';
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble';
+      if (item.type === 'file') {
+        bubble.classList.add('file-bubble');
+        bubble.innerHTML = '<span class="file-icon">▣</span><span class="f-info"><b>' + esc(item.name || '文件') + '</b><small>' + fmtByte(item.size || 0) + '</small></span>';
+        const dl = document.createElement('button'); dl.textContent = '下载';
+        dl.onclick = () => downloadFile(item); bubble.appendChild(dl);
+      } else {
+        bubble.textContent = item.text || '';
       }
-      const done=await api({action:'transfer.fileComplete',bindId:auth.bindId,side:'mobile',mobileToken:auth.mobileToken,fileId:init.file.id});
-      if(!done.success)throw new Error(done.message||'文件发送失败');
-      const msg=done.message||{};
-      const messageId=(msg.id||'').replace(/^msg_/,'');
-      if(!messageId) throw new Error('文件上传后未取得标识');
-      const share=await api({action:'transfer.share',bindId:auth.bindId,mobileToken:auth.mobileToken,side:'mobile',messageId,code:$('shareCode').value.trim().toUpperCase(),hours:$('shareHours').value});
-      if(!share.success) throw new Error(share.message||'共享失败');
-      toast('shareMsg','文件已共享，接收密码 '+share.code,'true');
-      $('shareCode').value='';
-      await loadShares();
-    }catch(e){toast('shareMsg',e.message||'文件共享失败')}
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      const tm = document.createElement('span');
+      tm.textContent = new Date(item.createdAt).toLocaleString('zh-CN', { hour12: false });
+      meta.appendChild(tm);
+      if (item.type === 'text') {
+        const cp = document.createElement('button'); cp.textContent = '复制';
+        cp.onclick = async () => { try { await navigator.clipboard.writeText(item.text || ''); cp.textContent = '已复制'; setTimeout(() => cp.textContent = '复制', 1200); } catch (e) {} };
+        meta.appendChild(cp);
+      }
+      const del = document.createElement('button'); del.textContent = '删除';
+      del.onclick = () => deleteMsg(item);
+      meta.appendChild(del);
+      wrap.appendChild(bubble); wrap.appendChild(meta); row.appendChild(wrap); box.appendChild(row);
+    });
+    box.scrollTop = box.scrollHeight;
   }
 
-  // ===== 领取（输入密码获取共享）=====
-  async function claim(){
-    if(!auth?.bindId) return goBind();
-    const code=$('claimCode').value.trim().toUpperCase();if(code.length!==6)return toast('claimMsg','请输入 6 位接收密码');
-    toast('claimMsg','正在领取…');
-    try{
-      const d=await api({action:'transfer.claim',code});
-      if(!d.success) throw new Error(d.message||'领取失败');
-      const m=d.message||{};
-      if(m.type==='file'&&m.fileId){
-        if(d.downloadToken){
-          const q=new URLSearchParams({action:'download',token:d.downloadToken});
-          const a=document.createElement('a');a.href='/sync/file.php?'+q.toString();a.download=m.name||'file';document.body.appendChild(a);a.click();a.remove();
-          toast('claimMsg','已开始下载：'+(m.name||'文件'),'true');
-        } else toast('claimMsg','共享文件已被领取，请让共享者重新共享',true);
-      } else if(m.text){
-        await navigator.clipboard.writeText(m.text||'');toast('claimMsg','共享文本已复制到剪贴板','true');
-      } else toast('claimMsg','领取成功','true');
-      $('claimCode').value='';
-    }catch(e){toast('claimMsg',e.message||'领取失败')}
+  function loadMessages() {
+    if (!ensured()) return Promise.resolve();
+    return api({ action: 'transfer.messages', bindId: auth.bindId, side: 'mobile', mobileToken: auth.mobileToken })
+      .then((d) => {
+        if (!d.success) { if (/失效/.test(d.message || '')) { localStorage.removeItem(storageKey); auth = null; goBind(); } throw new Error(d.message || '读取失败'); }
+        renderMessages(d.messages);
+      })
+      .catch(() => {});
   }
 
-  // ===== 事件 =====
-  $('addFileBtn').addEventListener('click',()=>{ if(!ensureAuth())return; $('fileInput').click(); });
-  $('fileInput').addEventListener('change',async e=>{ if(!auth)return; try{for(const f of e.target.files)await uploadFile(f);await loadMessages()}catch(x){toast('message',x.message||'文件发送失败')}finally{e.target.value=''} });
-  $('sendBtn').addEventListener('click',()=>void sendText().catch(e=>toast('message',e.message)));
-  $('messageInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();void sendText().catch(x=>toast('message',x.message))}});
-  $('refreshBtn').addEventListener('click',()=>void loadMessages());
-  $('shareBtn').addEventListener('click',openShare);
-  $('shareClose').addEventListener('click',closeShare);
-  $('shareOverlay').addEventListener('click',e=>{if(e.target===$('shareOverlay'))closeShare()});
-  $('shareNowBtn').addEventListener('click',()=>void doShareText());
-  $('shareFileBtn').addEventListener('click',()=>{ if(!ensureAuth())return; $('shareFileInput').click(); });
-  $('shareFileInput').addEventListener('change',async e=>{ if(!auth||!e.target.files?.length)return; try{for(const f of e.target.files)await shareLocalFile(f)}catch(x){toast('shareMsg',x.message||'文件共享失败')}finally{e.target.value=''} });
-  $('shareCode').addEventListener('input',e=>e.target.value=e.target.value.replace(/[^a-z0-9]/gi,'').toUpperCase().slice(0,6));
-  $('claimCode').addEventListener('input',e=>e.target.value=e.target.value.replace(/[^a-z0-9]/gi,'').toUpperCase().slice(0,6));
-  $('claimCode').addEventListener('keydown',e=>{if(e.key==='Enter')void claim()});
-  $('claimBtn').addEventListener('click',()=>void claim());
-  $('backBtn').addEventListener('click',()=>{ location.href='/mobile/'; });
+  function sendText() {
+    const v = $('messageInput').value.trim();
+    if (!v) return;
+    api({ action: 'transfer.sendText', bindId: auth.bindId, side: 'mobile', mobileToken: auth.mobileToken, text: v })
+      .then(() => { $('messageInput').value = ''; return loadMessages(); })
+      .catch((e) => toast('statusLine', e.message || '发送失败'));
+  }
 
-  (function init(){ if(auth?.bindId&&auth?.mobileToken){$('boundChip').textContent=(auth.deviceName||'已绑定')+' · '+auth.code; $('boundChip').classList.add('colored'); void loadMessages(); pollTimer=setInterval(()=>void loadMessages().catch(()=>{}),3000);} else goBind(); })();
-  window.addEventListener('pagehide',()=>clearInterval(pollTimer));
+  function deleteMsg(item) {
+    if (!window.confirm('删除这条消息？')) return;
+    api({ action: 'transfer.delete', bindId: auth.bindId, mobileToken: auth.mobileToken, side: 'mobile', messageId: item.id })
+      .then(() => loadMessages())
+      .catch((e) => toast('statusLine', e.message || '删除失败'));
+  }
+
+  function downloadFile(item) {
+    const q = new URLSearchParams({ action: 'download', bindId: auth.bindId, side: 'mobile', mobileToken: auth.mobileToken, fileId: item.fileId });
+    const a = document.createElement('a');
+    a.href = '/sync/file.php?' + q.toString();
+    a.download = item.name || 'file';
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+
+  function uploadFileToMessages(file) {
+    return api({ action: 'transfer.fileInit', bindId: auth.bindId, side: 'mobile', mobileToken: auth.mobileToken, name: file.name, size: file.size, mime: file.type, chunkSize: 2 * 1024 * 1024 })
+      .then(async (init) => {
+        if (!init.success) throw new Error(init.message || '创建上传失败');
+        for (let i = 0; i < init.file.chunkCount; i++) {
+          const fd = new FormData();
+          fd.append('action', 'uploadChunk'); fd.append('bindId', auth.bindId); fd.append('side', 'mobile'); fd.append('mobileToken', auth.mobileToken);
+          fd.append('fileId', init.file.id); fd.append('chunkIndex', String(i));
+          fd.append('chunk', file.slice(i * 2 * 1024 * 1024, Math.min(file.size, (i + 1) * 2 * 1024 * 1024)), file.name + '.part');
+          const r = await fetch('/sync/file.php', { method: 'POST', body: fd });
+          const d = await r.json();
+          if (!r.ok || !d.success) throw new Error(d.message || '分片上传失败');
+        }
+        const done = await api({ action: 'transfer.fileComplete', bindId: auth.bindId, side: 'mobile', mobileToken: auth.mobileToken, fileId: init.file.id });
+        if (!done.success) throw new Error(done.message || '文件发送失败');
+        return done.message || {};
+      });
+  }
+
+  // ===== 共享 =====
+  function loadShares() {
+    if (!auth || !auth.bindId) return Promise.resolve();
+    return api({ action: 'transfer.shares', bindId: auth.bindId, mobileToken: auth.mobileToken, side: 'mobile' })
+      .then((d) => {
+        if (!d.success) throw new Error(d.message || '读取共享失败');
+        const box = $('shareList');
+        box.innerHTML = '';
+        const list = d.shares || [];
+        if (!list.length) { box.innerHTML = '<div class="empty">暂无共享</div>'; return; }
+        list.forEach((sh) => {
+          const it = document.createElement('div'); it.className = 'share-item';
+          const tag = document.createElement('span'); tag.className = 'share-tag' + (sh.type === 'file' ? ' file' : ''); tag.textContent = sh.type === 'file' ? '文件' : '文本';
+          const meta = document.createElement('span'); meta.className = 'share-meta';
+          const nm = document.createElement('b'); nm.textContent = sh.name || sh.text || (sh.type === 'file' ? '文件' : '文本');
+          const sub = document.createElement('span'); sub.textContent = '密码 ' + sh.code + ' · 至 ' + new Date(sh.expiresAt).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit' });
+          meta.appendChild(nm); meta.appendChild(sub);
+          const del = document.createElement('button'); del.className = 'btn secondary sm danger'; del.textContent = '删除';
+          del.onclick = () => deleteShare(sh.id);
+          it.appendChild(tag); it.appendChild(meta); it.appendChild(del);
+          box.appendChild(it);
+        });
+      })
+      .catch((e) => {});
+  }
+
+  function deleteShare(id) {
+    if (!window.confirm('删除这条共享？')) return;
+    api({ action: 'transfer.shareDelete', bindId: auth.bindId, mobileToken: auth.mobileToken, side: 'mobile', id })
+      .then(() => loadShares())
+      .catch((e) => toast('shareMsg', e.message || '删除失败'));
+  }
+
+  function openShare() { if (!ensured()) return; $('shareOverlay').classList.remove('hidden'); loadShares(); }
+  function closeShare() { $('shareOverlay').classList.add('hidden'); }
+
+  function shareText() {
+    const v = $('shareText').value.trim();
+    if (!v) return toast('shareMsg', '请输入要共享的文本');
+    api({ action: 'transfer.share', bindId: auth.bindId, mobileToken: auth.mobileToken, side: 'mobile', text: v, code: $('shareCode').value.trim().toUpperCase(), hours: $('shareHours').value })
+      .then((d) => {
+        if (!d.success) throw new Error(d.message || '共享失败');
+        $('shareText').value = ''; $('shareCode').value = '';
+        toast('shareMsg', '共享成功，接收密码 ' + d.code, true);
+        return loadShares();
+      })
+      .catch((e) => toast('shareMsg', e.message || '共享失败'));
+  }
+
+  function shareFile(file) {
+    if (!file) return;
+    toast('shareMsg', '正在上传文件…');
+    uploadFileToMessages(file)
+      .then((msg) => {
+        const messageId = (msg.id || '').replace(/^msg_/, '');
+        if (!messageId) throw new Error('文件上传后未取得标识');
+        return api({ action: 'transfer.share', bindId: auth.bindId, mobileToken: auth.mobileToken, side: 'mobile', messageId: messageId, code: $('shareCode').value.trim().toUpperCase(), hours: $('shareHours').value });
+      })
+      .then((d) => {
+        if (!d.success) throw new Error(d.message || '共享失败');
+        toast('shareMsg', '文件已共享，接收密码 ' + d.code, true);
+        $('shareCode').value = '';
+        return loadShares();
+      })
+      .catch((e) => toast('shareMsg', e.message || '文件共享失败'));
+  }
+
+  // ===== 领取 =====
+  function claim() {
+    const code = $('claimCode').value.trim().toUpperCase();
+    if (code.length !== 6) return toast('claimMsg', '请输入 6 位接收密码');
+    toast('claimMsg', '正在领取…');
+    api({ action: 'transfer.claim', code })
+      .then((d) => {
+        if (!d.success) throw new Error(d.message || '领取失败');
+        const m = d.message || {};
+        if (m.type === 'file' && m.fileId) {
+          if (d.downloadToken) {
+            const q = new URLSearchParams({ action: 'download', token: d.downloadToken });
+            const a = document.createElement('a');
+            a.href = '/sync/file.php?' + q.toString();
+            a.download = m.name || 'file';
+            document.body.appendChild(a); a.click(); a.remove();
+            toast('claimMsg', '已开始下载：' + (m.name || '文件'), true);
+          } else {
+            toast('claimMsg', '共享文件已被领取，请让共享者重新共享');
+          }
+        } else if (m.text) {
+          navigator.clipboard.writeText(m.text || '').then(() => toast('claimMsg', '共享文本已复制到剪贴板', true));
+        } else {
+          toast('claimMsg', '领取成功', true);
+        }
+        $('claimCode').value = '';
+      })
+      .catch((e) => toast('claimMsg', e.message || '领取失败'));
+  }
+
+  // ===== 事件绑定 =====
+  $('backBtn').addEventListener('click', () => { location.href = '/mobile/'; });
+  $('addFileBtn').addEventListener('click', () => { if (ensured()) $('fileInput').click(); });
+  $('fileInput').addEventListener('change', (e) => {
+    if (!auth || !e.target.files || !e.target.files.length) return;
+    const files = Array.from(e.target.files || []);
+    const run = files.reduce((p, f) => p.then(() => uploadFileToMessages(f)), Promise.resolve());
+    run.then(() => loadMessages()).then(() => toast('statusLine', '文件发送完成', true)).catch((x) => toast('statusLine', x.message || '文件发送失败'));
+    e.target.value = '';
+  });
+  $('sendBtn').addEventListener('click', sendText);
+  $('messageInput').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(); } });
+  $('shareBtn').addEventListener('click', openShare);
+  $('shareClose').addEventListener('click', closeShare);
+  $('shareOverlay').addEventListener('click', (e) => { if (e.target === $('shareOverlay')) closeShare(); });
+  $('shareNowBtn').addEventListener('click', shareText);
+  $('shareFileBtn').addEventListener('click', () => { if (ensured()) $('shareFileInput').click(); });
+  $('shareFileInput').addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (f) shareFile(f);
+    e.target.value = '';
+  });
+  $('claimBtn').addEventListener('click', claim);
+  $('claimCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') claim(); });
+
+  ['shareCode', 'claimCode'].forEach((id) => {
+    $(id).addEventListener('input', (e) => { e.target.value = e.target.value.replace(/[^0-9a-z]/gi, '').toUpperCase().slice(0, 6); });
+  });
+
+  // ===== 初始化 =====
+  (function init() {
+    if (auth && auth.bindId && auth.mobileToken) {
+      $('boundChip').textContent = (auth.deviceName || '已绑定') + ' · ' + (auth.code || '');
+      $('boundChip').classList.add('colored');
+      loadMessages();
+      pollTimer = window.setInterval(() => loadMessages(), 3000);
+    } else {
+      goBind();
+    }
+  })();
+  window.addEventListener('pagehide', () => { if (pollTimer) window.clearInterval(pollTimer); });
+})();
 </script>
 </body>
 </html>
