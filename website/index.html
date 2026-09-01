@@ -185,20 +185,6 @@
     border-radius:6px;padding:3px 9px;color:var(--text);white-space:nowrap;
   }
 
-  /* ---------- 教程步骤 ---------- */
-  .steps{margin-top:38px;display:grid;gap:16px}
-  .step{
-    display:grid;grid-template-columns:54px 1fr;gap:20px;align-items:start;
-    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px 24px;
-  }
-  .step .num{
-    width:46px;height:46px;border-radius:12px;display:grid;place-items:center;
-    font-weight:800;font-size:18px;color:#fff;
-    background:linear-gradient(135deg,var(--accent),#7c5cff);
-  }
-  .step h3{font-size:17px;margin:2px 0 6px}
-  .step p{margin:0;color:var(--muted);font-size:14.5px}
-
   /* ---------- 下载区 ---------- */
   .download{
     margin-top:40px;text-align:center;
@@ -210,44 +196,65 @@
   .dl-tips{margin-top:26px;display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
   .dl-tip{font-size:13px;color:var(--muted);background:rgba(0,0,0,.2);border:1px solid var(--line);padding:8px 14px;border-radius:9px}
 
-  /* ---------- 更新记录 / 路线图 卡片 ---------- */
-  .cards-2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:38px}
-  @media(max-width:880px){.cards-2{grid-template-columns:1fr}}
-  .rel-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:26px}
-  .rel-card .ver{display:flex;align-items:center;gap:10px;margin-bottom:14px}
-  .rel-card .ver .tag{font-size:12px;background:var(--accent-soft);color:var(--accent-2);padding:3px 10px;border-radius:20px;font-weight:700}
-  .rel-card .ver .when{color:var(--muted-2);font-size:13px}
-  .rel-card h3{font-size:18px;margin:0}
-  .rel-card ul{margin:0;padding-left:18px;color:var(--muted);font-size:14px;display:grid;gap:6px}
+  /* ---------- 更新日志：竖向时间线 + 右侧固定滚动内容 ---------- */
+  #tlWrap{margin-top:42px;display:grid;grid-template-columns:240px 1fr;gap:34px;align-items:start}
+  @media(max-width:820px){#tlWrap{grid-template-columns:1fr}}
 
-  .roadmap-list{margin-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  @media(max-width:680px){.roadmap-list{grid-template-columns:1fr}}
-  .road-item{display:flex;gap:12px;align-items:flex-start;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;font-size:14px;color:var(--muted)}
-  .road-item .dot{width:10px;height:10px;border-radius:50%;background:var(--warn);margin-top:6px;flex:none;box-shadow:0 0 0 4px rgba(255,180,84,.15)}
-
-  /* ---------- FAQ ---------- */
-  .faq{margin-top:38px;display:grid;gap:12px}
-  details.faq-item{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:4px 20px;transition:.2s}
-  details.faq-item[open]{border-color:var(--accent-line)}
-  details.faq-item summary{cursor:pointer;padding:16px 0;font-weight:600;font-size:15.5px;list-style:none;display:flex;justify-content:space-between;align-items:center}
-  details.faq-item summary::-webkit-details-marker{display:none}
-  details.faq-item summary::after{content:"+";color:var(--accent-2);font-size:20px;transition:.2s}
-  details.faq-item[open] summary::after{transform:rotate(45deg)}
-  details.faq-item p{margin:0 0 16px;color:var(--muted);font-size:14.5px}
-
-  /* ---------- 预留：未来板块 ---------- */
-  .future-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:38px}
-  @media(max-width:880px){.future-grid{grid-template-columns:1fr}}
-  .future-card{
-    border:1px dashed var(--line);border-radius:var(--radius);padding:30px 24px;text-align:center;
-    background:repeating-linear-gradient(45deg,transparent,transparent 14px,rgba(255,255,255,.015) 14px,rgba(255,255,255,.015) 28px);
+  /* 左侧时间线（最新在上，节点过多可上下滚动） */
+  .tl-rail{position:relative;border:1px solid var(--line);border-radius:12px;background:var(--bg-soft);padding:6px 0}
+  .tl-scroll{max-height:520px;overflow-y:auto;padding:10px 6px}
+  .tl-item{
+    position:relative;display:block;width:100%;text-align:left;
+    padding:12px 14px 12px 30px;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;
   }
-  .future-card .plus{
-    width:44px;height:44px;border-radius:12px;margin:0 auto 12px;display:grid;place-items:center;
-    border:1px dashed var(--accent-line);color:var(--accent-2);font-size:22px;
+  .tl-item::before{
+    content:"";position:absolute;left:12px;top:18px;width:10px;height:10px;border-radius:50%;
+    background:var(--panel-2);border:2px solid var(--line);transition:.2s;
   }
-  .future-card h3{font-size:15px;margin:0 0 6px;color:var(--muted)}
-  .future-card p{margin:0;font-size:13px;color:var(--muted-2)}
+  /* 竖线穿过节点 */
+  .tl-item:not(:last-child)::after{
+    content:"";position:absolute;left:15.5px;top:34px;bottom:-8px;width:2px;background:var(--line);
+  }
+  .tl-item .v{display:block;font-size:14px;font-weight:700;color:var(--muted);transition:.2s}
+  .tl-item .tag-latest{
+    display:inline-block;font-size:10px;color:var(--accent-2);background:var(--accent-soft);
+    border:1px solid var(--accent-line);padding:1px 7px;border-radius:20px;letter-spacing:1px;margin-bottom:2px;
+  }
+  .tl-item:hover .v{color:var(--text)}
+  .tl-item.active .v{color:var(--text)}
+  .tl-item.active::before{background:var(--accent);border-color:var(--accent-2);box-shadow:0 0 0 4px var(--accent-soft),0 0 14px rgba(79,140,255,.5)}
+  .tl-item.active{background:var(--panel);border-radius:9px}
+
+  /* 右侧固定高度内容框（长内容内部滚动，滑动条统一样式） */
+  .tl-panel{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:30px 30px 26px;box-shadow:var(--shadow);
+    height:520px;overflow-y:auto;
+  }
+  .tl-panel h3{font-size:24px;margin:0 0 6px;font-weight:800;display:flex;align-items:center;gap:12px}
+  .tl-panel .when{color:var(--muted-2);font-size:13px;margin-bottom:18px}
+  .tl-panel ul{margin:0;padding-left:20px;color:var(--muted);font-size:14.5px;display:grid;gap:7px}
+  .tl-panel .sec{color:var(--accent-2);font-weight:700;font-size:14.5px;margin:16px 0 6px}
+  .tl-panel .sec:first-child{margin-top:0}
+  .tl-panel .plain{color:var(--muted);font-size:14.5px;margin:4px 0}
+  .tl-empty{color:var(--muted-2);text-align:center;padding:30px 0}
+
+  /* 统一样式滚动条 */
+  .tl-scroll::-webkit-scrollbar,
+  .tl-panel::-webkit-scrollbar{width:10px;height:10px}
+  .tl-scroll::-webkit-scrollbar-track,
+  .tl-panel::-webkit-scrollbar-track{background:transparent;border-radius:10px}
+  .tl-scroll::-webkit-scrollbar-thumb,
+  .tl-panel::-webkit-scrollbar-thumb{
+    background:var(--panel-2);border:2px solid var(--bg-soft);border-radius:10px;
+  }
+  .tl-scroll::-webkit-scrollbar-thumb:hover,
+  .tl-panel::-webkit-scrollbar-thumb:hover{background:var(--muted-2);border-color:var(--bg-soft)}
+  .tl-scroll::-webkit-scrollbar-corner,
+  .tl-panel::-webkit-scrollbar-corner{background:transparent}
+  /* Firefox */
+  .tl-scroll,.tl-panel{scrollbar-width:thin;scrollbar-color:var(--panel-2) transparent}
+  @keyframes tlIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
   /* ---------- 仓库 / 页脚 ---------- */
   .repo{text-align:center;padding-top:60px}
@@ -262,52 +269,6 @@
 
   .pill-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
   .pill{font-size:12px;color:var(--muted);background:var(--bg-soft);border:1px solid var(--line);padding:4px 11px;border-radius:20px}
-
-  /* ---------- 更新日志：横向时间线 ---------- */
-  #tlWrap{margin-top:42px}
-  .tl-track{
-    position:relative;display:flex;justify-content:space-between;gap:8px;
-    padding:22px 6px 0;overflow-x:auto;-webkit-overflow-scrolling:touch;
-  }
-  .tl-track::before{
-    content:"";position:absolute;left:0;right:0;top:36px;height:2px;
-    background:linear-gradient(90deg,var(--line),var(--accent-line),var(--line));
-  }
-  .tl-node{
-    position:relative;flex:1;min-width:64px;z-index:1;
-    display:flex;flex-direction:column;align-items:center;gap:12px;
-    background:none;border:0;padding:0 4px;cursor:pointer;color:inherit;font:inherit;
-  }
-  .tl-node .dot{
-    width:16px;height:16px;border-radius:50%;flex:none;
-    background:var(--panel-2);border:2px solid var(--line);
-    box-shadow:0 0 0 5px var(--bg);transition:.2s;
-  }
-  .tl-node .v{
-    font-size:13px;font-weight:700;color:var(--muted);white-space:nowrap;transition:.2s;
-  }
-  .tl-node:hover .v{color:var(--text)}
-  .tl-node.active .dot{background:var(--accent);border-color:var(--accent-2);box-shadow:0 0 0 5px var(--accent-soft),0 0 18px rgba(79,140,255,.5)}
-  .tl-node.active .v{color:var(--text)}
-  .tl-node .tag-latest{
-    font-size:10px;color:var(--accent-2);background:var(--accent-soft);
-    border:1px solid var(--accent-line);padding:1px 7px;border-radius:20px;letter-spacing:1px;
-  }
-  .tl-panel{
-    margin-top:34px;background:var(--panel);border:1px solid var(--line);
-    border-radius:var(--radius);padding:34px 34px 10px;min-height:200px;
-    box-shadow:var(--shadow);animation:tlIn .25s ease;
-  }
-  @keyframes tlIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-  .tl-panel h3{font-size:22px;margin:0 0 6px;font-weight:800;display:flex;align-items:center;gap:12px}
-  .tl-panel .when{color:var(--muted-2);font-size:13px;margin-bottom:18px}
-  .tl-panel ul{margin:0;padding-left:20px;color:var(--muted);font-size:14.5px;display:grid;gap:7px}
-  .tl-panel .sec{
-    color:var(--accent-2);font-weight:700;font-size:14.5px;margin:16px 0 6px;
-  }
-  .tl-panel .sec:first-child{margin-top:0}
-  .tl-panel .plain{color:var(--muted);font-size:14.5px;margin:4px 0}
-  .tl-empty{color:var(--muted-2);text-align:center;padding:30px 0}
 
   /* ---------- 蓝奏云弹窗 ---------- */
   .lz-overlay{
@@ -356,7 +317,6 @@
       <a href="#keys">快捷操作</a>
       <a href="#download">下载</a>
       <a href="#mobile">移动联动</a>
-      <a href="#faq">常见问题</a>
     </nav>
     <a class="nav-cta" href="#download">下载 ShortCut</a>
   </div>
@@ -648,39 +608,19 @@
   </div>
 </section>
 
-<!-- ===================== 9. 更新记录（横线时间线） ===================== -->
+<!-- ===================== 9. 更新记录（竖向时间线） ===================== -->
 <section id="changelog">
   <div class="wrap">
     <div class="center">
       <span class="eyebrow">更新记录</span>
       <h2 class="title">版本更新内容</h2>
-      <p class="lead" id="changelogHint" style="margin-inline:auto">点击时间线上的版本节点查看对应更新内容，最新版本置顶。</p>
+      <p class="lead" id="changelogHint" style="margin-inline:auto">左侧按时间排列所有版本（最新在上），点击版本查看下方更新内容；内容较多时可在框内上下滚动。</p>
     </div>
     <div id="tlWrap">
-      <div class="tl-track" id="tlTrack"><!-- 时间线节点由 JS 渲染 --></div>
+      <div class="tl-rail">
+        <div class="tl-scroll" id="tlTrack"><!-- 时间线节点由 JS 渲染 --></div>
+      </div>
       <div class="tl-panel" id="tlPanel"></div>
-    </div>
-  </div>
-</section>
-
-<!-- ===================== 10. 常见问题 ===================== -->
-<section id="faq">
-  <div class="wrap">
-    <div class="center">
-      <span class="eyebrow">常见问题</span>
-      <h2 class="title">你可能想问</h2>
-    </div>
-    <div class="faq">
-      <details class="faq-item"><summary>ShortCut 支持哪些系统？</summary><p>当前主要面向 Windows 系统。</p></details>
-      <details class="faq-item"><summary>可以添加网页地址吗？</summary><p>可以。输入网址时如果没有填写协议，ShortCut 会自动补全后使用浏览器打开。</p></details>
-      <details class="faq-item"><summary>为什么部分程序没有原始图标？</summary><p>部分程序的图标可能无法直接提取。ShortCut 会尝试其他提取方式，仍然失败时使用系统默认图标。</p></details>
-      <details class="faq-item"><summary>数据会上传到网络吗？</summary><p>当前快捷方式、任务墙和设置数据保存在本地。</p></details>
-      <details class="faq-item"><summary>安装新版本会丢失任务和快捷方式吗？</summary><p>正常覆盖安装不会删除用户配置。正式更新前仍建议保留重要配置的导出备份。</p></details>
-      <details class="faq-item"><summary>为什么旧版本不能自动更新？</summary><p>早期版本没有包含更新组件，需要先手动安装一次带更新功能的新版。</p></details>
-      <details class="faq-item"><summary>如何检查更新？</summary><p>点击主页面左下角、设置按钮上方的更新入口。</p></details>
-      <details class="faq-item"><summary>检查到更新后会自动下载吗？</summary><p>不会。软件会先展示版本号和更新内容，用户确认后才开始下载。</p></details>
-      <details class="faq-item"><summary>SC球 需要激活才能使用吗？</summary><p>需要。未激活时程序会先进入激活页面，激活通过后 SC球 才会显示。</p></details>
-      <details class="faq-item"><summary>DeepSeek 余额如何配置？</summary><p>在 SC球 设置的 DeepSeek 板块填写自己的 API Key，余额每分钟刷新，点击余额可打开 DeepSeek 平台。</p></details>
     </div>
   </div>
 </section>
@@ -792,32 +732,37 @@
     });
     return out;
   }
-  function show(idx) {
-    if (!versions.length) return;
-    var v = versions[Math.max(0, Math.min(idx, versions.length - 1))];
-    Array.prototype.forEach.call(track.children, function (n, i) {
-      n.classList.toggle('active', i === idx);
-    });
-    var latestTag = idx === 0 ? '' : '';
-    panel.innerHTML =
-      '<h3>ShortCut ' + esc(v.version) + '</h3>' +
-      '<div class="when">' + (idx === 0 ? '最新版本' : '历史版本') + '</div>' +
-      (renderNotesHtml(v.notes) ? '<ul>' + renderNotesHtml(v.notes) + '</ul>' : '<div class="tl-empty">该版本暂无更新说明</div>');
-  }
   function build(list, latest) {
     versions = list || [];
     track.innerHTML = '';
     versions.forEach(function (v, idx) {
       var node = document.createElement('button');
       node.type = 'button';
-      node.className = 'tl-node' + (idx === 0 ? ' active' : '');
-      node.innerHTML = '<span class="dot"></span>' +
-        (idx === 0 ? '<span class="tag-latest">最新</span>' : '') +
-        '<span class="v">' + esc(v.version || '') + '</span>';
+      node.className = 'tl-item' + (idx === 0 ? ' active' : '');
+      var label = idx === 0
+        ? '<span class="tag-latest">最新</span><span class="v">ShortCut ' + esc(v.version || '') + '</span>'
+        : '<span class="v">ShortCut ' + esc(v.version || '') + '</span>';
+      node.innerHTML = label;
       node.addEventListener('click', function () { show(idx); });
       track.appendChild(node);
     });
     if (versions.length) show(0);
+  }
+  function show(idx) {
+    if (!versions.length) return;
+    var v = versions[Math.max(0, Math.min(idx, versions.length - 1))];
+    Array.prototype.forEach.call(track.children, function (n, i) {
+      n.classList.toggle('active', i === idx);
+    });
+    panel.innerHTML =
+      '<h3>ShortCut ' + esc(v.version) + '</h3>' +
+      '<div class="when">' + (idx === 0 ? '最新版本' : '历史版本') + '</div>' +
+      (renderNotesHtml(v.notes) ? '<ul>' + renderNotesHtml(v.notes) + '</ul>' : '<div class="tl-empty">该版本暂无更新说明</div>');
+    // 让当前选中节点在侧栏内滚动到可视区域
+    var active = track.querySelector('.tl-item.active');
+    if (active && active.scrollIntoView) {
+      active.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
   }
   if (!track || !panel) return;
   fetch(NOTES_URL, { cache: 'no-store' })
