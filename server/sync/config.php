@@ -553,3 +553,194 @@ function rate_limit_allow($key, $limit, $windowSeconds) {
         return ['data' => $records, 'result' => $allowed];
     });
 }
+
+// ===== 过期清理（阶段 A：过期消息、孤立分片、失效分享、失效会话）=====
+
+$SETTINGS_FILE = $DATA_DIR . '/settings.json';
+$ACTIVATION_CONFIG_PATH = dirname(__DIR__) . '/activation/data/activation_config.json';
+
+// 读取此绑定所属用户组的消息保留时长（小时），读不到则用平台默认
+function sync_retention_hours($bindId = '') {
+    global $ACTIVATION_CONFIG_PATH;
+    $default = 24;
+    $config = null;
+    if (file_exists($ACTIVATION_CONFIG_PATH)) {
+        $raw = @file_get_contents($ACTIVATION_CONFIG_PATH);
+        $decoded = json_decode((string)$raw, true);
+        if (is_array($decoded)) $config = $decoded;
+    }
+    $hours = 0;
+    if (is_array($config)) {
+        $bindLookup = [];
+        if (isset($config['binds']) && is_array($config['binds'])) {
+            // 多配置文件中无绑定到用户组映射；此处直接取匹配不到绑定时的平台策略
+        }
+        $groups = isset($config['groups']) && is_array($config['groups']) ? $config['groups'] : [];
+        foreach ($groups as $group) {
+            if (is_array($group) && isset($group['fileTransferPolicy']['retentionHours'])) {
+                $hours = max($hours, (int)$group['fileTransferPolicy']['retentionHours']);
+            }
+        }
+    }
+    return $hours > 0 ? $hours : $default;
+}
+
+// 读取或初始化 sync 本地设置（lastCleanupAt 等）
+function sync_settings_read() {
+    global $SETTINGS_FILE;
+    if (!file_exists($SETTINGS_FILE)) return ['lastCleanupAt' => 0, 'createdAt' => date('c')];
+    return json_lock_read($SETTINGS_FILE);
+}
+
+function sync_settings_write($settings) {
+    global $SETTINGS_FILE;
+    return json_lock_write($SETTINGS_FILE, $settings);
+}
+
+// 清理已过期的分享记录
+function cleanup_expired_shares() {
+    global $SHARES_FILE;
+    if (!file_exists($SHARES_FILE)) return 0;
+    $now = time();
+    return json_lock_update($SHARES_FILE, function ($shares) use ($now) {
+        $kept = [];
+        $removed = 0;
+        foreach ($shares as $share) {
+            if (strtotime((string)($share['expires_at'] ?? '')) > $now) {
+                $kept[] = $share;
+            } else {
+                $removed++;
+            }
+        }
+        return ['data' => $kept, 'result' => $removed];
+    });
+}
+
+// 清理某绑定下已过期或不再被任何消息引用的文件分片（孤立分片）
+function cleanup_expired_files($retentionHours) {
+    global $FILE_DIR;
+    if (!is_dir($FILE_DIR)) return 0;
+    $maxAge = $retentionHours * 3600;
+    $now = time();
+    $removed = 0;
+    $binds = @scandir($FILE_DIR);
+    if (!$binds) return 0;
+    foreach ($binds as $bindId) {
+        if ($bindId === '.' || $bindId === '..') continue;
+        $bindDir = $FILE_DIR . '/' . $bindId;
+        if (!is_dir($bindDir)) continue;
+        // 消息引用集合：该绑定当前仍被引用的 fileId
+        $referenced = [];
+        $msgPath = message_path($bindId);
+        if (file_exists($msgPath)) {
+            $messages = json_lock_read($msgPath);
+            foreach ($messages as $msg) {
+                if (is_array($msg) && !empty($msg['fileId'])) $referenced[$msg['fileId']] = true;
+            }
+        }
+        $files = @scandir($bindDir);
+        if (!$files) continue;
+        foreach ($files as $fileId) {
+            if ($fileId === '.' || $fileId === '..') continue;
+            $fileDir = $bindDir . '/' . $fileId;
+            if (!is_dir($fileDir)) continue;
+            $remove = !isset($referenced[$fileId]); // 孤立文件
+            if (!$remove) {
+                // 仍被引用：按保留时长清理（未被收藏）
+                $metaPath = $fileDir . '/meta.json';
+                if (file_exists($metaPath)) {
+                    $meta = json_lock_read($metaPath);
+                    $createdAt = isset($meta['createdAt']) ? strtotime((string)$meta['createdAt']) : $now;
+                    // 校验消息是否收藏
+                    $favorited = false;
+                    if (file_exists($msgPath)) {
+                        $messages = json_lock_read($msgPath);
+                        foreach ($messages as $msg) {
+                            if (is_array($msg) && ($msg['fileId'] ?? '') === $fileId && !empty($msg['favorite'])) { $favorited = true; break; }
+                        }
+                    }
+                    if (!$favorited && $createdAt > 0 && ($now - $createdAt) > $maxAge) $remove = true;
+                } else {
+                    $remove = true; // 无 meta 的残留目录
+                }
+            }
+            if ($remove) {
+                remove_file_storage($bindId, $fileId);
+                $removed++;
+            }
+        }
+    }
+    return $removed;
+}
+
+// 清理过期消息（未收藏，超过保留时长）；返回移除的 fileId 集合供文件清理
+function cleanup_expired_messages($retentionHours) {
+    global $MESSAGE_DIR;
+    if (!is_dir($MESSAGE_DIR)) return [];
+    $maxAge = $retentionHours * 3600;
+    $now = time();
+    $removedFileIds = [];
+    $binds = @scandir($MESSAGE_DIR);
+    if (!$binds) return [];
+    foreach ($binds as $bindId) {
+        if ($bindId === '.' || $bindId === '..') continue;
+        $path = $MESSAGE_DIR . '/' . $bindId . '.json';
+        if (!file_exists($path)) continue;
+        json_lock_update($path, function ($messages) use ($maxAge, $now, &$removedFileIds) {
+            $kept = [];
+            foreach ($messages as $msg) {
+                if (!is_array($msg)) continue;
+                if (!empty($msg['favorite'])) { $kept[] = $msg; continue; }
+                $createdAt = isset($msg['createdAt']) ? strtotime((string)$msg['createdAt']) : $now;
+                if ($createdAt > 0 && ($now - $createdAt) > $maxAge) {
+                    if (!empty($msg['fileId'])) $removedFileIds[] = $msg['fileId'];
+                    continue;
+                }
+                $kept[] = $msg;
+            }
+            return ['data' => $kept];
+        });
+    }
+    return $removedFileIds;
+}
+
+// 清理限流旧记录
+function cleanup_rate_limits() {
+    global $RATE_LIMIT_FILE;
+    if (!file_exists($RATE_LIMIT_FILE)) return 0;
+    $now = time();
+    return json_lock_update($RATE_LIMIT_FILE, function ($records) use ($now) {
+        $kept = [];
+        foreach ($records as $key => $timestamps) {
+            $recent = array_values(array_filter((array)$timestamps, function ($stamp) use ($now) {
+                return is_numeric($stamp) && (int)$stamp > $now - 86400;
+            }));
+            if ($recent) $kept[$key] = $recent;
+        }
+        return ['data' => $kept, 'result' => 0];
+    });
+}
+
+// 统一的过期清理入口：节流（默认 15 分钟一次），返回清理统计
+function run_cleanup_if_due($bindId = '') {
+    $settings = sync_settings_read();
+    $cleanupInterval = 900;
+    $now = time();
+    $last = isset($settings['lastCleanupAt']) ? (int)$settings['lastCleanupAt'] : 0;
+    if ($now - $last < $cleanupInterval) return null;
+    $retentionHours = sync_retention_hours($bindId);
+    $stats = [
+        'shares' => cleanup_expired_shares(),
+        'messages' => 0,
+        'files' => cleanup_expired_files($retentionHours),
+        'rateLimits' => 0,
+    ];
+    $removedFileIds = cleanup_expired_messages($retentionHours);
+    $stats['messages'] = count($removedFileIds);
+    cleanup_rate_limits();
+    // 被删消息引用的文件若无其他消息引用，已被 cleanup_expired_files 处理（下一轮），无需再动
+    $settings['lastCleanupAt'] = $now;
+    $settings['lastCleanupStats'] = $stats;
+    sync_settings_write($settings);
+    return $stats;
+}

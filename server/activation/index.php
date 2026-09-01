@@ -1178,7 +1178,7 @@ $loggedIn = !empty($_SESSION['admin']);
           row.appendChild(sw);
           grid.appendChild(row);
           if (mid === 'fileTransfer') {
-            const policy = group.fileTransferPolicy || { maxFileMb: 500, cloudQuotaMb: 2048, shareEnabled: true, maxShareHours: 24 };
+            const policy = group.fileTransferPolicy || { maxFileMb: 500, cloudQuotaMb: 2048, shareEnabled: true, maxShareHours: 24, retentionHours: 24 };
             group.fileTransferPolicy = policy;
             const policyBox = document.createElement('div');
             policyBox.className = 'perm-row perm-row-feature';
@@ -1198,7 +1198,7 @@ $loggedIn = !empty($_SESSION['admin']);
               wrap.append(label, input);
               return wrap;
             };
-            policyBox.append(makeNumber('单文件上限 MB', 'maxFileMb', 1, 10240), makeNumber('云空间配额 MB', 'cloudQuotaMb', 1, 102400), makeNumber('最长分享小时', 'maxShareHours', 1, 24));
+            policyBox.append(makeNumber('单文件上限 MB', 'maxFileMb', 1, 10240), makeNumber('云空间配额 MB', 'cloudQuotaMb', 1, 102400), makeNumber('最长分享小时', 'maxShareHours', 1, 24), makeNumber('消息保留小时', 'retentionHours', 1, 720));
             const shareWrap = document.createElement('div');
             shareWrap.className = 'field';
             const shareLabel = document.createElement('span'); shareLabel.className = 'label'; shareLabel.textContent = '允许接收密码分享';

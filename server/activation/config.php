@@ -230,6 +230,7 @@ function normalize_transfer_policy($raw = null) {
         'cloudQuotaMb' => max(1, min(102400, intval($data['cloudQuotaMb'] ?? 2048))),
         'shareEnabled' => array_key_exists('shareEnabled', $data) ? !empty($data['shareEnabled']) : true,
         'maxShareHours' => max(1, min(24, intval($data['maxShareHours'] ?? 24))),
+        'retentionHours' => max(1, min(720, intval($data['retentionHours'] ?? 24))),
     ];
 }
 

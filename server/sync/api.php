@@ -28,6 +28,9 @@ $action = isset($input['action']) ? trim($input['action']) : '';
 $board = isset($input['board']) ? trim($input['board']) : 'system';
 $bindId = isset($input['bindId']) ? trim($input['bindId']) : '';
 
+// 阶段 A：过期清理（节流：约每 15 分钟触发一次，随任意请求顺带执行）
+run_cleanup_if_due($bindId);
+
 function respond($data) {
     echo json_encode($data, JSON_UNESCAPED_UNICODE);
     exit;
