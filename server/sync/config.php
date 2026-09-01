@@ -280,6 +280,34 @@ function file_meta_path($bindId, $fileId) { return file_dir($bindId, $fileId) . 
 
 function save_file_meta($bindId, $meta) { return json_lock_write(file_meta_path($bindId, $meta['id']), $meta); }
 
+// 分片哈希校验：期望是 64 位 hex（sha256）；分片内容不匹配返回 false
+function verify_chunk_hash($tmpPath, $expectedHash) {
+    $expectedHash = strtolower(trim((string)$expectedHash));
+    if ($expectedHash === '') return true; // 客户端未上报哈希则跳过（向后兼容）
+    if (!preg_match('/^[a-f0-9]{64}$/', $expectedHash)) return false;
+    $actual = hash_file('sha256', $tmpPath);
+    return $actual === $expectedHash;
+}
+
+// 拼接全部分片计算完整文件 SHA-256
+function compute_file_sha256($bindId, $meta) {
+    $dir = file_dir($bindId, $meta['id']);
+    $ctx = hash_init('sha256');
+    for ($i = 0; $i < (int)$meta['chunkCount']; $i++) {
+        $part = $dir . '/chunk-' . $i . '.part';
+        if (!is_file($part)) return null;
+        $handle = @fopen($part, 'rb');
+        if (!$handle) return null;
+        while (!feof($handle)) {
+            $buf = fread($handle, 1024 * 1024);
+            if ($buf === false) { fclose($handle); return null; }
+            hash_update($ctx, $buf);
+        }
+        fclose($handle);
+    }
+    return hash_final($ctx);
+}
+
 function load_file_meta($bindId, $fileId) {
     $id = safe_file_id($fileId);
     if ($id === null) return null;

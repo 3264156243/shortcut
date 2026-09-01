@@ -44,6 +44,7 @@ if ($action === 'download' && trim((string)file_input('token')) !== '') {
     header('Content-Disposition: attachment; filename="download"; filename*=UTF-8\'\'' . $encoded);
     header('Content-Length: ' . (int)($shared['size'] ?: $meta['size']));
     header('X-Content-Type-Options: nosniff');
+    header('X-Checksum-Sha256: ' . compute_file_sha256($bindId, $meta));
     for ($i = 0; $i < (int)$meta['chunkCount']; $i++) {
         $part = $dir . '/chunk-' . $i . '.part';
         if (!is_file($part)) { http_response_code(500); exit; }
@@ -65,6 +66,12 @@ if ($action === 'uploadChunk') {
     if ($index < 0 || $index >= (int)$meta['chunkCount']) file_fail('分片序号无效');
     if (!isset($_FILES['chunk']) || $_FILES['chunk']['error'] !== UPLOAD_ERR_OK) file_fail('分片接收失败');
     $tmp = $_FILES['chunk']['tmp_name'];
+    // 分片哈希校验（客户端上报时校验，未上报则跳过以向后兼容）
+    $chunkHash = trim((string)file_input('chunkHash'));
+    if ($chunkHash !== '' && !verify_chunk_hash($tmp, $chunkHash)) {
+        @unlink($tmp);
+        file_fail('分片哈希校验失败', 400);
+    }
     $target = file_dir($bindId, $fileId) . '/chunk-' . $index . '.part';
     if (!move_uploaded_file($tmp, $target)) file_fail('分片保存失败', 500);
     $meta = load_file_meta($bindId, $fileId);
@@ -87,6 +94,7 @@ if ($action === 'download') {
     header('Content-Disposition: attachment; filename="download"; filename*=UTF-8\'\'' . $encoded);
     header('Content-Length: ' . (int)$meta['size']);
     header('X-Content-Type-Options: nosniff');
+    header('X-Checksum-Sha256: ' . compute_file_sha256($bindId, $meta));
     for ($i = 0; $i < (int)$meta['chunkCount']; $i++) {
         $part = $dir . '/chunk-' . $i . '.part';
         if (!is_file($part)) { http_response_code(500); exit; }

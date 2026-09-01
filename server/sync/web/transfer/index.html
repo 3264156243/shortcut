@@ -238,14 +238,23 @@
   }
 
   function uploadFileToMessages(file) {
+    function chunkHash(buf) {
+      return crypto.subtle.digest('SHA-256', buf).then((digest) => {
+        return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+      });
+    }
     return api({ action: 'transfer.fileInit', bindId: auth.bindId, side: 'mobile', mobileToken: auth.mobileToken, name: file.name, size: file.size, mime: file.type, chunkSize: 2 * 1024 * 1024 })
       .then(async (init) => {
         if (!init.success) throw new Error(init.message || '创建上传失败');
         for (let i = 0; i < init.file.chunkCount; i++) {
+          const slice = file.slice(i * 2 * 1024 * 1024, Math.min(file.size, (i + 1) * 2 * 1024 * 1024));
+          let hash = '';
+          try { hash = await chunkHash(await slice.arrayBuffer()); } catch (e) {}
           const fd = new FormData();
           fd.append('action', 'uploadChunk'); fd.append('bindId', auth.bindId); fd.append('side', 'mobile'); fd.append('mobileToken', auth.mobileToken);
           fd.append('fileId', init.file.id); fd.append('chunkIndex', String(i));
-          fd.append('chunk', file.slice(i * 2 * 1024 * 1024, Math.min(file.size, (i + 1) * 2 * 1024 * 1024)), file.name + '.part');
+          if (hash) fd.append('chunkHash', hash);
+          fd.append('chunk', slice, file.name + '.part');
           const r = await fetch('/sync/file.php', { method: 'POST', body: fd });
           const d = await r.json();
           if (!r.ok || !d.success) throw new Error(d.message || '分片上传失败');

@@ -206,12 +206,15 @@ switch ($action) {
         sort($uploaded);
         $expected = range(0, max(0, (int)$meta['chunkCount'] - 1));
         if ($uploaded !== $expected) error_msg('文件仍有分片未上传');
+        // 计算完整文件 SHA-256（分片已全部就位）
+        $sha256 = compute_file_sha256($bindId, $meta);
+        if ($sha256) $meta['sha256'] = $sha256;
         $message = file_message($meta, $side);
         if (!append_message($bindId, $message)) error_msg('文件消息保存失败');
         $meta['complete'] = true;
         $meta['messageId'] = $message['id'];
         save_file_meta($bindId, $meta);
-        respond(['success' => true, 'message' => $message]);
+        respond(['success' => true, 'message' => $message, 'sha256' => $sha256 ? $sha256 : '']);
         break;
 
     case 'transfer.share':

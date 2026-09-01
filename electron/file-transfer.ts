@@ -1,5 +1,6 @@
 import { app, ipcMain } from 'electron';
 import { promises as fs } from 'fs';
+import { createHash } from 'crypto';
 import path from 'path';
 import { getBindInfo } from './sync/binding';
 
@@ -47,12 +48,14 @@ async function uploadFile(filePath: string) {
     const length = Math.min(chunkSize, stat.size - index * chunkSize);
     const chunk = Buffer.alloc(length);
     await handle.read(chunk, 0, length, index * chunkSize);
+    const chunkHash = createHash('sha256').update(chunk).digest('hex');
     const form = new FormData();
     form.append('action', 'uploadChunk');
     form.append('bindId', binding.bindId);
     form.append('side', 'desktop');
     form.append('fileId', file.id);
     form.append('chunkIndex', String(index));
+    form.append('chunkHash', chunkHash);
     form.append('chunk', new Blob([chunk]), name + '.part');
     const response = await fetch(FILE_URL, { method: 'POST', body: form });
     const result = await response.json().catch(() => null);
