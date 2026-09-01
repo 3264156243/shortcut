@@ -282,6 +282,7 @@
       <a href="#keys">快捷操作</a>
       <a href="#tutorial">使用教程</a>
       <a href="#download">下载</a>
+      <a href="#mobile">移动联动</a>
       <a href="#faq">常见问题</a>
     </nav>
     <a class="nav-cta" href="#download">下载 ShortCut</a>
@@ -301,7 +302,7 @@
         <a class="btn ghost" href="https://gitee.com/wanan6/short-cut" target="_blank" rel="noopener">访问仓库</a>
       </div>
       <div class="hero-meta">
-        <div><b>2.4.0</b>当前版本</div>
+        <div><b id="heroVersion">—</b>当前版本</div>
         <div><b>Windows</b>支持平台</div>
         <div><b>本地保存</b>数据不上传</div>
       </div>
@@ -534,14 +535,49 @@
       <h2>下载 ShortCut</h2>
       <p class="lead">下载适用于 Windows 的 ShortCut 安装程序，安装后即可开始管理快捷方式和任务墙。</p>
       <div class="hero-actions" style="justify-content:center">
-        <!-- 下载链接：当前稳定版安装包 -->
-        <a class="btn primary" href="https://shortcut.326415.xyz/updates/ShortCut-2.4.0-Setup.exe" target="_blank" rel="noopener">⬇ 下载最新版 (2.4.0)</a>
+        <!-- 下载链接：自动获取更新服务器最新版本 -->
+        <a class="btn primary" id="dlDirect" href="https://shortcut.326415.xyz/updates/ShortCut-2.4.4-Setup.exe" target="_blank" rel="noopener">⬇ 下载最新版 (<span id="dlVersion">2.4.4</span>)</a>
+        <a class="btn ghost" href="https://wwbac.lanzoue.com/ijE7j45ylf5a" target="_blank" rel="noopener">☁ 蓝奏云下载（访问密码 9akr）</a>
         <a class="btn ghost" href="#changelog">查看更新内容</a>
       </div>
       <div class="dl-tips">
         <span class="dl-tip">✓ 安装新版时会保留原有本地配置</span>
         <span class="dl-tip">✓ 下载更新前可先查看该版本更新内容</span>
         <span class="dl-tip">✓ 首次安装和后续升级均使用安装程序</span>
+        <span class="dl-tip">✓ 蓝奏云若提示密码请输入 9akr</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 8.5 移动联动 ===================== -->
+<section id="mobile">
+  <div class="wrap">
+    <div class="core-block reverse">
+      <div>
+        <!-- 移动联动截图：建议放手机浏览器打开 /mobile/ 的绑定与功能入口 -->
+        <div class="shot" style="min-height:340px">
+          <div class="placeholder">
+            <div class="ph-label">移动联动</div>
+            放入手机打开联动门户的截图<br/>（绑定 / 任务墙 / 文件快传入口）
+          </div>
+        </div>
+      </div>
+      <div>
+        <span class="badge">核心板块四</span>
+        <h2 class="title">手机与桌面联动</h2>
+        <p class="lead">无需安装手机 App，手机浏览器打开联动门户，扫码或输入 6 位绑定码即可与桌面 ShortCut 互联，双向传文件、发文本、推送任务。</p>
+        <ul>
+          <li>手机访问 <b>shortcut.326415.xyz/mobile</b>，扫码或输入桌面端“验证绑定”页的 6 位绑定码完成绑定。</li>
+          <li>任务墙互通：手机查看 / 推送任务至桌面任务墙，桌面端同步显示。</li>
+          <li>文件快传：手机与桌面双向发送文件与文本消息，云端中转、两端同步。</li>
+          <li>临时共享：6 位接收密码领取共享文本或文件（可选加密密码与时长）。</li>
+          <li>绑定信息保存在手机本地，一次绑定持续有效，可随时更换或解除。</li>
+        </ul>
+        <div class="hero-actions" style="margin-top:26px">
+          <a class="btn primary" href="https://shortcut.326415.xyz/mobile/" target="_blank" rel="noopener">📱 打开移动联动门户</a>
+          <a class="btn ghost" href="https://shortcut.326415.xyz/transfer/" target="_blank" rel="noopener">文件快传页</a>
+        </div>
       </div>
     </div>
   </div>
@@ -553,36 +589,10 @@
     <div class="center">
       <span class="eyebrow">更新记录</span>
       <h2 class="title">版本更新内容</h2>
+      <p class="lead" id="changelogHint" style="margin-inline:auto">时间线自动同步每次发布，最新版本置顶。</p>
     </div>
-    <div class="cards-2">
-      <div class="rel-card">
-        <div class="ver"><span class="tag">最新</span><h3>ShortCut 2.4.0</h3></div>
-        <ul>
-          <li>新增驾驶舱数据模块，显示 CPU / GPU / 内存占用与温度。</li>
-          <li>新增 DeepSeek 余额模块，每分钟刷新，API Key 由用户填写。</li>
-          <li>播放音乐时 DeepSeek 余额分离为右侧小圆球，实时跟随 SC球。</li>
-          <li>SC球 收起宽度随内容自适应，设置面板按模块分区。</li>
-          <li>新增音乐全局快捷键 Alt+Z / Alt+X / Alt+C。</li>
-        </ul>
-      </div>
-      <div class="rel-card">
-        <div class="ver"><h3>ShortCut 2.3.2</h3></div>
-        <ul>
-          <li>未激活的新安装会先进入激活页面。</li>
-          <li>激活码管理后台支持生成、禁用、启用、解除绑定和删除。</li>
-          <li>本地配置自动保留三份时间点备份。</li>
-          <li>任务清单与任务墙完成状态双向同步。</li>
-        </ul>
-      </div>
-      <div class="rel-card">
-        <div class="ver"><h3>ShortCut 2.1.0</h3></div>
-        <ul>
-          <li>新增翻译板块与 Alt+E 划词翻译。</li>
-          <li>新增电脑驾驶舱板块。</li>
-          <li>新增 SC球 灵动岛基础能力。</li>
-          <li>支持网易云音乐控制与歌词展示。</li>
-        </ul>
-      </div>
+    <div class="cards-2" id="changelogList">
+      <!-- 由 /updates/release-notes.json 动态渲染，发布新版本后自动更新 -->
     </div>
   </div>
 </section>
@@ -661,6 +671,105 @@
     <div style="margin-top:6px">面向 Windows 的桌面快捷启动与任务墙效率工具</div>
   </div>
 </footer>
+
+<script>
+/* 自动获取最新版本：读取更新服务器 latest.yml，动态更新下载链接与版本号 */
+(function () {
+  var LATEST_URL = 'https://shortcut.326415.xyz/updates/latest.yml';
+  function apply(data) {
+    try {
+      var version = (String(data && data.version || '').trim()) || '';
+      var file = '';
+      var files = data && data.files;
+      if (files && files.length) file = String(files[0].url || '').trim();
+      if (!file && data && data.path) file = String(data.path).trim();
+      if (version) {
+        var vEl = document.getElementById('dlVersion');
+        if (vEl) vEl.textContent = version;
+        var heroEl = document.getElementById('heroVersion');
+        if (heroEl) heroEl.textContent = version;
+        var dl = document.getElementById('dlDirect');
+        if (dl) {
+          var base = 'https://shortcut.326415.xyz/updates/';
+          dl.href = file ? base + file : base + 'ShortCut-' + version + '-Setup.exe';
+        }
+      }
+    } catch (e) {}
+  }
+  fetch(LATEST_URL, { cache: 'no-store' })
+    .then(function (r) { return r.ok ? r.text() : Promise.reject(); })
+    .then(function (text) {
+      var yaml = {};
+      text.replace(/^(version|path|url):\s*(.+)$/gm, function (_, k, v) {
+        if (k === 'version') yaml.version = v.trim();
+        if (k === 'path') yaml.path = v.trim();
+        if (k === 'url' && !yaml.rawUrl) yaml.rawUrl = v.trim();
+        return _;
+      });
+      if (yaml.version && yaml.rawUrl) {
+        yaml.files = [{ url: yaml.rawUrl }];
+        apply(yaml);
+      }
+    })
+    .catch(function () {});
+})();
+
+/* 更新日志时间线：读取 /updates/release-notes.json（构建时自动生成全量版本），渲染时间线 */
+(function () {
+  var NOTES_URL = 'https://shortcut.326415.xyz/updates/release-notes.json';
+  function esc(s) { return String(s || '').replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function renderNotes(md) {
+    var out = '';
+    (String(md || '').split(/\r?\n/)).forEach(function (line) {
+      var l = line.replace(/\s+$/, '');
+      if (/^#\s/.test(l)) return;                       // 标题行（版本名）由卡片头展示
+      if (/^##\s/.test(l)) out += '<p style="font-weight:700;color:var(--accent-2);margin:10px 0 4px">' + esc(l.replace(/^##\s+/, '')) + '</p>';
+      else if (/^-\s/.test(l)) out += '<li>' + esc(l.replace(/^-\s+/, '')) + '</li>';
+      else if (/^\*\s/.test(l)) out += '<li>' + esc(l.replace(/^\*\s+/, '')) + '</li>';
+      else if (l === '') out += '<li class="sep-li"></li>';
+      else out += '<li>' + esc(l) + '</li>';
+    });
+    return '<ul style="margin:0;padding-left:18px;color:var(--muted);font-size:14px;display:grid;gap:6px">' + out + '</ul>';
+  }
+  function render(versions, latest) {
+    var box = document.getElementById('changelogList');
+    if (!box) return;
+    box.innerHTML = '';
+    var list = versions || [];
+    list.forEach(function (v, idx) {
+      var ver = String(v.version || '');
+      var card = document.createElement('div');
+      card.className = 'rel-card';
+      var head = document.createElement('div');
+      head.className = 'ver';
+      var tagWrap = document.createElement('span');
+      if (idx === 0 || ver === String(latest || '')) {
+        var tag = document.createElement('span');
+        tag.className = 'tag';
+        tag.textContent = '最新';
+        tagWrap.appendChild(tag);
+      }
+      var h3 = document.createElement('h3');
+      h3.textContent = 'ShortCut ' + ver;
+      head.appendChild(tagWrap);
+      head.appendChild(h3);
+      card.appendChild(head);
+      card.insertAdjacentHTML('beforeend', renderNotes(v.notes));
+      box.appendChild(card);
+    });
+    if (!box.children.length) {
+      box.innerHTML = '<div class="empty" style="color:var(--muted-2);padding:20px 0;text-align:center">暂无更新记录</div>';
+    }
+  }
+  fetch(NOTES_URL, { cache: 'no-store' })
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+    .then(function (data) { render(data.versions, data.latest); })
+    .catch(function () {
+      var hint = document.getElementById('changelogHint');
+      if (hint) hint.textContent = '更新记录加载失败，请稍后刷新查看。';
+    });
+})();
+</script>
 
 </body>
 </html>
