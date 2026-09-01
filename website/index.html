@@ -262,6 +262,80 @@
 
   .pill-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
   .pill{font-size:12px;color:var(--muted);background:var(--bg-soft);border:1px solid var(--line);padding:4px 11px;border-radius:20px}
+
+  /* ---------- 更新日志：横向时间线 ---------- */
+  #tlWrap{margin-top:42px}
+  .tl-track{
+    position:relative;display:flex;justify-content:space-between;gap:8px;
+    padding:22px 6px 0;overflow-x:auto;-webkit-overflow-scrolling:touch;
+  }
+  .tl-track::before{
+    content:"";position:absolute;left:0;right:0;top:36px;height:2px;
+    background:linear-gradient(90deg,var(--line),var(--accent-line),var(--line));
+  }
+  .tl-node{
+    position:relative;flex:1;min-width:64px;z-index:1;
+    display:flex;flex-direction:column;align-items:center;gap:12px;
+    background:none;border:0;padding:0 4px;cursor:pointer;color:inherit;font:inherit;
+  }
+  .tl-node .dot{
+    width:16px;height:16px;border-radius:50%;flex:none;
+    background:var(--panel-2);border:2px solid var(--line);
+    box-shadow:0 0 0 5px var(--bg);transition:.2s;
+  }
+  .tl-node .v{
+    font-size:13px;font-weight:700;color:var(--muted);white-space:nowrap;transition:.2s;
+  }
+  .tl-node:hover .v{color:var(--text)}
+  .tl-node.active .dot{background:var(--accent);border-color:var(--accent-2);box-shadow:0 0 0 5px var(--accent-soft),0 0 18px rgba(79,140,255,.5)}
+  .tl-node.active .v{color:var(--text)}
+  .tl-node .tag-latest{
+    font-size:10px;color:var(--accent-2);background:var(--accent-soft);
+    border:1px solid var(--accent-line);padding:1px 7px;border-radius:20px;letter-spacing:1px;
+  }
+  .tl-panel{
+    margin-top:34px;background:var(--panel);border:1px solid var(--line);
+    border-radius:var(--radius);padding:34px 34px 10px;min-height:200px;
+    box-shadow:var(--shadow);animation:tlIn .25s ease;
+  }
+  @keyframes tlIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .tl-panel h3{font-size:22px;margin:0 0 6px;font-weight:800;display:flex;align-items:center;gap:12px}
+  .tl-panel .when{color:var(--muted-2);font-size:13px;margin-bottom:18px}
+  .tl-panel ul{margin:0;padding-left:20px;color:var(--muted);font-size:14.5px;display:grid;gap:7px}
+  .tl-panel .sec{
+    color:var(--accent-2);font-weight:700;font-size:14.5px;margin:16px 0 6px;
+  }
+  .tl-panel .sec:first-child{margin-top:0}
+  .tl-panel .plain{color:var(--muted);font-size:14.5px;margin:4px 0}
+  .tl-empty{color:var(--muted-2);text-align:center;padding:30px 0}
+
+  /* ---------- 蓝奏云弹窗 ---------- */
+  .lz-overlay{
+    position:fixed;inset:0;z-index:999;display:grid;place-items:center;
+    background:rgba(8,10,16,.72);backdrop-filter:blur(6px);padding:20px;
+  }
+  .lz-overlay.hidden{display:none}
+  .lz-modal{
+    position:relative;width:min(100%,420px);background:var(--panel-2);
+    border:1px solid var(--line);border-radius:18px;padding:34px 30px 28px;text-align:center;
+    box-shadow:var(--shadow);animation:tlIn .2s ease;
+  }
+  .lz-close{
+    position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;
+    border:1px solid var(--line);background:transparent;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;
+  }
+  .lz-close:hover{border-color:var(--accent-line);color:var(--text)}
+  .lz-icon{font-size:40px;margin-bottom:8px}
+  .lz-modal h3{margin:0 0 8px;font-size:20px}
+  .lz-desc{color:var(--muted);font-size:14px;margin:0 0 18px}
+  .lz-code{
+    font-size:30px;font-weight:800;letter-spacing:8px;color:var(--accent-2);
+    background:var(--bg-soft);border:1px dashed var(--accent-line);border-radius:12px;
+    padding:12px 0;margin-bottom:22px;user-select:all;
+  }
+  .lz-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .lz-actions .btn{justify-content:center;padding:13px 10px;font-size:14px}
+  @media(max-width:520px){.lz-actions{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -280,7 +354,6 @@
       <a href="#taskwall">任务墙</a>
       <a href="#scball">SC球</a>
       <a href="#keys">快捷操作</a>
-      <a href="#tutorial">使用教程</a>
       <a href="#download">下载</a>
       <a href="#mobile">移动联动</a>
       <a href="#faq">常见问题</a>
@@ -299,7 +372,6 @@
       <div class="hero-actions">
         <a class="btn primary" href="#download">⬇ 下载 ShortCut</a>
         <a class="btn ghost" href="#features">查看功能</a>
-        <a class="btn ghost" href="https://gitee.com/wanan6/short-cut" target="_blank" rel="noopener">访问仓库</a>
       </div>
       <div class="hero-meta">
         <div><b id="heroVersion">—</b>当前版本</div>
@@ -507,27 +579,7 @@
   </div>
 </section>
 
-<!-- ===================== 7. 使用教程 ===================== -->
-<section id="tutorial">
-  <div class="wrap">
-    <div class="center">
-      <span class="eyebrow">使用教程</span>
-      <h2 class="title">七步上手 ShortCut</h2>
-      <p class="lead">从安装到检查更新，几分钟完成全部设置。</p>
-    </div>
-    <div class="steps">
-      <div class="step"><div class="num">1</div><div><h3>安装并启动</h3><p>下载 ShortCut 安装包，完成安装后启动软件。</p></div></div>
-      <div class="step"><div class="num">2</div><div><h3>添加快捷方式</h3><p>进入快捷方式板块，选择手动添加路径，或者从已安装软件中导入程序。</p></div></div>
-      <div class="step"><div class="num">3</div><div><h3>整理快捷页面</h3><p>根据使用场景创建多个快捷方式页面，例如工作、学习、设计或娱乐。</p></div></div>
-      <div class="step"><div class="num">4</div><div><h3>使用键盘启动</h3><p>通过方向键选择快捷方式，按 Enter 直接启动。</p></div></div>
-      <div class="step"><div class="num">5</div><div><h3>创建任务墙</h3><p>进入任务墙板块，新建任务墙并设置名称。</p></div></div>
-      <div class="step"><div class="num">6</div><div><h3>添加任务</h3><p>在底部输入栏输入任务标题，根据需要启用长文本或待办提醒。</p></div></div>
-      <div class="step"><div class="num">7</div><div><h3>检查更新</h3><p>点击左侧设置按钮上方的更新入口。发现新版本后，阅读更新内容并决定是否下载。</p></div></div>
-    </div>
-  </div>
-</section>
-
-<!-- ===================== 8. 下载 ===================== -->
+<!-- ===================== 7. 下载 ===================== -->
 <section id="download">
   <div class="wrap">
     <div class="download">
@@ -537,18 +589,31 @@
       <div class="hero-actions" style="justify-content:center">
         <!-- 下载链接：自动获取更新服务器最新版本 -->
         <a class="btn primary" id="dlDirect" href="https://shortcut.326415.xyz/updates/ShortCut-2.4.4-Setup.exe" target="_blank" rel="noopener">⬇ 下载最新版 (<span id="dlVersion">2.4.4</span>)</a>
-        <a class="btn ghost" href="https://wwbac.lanzoue.com/ijE7j45ylf5a" target="_blank" rel="noopener">☁ 蓝奏云下载（访问密码 9akr）</a>
-        <a class="btn ghost" href="#changelog">查看更新内容</a>
+        <button class="btn ghost" id="dlLanzou" type="button">☁ 蓝奏云下载（推荐）</button>
       </div>
       <div class="dl-tips">
         <span class="dl-tip">✓ 安装新版时会保留原有本地配置</span>
         <span class="dl-tip">✓ 下载更新前可先查看该版本更新内容</span>
         <span class="dl-tip">✓ 首次安装和后续升级均使用安装程序</span>
-        <span class="dl-tip">✓ 蓝奏云若提示密码请输入 9akr</span>
       </div>
     </div>
   </div>
 </section>
+
+<!-- ===================== 蓝奏云密码弹窗 ===================== -->
+<div class="lz-overlay hidden" id="lzOverlay">
+  <div class="lz-modal">
+    <button class="lz-close" id="lzClose" type="button" title="关闭">×</button>
+    <div class="lz-icon">🔒</div>
+    <h3>蓝奏云下载</h3>
+    <p class="lz-desc">访问该分享链接需要访问密码，请复制后前往蓝奏云下载。</p>
+    <div class="lz-code" id="lzCode">9akr</div>
+    <div class="lz-actions">
+      <button class="btn ghost" id="lzCopy" type="button">📋 复制密码</button>
+      <a class="btn primary" id="lzGo" href="https://wwbac.lanzoue.com/ijE7j45ylf5a" target="_blank" rel="noopener">我已复制，前往下载 →</a>
+    </div>
+  </div>
+</div>
 
 <!-- ===================== 8.5 移动联动 ===================== -->
 <section id="mobile">
@@ -583,16 +648,17 @@
   </div>
 </section>
 
-<!-- ===================== 9. 更新记录 ===================== -->
+<!-- ===================== 9. 更新记录（横线时间线） ===================== -->
 <section id="changelog">
   <div class="wrap">
     <div class="center">
       <span class="eyebrow">更新记录</span>
       <h2 class="title">版本更新内容</h2>
-      <p class="lead" id="changelogHint" style="margin-inline:auto">时间线自动同步每次发布，最新版本置顶。</p>
+      <p class="lead" id="changelogHint" style="margin-inline:auto">点击时间线上的版本节点查看对应更新内容，最新版本置顶。</p>
     </div>
-    <div class="cards-2" id="changelogList">
-      <!-- 由 /updates/release-notes.json 动态渲染，发布新版本后自动更新 -->
+    <div id="tlWrap">
+      <div class="tl-track" id="tlTrack"><!-- 时间线节点由 JS 渲染 --></div>
+      <div class="tl-panel" id="tlPanel"></div>
     </div>
   </div>
 </section>
@@ -616,52 +682,6 @@
       <details class="faq-item"><summary>SC球 需要激活才能使用吗？</summary><p>需要。未激活时程序会先进入激活页面，激活通过后 SC球 才会显示。</p></details>
       <details class="faq-item"><summary>DeepSeek 余额如何配置？</summary><p>在 SC球 设置的 DeepSeek 板块填写自己的 API Key，余额每分钟刷新，点击余额可打开 DeepSeek 平台。</p></details>
     </div>
-  </div>
-</section>
-
-<!-- ===================== 11. 项目路线图 ===================== -->
-<section id="roadmap">
-  <div class="wrap">
-    <div class="center">
-      <span class="eyebrow">项目路线图</span>
-      <h2 class="title">后续规划</h2>
-      <p class="lead">围绕「多功能桌面效率工具」继续扩展。路线图中的内容可能根据实际开发情况调整。</p>
-    </div>
-    <div class="roadmap-list">
-      <div class="road-item"><span class="dot"></span>增加更多独立工具板块</div>
-      <div class="road-item"><span class="dot"></span>完善任务提醒方式</div>
-      <div class="road-item"><span class="dot"></span>增强任务分类、筛选和状态管理</div>
-      <div class="road-item"><span class="dot"></span>完善本地数据备份与恢复</div>
-      <div class="road-item"><span class="dot"></span>优化快捷方式整理和批量管理</div>
-      <div class="road-item"><span class="dot"></span>持续完善键盘操作体验</div>
-      <div class="road-item"><span class="dot"></span>完善版本更新和更新记录展示</div>
-    </div>
-
-    <!-- 预留：未来新板块展示位 -->
-    <div style="margin-top:54px">
-      <div class="center" style="margin-bottom:6px">
-        <span class="eyebrow">预留位置</span>
-        <h2 class="title" style="font-size:24px">更多工具板块，敬请期待</h2>
-        <p class="lead">目前 ShortCut 以「快捷方式管理」和「任务墙」两大核心板块为主，后续新增的工具板块将在此展示。</p>
-      </div>
-      <div class="future-grid">
-        <div class="future-card"><div class="plus">+</div><h3>新板块占位</h3><p>未来新增工具板块一</p></div>
-        <div class="future-card"><div class="plus">+</div><h3>新板块占位</h3><p>未来新增工具板块二</p></div>
-        <div class="future-card"><div class="plus">+</div><h3>新板块占位</h3><p>未来新增工具板块三</p></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ===================== 12. 仓库地址 ===================== -->
-<section class="repo" id="repo">
-  <div class="wrap">
-    <span class="eyebrow">仓库地址</span>
-    <h2 class="title">源码与发布</h2>
-    <p class="lead" style="margin-inline:auto">项目基于 MIT License 开源，欢迎访问 Gitee 仓库查看源码、提交 issue 与发布记录。</p>
-    <a class="repo-link" href="https://gitee.com/wanan6/short-cut" target="_blank" rel="noopener">
-      🐱 gitee.com/wanan6/short-cut
-    </a>
   </div>
 </section>
 
@@ -700,73 +720,112 @@
     .then(function (r) { return r.ok ? r.text() : Promise.reject(); })
     .then(function (text) {
       var yaml = {};
-      text.replace(/^(version|path|url):\s*(.+)$/gm, function (_, k, v) {
-        if (k === 'version') yaml.version = v.trim();
-        if (k === 'path') yaml.path = v.trim();
-        if (k === 'url' && !yaml.rawUrl) yaml.rawUrl = v.trim();
-        return _;
-      });
-      if (yaml.version && yaml.rawUrl) {
-        yaml.files = [{ url: yaml.rawUrl }];
+      var lines = text.split(/\r?\n/);
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+        var m = line.match(/^\s*-\s*url:\s*(.+?)\s*$/);
+        if (m && !yaml.rawUrl) { yaml.rawUrl = m[1]; continue; }
+        m = line.match(/^version:\s*(.+?)\s*$/);
+        if (m && !yaml.version) { yaml.version = m[1]; continue; }
+        m = line.match(/^path:\s*(.+?)\s*$/);
+        if (m && !yaml.path) { yaml.path = m[1]; continue; }
+        m = line.match(/^url:\s*(.+?)\s*$/);
+        if (m && !yaml.rawUrl) { yaml.rawUrl = m[1]; }
+      }
+      if (yaml.version) {
+        yaml.files = [{ url: yaml.rawUrl || yaml.path || ('ShortCut-' + yaml.version + '-Setup.exe') }];
         apply(yaml);
       }
     })
     .catch(function () {});
 })();
 
-/* 更新日志时间线：读取 /updates/release-notes.json（构建时自动生成全量版本），渲染时间线 */
+/* 蓝奏云弹窗：展示访问密码，复制密码与前往下载 */
+(function () {
+  var overlay = document.getElementById('lzOverlay');
+  var openBtn = document.getElementById('dlLanzou');
+  var closeBtn = document.getElementById('lzClose');
+  var copyBtn = document.getElementById('lzCopy');
+  var codeText = '9akr';
+  function open() { if (overlay) overlay.classList.remove('hidden'); }
+  function close() { if (overlay) overlay.classList.add('hidden'); }
+  if (openBtn) openBtn.addEventListener('click', open);
+  if (closeBtn) closeBtn.addEventListener('click', close);
+  if (overlay) overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+  if (copyBtn) copyBtn.addEventListener('click', function () {
+    function done() {
+      copyBtn.textContent = '✅ 已复制';
+      setTimeout(function () { copyBtn.textContent = '📋 复制密码'; }, 2000);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(codeText).then(done, function () { fallbackCopy(); done(); });
+    } else { fallbackCopy(); done(); }
+    function fallbackCopy() {
+      if (!codeText) return;
+      var ta = document.createElement('textarea');
+      ta.value = codeText; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+    }
+  });
+})();
+
+/* 更新日志：横向时间线，点击节点切换下方内容（数据来自 /updates/release-notes.json） */
 (function () {
   var NOTES_URL = 'https://shortcut.326415.xyz/updates/release-notes.json';
+  var track = document.getElementById('tlTrack');
+  var panel = document.getElementById('tlPanel');
+  var hintEl = document.getElementById('changelogHint');
+  var versions = [];
   function esc(s) { return String(s || '').replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
-  function renderNotes(md) {
+  function renderNotesHtml(md) {
     var out = '';
     (String(md || '').split(/\r?\n/)).forEach(function (line) {
       var l = line.replace(/\s+$/, '');
-      if (/^#\s/.test(l)) return;                       // 标题行（版本名）由卡片头展示
-      if (/^##\s/.test(l)) out += '<p style="font-weight:700;color:var(--accent-2);margin:10px 0 4px">' + esc(l.replace(/^##\s+/, '')) + '</p>';
+      if (/^#\s/.test(l)) return;                          // 版本标题行由面板头展示
+      if (/^##\s/.test(l)) out += '<div class="sec">' + esc(l.replace(/^##\s+/, '')) + '</div>';
       else if (/^-\s/.test(l)) out += '<li>' + esc(l.replace(/^-\s+/, '')) + '</li>';
       else if (/^\*\s/.test(l)) out += '<li>' + esc(l.replace(/^\*\s+/, '')) + '</li>';
-      else if (l === '') out += '<li class="sep-li"></li>';
-      else out += '<li>' + esc(l) + '</li>';
+      else if (l === '') { /* 空行忽略 */ }
+      else out += '<div class="plain">' + esc(l) + '</div>';
     });
-    return '<ul style="margin:0;padding-left:18px;color:var(--muted);font-size:14px;display:grid;gap:6px">' + out + '</ul>';
+    return out;
   }
-  function render(versions, latest) {
-    var box = document.getElementById('changelogList');
-    if (!box) return;
-    box.innerHTML = '';
-    var list = versions || [];
-    list.forEach(function (v, idx) {
-      var ver = String(v.version || '');
-      var card = document.createElement('div');
-      card.className = 'rel-card';
-      var head = document.createElement('div');
-      head.className = 'ver';
-      var tagWrap = document.createElement('span');
-      if (idx === 0 || ver === String(latest || '')) {
-        var tag = document.createElement('span');
-        tag.className = 'tag';
-        tag.textContent = '最新';
-        tagWrap.appendChild(tag);
-      }
-      var h3 = document.createElement('h3');
-      h3.textContent = 'ShortCut ' + ver;
-      head.appendChild(tagWrap);
-      head.appendChild(h3);
-      card.appendChild(head);
-      card.insertAdjacentHTML('beforeend', renderNotes(v.notes));
-      box.appendChild(card);
+  function show(idx) {
+    if (!versions.length) return;
+    var v = versions[Math.max(0, Math.min(idx, versions.length - 1))];
+    Array.prototype.forEach.call(track.children, function (n, i) {
+      n.classList.toggle('active', i === idx);
     });
-    if (!box.children.length) {
-      box.innerHTML = '<div class="empty" style="color:var(--muted-2);padding:20px 0;text-align:center">暂无更新记录</div>';
-    }
+    var latestTag = idx === 0 ? '' : '';
+    panel.innerHTML =
+      '<h3>ShortCut ' + esc(v.version) + '</h3>' +
+      '<div class="when">' + (idx === 0 ? '最新版本' : '历史版本') + '</div>' +
+      (renderNotesHtml(v.notes) ? '<ul>' + renderNotesHtml(v.notes) + '</ul>' : '<div class="tl-empty">该版本暂无更新说明</div>');
   }
+  function build(list, latest) {
+    versions = list || [];
+    track.innerHTML = '';
+    versions.forEach(function (v, idx) {
+      var node = document.createElement('button');
+      node.type = 'button';
+      node.className = 'tl-node' + (idx === 0 ? ' active' : '');
+      node.innerHTML = '<span class="dot"></span>' +
+        (idx === 0 ? '<span class="tag-latest">最新</span>' : '') +
+        '<span class="v">' + esc(v.version || '') + '</span>';
+      node.addEventListener('click', function () { show(idx); });
+      track.appendChild(node);
+    });
+    if (versions.length) show(0);
+  }
+  if (!track || !panel) return;
   fetch(NOTES_URL, { cache: 'no-store' })
     .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
-    .then(function (data) { render(data.versions, data.latest); })
+    .then(function (data) { build(data.versions, data.latest); })
     .catch(function () {
-      var hint = document.getElementById('changelogHint');
-      if (hint) hint.textContent = '更新记录加载失败，请稍后刷新查看。';
+      if (hintEl) hintEl.textContent = '更新记录加载失败，请稍后刷新查看。';
+      if (panel) panel.innerHTML = '<div class="tl-empty">更新记录加载失败，请稍后刷新查看。</div>';
     });
 })();
 </script>
