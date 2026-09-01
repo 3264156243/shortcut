@@ -160,6 +160,7 @@ Remove-SSHSession -SessionId $s.SessionId | Out-Null
 
 ## 更新记录
 
+- [2026-09-02] 介绍网站三大升级（`ae98f03`，已部署服务器根 index.html，md5 一致 + HTTP 200）：①**更新日志时间线自动化**——读取 `/updates/release-notes.json`（每次构建自动生成全量版本）动态渲染时间线，未来发布新版本网站自动长出新条目，零手动改码；②**下载板块**——自动拉取 `/updates/latest.yml` 动态指向最新版安装包（按钮与首屏版本号自动更新），另新增**蓝奏云下载**入口（https://wwbac.lanzoue.com/ijE7j45ylf5a，访问密码 9akr）；③**新增「移动联动」板块**（核心板块四，含文档截图占位）——web 桌面联动门户入口 `shortcut.326415.xyz/mobile/` 与文件快传页按钮，说明扫码/6 位绑定码绑定、任务墙互通、文件快传、临时共享能力。截图占位按用户要求保持不动。
 - [2026-09-01] 分片上传 SHA-256 哈希完整性（`e363b91`，已推送 + 部署）：桌面端 Electron（`createHash('sha256')`）与移动端 transfer 页（Web Crypto）对每个分片计算 sha256 随 `chunkHash` 上报；服务端 `verify_chunk_hash` 校验（未上报向后兼容跳过，非法 64 位 hex 拒绝）；`transfer.fileComplete` 拼接全部分片计算完整文件 SHA-256 存 meta 并返回，download 两分支响应头 `X-Checksum-Sha256` 供下载后校验。已部署 `sync/{config,api,file}.php` + `{bind,transfer}/index.html`（md5 与本地一致，php -l 通过，HTTP 冒烟 200）。
 - [2026-09-01] 阶段A剩余——过期清理机制（`513d877`）部署并生产验证：服务器 settings.json 显示清理已实际触发（lastCleanupStats：shares:3, files:2，即删除 3 条过期分享 + 2 个孤立分片）。管理后台 fileTransferPolicy 新增「消息保留小时」retentionHours（1~720h 默认 24，`normalize_transfer_policy` 归一化已实测 99/5 正确），用户组保存策略后写入 activation_config.json 供 sync 侧 `sync_retention_hours` 读取。注：当前生产各用户组配置尚无 fileTransferPolicy 字段（旧配置），实际生效为默认 24h，后台保存一次策略即下发。
 - [2026-08-19] transfer 页完整重写（`0f52397`）：共享内容重构为独立弹窗（overlay 全屏遮罩 + sheet 底部抽屉），内含三区块（创建共享：文本/文件上传/时长/密码 + 领取共享：输密码下载/复制 + 我的共享历史：列表/删除）。主页面仅文件互传（composer+消息列表+工具栏"共享内容"按钮），不混入任何共享表单。JS 全部引用匹配 DOM，脚本不再崩溃。所有返回按钮指向 `/mobile/`。
