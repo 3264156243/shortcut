@@ -205,14 +205,10 @@
     position:relative;border:1px solid var(--line);border-radius:14px;background:var(--bg-soft);
     padding:10px 6px;overflow:hidden;
   }
-  /* 主干线：一条贯穿整条时间线的竖线，由控件容器绘制 */
+  /* 主干线：已按需求移除，仅保留节点 */
   .tl-track{
     position:relative;max-height:520px;overflow-y:auto;overflow-x:hidden;
     padding:8px 2px;
-  }
-  .tl-track::before{
-    content:"";position:absolute;left:30px;top:0;bottom:0;width:2px;
-    background:linear-gradient(180deg,transparent,var(--line) 24px,var(--line) calc(100% - 24px),transparent);
   }
   /* 节点：统一高度排列在主干线上 */
   .tl-node{
