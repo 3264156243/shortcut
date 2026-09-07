@@ -160,6 +160,7 @@ Remove-SSHSession -SessionId $s.SessionId | Out-Null
 
 ## 更新记录
 
+- [2026-09-02] 介绍网站每次进入/刷新强制定位顶部（`f03759b`，已部署）：根因是浏览器默认 `scrollRestoration=auto` 刷新时恢复上次滚动位置（上次停在下载区）。修复：设 `history.scrollRestoration='manual'`，并在 DOMContentLoaded 与 load 时 `scrollTo(0,0)` 双保险。HTTP 200、md5 一致。
 - [2026-09-02] 介绍网站时间线控件移除主干线（`08d511d`，已部署）：删除 `.tl-track::before` 贯穿竖线，仅保留可点击节点列表（圆点 `.nd` + 版本号 `.ver`），交互不变。HTTP 200、md5 一致。
 - [2026-09-02] 介绍网站更新日志重构为**整体时间线控件**（`ff41e75`，已部署）：自包含 `.tl-widget` 组件——主干线由 `.tl-track` 容器 `::before` 一次性绘制贯穿全部节点，节点 `.tl-node`（`.nd` 圆点 + `.tx` 文本，统一 min-height）排列在线上；彻底移除旧逐行拼接实现（`tl-item`/`tl-dot`/`tl-info`/`tl-rail`/`tl-scroll` 全部清零），结构自包含、圆点严格对齐主干线。HTTP 200、md5 一致。
 - [2026-09-02] 介绍网站更新日志改**标准时间线控件**（`bdf590d`，已部署）：每个版本节点用独立 `.tl-dot` 圆点列 + 主干线 `.tl-item::before` 贯穿 + 右侧 `.tl-info` 版本信息；JS 渲染为标准 dot/info 结构，圆点严格对齐主干线，不再出现字符拼接导致的错位/破碎。HTTP 200、md5 一致。
