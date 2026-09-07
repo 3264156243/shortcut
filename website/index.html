@@ -646,6 +646,14 @@
 </footer>
 
 <script>
+/* 每次进入 / 刷新页面都定位到最顶部（阻止浏览器恢复上次滚动位置） */
+(function () {
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  window.scrollTo(0, 0);
+  document.addEventListener('DOMContentLoaded', function () { window.scrollTo(0, 0); });
+  window.addEventListener('load', function () { window.scrollTo(0, 0); });
+})();
+
 /* 自动获取最新版本：读取更新服务器 latest.yml，动态更新下载链接与版本号 */
 (function () {
   var LATEST_URL = 'https://shortcut.326415.xyz/updates/latest.yml';
