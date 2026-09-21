@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#24221f" />
+  <title>ShortCut 电脑控制</title>
+  <style>
+    :root { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; color: #f6efe5; background: #24221f; }
+    * { box-sizing: border-box; letter-spacing: 0; }
+    body { margin: 0; min-height: 100dvh; background: linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.02) 1px,transparent 1px),#24221f; background-size: 24px 24px; }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    .app { width: min(100%, 560px); min-height: 100dvh; margin: auto; padding: 20px 16px 36px; }
+    h1 { font-size: 22px; margin: 6px 0 4px; }
+    .sub { color: #aaa198; font-size: 13px; margin-bottom: 6px; }
+    .card { margin-top: 16px; padding: 16px 14px; border: 1px solid rgba(255,255,255,.09); border-radius: 12px; background: #2c2925; }
+    .card h2 { margin: 0 0 10px; font-size: 15px; }
+    .card p { margin: 6px 0; color: #aaa198; font-size: 13px; line-height: 1.7; }
+    .card b { color: #f6efe5; }
+    .steps { margin: 0; padding-left: 18px; color: #aaa198; font-size: 13px; line-height: 2; }
+    .row { display: flex; gap: 8px; margin-top: 12px; }
+    .row input { flex: 1; min-width: 0; padding: 11px 12px; border: 1px solid rgba(255,255,255,.14); border-radius: 10px; background: #24221f; color: #f6efe5; font-size: 14px; outline: none; }
+    .row input:focus { border-color: #4f8cff; }
+    .row button { padding: 11px 18px; border: 0; border-radius: 10px; background: #4f8cff; color: #fff; font-size: 14px; font-weight: 700; }
+    .row button:active { transform: scale(.98); }
+    .tip { margin-top: 10px; color: #8f877e; font-size: 12px; line-height: 1.7; }
+    .tip a { color: #e0957e; font-weight: 700; text-decoration: none; }
+    .err { margin-top: 8px; color: #e0957e; font-size: 12px; min-height: 18px; }
+    .foot { margin-top: 22px; color: #6f6861; font-size: 10px; text-align: center; }
+    .back { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px; color: #aaa198; font-size: 12px; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>🖥️ 电脑控制</h1>
+    <p class="sub">用手机向电脑打字、控制鼠标、使用电脑粘贴板</p>
+
+    <div class="card">
+      <h2>使用前提</h2>
+      <ol class="steps">
+        <li>电脑与手机连接<b>同一网络</b>（同一 Wi-Fi / 路由器）。</li>
+        <li>电脑打开 ShortCut，进入<b>「控制」</b>板块，点击<b>「启动」</b>。</li>
+        <li>在桌面端查看<b>绑定码</b>与<b>局域网地址</b>（也可直接扫桌面端二维码）。</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h2>输入电脑地址</h2>
+      <p>桌面端「控制」板块会显示形如 <b>192.168.x.x:9823</b> 的地址，填写后打开控制页：</p>
+      <div class="row">
+        <input id="hostInput" inputmode="url" autocomplete="off" placeholder="192.168.1.5:9823" />
+        <button id="goBtn" type="button">打开控制页</button>
+      </div>
+      <div id="err" class="err"></div>
+      <div class="tip">
+        更方便：直接用手机相机扫描桌面端「控制」板块的二维码。<br />
+        打开控制页后，输入桌面端显示的 6 位绑定码即可开始控制。<br />
+        <a href="/mobile/">← 返回移动联动</a>
+      </div>
+    </div>
+
+    <p class="foot">ShortCut · 移动联动平台</p>
+  </div>
+
+  <script>
+    const HOST_KEY = 'shortcut-control-host-v1';
+    const input = document.getElementById('hostInput');
+    const errEl = document.getElementById('err');
+    try { input.value = localStorage.getItem(HOST_KEY) || ''; } catch {}
+
+    function normalizeHost(raw) {
+      let host = String(raw || '').trim();
+      if (!host) return null;
+      host = host.replace(/^https?:\/\//i, '').replace(/\/+.*$/, '');
+      // 允许 IP:端口、主机名:端口、或纯 IP（补默认端口 9823）
+      if (/^[\w.-]+:\d{2,5}$/.test(host)) return host;
+      if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return host + ':9823';
+      return null;
+    }
+
+    function go() {
+      errEl.textContent = '';
+      const host = normalizeHost(input.value);
+      if (!host) {
+        errEl.textContent = '地址格式不对，请按桌面端显示填写，如 192.168.1.5:9823';
+        return;
+      }
+      try { localStorage.setItem(HOST_KEY, host); } catch {}
+      location.href = 'http://' + host + '/';
+    }
+
+    document.getElementById('goBtn').addEventListener('click', go);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+  </script>
+</body>
+</html>

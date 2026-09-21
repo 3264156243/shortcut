@@ -77,7 +77,7 @@ export interface MusicState {
   durationMs?: number;
 }
 
-export type ModuleId = 'shortcuts' | 'tasks' | 'cockpit' | 'usage' | 'usageManage' | 'translate' | 'fileTransfer' | 'island' | 'codexProvider' | 'activation' | 'voiceInput';
+export type ModuleId = 'shortcuts' | 'tasks' | 'cockpit' | 'usage' | 'usageManage' | 'translate' | 'fileTransfer' | 'island' | 'codexProvider' | 'activation' | 'voiceInput' | 'control';
 export type ModuleAccessLevel = 'free' | 'member' | 'super';
 export type ActivationPolicy = 'all' | 'premium_only' | 'none';
 

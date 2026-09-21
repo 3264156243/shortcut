@@ -198,6 +198,11 @@ declare global {
       translateText: (text: string, from: string, to: string) => Promise<{ success: boolean; translatedText?: string; from?: string; to?: string; error?: string }>;
       startCockpit: () => Promise<{ success: boolean; error?: string }>;
       stopCockpit: () => Promise<boolean>;
+      startControl: () => Promise<{ success: boolean; port?: number; error?: string }>;
+      stopControl: () => Promise<boolean>;
+      restartControl: () => Promise<{ success: boolean; port?: number; error?: string }>;
+      getControlStatus: () => Promise<{ running: boolean; starting?: boolean; port: number; injector: boolean; authMode?: string; pairCode?: string | null; clients?: number; urls: string[] }>;
+      resetControlCode: () => Promise<{ success: boolean; pairCode?: string; error?: string }>;
       onCockpitData: (callback: (data: unknown) => void) => () => void;
       showNotification: (title: string, body: string) => Promise<boolean>;
       checkForUpdates: () => Promise<{ success: boolean; status: string; error?: string }>;

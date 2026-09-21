@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>手机控制端</title>
+  <link rel="stylesheet" href="css/phone.css" />
+</head>
+<body>
+  <header>
+    <div class="brand">手机控制端</div>
+    <div class="status"><span class="dot" id="dot"></span><span id="statusText">未绑定</span></div>
+  </header>
+
+  <main>
+    <section class="card" id="pairCard">
+      <h2>绑定到电脑</h2>
+      <p>输入电脑上的 6 位绑定码。</p>
+      <label for="pairCode">绑定码</label>
+      <input id="pairCode" type="tel" inputmode="numeric" maxlength="6" placeholder="例如 832369" autocomplete="one-time-code" />
+      <div class="err" id="pairErr"></div>
+      <button class="btn" id="btnPair" type="button">绑定</button>
+    </section>
+
+    <div id="app" class="hidden">
+      <!-- 输入主页面 -->
+      <section class="card" id="inputCard">
+        <h2>输入</h2>
+        <p>点控件不会收起输入法；「清空」只清本页缓冲，不影响电脑。</p>
+        <label for="kb">输入区</label>
+        <textarea id="kb" placeholder="在这里打字…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+        <div class="meter">
+          <span>本地 <b id="bufLen">0</b> · 已同步 <b id="sentLen">0</b></span>
+          <span id="syncState">已同步</span>
+        </div>
+        <div class="sync-bar"><i id="syncBar"></i></div>
+
+        <div class="actions">
+          <div class="row row-4">
+            <button type="button" class="btn ghost sm kb-safe" id="btnBs">⌫ 退格</button>
+            <button type="button" class="btn ghost sm kb-safe" id="btnEnter">⏎ 回车</button>
+            <button type="button" class="btn ghost sm kb-safe" id="btnTab">⇥ Tab</button>
+            <button type="button" class="btn ghost sm kb-safe" id="btnClear">清空</button>
+          </div>
+        </div>
+
+        <label>方向</label>
+        <div class="arrows" id="arrows">
+          <button type="button" class="chip arrow kb-safe" data-key="up">↑</button>
+          <button type="button" class="chip arrow kb-safe" data-key="left">←</button>
+          <button type="button" class="chip arrow kb-safe" data-key="down">↓</button>
+          <button type="button" class="chip arrow kb-safe" data-key="right">→</button>
+        </div>
+
+        <label>快捷键</label>
+        <div class="chips" id="typeChips"></div>
+
+        <label>呼出面板</label>
+        <div class="sheet-entries">
+          <button type="button" class="sheet-entry" id="btnOpenPad">
+            <span>触控板</span>
+            <span class="chev">上滑展开</span>
+          </button>
+          <button type="button" class="sheet-entry" id="btnOpenVk">
+            <span>键盘</span>
+            <span class="chev">上滑展开</span>
+          </button>
+          <button type="button" class="sheet-entry" id="btnOpenClip">
+            <span>电脑粘贴板</span>
+            <span class="chev">上滑展开</span>
+          </button>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- 底部抽屉遮罩 -->
+  <div class="sheet-backdrop hidden" id="sheetBackdrop"></div>
+
+  <!-- 触控板抽屉：从底部上滑覆盖 -->
+  <section class="sheet" id="padSheet" aria-hidden="true">
+    <div class="sheet-grab" data-close-sheet="pad"></div>
+    <div class="sheet-head">
+      <h2>触控板</h2>
+      <button type="button" class="btn ghost sm" data-close-sheet="pad">收起</button>
+    </div>
+    <div class="sheet-body">
+      <p>单指滑动 = 移动 · 单击 = 左键 · 双指轻点 / 长按 = 右键 · 双指上下 = 滚轮</p>
+      <div class="pad-wrap">
+        <div id="pad">
+          <div class="pad-hint" id="padHint">在此滑动控制鼠标<br/>单击左键 · 双指右键 · 双指滑动滚轮</div>
+        </div>
+      </div>
+      <label>灵敏度 <span id="sensVal">1.0</span>x</label>
+      <input id="sens" type="range" min="0.3" max="2.5" step="0.1" value="1" />
+      <div class="pad-tools">
+        <button type="button" class="btn ghost sm" data-click="left">左键</button>
+        <button type="button" class="btn ghost sm" data-click="right">右键</button>
+        <button type="button" class="btn ghost sm" data-click="middle">中键</button>
+      </div>
+      <div class="pad-tools">
+        <button type="button" class="btn ghost sm" id="wheelUp">滚轮↑</button>
+        <button type="button" class="btn ghost sm" id="wheelDn">滚轮↓</button>
+        <button type="button" class="btn ghost sm" id="btnDbl">双击</button>
+      </div>
+
+      <div class="inner-drawer">
+        <button type="button" class="inner-toggle" id="btnMoreToggle" aria-expanded="false">
+          <span>更多快捷键</span>
+          <span class="chev" id="moreChev">展开</span>
+        </button>
+        <div class="inner-body hidden" id="moreBody">
+          <div class="chips" id="padMoreChips"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 键盘抽屉：从底部上滑覆盖 -->
+  <section class="sheet landscape-sheet" id="vkSheet" aria-hidden="true">
+    <div class="sheet-grab" data-close-sheet="vk"></div>
+    <div class="sheet-head">
+      <h2>虚拟键盘</h2>
+      <div class="row" style="flex:0">
+        <button type="button" class="btn ghost sm" id="btnVkClear">释放修饰</button>
+        <button type="button" class="btn ghost sm" data-close-sheet="vk">收起</button>
+      </div>
+    </div>
+    <div class="sheet-body">
+      <p class="vk-tip">键盘始终按横屏形态展示（与手机方向无关），竖屏时会旋转铺满全屏</p>
+      <div id="vkPanel">
+        <div class="vk-stage" id="vkStage">
+          <div class="vk-stage-inner" id="vkStageInner">
+            <div id="vkBody"></div>
+            <div class="vk-mods" id="vkMods">
+              <button type="button" class="vk" data-mod="ctrl">Ctrl</button>
+              <button type="button" class="vk" data-mod="shift">Shift</button>
+              <button type="button" class="vk" data-mod="alt">Alt</button>
+              <button type="button" class="vk" data-mod="win">Win</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 电脑粘贴板抽屉 -->
+  <section class="sheet" id="clipSheet" aria-hidden="true">
+    <div class="sheet-grab" data-close-sheet="clip"></div>
+    <div class="sheet-head">
+      <h2>电脑粘贴板</h2>
+      <div class="row" style="flex:0">
+        <button type="button" class="btn ghost sm" id="btnClipRefresh">刷新</button>
+        <button type="button" class="btn ghost sm" id="btnClipClear">清历史</button>
+        <button type="button" class="btn ghost sm" data-close-sheet="clip">收起</button>
+      </div>
+    </div>
+    <div class="sheet-body clip-body">
+      <p class="clip-tip">点条目 = 输出到电脑光标处 · 「复制」= 复制到手机剪贴板 · 打开时自动读取电脑剪贴板</p>
+      <div class="clip-current" id="clipCurrent">
+        <div class="clip-label">当前电脑剪贴板</div>
+        <div class="clip-current-text" id="clipCurrentText">—</div>
+        <div class="row" style="margin-top:8px">
+          <button type="button" class="btn sm" id="btnClipPasteCurrent" style="flex:1">输出到光标</button>
+          <button type="button" class="btn ghost sm" id="btnClipCopyCurrent" style="flex:1">复制到手机</button>
+        </div>
+      </div>
+      <div class="clip-label" style="margin-top:12px">历史记录</div>
+      <div class="clip-list" id="clipList">
+        <div class="clip-empty">暂无记录，点「刷新」读取电脑剪贴板</div>
+      </div>
+    </div>
+  </section>
+
+  <script src="js/phone.js"></script>
+</body>
+</html>

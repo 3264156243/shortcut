@@ -3073,6 +3073,13 @@ ipcMain.handle('cockpit:stop', () => {
   return true;
 });
 
+const controlService = require('./control-service');
+ipcMain.handle('control:start', async () => controlService.startControlService());
+ipcMain.handle('control:stop', async () => controlService.stopControlService());
+ipcMain.handle('control:restart', async () => controlService.restartControlService());
+ipcMain.handle('control:status', async () => controlService.getControlStatus());
+ipcMain.handle('control:resetCode', async () => controlService.resetControlCode());
+
 ipcMain.handle('translate:text', (_e: any, text: string, from: string, to: string) => translateText(text, from, to));
 
 ipcMain.handle('shell:runBat', async (_e: any, content: string, runAsAdmin: boolean) => {
@@ -3977,6 +3984,7 @@ if (!gotSingleInstanceLock) {
     reminderWindows.clear();
     stopMusicBridge();
     stopHardwareMonitor();
+    try { require('./control-service').stopControlService(); } catch { }
     if (usageFlushTimer) clearInterval(usageFlushTimer);
     stopUsageMonitor();
     if (captureOverlay && !captureOverlay.isDestroyed()) captureOverlay.destroy();

@@ -120,6 +120,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   translateText: (text: string, from: string, to: string) => ipcRenderer.invoke('translate:text', text, from, to),
   startCockpit: () => ipcRenderer.invoke('cockpit:start'),
   stopCockpit: () => ipcRenderer.invoke('cockpit:stop'),
+  startControl: () => ipcRenderer.invoke('control:start'),
+  stopControl: () => ipcRenderer.invoke('control:stop'),
+  restartControl: () => ipcRenderer.invoke('control:restart'),
+  getControlStatus: () => ipcRenderer.invoke('control:status'),
+  resetControlCode: () => ipcRenderer.invoke('control:resetCode'),
   onCockpitData: (callback: (data: unknown) => void) => {
     const handler = (_event: unknown, data: unknown) => callback(data);
     ipcRenderer.on('cockpit:data', handler);

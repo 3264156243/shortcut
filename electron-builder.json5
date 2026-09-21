@@ -36,6 +36,10 @@
       "to": "usage-monitor"
     },
     {
+      "from": "resources/sj",
+      "to": "sj"
+    },
+    {
       "from": "scripts/voice-input-bridge.ps1",
       "to": "scripts/voice-input-bridge.ps1"
     }

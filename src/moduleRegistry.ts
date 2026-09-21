@@ -7,6 +7,7 @@ import {
   KeyRound,
   Languages,
   Mic,
+  MonitorSmartphone,
   Send,
   Smartphone,
   type LucideIcon,
@@ -33,6 +34,7 @@ export const MODULE_REGISTRY: ModuleMeta[] = [
   { id: 'codexProvider', label: '供应商', icon: Bot, group: 'more', defaultEnabled: true, defaultVisible: true },
   { id: 'activation', label: '激活', icon: KeyRound, group: 'more', defaultEnabled: true, defaultVisible: true },
   { id: 'voiceInput', label: '语音', icon: Mic, group: 'more', defaultEnabled: true, defaultVisible: true },
+  { id: 'control', label: '控制', icon: MonitorSmartphone, group: 'more', defaultEnabled: true, defaultVisible: true },
 ];
 
 export const CORE_MODULE_IDS: ModuleId[] = ['shortcuts', 'tasks'];

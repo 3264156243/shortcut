@@ -1,0 +1,23 @@
+{
+  "name": "sj",
+  "version": "1.1.0",
+  "private": true,
+  "description": "sj 手机控制端模块：输入/触控板/键盘/电脑粘贴板，Windows 光标注入；绑定可拆卸，供集成",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "exports": {
+    ".": "./server.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "platform": "win32",
+  "keywords": [
+    "remote-input",
+    "phone-keyboard",
+    "windows",
+    "sendinput"
+  ]
+}
