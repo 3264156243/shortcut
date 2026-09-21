@@ -203,6 +203,9 @@ declare global {
       restartControl: () => Promise<{ success: boolean; port?: number; error?: string }>;
       getControlStatus: () => Promise<{ running: boolean; starting?: boolean; port: number; injector: boolean; authMode?: string; pairCode?: string | null; clients?: number; urls: string[] }>;
       resetControlCode: () => Promise<{ success: boolean; pairCode?: string; error?: string }>;
+      startCloudControl: () => Promise<{ success: boolean; error?: string }>;
+      stopCloudControl: () => Promise<boolean>;
+      getCloudControlStatus: () => Promise<{ active: boolean; connected: boolean; connecting: boolean; injector: boolean; lastError: string }>;
       onCockpitData: (callback: (data: unknown) => void) => () => void;
       showNotification: (title: string, body: string) => Promise<boolean>;
       checkForUpdates: () => Promise<{ success: boolean; status: string; error?: string }>;

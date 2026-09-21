@@ -62,6 +62,18 @@ function require_transfer_identity($bindId, $input) {
     return $side === 'mobile' ? 'mobile' : 'desktop';
 }
 
+/** 控制板块：签发云端 WS 中继连接票据（HMAC，短时效） */
+function issue_control_ticket($bindId, $role) {
+    global $CONTROL_RELAY_SECRET;
+    $payload = base64_encode(json_encode([
+        'bindId' => $bindId,
+        'role' => $role,
+        'exp' => time() + 600,
+    ]));
+    $sig = hash_hmac('sha256', $payload, $CONTROL_RELAY_SECRET);
+    return $payload . '.' . $sig;
+}
+
 switch ($action) {
 
     // ===== 绑定管理（通用，不分 board）=====
@@ -153,6 +165,23 @@ switch ($action) {
         if (!$mobile) error_msg('移动端绑定失败');
         $bind = get_bind($resolved);
         respond(['success' => true, 'bindId' => $resolved, 'code' => $bind['code'] ?? '', 'mobileToken' => $mobile['token'], 'deviceId' => $mobile['deviceId'], 'deviceName' => $mobile['deviceName']]);
+        break;
+
+    case 'control.ticket':
+        // 控制板块：手机（mobileToken）或桌面（bindCode）换取 10 分钟 WS 中继连接票据
+        if (!rate_limit_allow('control.ticket:' . client_ip(), 60, 60)) error_msg('请求过于频繁，请稍后再试');
+        $role = isset($input['role']) && $input['role'] === 'desktop' ? 'desktop' : 'mobile';
+        $targetBind = isset($input['bindId']) ? trim((string)$input['bindId']) : '';
+        if ($targetBind === '' || !get_bind($targetBind)) error_msg('绑定身份无效');
+        if ($role === 'mobile') {
+            $token = isset($input['mobileToken']) ? trim((string)$input['mobileToken']) : '';
+            if (!validate_mobile_token($targetBind, $token)) error_msg('移动端绑定已失效，请重新绑定');
+        } else {
+            $code = strtoupper(limited_text(isset($input['bindCode']) ? $input['bindCode'] : '', 8));
+            $bindRow = get_bind($targetBind);
+            if (!$bindRow || strcasecmp((string)($bindRow['code'] ?? ''), $code) !== 0) error_msg('桌面端凭证无效');
+        }
+        respond(['success' => true, 'ticket' => issue_control_ticket($targetBind, $role)]);
         break;
 
     case 'transfer.messages':

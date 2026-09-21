@@ -9,6 +9,19 @@ $SHARES_FILE = $DATA_DIR . '/shares.json';
 $FILE_DIR = $DATA_DIR . '/files';
 $MAX_QUEUE_ITEMS = 500;
 
+// ===== 控制板块（手机控制电脑）：云端 WS 中继共享密钥（与 relay.js 共用，勿提交到公开仓库版本）=====
+// 若密钥文件存在则优先读取（便于服务器上轮换密钥而不改代码）
+$CONTROL_SECRET_FILE = $DATA_DIR . '/control-relay-secret.txt';
+if (is_readable($CONTROL_SECRET_FILE)) {
+    $CONTROL_RELAY_SECRET = trim((string)file_get_contents($CONTROL_SECRET_FILE));
+} else {
+    $CONTROL_RELAY_SECRET = 'sc-relay-9f4c2b7a81d3e650-control';
+    // 首次运行自动生成随机密钥落盘，保证每台服务器唯一
+    if (is_dir($DATA_DIR) && is_writable($DATA_DIR) && !file_exists($CONTROL_SECRET_FILE)) {
+        try { file_put_contents($CONTROL_SECRET_FILE, bin2hex(random_bytes(24)), LOCK_EX); } catch (\Throwable $t) {}
+    }
+}
+
 // ===== 通用：flock 封装 =====
 function with_lock($file, $fn) {
     $dir = dirname($file);

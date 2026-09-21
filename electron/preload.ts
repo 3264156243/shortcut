@@ -125,6 +125,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   restartControl: () => ipcRenderer.invoke('control:restart'),
   getControlStatus: () => ipcRenderer.invoke('control:status'),
   resetControlCode: () => ipcRenderer.invoke('control:resetCode'),
+  startCloudControl: () => ipcRenderer.invoke('control:cloudStart'),
+  stopCloudControl: () => ipcRenderer.invoke('control:cloudStop'),
+  getCloudControlStatus: () => ipcRenderer.invoke('control:cloudStatus'),
   onCockpitData: (callback: (data: unknown) => void) => {
     const handler = (_event: unknown, data: unknown) => callback(data);
     ipcRenderer.on('cockpit:data', handler);

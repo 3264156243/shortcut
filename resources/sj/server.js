@@ -634,6 +634,25 @@ if ($null -eq $t) { $t = '' };
       sessionTokens,
       typeText,
       sendKey,
+      sendCombo,
+      sendMouse,
+      sendClick,
+      sendWheel,
+      refreshClipboard,
+      isInjectorReady: () => injector.ready,
+      async pasteClipboardText(text) {
+        const t = String(text == null ? '' : text);
+        if (!t || t.length > 20000) return false;
+        const CHUNK = 500;
+        for (let i = 0; i < t.length; i += CHUNK) {
+          if (!typeText(t.slice(i, i + CHUNK))) return false;
+        }
+        logInput('[粘贴]' + (t.length > 40 ? t.slice(0, 40) + '…' : t));
+        return true;
+      },
+      clearClipHistory() {
+        clipHistory.length = 0;
+      },
     },
   };
 }

@@ -1,28 +1,45 @@
-import { useCallback, useEffect, useState } from 'react';
-import { MonitorSmartphone, Play, Power, RefreshCw, RotateCcw, Copy, QrCode, ShieldAlert } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { MonitorSmartphone, Play, Power, RefreshCw, RotateCcw, Copy, QrCode, ShieldAlert, Cloud, Wifi } from 'lucide-react';
 import QRCode from 'qrcode';
 import { useStore } from '../store';
 
-interface ControlStatus {
+interface LanStatus {
   running: boolean;
   starting?: boolean;
   port: number;
   injector: boolean;
-  authMode?: string;
   pairCode?: string | null;
   clients?: number;
   urls: string[];
 }
 
+interface CloudStatus {
+  active: boolean;
+  connected: boolean;
+  connecting: boolean;
+  injector: boolean;
+  lastError: string;
+}
+
+type Mode = 'none' | 'cloud' | 'lan';
+
 export default function ControlPanel() {
   const addToast = useStore((s) => s.addToast);
-  const [status, setStatus] = useState<ControlStatus | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [lan, setLan] = useState<LanStatus | null>(null);
+  const [cloud, setCloud] = useState<CloudStatus | null>(null);
+  const [busy, setBusy] = useState<Mode>('none');
   const [qrDataUrl, setQrDataUrl] = useState('');
+  const modeRef = useRef<Mode>('none');
 
   const refresh = useCallback(async () => {
-    const result = await window.electronAPI?.getControlStatus?.();
-    if (result) setStatus(result);
+    const [lanResult, cloudResult] = await Promise.all([
+      window.electronAPI?.getControlStatus?.(),
+      window.electronAPI?.getCloudControlStatus?.(),
+    ]);
+    if (lanResult) setLan(lanResult);
+    if (cloudResult) setCloud(cloudResult);
+    const activeMode: Mode = cloudResult?.active ? 'cloud' : lanResult?.running ? 'lan' : 'none';
+    modeRef.current = activeMode;
   }, []);
 
   useEffect(() => {
@@ -31,49 +48,46 @@ export default function ControlPanel() {
     return () => window.clearInterval(timer);
   }, [refresh]);
 
-  // 生成首个局域网地址的二维码（手机扫码直达控制页）
+  const lanRunning = !!lan?.running && !lan?.starting;
+  const cloudActive = !!cloud?.active;
+  const mode: Mode = cloudActive ? 'cloud' : lanRunning ? 'lan' : 'none';
+
+  // 局域网模式：生成首个地址二维码
   useEffect(() => {
-    const primary = status?.urls?.[0];
-    if (!primary || !status?.running || status.starting) {
+    const primary = lan?.urls?.[0];
+    if (mode !== 'lan' || !primary) {
       setQrDataUrl('');
       return;
     }
     QRCode.toDataURL(primary, { width: 220, margin: 1, color: { dark: '#1c1917', light: '#ffffff' } })
       .then((url: string) => setQrDataUrl(url))
       .catch(() => setQrDataUrl(''));
-  }, [status?.running, status?.starting, status?.urls]);
+  }, [mode, lan?.urls]);
 
-  const start = async () => {
-    setBusy(true);
+  const startCloud = async () => {
+    setBusy('cloud');
+    const result = await window.electronAPI?.startCloudControl?.();
+    setBusy('none');
+    if (!result?.success) return addToast(result?.error || '云端连接启动失败', 'error');
+    addToast('云端连接已启动', 'success');
+    await refresh();
+  };
+
+  const startLan = async () => {
+    setBusy('lan');
     const result = await window.electronAPI?.startControl?.();
-    setBusy(false);
+    setBusy('none');
     if (!result?.success) return addToast(result?.error || '启动失败', 'error');
-    addToast('控制服务已启动', 'success');
+    addToast('局域网控制服务已启动', 'success');
     await refresh();
   };
 
-  const stop = async () => {
-    setBusy(true);
+  const stopAll = async () => {
+    setBusy(mode === 'cloud' ? 'cloud' : 'lan');
+    await window.electronAPI?.stopCloudControl?.();
     await window.electronAPI?.stopControl?.();
-    setBusy(false);
+    setBusy('none');
     addToast('控制服务已停止', 'info');
-    await refresh();
-  };
-
-  const restart = async () => {
-    setBusy(true);
-    const result = await window.electronAPI?.restartControl?.();
-    setBusy(false);
-    if (!result?.success) return addToast(result?.error || '重启失败', 'error');
-    addToast('控制服务已重启', 'success');
-    await refresh();
-  };
-
-  const resetCode = async () => {
-    if (!window.confirm('重置绑定码？已连接的手机将全部失效，需要重新输入新绑定码。')) return;
-    const result = await window.electronAPI?.resetControlCode?.();
-    if (!result?.success) return addToast(result?.error || '重置失败', 'error');
-    addToast('绑定码已重置', 'success');
     await refresh();
   };
 
@@ -82,7 +96,8 @@ export default function ControlPanel() {
     addToast(tip, 'success');
   };
 
-  const running = !!status?.running && !status?.starting;
+  const cardStyle = { background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' };
+  const mutedStyle = { color: 'var(--color-text-muted)' };
 
   return (
     <div className="flex h-full min-h-0 flex-col" style={{ color: 'var(--color-text)' }}>
@@ -90,72 +105,122 @@ export default function ControlPanel() {
         <div className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ background: 'var(--color-accent)', color: 'white' }}><MonitorSmartphone size={17} /></div>
         <div className="min-w-0">
           <div className="text-sm font-semibold">控制</div>
-          <div className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
-            {status?.running ? (status.starting ? '服务启动中…' : `运行中 · 端口 ${status.port}`) : '已停止'}
+          <div className="text-[11px]" style={mutedStyle}>
+            {mode === 'cloud'
+              ? cloud?.connected ? '云端连接 · 运行中' : cloud?.connecting ? '云端连接中…' : '云端连接 · 等待重连'
+              : mode === 'lan'
+                ? `局域网 · 端口 ${lan?.port}`
+                : '已停止'}
           </div>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          {status?.running && (
-            <button type="button" onClick={() => void restart()} disabled={busy} title="重启服务" className="flex h-8 w-8 items-center justify-center rounded-lg disabled:opacity-50" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}><RotateCcw size={14} /></button>
-          )}
-          <button type="button" onClick={() => void refresh()} title="刷新状态" className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}><RefreshCw size={14} /></button>
-          {running ? (
-            <button type="button" onClick={() => void stop()} disabled={busy} className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs text-white disabled:opacity-50" style={{ background: '#b3564e' }}><Power size={13} />停止</button>
-          ) : (
-            <button type="button" onClick={() => void start()} disabled={busy} className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs text-white disabled:opacity-50" style={{ background: 'var(--color-accent)' }}><Play size={13} />启动</button>
+          <button type="button" onClick={() => void refresh()} title="刷新状态" className="flex h-8 w-8 items-center justify-center rounded-lg" style={cardStyle}><RefreshCw size={14} /></button>
+          {mode !== 'none' && (
+            <button type="button" onClick={() => void stopAll()} disabled={busy !== 'none'} className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs text-white disabled:opacity-50" style={{ background: '#b3564e' }}><Power size={13} />停止</button>
           )}
         </div>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4" style={{ background: 'var(--color-bg)' }}>
         <div className="mx-auto flex max-w-3xl flex-col gap-4">
-          {/* 服务状态 */}
-          <section className="rounded-xl p-4" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
-            <div className="mb-3 flex items-center gap-2 text-xs font-semibold">
-              <span className={`h-2 w-2 rounded-full ${running ? '' : 'opacity-40'}`} style={{ background: running ? '#63b582' : 'var(--color-text-muted)' }} />
-              服务状态
-            </div>
-            <div className="grid grid-cols-3 gap-3 text-center">
-              <div className="rounded-lg py-3" style={{ background: 'var(--color-bg-card-hover)' }}>
-                <div className="text-lg font-bold">{status?.running ? (status.starting ? '启动中' : '运行中') : '停止'}</div>
-                <div className="mt-1 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>服务</div>
-              </div>
-              <div className="rounded-lg py-3" style={{ background: 'var(--color-bg-card-hover)' }}>
-                <div className="text-lg font-bold">{status?.injector ? '就绪' : (running ? '等待' : '—')}</div>
-                <div className="mt-1 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>输入注入</div>
-              </div>
-              <div className="rounded-lg py-3" style={{ background: 'var(--color-bg-card-hover)' }}>
-                <div className="text-lg font-bold">{status?.clients ?? '—'}</div>
-                <div className="mt-1 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>已连接手机</div>
-              </div>
-            </div>
-          </section>
 
-          {running && (
+          {/* ===== 模式选择（未运行） ===== */}
+          {mode === 'none' && (
+            <section className="grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => void startCloud()}
+                disabled={busy !== 'none'}
+                className="rounded-xl p-4 text-left transition-transform active:scale-[.99] disabled:opacity-60"
+                style={{ ...cardStyle, borderColor: 'var(--color-accent)' }}
+              >
+                <div className="flex items-center gap-2 text-sm font-semibold"><Cloud size={16} style={{ color: 'var(--color-accent)' }} />云端连接（推荐）</div>
+                <div className="mt-2 text-xs leading-5" style={mutedStyle}>手机经云端中继连接电脑，<b>任何网络都可用</b>（4G / 别处 Wi-Fi 均可）。使用 ShortCut 绑定身份自动配对，无需输入额外连接码。</div>
+                <div className="mt-2 text-[11px]" style={mutedStyle}>延迟约 30~80ms · 打字流畅 · 触控板可用</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => void startLan()}
+                disabled={busy !== 'none'}
+                className="rounded-xl p-4 text-left transition-transform active:scale-[.99] disabled:opacity-60"
+                style={cardStyle}
+              >
+                <div className="flex items-center gap-2 text-sm font-semibold"><Wifi size={16} style={{ color: 'var(--color-accent)' }} />局域网直连</div>
+                <div className="mt-2 text-xs leading-5" style={mutedStyle}>手机与电脑连接<b>同一网络</b>时使用，延迟最低。手机扫码或输入地址 + 6 位绑定码连接。</div>
+                <div className="mt-2 text-[11px]" style={mutedStyle}>延迟约 5~15ms · 最快响应</div>
+              </button>
+            </section>
+          )}
+
+          {/* ===== 云模式状态 ===== */}
+          {mode === 'cloud' && cloud && (
             <>
-              {/* 绑定码 */}
-              <section className="rounded-xl p-4" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
-                <div className="mb-2 text-xs font-semibold">绑定码</div>
-                {status?.pairCode ? (
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 text-center text-3xl font-bold tracking-[0.35em]" style={{ fontFamily: 'ui-monospace, Consolas, monospace', color: 'var(--color-accent)' }}>{status.pairCode}</div>
-                    <button type="button" onClick={() => void copy(status.pairCode || '', '绑定码已复制')} title="复制绑定码" className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: 'var(--color-bg-card-hover)' }}><Copy size={14} /></button>
-                    <button type="button" onClick={() => void resetCode()} title="重置绑定码" className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: 'var(--color-bg-card-hover)' }}><RotateCcw size={14} /></button>
+              <section className="rounded-xl p-4" style={cardStyle}>
+                <div className="mb-3 flex items-center gap-2 text-xs font-semibold">
+                  <Cloud size={13} style={{ color: 'var(--color-accent)' }} />云端连接状态
+                </div>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div className="rounded-lg py-3" style={{ background: 'var(--color-bg-card-hover)' }}>
+                    <div className="text-lg font-bold">{cloud.connected ? '已连接' : cloud.connecting ? '连接中' : '重连中'}</div>
+                    <div className="mt-1 text-[11px]" style={mutedStyle}>云端通道</div>
                   </div>
-                ) : (
-                  <div className="py-2 text-center text-xs" style={{ color: 'var(--color-text-muted)' }}>等待服务就绪后显示…</div>
-                )}
-                <div className="mt-2 text-[11px] leading-5" style={{ color: 'var(--color-text-muted)' }}>
-                  在手机控制页输入该绑定码完成配对。绑定码仅本机生成，重置后旧连接全部失效。
+                  <div className="rounded-lg py-3" style={{ background: 'var(--color-bg-card-hover)' }}>
+                    <div className="text-lg font-bold">{cloud.injector ? '就绪' : '等待'}</div>
+                    <div className="mt-1 text-[11px]" style={mutedStyle}>输入注入</div>
+                  </div>
+                  <div className="rounded-lg py-3" style={{ background: 'var(--color-bg-card-hover)' }}>
+                    <div className="text-lg font-bold">{cloud.connected ? '在线' : '—'}</div>
+                    <div className="mt-1 text-[11px]" style={mutedStyle}>手机接入</div>
+                  </div>
+                </div>
+                {cloud.lastError && <div className="mt-3 text-[11px]" style={{ color: '#c97b74' }}>最近错误：{cloud.lastError}</div>}
+              </section>
+
+              <section className="rounded-xl p-4 text-[11px] leading-5" style={mutedStyle}>
+                <div className="mb-1 text-xs font-semibold" style={{ color: 'var(--color-text)' }}>使用方法</div>
+                手机打开 <b>shortcut.326415.xyz/mobile</b> → 「电脑控制」→「云端连接」，即可向电脑打字、控制鼠标、使用电脑粘贴板。连接使用 ShortCut 绑定身份自动配对，无需输入连接码。启动后保持本窗口开启即可；点击「停止」断开。
+              </section>
+            </>
+          )}
+
+          {/* ===== 局域网模式状态 ===== */}
+          {mode === 'lan' && lan && (
+            <>
+              <section className="rounded-xl p-4" style={cardStyle}>
+                <div className="mb-3 flex items-center gap-2 text-xs font-semibold">
+                  <span className="h-2 w-2 rounded-full" style={{ background: '#63b582' }} />局域网服务状态
+                </div>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div className="rounded-lg py-3" style={{ background: 'var(--color-bg-card-hover)' }}>
+                    <div className="text-lg font-bold">运行中</div>
+                    <div className="mt-1 text-[11px]" style={mutedStyle}>端口 {lan.port}</div>
+                  </div>
+                  <div className="rounded-lg py-3" style={{ background: 'var(--color-bg-card-hover)' }}>
+                    <div className="text-lg font-bold">{lan.injector ? '就绪' : '等待'}</div>
+                    <div className="mt-1 text-[11px]" style={mutedStyle}>输入注入</div>
+                  </div>
+                  <div className="rounded-lg py-3" style={{ background: 'var(--color-bg-card-hover)' }}>
+                    <div className="text-lg font-bold">{lan.clients ?? '—'}</div>
+                    <div className="mt-1 text-[11px]" style={mutedStyle}>已连接手机</div>
+                  </div>
                 </div>
               </section>
 
-              {/* 局域网地址 + 二维码 */}
-              <section className="rounded-xl p-4" style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
+              {lan.pairCode && (
+                <section className="rounded-xl p-4" style={cardStyle}>
+                  <div className="mb-2 text-xs font-semibold">绑定码</div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 text-center text-3xl font-bold tracking-[0.35em]" style={{ fontFamily: 'ui-monospace, Consolas, monospace', color: 'var(--color-accent)' }}>{lan.pairCode}</div>
+                    <button type="button" onClick={() => void copy(lan.pairCode || '', '绑定码已复制')} title="复制绑定码" className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: 'var(--color-bg-card-hover)' }}><Copy size={14} /></button>
+                  </div>
+                </section>
+              )}
+
+              <section className="rounded-xl p-4" style={cardStyle}>
                 <div className="mb-3 flex items-center gap-2 text-xs font-semibold"><QrCode size={13} />手机接入（需与电脑同一网络）</div>
                 <div className="flex items-start gap-4">
                   <div className="min-w-0 flex-1">
-                    {(status?.urls?.length ? status.urls : []).map((url) => (
+                    {(lan.urls?.length ? lan.urls : []).map((url) => (
                       <button
                         key={url}
                         type="button"
@@ -167,9 +232,9 @@ export default function ControlPanel() {
                         {url}
                       </button>
                     ))}
-                    {!status?.urls?.length && <div className="py-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>未检测到局域网地址</div>}
-                    <div className="text-[11px] leading-5" style={{ color: 'var(--color-text-muted)' }}>
-                      手机浏览器打开上方地址（或扫码）→ 输入绑定码 → 即可用手机向电脑打字、控制鼠标、使用电脑粘贴板。
+                    {!lan.urls?.length && <div className="py-2 text-xs" style={mutedStyle}>未检测到局域网地址</div>}
+                    <div className="text-[11px] leading-5" style={mutedStyle}>
+                      手机浏览器打开上方地址（或扫码）→ 输入绑定码 → 即可用手机控制电脑。
                     </div>
                   </div>
                   {qrDataUrl && (
@@ -180,22 +245,26 @@ export default function ControlPanel() {
                   )}
                 </div>
               </section>
-
-              {/* 安全提示 */}
-              <section className="flex items-start gap-2 rounded-xl p-4 text-[11px] leading-5" style={{ background: 'rgba(179,86,78,.08)', border: '1px solid rgba(179,86,78,.25)', color: 'var(--color-text-muted)' }}>
-                <ShieldAlert size={15} className="mt-0.5 shrink-0" style={{ color: '#c97b74' }} />
-                <span>控制服务只在本机与局域网内可用，绑定码是唯一凭证；离开时点击「停止」关闭服务。任何人拿到绑定码即可操作你的电脑，请勿泄露。</span>
-              </section>
             </>
           )}
 
-          {!running && (
-            <section className="flex flex-col items-center justify-center rounded-xl py-10 text-center" style={{ background: 'var(--color-bg-card)', border: '1px dashed var(--color-border)' }}>
-              <MonitorSmartphone size={30} strokeWidth={1.4} style={{ color: 'var(--color-text-muted)' }} />
+          {/* ===== 安全提示 ===== */}
+          {mode !== 'none' && (
+            <section className="flex items-start gap-2 rounded-xl p-4 text-[11px] leading-5" style={{ background: 'rgba(179,86,78,.08)', border: '1px solid rgba(179,86,78,.25)', ...mutedStyle }}>
+              <ShieldAlert size={15} className="mt-0.5 shrink-0" style={{ color: '#c97b74' }} />
+              <span>连接使用 ShortCut 绑定身份加密配对，云端只转发加密通道数据、不存储输入内容。离开时点击「停止」关闭服务——任何能通过你绑定身份的人都能操作电脑，请注意账号安全。</span>
+            </section>
+          )}
+
+          {/* ===== 未运行说明 ===== */}
+          {mode === 'none' && (
+            <section className="flex flex-col items-center justify-center rounded-xl py-8 text-center" style={{ background: 'var(--color-bg-card)', border: '1px dashed var(--color-border)' }}>
+              <MonitorSmartphone size={30} strokeWidth={1.4} style={mutedStyle} />
               <div className="mt-3 text-sm">把手机变成电脑的远程输入面板</div>
-              <div className="mt-1 max-w-xs text-xs leading-5" style={{ color: 'var(--color-text-muted)' }}>
-                点击「启动」开启控制服务，手机与电脑连同一网络后扫码或输入地址即可：缓冲打字、触控板、虚拟键盘、电脑粘贴板。
+              <div className="mt-1 max-w-sm text-xs leading-5" style={mutedStyle}>
+                选择上方任一连接方式启动服务：手机向电脑缓冲打字、触控板鼠标、横屏虚拟键盘、电脑粘贴板。
               </div>
+              <button type="button" onClick={() => void refresh()} className="mt-3 flex items-center gap-1 text-[11px]" style={mutedStyle}><RotateCcw size={11} />刷新状态</button>
             </section>
           )}
         </div>

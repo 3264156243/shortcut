@@ -3079,6 +3079,10 @@ ipcMain.handle('control:stop', async () => controlService.stopControlService());
 ipcMain.handle('control:restart', async () => controlService.restartControlService());
 ipcMain.handle('control:status', async () => controlService.getControlStatus());
 ipcMain.handle('control:resetCode', async () => controlService.resetControlCode());
+const controlCloud = require('./control-cloud');
+ipcMain.handle('control:cloudStart', async () => controlCloud.startCloudControl());
+ipcMain.handle('control:cloudStop', async () => controlCloud.stopCloudControl());
+ipcMain.handle('control:cloudStatus', async () => controlCloud.getCloudStatus());
 
 ipcMain.handle('translate:text', (_e: any, text: string, from: string, to: string) => translateText(text, from, to));
 
@@ -3985,6 +3989,7 @@ if (!gotSingleInstanceLock) {
     stopMusicBridge();
     stopHardwareMonitor();
     try { require('./control-service').stopControlService(); } catch { }
+    try { require('./control-cloud').stopCloudControl(); } catch { }
     if (usageFlushTimer) clearInterval(usageFlushTimer);
     stopUsageMonitor();
     if (captureOverlay && !captureOverlay.isDestroyed()) captureOverlay.destroy();
