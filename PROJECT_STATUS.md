@@ -160,6 +160,7 @@ Remove-SSHSession -SessionId $s.SessionId | Out-Null
 
 ## 更新记录
 
+- [2026-09-02] **新增控制板块——手机远程控制电脑**（`86eaa4b`，桌面端待打包，Web 已部署）：集成自研 sj 模块（打字/触控板/虚拟键盘/电脑粘贴板，SendInput 注入，pair 绑定码鉴权）。桌面端：`resources/sj/` 随包分发（extraResources）；`electron/control-service.ts` 管理服务子进程（ELECTRON_RUN_AS_NODE 拉起 server.js，端口 9823-9830 自动探测空闲）；IPC `control:start/stop/restart/status/resetCode`；新增「控制」板块 ControlPanel（服务开关/注入状态/绑定码复制+重置/局域网地址/扫码接入二维码/安全提示）；管理后台 MODULE_META 加「手机控制」（默认免费）。Web 端：新增 `/control/` 引导页（同网说明、地址输入记忆跳转、扫码提示）；移动 Hub 加「电脑控制」入口卡片。链路：手机与电脑同一网络 → 桌面「控制」启动 → 手机扫桌面二维码或经 /control/ 输入地址 → 输入 6 位绑定码 → 手机变电脑输入面板。sj 本机冒烟通过（pair 模式 injector ready、页面/静态全 200）；tsc 双端零错误、vite build 通过；PHP 语法通过、线上 HTTP 200。
 - [2026-09-02] 移动联动 Hub 删除底部未绑定提示条（`939c62d`，已部署）：未绑定时顶部"去绑定"绑定条与尾部"尚未绑定……前往绑定"提示重复，只保留顶部唯一绑定入口（去绑定/管理均跳 `/bind/`）；同步清理 `unboundTip` JS 逻辑与 `.unbound-tip`/`.hidden` 废弃 CSS。页面结构：顶部绑定条 + 任务墙/文件共享两入口。HTTP 200、md5 一致。
 - [2026-09-02] 移动联动 Hub 去掉冗余"验证绑定"入口卡片（`3fadabb`，已部署）：顶部绑定信息条已承担绑定跳转（未绑定"去绑定"、已绑定"管理"，点击均跳 `/bind/`），第三个"验证绑定"卡片完全冗余，从 HTML 删除（连同 JS 中已绑定时移除卡片的兼容逻辑）；页面仅保留任务墙、文件共享两个功能入口，未绑定提示与顶部绑定条保留。HTTP 200、md5 一致。
 - [2026-09-02] 介绍网站每次进入/刷新强制定位顶部（`f03759b`，已部署）：根因是浏览器默认 `scrollRestoration=auto` 刷新时恢复上次滚动位置（上次停在下载区）。修复：设 `history.scrollRestoration='manual'`，并在 DOMContentLoaded 与 load 时 `scrollTo(0,0)` 双保险。HTTP 200、md5 一致。
