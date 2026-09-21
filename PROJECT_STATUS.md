@@ -160,6 +160,7 @@ Remove-SSHSession -SessionId $s.SessionId | Out-Null
 
 ## 更新记录
 
+- [2026-09-02] 移动联动 Hub 去掉冗余"验证绑定"入口卡片（`3fadabb`，已部署）：顶部绑定信息条已承担绑定跳转（未绑定"去绑定"、已绑定"管理"，点击均跳 `/bind/`），第三个"验证绑定"卡片完全冗余，从 HTML 删除（连同 JS 中已绑定时移除卡片的兼容逻辑）；页面仅保留任务墙、文件共享两个功能入口，未绑定提示与顶部绑定条保留。HTTP 200、md5 一致。
 - [2026-09-02] 介绍网站每次进入/刷新强制定位顶部（`f03759b`，已部署）：根因是浏览器默认 `scrollRestoration=auto` 刷新时恢复上次滚动位置（上次停在下载区）。修复：设 `history.scrollRestoration='manual'`，并在 DOMContentLoaded 与 load 时 `scrollTo(0,0)` 双保险。HTTP 200、md5 一致。
 - [2026-09-02] 介绍网站时间线控件移除主干线（`08d511d`，已部署）：删除 `.tl-track::before` 贯穿竖线，仅保留可点击节点列表（圆点 `.nd` + 版本号 `.ver`），交互不变。HTTP 200、md5 一致。
 - [2026-09-02] 介绍网站更新日志重构为**整体时间线控件**（`ff41e75`，已部署）：自包含 `.tl-widget` 组件——主干线由 `.tl-track` 容器 `::before` 一次性绘制贯穿全部节点，节点 `.tl-node`（`.nd` 圆点 + `.tx` 文本，统一 min-height）排列在线上；彻底移除旧逐行拼接实现（`tl-item`/`tl-dot`/`tl-info`/`tl-rail`/`tl-scroll` 全部清零），结构自包含、圆点严格对齐主干线。HTTP 200、md5 一致。
