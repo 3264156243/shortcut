@@ -55,11 +55,6 @@
         <span class="txt"><b>文件共享</b><span>发送/领取文件与文本，共享给他人</span></span>
         <span class="arrow">›</span>
       </a>
-      <a id="cardBind" class="nav-card" href="/bind/">
-        <span class="nav-ico">🔗</span>
-        <span class="txt"><b>验证绑定</b><span>查看 / 更换桌面端绑定</span></span>
-        <span class="arrow">›</span>
-      </a>
     </nav>
 
     <div id="unboundTip" class="unbound-tip hidden">
@@ -83,9 +78,7 @@
       $('bindPill').textContent = '管理';
       $('bindStrip').style.cursor = 'pointer';
       $('bindStrip').onclick = () => location.href = '/bind/';
-      // 已绑定：顶部已有绑定信息+管理入口，隐藏下方面板中的验证绑定卡片与未绑定提示
-      var bindCard = $('cardBind');
-      if (bindCard) bindCard.parentNode.removeChild(bindCard);
+      // 已绑定：顶部绑定信息条即管理入口（点击跳 /bind/），隐藏未绑定提示
       $('unboundTip').classList.add('hidden');
     } else {
       $('bindPill').textContent = '去绑定';
