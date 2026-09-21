@@ -117,6 +117,15 @@ npm run music:bridge
 
 ### 4.2 刷新 release/win-unpacked 的 app.asar
 
+**前置（必做）**：先重新编译两套产物，缺一不可——`tsc --noEmit` 只做类型检查**不产出 JS**，改了主进程/electron 代码后必须真正编译：
+
+```powershell
+npm run build                      # 渲染层 → dist/
+npx tsc -p tsconfig.electron.json  # 主进程+preload → dist-electron/（不加 --noEmit！）
+```
+
+> 坑：只跑 `--noEmit` 校验就刷新 asar，会导致 dist-electron 仍旧版（新 IPC/preload 全部缺失），UI 点按钮一律"启用失败"。且 `resources/sj/` 等 extraResources 改动不在 asar 里，需同步到 `release\win-unpacked\resources\` 对应目录。
+
 不要用 `asar pack .` 打包整个项目（会把 node_modules 等全部打进去，产物会膨胀到几 GB）。正确做法是解包、替换 `dist` 和 `dist-electron`、再打包：
 
 ```powershell
