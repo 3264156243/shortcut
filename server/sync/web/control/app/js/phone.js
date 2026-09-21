@@ -87,7 +87,8 @@
         if (msg.t === 'auth-ok') {
           wsAuthTokened = true;
           connecting = false;
-          desktopOnline = !!msg.desktopOnline;
+          // 仅在中继明确给出桌面在线状态时才更新，避免把已收到的 desktop-status 覆盖回离线
+          if (typeof msg.desktopOnline === 'boolean') desktopOnline = msg.desktopOnline;
           updateConnectionUi();
         } else if (msg.t === 'auth-fail') {
           wsAuthTokened = false;

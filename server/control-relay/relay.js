@@ -156,7 +156,15 @@ wss.on('connection', (ws, req) => {
         room.mobiles.add(ws);
         try { ws.send(JSON.stringify({ t: 'desktop-status', online: !!room.desktop })); } catch { }
       }
-      try { ws.send(JSON.stringify({ t: 'auth-ok', role: identity.role, bindId: identity.bindId })); } catch { }
+      try {
+        ws.send(JSON.stringify({
+          t: 'auth-ok',
+          role: identity.role,
+          bindId: identity.bindId,
+          // 手机端需要知道桌面当前是否在线（undefined = 桌面端自身连接无需此字段）
+          desktopOnline: identity.role === 'mobile' ? !!room.desktop : undefined,
+        }));
+      } catch { }
       console.log(`[relay] auth ${identity.role} bind=${identity.bindId.slice(0, 8)}… rooms=${rooms.size}`);
       return;
     }
