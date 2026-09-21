@@ -27,10 +27,7 @@
     .nav-card .txt b { display: block; font-size: 16px; }
     .nav-card .txt span { color: #aaa198; font-size: 12px; }
     .nav-card .arrow { color: #948b82; font-size: 20px; }
-    .unbound-tip { margin-top: 4px; padding: 12px 14px; color: #c8beb3; font-size: 12px; background: #2b2420; border: 1px solid rgba(213,111,85,.25); border-radius: 10px; line-height: 1.7; }
-    .unbound-tip a { color: #e0957e; font-weight: 700; text-decoration: none; }
     .foot { margin-top: 22px; color: #6f6861; font-size: 10px; text-align: center; }
-    .hidden { display: none; }
   </style>
 </head>
 <body>
@@ -57,10 +54,6 @@
       </a>
     </nav>
 
-    <div id="unboundTip" class="unbound-tip hidden">
-      尚未绑定桌面端。请在桌面 ShortCut「联动绑定」获取 6 位绑定码或二维码，然后<a href="/bind/">前往绑定</a>。
-    </div>
-
     <p class="foot">ShortCut · 移动联动平台</p>
   </div>
 
@@ -76,15 +69,12 @@
       $('bindTitle').textContent = auth.deviceName || '已绑定';
       $('bindDetail').textContent = (auth.code ? '绑定码 ' + auth.code : auth.bindId);
       $('bindPill').textContent = '管理';
-      $('bindStrip').style.cursor = 'pointer';
-      $('bindStrip').onclick = () => location.href = '/bind/';
-      // 已绑定：顶部绑定信息条即管理入口（点击跳 /bind/），隐藏未绑定提示
-      $('unboundTip').classList.add('hidden');
     } else {
       $('bindPill').textContent = '去绑定';
-      $('bindStrip').onclick = () => location.href = '/bind/';
-      $('unboundTip').classList.remove('hidden');
     }
+    // 顶部绑定信息条是唯一的绑定入口：未绑定"去绑定"、已绑定"管理"，点击均跳 /bind/
+    $('bindStrip').style.cursor = 'pointer';
+    $('bindStrip').onclick = () => location.href = '/bind/';
   </script>
 </body>
 </html>
