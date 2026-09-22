@@ -160,6 +160,8 @@ Remove-SSHSession -SessionId $s.SessionId | Out-Null
 
 ## 更新记录
 
+- [2026-09-21] 控制板块第二轮反馈修复（`aa68139`，云端已部署+桌面验收包已刷新）：①局域网模式已通（防火墙修复生效）。②云端"连接成功但输入无反应"排查中——已排除：桌面进程内注入完全正常（ELECTRON_RUN_AS_NODE 模拟 require sj createApp+startInjector，injector.ready=true、PowerShell spawn 正常）、指令路径白名单、id 匹配；已加双端诊断日志待用户复测定位：relay 侧 journalctl 看指令转发统计（fwd bind=… api=N res=M last=path，10 秒汇总防刷屏）与连接关闭记录，桌面侧 `userData/logs/control-cloud.log` 看 auth-ok/api 收发/注入结果/socket 错误。注意：ShortCut.exe 的 ELECTRON_RUN_AS_NODE 模式 stdout 会丢失（GUI 子系统），诊断输出必须走文件。③绑定后跳转修正：bind 页"继续使用"默认从 /taskwall/ 改为 /mobile/（用户要求绑定完回 Hub）。
+
 - [2026-09-21] 控制板块双问题修复（`7eb95f8`，云端已部署）：①**手机云控制页误报"桌面端未启动"**——根因是 relay 对 mobile 先发 `desktop-status(online:true)` 再发 `auth-ok`（原不带 online 字段），phone.js 在 auth-ok 处理里用 `!!msg.desktopOnline` 把已收到的在线状态覆盖回 false；修复为 relay auth-ok 携带 `desktopOnline` 字段 + phone.js 仅在字段为布尔时才更新（服务器端到端验证 PASS：DESKTOP auth-ok → MOBILE 收 desktop-status:true + auth-ok.desktopOnline:true）。中继日志还证实断连后桌面会自动重连（10:07 与 10:09 两次 auth），属 CDN/网络偶发抖动，重连机制正常。②**局域网手机打不开页面**——根因是 Windows 防火墙：网络配置文件为 Public 且 ShortCut/9823 无任何入站规则，已添加防火墙入站放行规则「ShortCut Control (TCP 9823-9830)」（All profiles Allow）；sj 服务本身正常（0.0.0.0:9823 监听确认）。
 
 - [2026-09-21] 修复桌面验收包控制板块"启用失败"（非代码 bug，构建流程坑）：`tsc --noEmit` 只做类型检查不产出 JS，此前两轮改动后 `dist-electron` 一直是 8/19 旧产物（control-service.js/control-cloud.js 缺失、main.js 无 control IPC handler、preload 无 startControl 等方法），点启动必然落空。修复：`npx tsc -p tsconfig.electron.json` 真编译 → 重刷 app.asar → 验证通过。HANDOVER.md §4.2 已补"前置编译必做"说明（渲染层 `npm run build` + 主进程 `npx tsc -p tsconfig.electron.json` 不带 --noEmit；extraResources 改动需同步到 win-unpacked\resources\）。另确认 win-unpacked 的 app.asar 内 node_modules 已含 ws 依赖（asar list 验证），Windows 排除端口范围不含 9823-9830，ELECTRON_RUN_AS_NODE 手动拉起 sj server.js 正常（pairCode/injector:true）。
