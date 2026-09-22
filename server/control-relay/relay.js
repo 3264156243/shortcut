@@ -87,6 +87,25 @@ function safeParse(raw) {
   try { return JSON.parse(String(raw)); } catch { return null; }
 }
 
+/** 指令转发统计（10 秒汇总一条，避免高频 mouse 刷爆日志） */
+const fwdStats = new Map(); // bindId → { api, res, last }
+setInterval(() => {
+  for (const [bindId, st] of fwdStats) {
+    if (st.api || st.res) {
+      console.log(`[relay] fwd bind=${bindId.slice(0, 8)}… api=${st.api} res=${st.res} last=${st.last || '-'}`);
+      st.api = 0; st.res = 0; st.last = '-';
+    }
+  }
+}, 10000).unref();
+
+function bumpFwd(bindId, kind, path) {
+  let st = fwdStats.get(bindId);
+  if (!st) { st = { api: 0, res: 0, last: '-' }; fwdStats.set(bindId, st); }
+  if (kind === 'api') st.api += 1;
+  else st.res += 1;
+  if (path) st.last = path;
+}
+
 const server = http.createServer((req, res) => {
   // 健康检查
   if (req.method === 'GET' && (req.url === '/healthz' || req.url === '/')) {
@@ -195,12 +214,14 @@ wss.on('connection', (ws, req) => {
       }
       try {
         desktop.ws === undefined; // noop 防御
+        bumpFwd(ws.bindId, 'api', path);
         desktop.send(JSON.stringify({ t: 'api', id: String(msg.id || ''), path, body: msg.body || {} }));
       } catch { }
       return;
     }
 
     if (ws.role === 'desktop' && msg.t === 'api-res') {
+      bumpFwd(ws.bindId, 'res', '');
       for (const mobile of room.mobiles) {
         try { mobile.send(JSON.stringify({ t: 'api-res', id: msg.id, ok: !!msg.ok, status: msg.status || 200, data: msg.data || {} })); } catch { }
       }
@@ -212,6 +233,7 @@ wss.on('connection', (ws, req) => {
     if (!ws.authed) return;
     const room = ws.room;
     if (!room) return;
+    console.log(`[relay] close ${ws.role} bind=${ws.bindId.slice(0, 8)}… rooms=${rooms.size}`);
     if (ws.role === 'desktop' && room.desktop === ws) {
       room.desktop = null;
       notifyDesktopStatus(room, false);

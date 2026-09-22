@@ -142,7 +142,7 @@
         // 生成二维码（桌面绑定链接）
         const bindUrl = 'https://shortcut.326415.xyz/mobile/?bind=' + encodeURIComponent(mobileAuth.bindId);
         renderQR(bindUrl);
-        $('reuseButton').onclick = () => { if (next) location.href = next; else location.href = '/taskwall/'; };
+        $('reuseButton').onclick = () => { if (next) location.href = next; else location.href = '/mobile/'; };
       } else {
         const directBind = params.get('bind');
         if (directBind) $('bindCode').placeholder = '扫码身份已读取，点「绑定码连接」';

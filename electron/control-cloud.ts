@@ -25,6 +25,16 @@ let reconnectAttempts = 0;
 let stopping = false;
 let lastError = '';
 
+/** 诊断日志：写 userData/logs/control-cloud.log（排查云端指令链路用） */
+function clog(msg: string) {
+  try {
+    const { app } = require('electron');
+    const dir = path.join(app.getPath('userData'), 'logs');
+    try { fs.mkdirSync(dir, { recursive: true }); } catch { }
+    fs.appendFileSync(path.join(dir, 'control-cloud.log'), `${new Date().toISOString()} ${msg}\n`);
+  } catch { }
+}
+
 function getSjServerPath(): string {
   const app = require('electron').app;
   if (app && app.isPackaged) {
@@ -148,6 +158,7 @@ function connect(bindId: string, bindCode: string) {
         wsState = 'authed';
         reconnectAttempts = 0;
         lastError = '';
+        clog('auth-ok (relay connected)');
         stopHeartbeat();
         heartbeatTimer = setInterval(() => {
           try { socket.send(JSON.stringify({ t: 'ping' })); } catch { }
@@ -156,23 +167,30 @@ function connect(bindId: string, bindCode: string) {
       }
       if (msg.t === 'auth-fail') {
         lastError = String(msg.error || '鉴权失败');
+        clog('auth-fail: ' + lastError);
         // 票据失效等情况：立即重试（重取 ticket）
         try { socket.close(); } catch { }
         return;
       }
       if (msg.t === 'api' && wsState === 'authed') {
         const id = String(msg.id || '');
+        const apiPath = String(msg.path || '');
+        // mouse 类指令高频，只在出错时记录；其余指令逐条记录
+        const isHighFreq = apiPath === '/api/mouse' || apiPath === '/api/wheel' || apiPath === '/api/click';
+        clog(`api <- ${apiPath} id=${id} injector=${sjApp?.injector?.ready ? 'ready' : 'NOT-READY'}`);
         const reply = (result: { ok: boolean; status: number; data: any }) => {
-          try { socket.send(JSON.stringify({ t: 'api-res', id, ok: result.ok, status: result.status, data: result.data })); } catch { }
+          if (!result.ok || !isHighFreq) clog(`api -> res id=${id} path=${apiPath} ok=${result.ok} status=${result.status}`);
+          try { socket.send(JSON.stringify({ t: 'api-res', id, ok: result.ok, status: result.status, data: result.data })); } catch (e: any) { clog('reply send FAIL: ' + (e?.message || '')); }
         };
         const timeout = setTimeout(() => reply({ ok: false, status: 504, data: { error: 'timeout' } }), API_TIMEOUT_MS);
-        handleApi(String(msg.path || ''), msg.body || {})
+        handleApi(apiPath, msg.body || {})
           .then((result) => { clearTimeout(timeout); reply(result); })
           .catch((err: any) => { clearTimeout(timeout); reply({ ok: false, status: 500, data: { error: err?.message || 'inject error' } }); });
       }
     });
 
     socket.on('close', () => {
+      clog(`socket close (attempt=${reconnectAttempts})`);
       if (ws === socket) {
         ws = null;
         wsState = 'idle';
@@ -183,10 +201,12 @@ function connect(bindId: string, bindCode: string) {
 
     socket.on('error', (err: Error) => {
       lastError = err?.message || '连接错误';
+      clog('socket error: ' + lastError);
       try { socket.close(); } catch { }
     });
   }).catch((err) => {
     lastError = err?.message || '获取凭证失败';
+    clog('ticket/connect FAIL: ' + lastError);
     scheduleReconnect(bindId, bindCode);
   });
 }
@@ -212,12 +232,15 @@ export async function startCloudControl(): Promise<{ success: boolean; error?: s
     const bindingMod = require('./sync/binding');
     const binding = bindingMod.getOrCreateBind ? await bindingMod.getOrCreateBind() : null;
     if (!binding || !binding.bindId) {
+      clog('start FAIL: no binding');
       return { success: false, error: '尚未建立联动绑定，请先在「联动绑定」板块完成绑定' };
     }
     await ensureInjector();
+    clog(`start OK bind=${binding.bindId} injector=${sjApp?.injector?.ready ? 'ready' : 'not-ready'} codeLen=${String(binding.code || '').length}`);
     connect(binding.bindId, String(binding.code || ''));
     return { success: true };
   } catch (error: any) {
+    clog('start ERROR: ' + (error?.message || String(error)));
     return { success: false, error: error?.message || '云端控制启动失败' };
   }
 }
