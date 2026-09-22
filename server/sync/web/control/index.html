@@ -67,17 +67,19 @@
         </span>
         <span class="arrow">›</span>
       </a>
-      <p class="tip" style="margin-top:8px">前提：电脑端 ShortCut「控制」板块已启动「云端连接」。</p>
+      <p class="tip" style="margin-top:8px">前提：电脑端 ShortCut「控制」板块已启动「云端连接」。桌面端该板块显示有二维码，扫码可直达本控制页。</p>
 
       <div class="card" style="margin-top:14px">
-        <h2>📶 局域网直连 <span class="badge" style="color:#63b582;border-color:rgba(99,181,130,.4)">更快</span></h2>
-        <p>手机与电脑连接<b>同一网络</b>时使用，延迟最低。桌面端「控制」板块会显示形如 <b>192.168.x.x:9823</b> 的地址：</p>
-        <div class="row">
-          <input id="hostInput" inputmode="url" autocomplete="off" placeholder="192.168.1.5:9823" />
-          <button id="goBtn" type="button">打开控制页</button>
+        <h2 style="cursor:pointer" id="lanToggle">📶 局域网直连 <span class="badge" style="color:#63b582;border-color:rgba(99,181,130,.4)">更快</span><span style="margin-left:auto;color:#948b82;font-size:18px" id="lanChev">›</span></h2>
+        <div id="lanBody" class="hidden" style="margin-top:10px">
+          <p>手机与电脑连接<b>同一网络</b>时使用，延迟最低。电脑端「局域网直连」状态卡会显示形如 <b>192.168.x.x:9823</b> 的地址：</p>
+          <div class="row">
+            <input id="hostInput" inputmode="url" autocomplete="off" placeholder="192.168.1.5:9823" />
+            <button id="goBtn" type="button">打开控制页</button>
+          </div>
+          <div id="err" class="err"></div>
+          <div class="tip">更方便：直接用手机相机扫描桌面端「局域网直连」状态卡的二维码。</div>
         </div>
-        <div id="err" class="err"></div>
-        <div class="tip">更方便：直接用手机相机扫描桌面端「控制」板块的二维码。</div>
       </div>
     </div>
 
@@ -99,6 +101,14 @@
     } catch {}
 
     document.getElementById(bound ? 'boundWrap' : 'unboundCard').classList.remove('hidden');
+
+    // 局域网折叠区
+    document.getElementById('lanToggle').addEventListener('click', () => {
+      const body = document.getElementById('lanBody');
+      const chev = document.getElementById('lanChev');
+      const open = body.classList.toggle('hidden') === false;
+      chev.textContent = open ? '⌄' : '›';
+    });
 
     function normalizeHost(raw) {
       let host = String(raw || '').trim();

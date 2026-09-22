@@ -19,6 +19,10 @@
   const pendingApi = new Map();
   let reconnectTimer = null;
   let connecting = false;
+  let lastAliveAt = 0;         // 最近一次收到中继任何消息的时间（检测半死连接）
+
+  const PING_INTERVAL = 25000;   // 心跳周期
+  const ALIVE_TIMEOUT = 60000;   // 超过 60s 未收到中继任何消息 → 主动断开重连（防半死连接黑洞）
 
   let composing = false;
   let sent = '';
@@ -78,9 +82,11 @@
     fetchTicket().then((ticket) => {
       ws = new WebSocket(RELAY_URL);
       ws.onopen = () => {
+        lastAliveAt = Date.now();
         wsSend({ auth: { role: 'mobile', bindId: binding.bindId, ticket } });
       };
       ws.onmessage = (ev) => {
+        lastAliveAt = Date.now();
         let msg = null;
         try { msg = JSON.parse(ev.data); } catch (_) { return; }
         if (!msg || typeof msg !== 'object') return;
@@ -129,9 +135,9 @@
     wsReady = wsAuthTokened && desktopOnline;
     setBound(wsReady);
     if (wsReady) {
-      // 已就绪：app 显示，状态条绿
+      // 已就绪：app 显示，状态条绿（附带已发指令数，便于现场诊断）
       $('dot').classList.add('on');
-      $('statusText').textContent = '已连接桌面';
+      $('statusText').textContent = apiSeq > 0 ? `已连接桌面·已发${apiSeq}` : '已连接桌面';
     } else if (wsAuthTokened && !desktopOnline) {
       $('dot').classList.remove('on');
       $('statusText').textContent = '桌面离线';
@@ -141,6 +147,16 @@
 
   /** 云模式 API：经中继转发到桌面 */
   async function api(path, body) {
+    const result = await rawApi(path, body);
+    // 失败可视化：鼠标类高频指令不打扰，其余失败给出提示
+    const highFreq = path === '/api/mouse' || path === '/api/wheel' || path === '/api/click';
+    if (!result.ok && !highFreq && typeof toast === 'function') {
+      toast(result.status === 503 ? '桌面不在线，指令未送达' : result.status === 504 ? '指令超时，请重试' : '指令发送失败');
+    }
+    return result;
+  }
+
+  async function rawApi(path, body) {
     if (!wsReady) return { ok: false, status: 503, data: { error: 'desktop offline' } };
     const id = String(++apiSeq);
     return new Promise((resolve) => {
@@ -242,14 +258,16 @@
   const kb = $('kb');
 
   /**
-   * 点按钮时不抢焦点：mousedown preventDefault + 点完把焦点还给输入区。
-   * 仅用于输入区控件；抽屉/绑定等不绑定此项。
+   * 点按钮时不影响当前输入状态：mousedown preventDefault 防抢焦点；
+   * 仅当焦点本来就在输入区（键盘弹出中）时才把焦点还给输入区保持键盘，
+   * 非输入状态（键盘收起）不主动拉起键盘。
    */
   function keepKeyboardOpen(el) {
     if (!el) return;
     el.addEventListener('mousedown', (e) => e.preventDefault());
     el.addEventListener('click', () => {
       if (activeSheet) return;
+      if (document.activeElement !== kb) return;
       try {
         kb.focus({ preventScroll: true });
       } catch (_) {
@@ -867,10 +885,14 @@
     connectRelay();
   }
 
-  // WS 心跳：保活 + 检测半开连接
+  // WS 心跳：保活 + 半死连接检测（60s 未收到中继任何消息 → 主动断开触发重连）
   setInterval(() => {
-    if (ws && ws.readyState === 1) wsSend({ t: 'ping' });
-  }, 25000);
+    if (!ws || ws.readyState !== 1) return;
+    wsSend({ t: 'ping' });
+    if (lastAliveAt && Date.now() - lastAliveAt > ALIVE_TIMEOUT) {
+      try { ws.close(); } catch (_) { try { ws.terminate && ws.terminate(); } catch (_) {} }
+    }
+  }, PING_INTERVAL);
 
   boot();
 })();

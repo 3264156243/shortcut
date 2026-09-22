@@ -119,14 +119,16 @@
   const kb = $('kb');
 
   /**
-   * 点按钮时不抢焦点：mousedown preventDefault + 点完把焦点还给输入区。
-   * 仅用于输入区控件；抽屉/绑定等不绑定此项。
+   * 点按钮时不影响当前输入状态：mousedown preventDefault 防抢焦点；
+   * 仅当焦点本来就在输入区（键盘弹出中）时才把焦点还给输入区保持键盘，
+   * 非输入状态（键盘收起）不主动拉起键盘。
    */
   function keepKeyboardOpen(el) {
     if (!el) return;
     el.addEventListener('mousedown', (e) => e.preventDefault());
     el.addEventListener('click', () => {
       if (activeSheet) return;
+      if (document.activeElement !== kb) return;
       try {
         kb.focus({ preventScroll: true });
       } catch (_) {

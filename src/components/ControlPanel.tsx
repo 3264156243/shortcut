@@ -52,10 +52,10 @@ export default function ControlPanel() {
   const cloudActive = !!cloud?.active;
   const mode: Mode = cloudActive ? 'cloud' : lanRunning ? 'lan' : 'none';
 
-  // 局域网模式：生成首个地址二维码
+  // 局域网模式：生成首个地址二维码；云模式：生成云控制页二维码（手机扫码直达）
   useEffect(() => {
-    const primary = lan?.urls?.[0];
-    if (mode !== 'lan' || !primary) {
+    const primary = mode === 'cloud' ? 'https://shortcut.326415.xyz/control/app/' : lan?.urls?.[0];
+    if (!primary) {
       setQrDataUrl('');
       return;
     }
@@ -176,9 +176,20 @@ export default function ControlPanel() {
                 {cloud.lastError && <div className="mt-3 text-[11px]" style={{ color: '#c97b74' }}>最近错误：{cloud.lastError}</div>}
               </section>
 
-              <section className="rounded-xl p-4 text-[11px] leading-5" style={mutedStyle}>
-                <div className="mb-1 text-xs font-semibold" style={{ color: 'var(--color-text)' }}>使用方法</div>
-                手机打开 <b>shortcut.326415.xyz/mobile</b> → 「电脑控制」→「云端连接」，即可向电脑打字、控制鼠标、使用电脑粘贴板。连接使用 ShortCut 绑定身份自动配对，无需输入连接码。启动后保持本窗口开启即可；点击「停止」断开。
+              <section className="rounded-xl p-4" style={cardStyle}>
+                <div className="mb-3 flex items-center gap-2 text-xs font-semibold"><QrCode size={13} />手机接入（扫码直达）</div>
+                <div className="flex items-start gap-4">
+                  {qrDataUrl ? (
+                    <div className="shrink-0 rounded-lg p-2" style={{ background: '#ffffff' }}>
+                      <img src={qrDataUrl} alt="手机扫码打开云控制页" width={150} height={150} />
+                      <div className="mt-1 text-center text-[10px]" style={{ color: '#57534e' }}>扫码打开云控制页</div>
+                    </div>
+                  ) : <div className="flex h-[150px] w-[150px] items-center justify-center rounded-lg text-xs" style={{ background: 'var(--color-bg-card-hover)' }}>…</div>}
+                  <div className="min-w-0 flex-1 text-[11px] leading-5" style={mutedStyle}>
+                    手机打开 <b>shortcut.326415.xyz/mobile</b> → 「电脑控制」→「云端连接」，或直接扫左侧二维码。<br /><br />
+                    连接使用 ShortCut 绑定身份自动配对，<b>无需输入连接码</b>。启动后保持本窗口开启即可；点击「停止」断开。
+                  </div>
+                </div>
               </section>
             </>
           )}
