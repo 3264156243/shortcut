@@ -9,6 +9,8 @@ use tauri::{
     Manager, WebviewUrl, WebviewWindowBuilder,
 };
 
+mod config;
+
 /// electronAPI shim：渲染层每次访问 window.electronAPI 的任意方法都落到 invoke('electron_api')。
 /// 回调型（onXxx）映射到 tauri 事件 'electron:<name>'。
 /// __TAURI__ 由 withGlobalTauri 注入；若 shim 先于其执行，等待就绪后再装配。
@@ -67,12 +69,68 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
         // ---- 系统信息（占位：M2 补齐真实实现）----
         "getSystemInfo" => json!({ "platform": "win32", "arch": "x64", "release": "" }),
 
+        // ---- M2：配置（%APPDATA%\ShortCut 硬兼容）----
+        "readConfig" => json!(config::read_config()),
+        "writeConfig" => {
+            let data = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            config::write_config(data);
+            Value::Null
+        }
+        "getPath" => {
+            let name = args.first().and_then(|v| v.as_str()).unwrap_or("userData");
+            let p = match name {
+                "userData" => config::user_data_dir(),
+                "downloads" => dirs_home().join("Downloads"),
+                "home" => dirs_home(),
+                "temp" => std::env::temp_dir(),
+                _ => config::user_data_dir(),
+            };
+            json!(p.to_string_lossy().to_string())
+        }
+        "isMaximized" => json!(window.is_maximized().unwrap_or(false)),
+
+        // ---- M2：开机自启 ----
+        "getOpenAtLogin" => {
+            use tauri_plugin_autostart::ManagerExt;
+            json!(app.autolaunch().is_enabled().unwrap_or(false))
+        }
+        "setOpenAtLogin" => {
+            use tauri_plugin_autostart::ManagerExt;
+            let enable = args.first().and_then(|v| v.as_bool()).unwrap_or(false);
+            let al = app.autolaunch();
+            let r = if enable { al.enable() } else { al.disable() };
+            json!(r.is_ok())
+        }
+
+        // ---- M2：通知 / 打开外部 ----
+        "showNotification" => {
+            use tauri_plugin_notification::NotificationExt;
+            let title = args.first().and_then(|v| v.as_str()).unwrap_or("ShortCut");
+            let body = args.get(1).and_then(|v| v.as_str()).unwrap_or("");
+            let _ = app.notification().builder().title(title).body(body).show();
+            Value::Null
+        }
+        "openExternal" => {
+            use tauri_plugin_opener::OpenerExt;
+            if let Some(url) = args.first().and_then(|v| v.as_str()) {
+                let _ = app.opener().open_url(url, None::<&str>);
+            }
+            Value::Null
+        }
+
         // ---- 未迁移方法兜底：返回空对象，前端不崩（按里程碑补齐）----
         _ => {
             log::debug!("[shim] 未实现的 electronAPI 方法: {}", method);
             Value::Null
         }
     }
+}
+
+/// 下载/主目录等兜底解析
+fn dirs_home() -> std::path::PathBuf {
+    std::env::var("USERPROFILE")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir())
 }
 
 /// 托盘菜单事件 → 主窗口显示/退出
@@ -93,7 +151,16 @@ fn handle_tray_event(app: &tauri::AppHandle, id: &str) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
+            // 配置损坏自愈（与 Electron 启动行为一致）
+            config::restore_from_backup_if_needed();
+
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
