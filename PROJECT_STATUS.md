@@ -160,6 +160,8 @@ Remove-SSHSession -SessionId $s.SessionId | Out-Null
 
 ## 更新记录
 
+- [2026-09-29] **Tauri 2 M3 透明窗家族全通过**（提交 `e6fd0dd`）：build_overlay 通用覆盖窗工厂后，任务墙（340×430）与 SC球（46×46）同模式点亮，截图验证**岛+任务墙双透明窗并存**、位置精确锚定岛右侧。Alt+U 切换任务墙（与 Electron 行为一致：存在即销毁）、SC 球随岛移动跟随。任务墙数据管道（sendTaskListData/pruneTaskList）M5 接入；翻译胶囊（Electron 版为 data:URL 动态 HTML、与翻译流程耦合）留 M5 翻译板块一起做。M3 里程碑核心目标（透明窗技术验证+主要窗口迁移）完成。
+
 - [2026-09-29] **Tauri 2 M3 灵动岛透明窗攻坚通过**（提交 `114a351`）——**迁移最大技术风险解除**：WebView2 透明合成正常，截图验证胶囊毛玻璃渲染+背景完全透出+位置精确还原 Electron 版记忆点（673,15）。实现：windows.rs 透明窗规格照抄 Electron（无边框/置顶/无影/不聚焦/跳过任务栏 + 收起态 set_ignore_cursor_events 穿透）；island_bounds 用逻辑像素（DPI 缩放兼容 DIP 位置记忆，primary_monitor 物理尺寸须除以 scale_factor）；patch_island_config 读-改-写 config.island 节。命令 toggleIsland/getIslandState/setIsland/moveIslandTo/getIslandBounds。踩坑：①global-shortcut 插件键名是 W3C code 格式（`alt+keyi` 非 `alt+i`），match 须兼容；②窗口位置 clamp 的 min/max 写反导致坐标跑屏外（2200）；③plugin-log 必须在 setup 最先初始化否则前段日志丢失；④`tauri build --debug` 后日志在 `%LOCALAPPDATA%\com.wanan.shortcut\logs\tauri.log`。SC球/翻译胶囊/任务墙/提醒窗复用同模式（风险已解除，属体力活）。
 
 - [2026-09-29] **Tauri 2 M2 完成**（提交 `1b86e8f`，对账 30/139）：①全局快捷键（global-shortcut 插件）——Alt+Space 壳内 toggle 主窗实测通过（可见→隐藏→恢复），Alt+I/U/S/D 以 `electron:shortcut` 事件转发前端待 M3/M5 接线，键位与 Electron 一致；②usage.rs 使用统计数据层（usage-record.json 结构/legacy icon 剥离/camelCase 序列化照抄 Electron，8 个命令），采集器 M5 接入；③clipboard-manager copyText + openFile/openFolder/showInFolder。**关键验证：主面板带配置数据完整渲染**——分组标签（通用1-4）/收藏快捷方式真实图标全部从 readConfig 桥接链路读出，前端零改动。踩坑：json! 宏不支持 `[0.0; 24]` 重复语法（改 vec!）。下一步 M3 透明窗攻坚（SC球/灵动岛/胶囊，唯一技术悬念点）。
