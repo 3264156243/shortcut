@@ -4,6 +4,7 @@
 
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{
@@ -388,6 +389,113 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
             }
         }
 
+
+        // ---- M5：任务墙数据（config.scTaskList + taskBoards.notes，语义照抄 Electron）----
+        "getTaskList" => {
+            let cfg = task_cfg(&app);
+            json!(resolve_task_list(&cfg))
+        }
+        "addTaskFromDrag" => {
+            let board_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let task_id = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            if !board_id.is_empty() && !task_id.is_empty() {
+                let raw = config::read_config();
+                let mut cfg: Value = if raw.is_empty() { json!({}) } else { serde_json::from_str(&raw).unwrap_or(json!({})) };
+                if let Some(list) = cfg.as_object_mut().unwrap().entry("scTaskList").or_insert_with(|| json!([])).as_array_mut() {
+                    let dup = list.iter().any(|e| e.get("boardId").and_then(|v| v.as_str()) == Some(board_id.as_str()) && e.get("taskId").and_then(|v| v.as_str()) == Some(task_id.as_str()));
+                    if !dup {
+                        list.push(json!({ "boardId": board_id, "taskId": task_id, "addedAt": chrono::Local::now().timestamp_millis() }));
+                        config::write_config(&serde_json::to_string(&cfg).unwrap_or_default());
+                    }
+                }
+            }
+            json!(resolve_task_list(&task_cfg(&app)))
+        }
+        "completeTaskInList" => {
+            let board_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            let task_id = args.get(1).and_then(|v| v.as_str()).unwrap_or("");
+            json!({ "ok": patch_task_flag(&app, board_id, task_id, true) })
+        }
+        "removeTaskFromList" => {
+            let board_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            let task_id = args.get(1).and_then(|v| v.as_str()).unwrap_or("");
+            let raw = config::read_config();
+            let mut cfg: Value = if raw.is_empty() { json!({}) } else { serde_json::from_str(&raw).unwrap_or(json!({})) };
+            let mut changed = false;
+            if let Some(list) = cfg.as_object_mut().unwrap().get_mut("scTaskList").and_then(|v| v.as_array_mut()) {
+                let before = list.len();
+                list.retain(|e| !(e.get("boardId").and_then(|v| v.as_str()) == Some(board_id) && e.get("taskId").and_then(|v| v.as_str()) == Some(task_id)));
+                changed = list.len() != before;
+            }
+            if changed {
+                config::write_config(&serde_json::to_string(&cfg).unwrap_or_default());
+            }
+            json!({ "ok": changed })
+        }
+        "locateTaskFromList" => {
+            let board_id = args.first().cloned().unwrap_or(Value::Null);
+            let task_id = args.get(1).cloned().unwrap_or(Value::Null);
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.set_focus();
+                let _ = app.emit("electron:TaskLocate", json!({ "boardId": board_id, "taskId": task_id }));
+            }
+            Value::Null
+        }
+
+        // ---- M5：翻译（代理 API，对齐 main.ts translateText）----
+        "translateText" => {
+            let text = args.first().and_then(|v| v.as_str()).unwrap_or("").trim().chars().take(5000).collect::<String>();
+            let from = args.get(1).and_then(|v| v.as_str()).unwrap_or("auto").to_string();
+            let to = args.get(2).and_then(|v| v.as_str()).unwrap_or("zh").to_string();
+            const LANGS: [&str; 14] = ["auto","zh","en","jp","kor","fra","de","ru","spa","ara","th","it","pt","vie"];
+            if text.is_empty() {
+                json!({ "success": false, "error": "请输入需要翻译的文字" })
+            } else if !LANGS.contains(&from.as_str()) || !LANGS.contains(&to.as_str()) || to == "auto" {
+                json!({ "success": false, "error": "不支持的语言类型" })
+            } else {
+                match tauri::async_runtime::block_on(async {
+                    tokio::task::spawn_blocking(move || {
+                        let resp = ureq::post("https://shortcut.326415.xyz/api/translate")
+                            .timeout(std::time::Duration::from_millis(12_000))
+                            .send_json(json!({ "text": text, "from": from, "to": to }))
+                            .map_err(|e| e.to_string())?;
+                        resp.into_json::<Value>().map_err(|e| e.to_string())
+                    }).await.map_err(|e| e.to_string())?
+                }) {
+                    Ok(payload) => payload,
+                    Err(e) => json!({ "success": false, "error": e }),
+                }
+            }
+        }
+
+        // ---- M5：网站图标（抓页面找 favicon → data:URL）----
+        "getWebsiteIcon" => {
+            let raw = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+            match tauri::async_runtime::block_on(async {
+                tokio::task::spawn_blocking(move || fetch_website_icon(&raw)).await
+                    .map_err(|e| e.to_string())?
+            }) {
+                Ok(icon) => icon,
+                Err(_) => Value::Null,
+            }
+        }
+
+        // ---- M5：绑定身份读取（config.sync 节，对齐 sync/binding.ts getStoredBinding）----
+        "syncGetBinding" => {
+            let cfg = task_cfg(&app);
+            let sync = cfg.get("sync").cloned().unwrap_or(json!({}));
+            let bind_id = sync.get("bindId").and_then(|v| v.as_str()).unwrap_or("");
+            if bind_id.is_empty() {
+                Value::Null
+            } else {
+                json!({
+                    "bindId": bind_id,
+                    "code": sync.get("bindCode").and_then(|v| v.as_str()).unwrap_or(""),
+                    "bindUrl": sync.get("bindUrl").and_then(|v| v.as_str()).unwrap_or("")
+                })
+            }
+        }
         // ---- 未迁移方法兜底：返回空对象，前端不崩（按里程碑补齐）----
         _ => {
             log::debug!("[shim] 未实现的 electronAPI 方法: {}", method);
@@ -396,6 +504,129 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
     }
 }
 
+
+/// M5 任务墙：读 config（供 resolve）
+fn task_cfg(_app: &tauri::AppHandle) -> Value {
+    let raw = config::read_config();
+    if raw.is_empty() { json!({}) } else { serde_json::from_str(&raw).unwrap_or(json!({})) }
+}
+
+/// M5 任务墙：scTaskList → 渲染条目（剔除失效引用，对齐 resolveTaskList）
+fn resolve_task_list(cfg: &Value) -> Vec<Value> {
+    let mut out = Vec::new();
+    let list = match cfg.get("scTaskList").and_then(|v| v.as_array()) {
+        Some(l) => l.clone(),
+        None => return out,
+    };
+    for entry in &list {
+        let board_id = entry.get("boardId").and_then(|v| v.as_str()).unwrap_or("");
+        let task_id = entry.get("taskId").and_then(|v| v.as_str()).unwrap_or("");
+        let task = cfg.get("taskBoards").and_then(|b| b.as_array())
+            .and_then(|boards| boards.iter().find(|b| b.get("id").and_then(|v| v.as_str()) == Some(board_id)))
+            .and_then(|b| b.get("notes").and_then(|n| n.as_array()))
+            .and_then(|notes| notes.iter().find(|n| n.get("id").and_then(|v| v.as_str()) == Some(task_id)));
+        if let Some(task) = task {
+            out.push(json!({
+                "boardId": board_id,
+                "taskId": task_id,
+                "title": task.get("text").and_then(|v| v.as_str()).unwrap_or("无标题任务"),
+                "done": task.get("done").and_then(|v| v.as_bool()).unwrap_or(false),
+                "addedAt": entry.get("addedAt").cloned().unwrap_or(Value::Null),
+            }));
+        }
+    }
+    out
+}
+
+/// M5 任务墙：置任务 done 标志（写回 config.taskBoards）
+fn patch_task_flag(_app: &tauri::AppHandle, board_id: &str, task_id: &str, done: bool) -> bool {
+    let raw = config::read_config();
+    let mut cfg: Value = if raw.is_empty() { json!({}) } else { serde_json::from_str(&raw).unwrap_or(json!({})) };
+    let mut changed = false;
+    if let Some(boards) = cfg.as_object_mut().unwrap().get_mut("taskBoards").and_then(|v| v.as_array_mut()) {
+        if let Some(board) = boards.iter_mut().find(|b| b.get("id").and_then(|v| v.as_str()) == Some(board_id)) {
+            if let Some(notes) = board.get_mut("notes").and_then(|n| n.as_array_mut()) {
+                if let Some(note) = notes.iter_mut().find(|n| n.get("id").and_then(|v| v.as_str()) == Some(task_id)) {
+                    if let Some(obj) = note.as_object_mut() {
+                        obj.insert("done".into(), json!(done));
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+    if changed {
+        config::write_config(&serde_json::to_string(&cfg).unwrap_or_default());
+    }
+    changed
+}
+
+/// M5 网站图标：抓 HTML 找 favicon → 抓图标 → data:URL（对齐 getWebsiteIcon）
+fn fetch_website_icon(raw: &str) -> Result<Value, String> {
+    let url = raw.trim();
+    let page_url = if url.starts_with("http://") || url.starts_with("https://") {
+        url.to_string()
+    } else {
+        format!("https://{}", url.trim_start_matches('/'))
+    };
+    let resp = ureq::get(&page_url)
+        .timeout(std::time::Duration::from_millis(6_000))
+        .set("Accept", "text/html,application/xhtml+xml")
+        .call()
+        .map_err(|e| e.to_string())?;
+    let final_url = resp.get_url().to_string();
+    let html: String = resp.into_string().unwrap_or_default().chars().take(512 * 1024).collect();
+    // link[rel~=icon] href
+    let mut icon_url: Option<String> = None;
+    for cap_off in html.match_indices("<link") {
+        let tag_end = html[cap_off.0..].find('>').map(|i| cap_off.0 + i).unwrap_or(html.len());
+        let tag = &html[cap_off.0..tag_end];
+        let lower = tag.to_lowercase();
+        if lower.contains("rel") && lower.contains("icon") && !lower.contains("apple-touch") {
+            if let Some(href_pos) = lower.find("href") {
+                let rest = &tag[href_pos..];
+                if let Some(eq) = rest.find('=') {
+                    let after = rest[eq + 1..].trim_start();
+                    if let Some(q1) = after.find('"') {
+                        if let Some(q2) = after[q1 + 1..].find('"') {
+                            icon_url = Some(after[q1 + 1..q1 + 1 + q2].to_string());
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let icon_url = match icon_url {
+        Some(u) => {
+            if u.starts_with("http://") || u.starts_with("https://") {
+                u
+            } else if u.starts_with("//") {
+                format!("https:{}", u)
+            } else if u.starts_with('/') {
+                let origin = final_url.split("/").take(3).collect::<Vec<_>>().join("/");
+                format!("{}{}", origin, u)
+            } else {
+                format!("{}/{}", final_url.trim_end_matches('/'), u)
+            }
+        }
+        None => {
+            // origin/favicon.ico 兜底
+            let origin = final_url.split("/").take(3).collect::<Vec<_>>().join("/");
+            format!("{}/favicon.ico", origin)
+        }
+    };
+    let icon = ureq::get(&icon_url)
+        .timeout(std::time::Duration::from_millis(6_000))
+        .set("Accept", "image/avif,image/webp,image/png,image/svg+xml,image/*,*/*;q=0.8")
+        .call()
+        .map_err(|e| e.to_string())?;
+    let mime_full = icon.content_type().to_string();
+    let mime = mime_full.split(';').next().unwrap_or("image/x-icon").to_string();
+    let mut buf = Vec::new();
+    icon.into_reader().take(300 * 1024).read_to_end(&mut buf).map_err(|e| e.to_string())?;
+    Ok(json!(format!("data:{};base64,{}", mime, control::base64_encode(&buf))))
+}
 /// 下载/主目录等兜底解析
 fn dirs_home() -> std::path::PathBuf {
     std::env::var("USERPROFILE")
