@@ -18,6 +18,8 @@ use tauri:: {
 mod cloud;
 mod license;
 mod sidecar;
+mod sync;
+mod transfer;
 mod config;
 mod control;
 mod usage;
@@ -538,20 +540,47 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
             }
         }
 
-        // ---- M5：绑定身份读取（config.sync 节，对齐 sync/binding.ts getStoredBinding）----
-        "syncGetBinding" => {
-            let cfg = task_cfg(&app);
-            let sync = cfg.get("sync").cloned().unwrap_or(json!({}));
-            let bind_id = sync.get("bindId").and_then(|v| v.as_str()).unwrap_or("");
-            if bind_id.is_empty() {
-                Value::Null
-            } else {
-                json!({
-                    "bindId": bind_id,
-                    "code": sync.get("bindCode").and_then(|v| v.as_str()).unwrap_or(""),
-                    "bindUrl": sync.get("bindUrl").and_then(|v| v.as_str()).unwrap_or("")
-                })
-            }
+        // ---- M5：绑定同步（sync:* 对齐 binding/engine/init.ts）----
+        "syncGetBinding" => sync::sync_get_binding(),
+        "syncPullNow" => sync::sync_pull_now(),
+
+        // ---- M5：文件快传（fileTransfer:* 对齐 file-transfer.ts）----
+        "fileTransferGetState" => transfer::get_state(),
+        "fileTransferSendText" => {
+            let text = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            transfer::send_text(text)
+        }
+        "fileTransferSendFile" => {
+            let path = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+            tauri::async_runtime::block_on(async {
+                tokio::task::spawn_blocking(move || transfer::send_file(&path)).await.unwrap_or_else(|e| json!({ "success": false, "message": e.to_string() }))
+            })
+        }
+        "fileTransferDownload" => {
+            let file_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let name = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            tauri::async_runtime::block_on(async {
+                tokio::task::spawn_blocking(move || transfer::download(&file_id, &name)).await.unwrap_or_else(|e| json!({ "success": false, "message": e.to_string() }))
+            })
+        }
+        "fileTransferDelete" => {
+            let id = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            transfer::delete_message(id)
+        }
+        "fileTransferShareText" => {
+            let text = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            let code = args.get(1).and_then(|v| v.as_str()).unwrap_or("");
+            let hours = args.get(2).and_then(|v| v.as_i64()).unwrap_or(24);
+            transfer::share_text(text, code, hours)
+        }
+        "fileTransferShareList" => transfer::share_list(),
+        "fileTransferShareDelete" => {
+            let id = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            transfer::share_delete(id)
+        }
+        "fileTransferClaim" => {
+            let code = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            transfer::claim(code)
         }
 
         // ---- M5：更新检查（读 electron-updater latest.yml 对比版本；完整下载安装 M6 接 tauri updater）----
