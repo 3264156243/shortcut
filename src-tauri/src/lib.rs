@@ -257,6 +257,7 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
                 &app,
                 json!({ "x": x, "y": y, "position": "custom" }),
             );
+            windows::position_deepseekball(&app);
             Value::Null
         }
         "getIslandBounds" => match app.get_webview_window("island") {
@@ -267,6 +268,26 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
             }
             None => Value::Null,
         },
+
+        // ---- M3：任务墙窗 / SC球壳（数据管道 M5 接入）----
+        "startTaskList" | "refreshTaskList" => {
+            let _ = windows::ensure_tasklist(&app);
+            Value::Null
+        }
+        "stopTaskList" => {
+            windows::destroy_tasklist(&app);
+            Value::Null
+        }
+        "startDeepseekBall" => {
+            let _ = windows::ensure_deepseekball(&app);
+            Value::Null
+        }
+        "stopDeepseekBall" => {
+            if let Some(win) = app.get_webview_window("deepseekball") {
+                let _ = win.destroy();
+            }
+            Value::Null
+        }
 
         // ---- 未迁移方法兜底：返回空对象，前端不崩（按里程碑补齐）----
         _ => {
@@ -334,7 +355,14 @@ pub fn run() {
                         match norm.as_str() {
                             "alt+space" => toggle_main_window(app),
                             "alt+i" => windows::toggle_island(app),
-                            "alt+u" => { let _ = app.emit("electron:shortcut", "tasklist"); }
+                            "alt+u" => {
+                                // 与 Electron taskListHotkey 一致：存在则销毁，否则创建
+                                if app.get_webview_window("tasklist").is_some() {
+                                    windows::destroy_tasklist(app);
+                                } else {
+                                    let _ = windows::ensure_tasklist(app);
+                                }
+                            }
                             "alt+s" => { let _ = app.emit("electron:shortcut", "screenshot-full"); }
                             "alt+d" => { let _ = app.emit("electron:shortcut", "screenshot-region"); }
                             _ => {}

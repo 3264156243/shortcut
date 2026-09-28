@@ -171,3 +171,90 @@ pub fn patch_island_config(app: &tauri::AppHandle, patch: Value) {
     }
     config::write_config(&serde_json::to_string(&cfg).unwrap_or_default());
 }
+
+/// 岛锚点（逻辑像素）：tasklist/SC球贴岛右侧（与 Electron taskListBounds/deepseekBallBounds 一致）
+pub fn island_anchor(app: &tauri::AppHandle) -> (f64, f64, f64, f64) {
+    if let Some(win) = app.get_webview_window("island") {
+        if let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) {
+            let scale = win.scale_factor().unwrap_or(1.0);
+            let x = pos.x as f64 / scale;
+            let y = pos.y as f64 / scale;
+            let w = size.width as f64 / scale;
+            return (x, y, w, 0.0);
+        }
+    }
+    let prefs = island_prefs();
+    island_bounds(app, &prefs)
+}
+
+/// 通用覆盖窗创建（岛同族规格：透明/无边框/置顶/无影/跳过任务栏）
+fn build_overlay(
+    app: &tauri::AppHandle,
+    id: &str,
+    url: &str,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    focusable: bool,
+) -> tauri::Result<tauri::WebviewWindow> {
+    let win = WebviewWindowBuilder::new(app, id, WebviewUrl::App(url.into()))
+        .title(format!("ShortCut {}", id))
+        .decorations(false)
+        .transparent(true)
+        .resizable(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .shadow(false)
+        .focused(false)
+        .visible(false)
+        .position(x, y)
+        .inner_size(w, h)
+        .initialization_script(crate::SHIM_JS)
+        .build()?;
+    let _ = win.set_focusable(focusable);
+    let _ = win.set_always_on_top(true);
+    Ok(win)
+}
+
+/// 任务墙窗口（340×430，岛右侧；Alt+U 切换创建/销毁）
+pub fn ensure_tasklist(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> {
+    if let Some(win) = app.get_webview_window("tasklist") {
+        let _ = win.show();
+        return Ok(win);
+    }
+    let (ix, iy, iw, _) = island_anchor(app);
+    let win = build_overlay(app, "tasklist", "tasklist.html", ix + iw + 8.0, iy, 340.0, 430.0, false);
+    if let Ok(ref w) = win {
+        let _ = w.show();
+    }
+    win
+}
+
+pub fn destroy_tasklist(app: &tauri::AppHandle) {
+    if let Some(win) = app.get_webview_window("tasklist") {
+        let _ = win.destroy();
+    }
+}
+
+/// SC球（46×46，岛右侧偏下；位置随岛）
+pub fn ensure_deepseekball(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> {
+    if let Some(win) = app.get_webview_window("deepseekball") {
+        position_deepseekball(app);
+        return Ok(win);
+    }
+    let (ix, iy, iw, _) = island_anchor(app);
+    let win = build_overlay(app, "deepseekball", "deepseekball.html", ix + iw + 8.0, iy + 8.0, 46.0, 46.0, false);
+    if let Ok(ref w) = win {
+        let _ = w.show();
+    }
+    win
+}
+
+/// SC球跟随岛位置（与 Electron positionDeepseekBall 一致）
+pub fn position_deepseekball(app: &tauri::AppHandle) {
+    if let Some(win) = app.get_webview_window("deepseekball") {
+        let (ix, iy, iw, _) = island_anchor(app);
+        let _ = win.set_position(tauri::LogicalPosition::new(ix + iw + 8.0, iy + 8.0));
+    }
+}
