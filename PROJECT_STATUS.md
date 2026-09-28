@@ -160,6 +160,8 @@ Remove-SSHSession -SessionId $s.SessionId | Out-Null
 
 ## 更新记录
 
+- [2026-09-29] **Tauri 2 M5 第五批（89/139）**（提交 `2a2321c`）：sidecar.rs LineStream 常驻进程模式——音乐桥（SMTC PowerShell 脚本照抄复用，stdout 行 JSON→emit IslandMusic）+ 硬件监控 sidecar（C# exe，cockpit:data/island:cockpit 双通道广播，main_active∨island.cockpitEnabled 联动启停）。音乐控制 -Control/-Seek 一次性命令。余额 Key 写配置/SC 球启停/平台跳转命令。getBalanceData 轮询暂占位。
+
 - [2026-09-29] **Tauri 2 M5 第四批（74/139）**（提交 `179d866`）：修正两处对齐错位——`openFile` 实为文件选择对话框（打开文件走 `openTarget`）、`runBat` 参数是 bat 内容（临时文件+Start-Process 可提权）。新增 tauri-plugin-dialog 对话框系（openFile/openImportFile/openIconFile→data:URL/saveFile）、readFile/writeFile、任务提醒全链路（30s 扫描 reminderAt→透明提醒窗堆叠→confirm/view）+ toggleTaskDone。测试 5 绿。
 
 - [2026-09-29] **Tauri 2 M5 三批推进（62/139 命令对账）**（提交 `597b4c8`）：①任务墙数据管道（getTaskList/addTaskFromDrag/completeTaskInList/removeTaskFromList/locateTaskFromList，config.scTaskList + taskBoards.notes 语义照抄）+ translateText（代理 API 12s 超时 + 14 语言白名单）+ getWebsiteIcon（favicon 抓取→data:URL）+ syncGetBinding；②更新检查（latest.yml 语义化版本对比）+ fileExists/getFileInfo/runBat/getInstalledSoftware（注册表三键枚举）+ getFileIcon(s)（PowerShell ExtractAssociatedIcon→PNG data:URL + FNV-1a 哈希缓存）；③激活授权 license 全系列（指纹脚本照抄 + 机器码 sha256 算法逐字节对齐 Electron 版——**实测同机同码 `5FB0DB8C…C265`，服务端视为同一设备**）+ gate 广播。新依赖 sha2。测试 4 绿。剩余：音乐桥/平台余额/Codex 预设/语音输入/快传/提醒/任务回调/翻译胶囊动态 HTML。
