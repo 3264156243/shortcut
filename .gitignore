@@ -51,3 +51,4 @@ rebuild-codexplusplus-dream-skin.js
 # Electron builder
 builder-debug.yml
 builder-effective-config.yaml
+tauri-setup.log
