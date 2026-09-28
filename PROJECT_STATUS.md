@@ -227,3 +227,11 @@ Remove-SSHSession -SessionId $s.SessionId | Out-Null
 - [2026-08-18] 创建本文档：整理 V2.4.4 发布历史 + 语音输入已完成项 + 移动端联动开发进行中状态（含未提交文件清单、服务端 code 半成品提示、下一步顺序、关键命令）。
 - [2026-08-18] 移动端联动本地代码完成并审查：补齐绑定二维码、移动 Web 页、原子 JSON 写入、CORS/限流、配置刷新；消费协议升级为 pull + ack 防任务丢失。目标版本改为 V2.4.5，暂未升版本或构建正式安装包。
 
+## Tauri 2 迁移（分支 codex/tauri2-migration）
+
+- [2026-08-18] M5 第五批（b6d2511→72d0eb3）：任务墙数据、翻译、网站图标、绑定读取、更新检查、文件信息/图标、运行 BAT、已装软件、license 全系、对话框、任务提醒、音乐桥、驾驶舱、余额开关，对账 89/139。
+- [2026-08-18] M5 第六批（2104505）：绑定同步引擎（bind.create/info/boards.update + pull/ack 拉取 + createTaskNote 便签写入）与文件快传全链路（transfer.messages/sendText/2MB 分片 multipart 上传+sha256/流式下载 Content-Length 校验+原子重命名/delete/share 三件套/claim），syncGetBinding 升级为 bind.info 校验链，对账 100/139。
+- [2026-08-18] M5 第七批（cfd7314）：getBalanceData/getDeepseekBalance 双 provider（DeepSeek user/balance + opencode zen usage，60s 缓存）、getTheme（注册表 AppsUseLightTheme）、任务墙拖放判定（pointInIsland 逻辑坐标 + scTaskList 去重写入），对账 105/139。
+- [2026-08-18] M5 第八批（a16f9bf）：Codex 供应商预设子系统完整移植（约 620 行 codex.rs：presets 存储/live config.toml 解析/shortcut-presets 快照/backup-shortcut 备份/applyPresetToToml 逐行改写/normalizeSnapshotConfig 归一化/applyCodexPreset 备份切换链，8 命令），对账 113/139。
+- [2026-08-18] M5 第九批（8a600f5）：语音输入全链路移植（约 770 行 voice.rs：胶囊窗+PowerShell 输入桥 stdin/stdout 行流+DashScope 百炼 ASR WS 双工流+applyRawResult 去重状态机+SSE 流式 LLM 润色+formatStructuredResult 清洗+voice-stats 按天统计+Alt+H 热键，11 命令；resources/scripts/voice-input-bridge.ps1 入包），对账 124/139。
+- M5 剩余（~15 命令）：翻译胶囊动态窗口（data:URL 需 Tauri 侧等价方案）、update:download/install（M6 updater）、少量回调别名；测试 5 绿，cargo check 全绿。
