@@ -11,11 +11,12 @@ use tauri::{
 
 mod config;
 mod usage;
+mod windows;
 
 /// electronAPI shim：渲染层每次访问 window.electronAPI 的任意方法都落到 invoke('electron_api')。
 /// 回调型（onXxx）映射到 tauri 事件 'electron:<name>'。
 /// __TAURI__ 由 withGlobalTauri 注入；若 shim 先于其执行，等待就绪后再装配。
-const SHIM_JS: &str = r#"
+pub(crate) const SHIM_JS: &str = r#"
 (() => {
   if (window.__SHORTCUT_SHIM__) return;
   window.__SHORTCUT_SHIM__ = true;
@@ -211,6 +212,62 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
             Value::Null
         }
 
+        // ---- M3：透明窗（灵动岛；SC球/胶囊随后）----
+        "toggleIsland" => {
+            windows::toggle_island(&app);
+            Value::Null
+        }
+        "getIslandState" => {
+            let prefs = windows::island_prefs();
+            let visible = app
+                .get_webview_window("island")
+                .and_then(|w| w.is_visible().ok())
+                .unwrap_or(false);
+            let mut state = prefs.clone();
+            if let Some(obj) = state.as_object_mut() {
+                obj.insert("visible".into(), json!(visible));
+            }
+            state
+        }
+        "setIsland" => {
+            if let Some(patch) = args.first().cloned() {
+                let was_pos = windows::island_prefs();
+                windows::patch_island_config(&app, patch);
+                if let Some(win) = app.get_webview_window("island") {
+                    let now = windows::island_prefs();
+                    let pos_changed = now.get("position") != was_pos.get("position")
+                        || now.get("x") != was_pos.get("x")
+                        || now.get("y") != was_pos.get("y");
+                    if pos_changed {
+                        let (x, y, _, _) = windows::island_bounds(&app, &now);
+                        let _ = win.set_position(tauri::LogicalPosition::new(x, y));
+                    }
+                    windows::apply_passthrough(&win);
+                }
+            }
+            Value::Null
+        }
+        "moveIslandTo" => {
+            let x = args.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let y = args.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0);
+            if let Some(win) = app.get_webview_window("island") {
+                let _ = win.set_position(tauri::LogicalPosition::new(x, y));
+            }
+            windows::patch_island_config(
+                &app,
+                json!({ "x": x, "y": y, "position": "custom" }),
+            );
+            Value::Null
+        }
+        "getIslandBounds" => match app.get_webview_window("island") {
+            Some(win) => {
+                let pos = win.outer_position().unwrap_or_default();
+                let size = win.outer_size().unwrap_or_default();
+                json!({ "x": pos.x, "y": pos.y, "width": size.width, "height": size.height })
+            }
+            None => Value::Null,
+        },
+
         // ---- 未迁移方法兜底：返回空对象，前端不崩（按里程碑补齐）----
         _ => {
             log::debug!("[shim] 未实现的 electronAPI 方法: {}", method);
@@ -270,10 +327,13 @@ pub fn run() {
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
                     if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        // 插件键名为 W3C code 格式（alt+keyi/alt+keys…），兼容 alt+x 简写
                         let key = shortcut.into_string().to_lowercase();
-                        match key.as_str() {
+                        let norm = key.replace("key", "");
+                        log::info!("[hotkey] 触发: {} -> {}", key, norm);
+                        match norm.as_str() {
                             "alt+space" => toggle_main_window(app),
-                            "alt+i" => { let _ = app.emit("electron:shortcut", "island"); }
+                            "alt+i" => windows::toggle_island(app),
                             "alt+u" => { let _ = app.emit("electron:shortcut", "tasklist"); }
                             "alt+s" => { let _ = app.emit("electron:shortcut", "screenshot-full"); }
                             "alt+d" => { let _ = app.emit("electron:shortcut", "screenshot-region"); }
@@ -284,24 +344,29 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
+            // 文件日志最先初始化（%LOCALAPPDATA%\com.wanan.shortcut\logs\tauri.log）
+            app.handle().plugin(
+                tauri_plugin_log::Builder::default()
+                    .level(log::LevelFilter::Info)
+                    .targets([
+                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir { file_name: Some("tauri".into()) }),
+                    ])
+                    .build(),
+            )?;
+
             // 配置损坏自愈（与 Electron 启动行为一致）
             config::restore_from_backup_if_needed();
 
-            // 注册全局快捷键（注册失败静默——与 Electron console.error 同语义不阻断启动）
+            // 注册全局快捷键（注册失败写日志——Electron 版同名键位如果被占也需要知道）
             {
                 use tauri_plugin_global_shortcut::GlobalShortcutExt;
                 let gs = app.global_shortcut();
                 for k in ["alt+space", "alt+i", "alt+u", "alt+s", "alt+d"] {
-                    let _ = gs.register(k);
+                    match gs.register(k) {
+                        Ok(_) => log::info!("[hotkey] 注册成功: {}", k),
+                        Err(e) => log::error!("[hotkey] 注册失败: {} ({})", k, e),
+                    }
                 }
-            }
-
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
             }
 
             // 主窗口：Rust builder 创建（initialization_script 只能挂在 builder 上；conf 不再定义窗口）
