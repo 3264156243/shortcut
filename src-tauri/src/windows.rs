@@ -317,3 +317,19 @@ pub fn destroy_deepseekball(app: &tauri::AppHandle) {
         let _ = win.destroy();
     }
 }
+/// M5：判断屏幕逻辑坐标是否在岛范围内（对齐 pointInIsland）
+pub fn point_in_island(app: &tauri::AppHandle, screen_x: f64, screen_y: f64) -> bool {
+    let Some(island) = app.get_webview_window("island") else {
+        return false;
+    };
+    let Ok(pos) = island.outer_position() else { return false };
+    let Ok(size) = island.outer_size() else { return false };
+    let scale = island.current_monitor().ok().flatten().map(|m| m.scale_factor()).unwrap_or(1.0);
+    let (x, y, w, h) = (
+        pos.x as f64 / scale,
+        pos.y as f64 / scale,
+        size.width as f64 / scale,
+        size.height as f64 / scale,
+    );
+    screen_x >= x && screen_x <= x + w && screen_y >= y && screen_y <= y + h
+}

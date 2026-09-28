@@ -909,8 +909,61 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
             json!(true)
         }
         "getBalanceData" | "getDeepseekBalance" => {
-            // 余额轮询（deepseek API）下批接入；先返回不可用态
-            json!({ "available": false })
+            let force = args.first().and_then(|v| v.as_bool()).unwrap_or(false);
+            match tauri::async_runtime::block_on(async {
+                tokio::task::spawn_blocking(move || sidecar::get_balance_data(force)).await
+                    .unwrap_or_else(|e| json!({ "error": e.to_string() }))
+            }) {
+                v => v,
+            }
+        }
+        "getTheme" => {
+            let dark = std::process::Command::new("reg.exe")
+                .args(["query", r"HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "/v", "AppsUseLightTheme"])
+                .creation_flags(0x08000000)
+                .output()
+                .map(|o| {
+                    let text = String::from_utf8_lossy(&o.stdout);
+                    !text.contains("0x0")
+                })
+                .unwrap_or(true);
+            json!(if dark { "dark" } else { "light" })
+        }
+        "overlapTaskDrag" => {
+            let (sx, sy) = (
+                args.first().and_then(|v| v.as_f64()).unwrap_or(0.0),
+                args.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0),
+            );
+            let tasks_enabled = task_cfg(&app).get("island").and_then(|i| i.get("tasksEnabled")).and_then(|v| v.as_bool()).unwrap_or(true);
+            if tasks_enabled && windows::point_in_island(&app, sx, sy) {
+                let _ = windows::ensure_tasklist(&app);
+            }
+            json!(true)
+        }
+        "dropTaskOnList" => {
+            let (sx, sy) = (
+                args.first().and_then(|v| v.as_f64()).unwrap_or(0.0),
+                args.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0),
+            );
+            let board_id = args.get(2).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let task_id = args.get(3).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let tasks_enabled = task_cfg(&app).get("island").and_then(|i| i.get("tasksEnabled")).and_then(|v| v.as_bool()).unwrap_or(true);
+            if tasks_enabled && windows::point_in_island(&app, sx, sy) {
+                let raw = config::read_config();
+                let mut cfg: Value = if raw.is_empty() { json!({}) } else { serde_json::from_str(&raw).unwrap_or(json!({})) };
+                let dup = cfg.get("scTaskList").and_then(|v| v.as_array()).map(|l| l.iter().any(|e| e.get("boardId").and_then(|v| v.as_str()) == Some(board_id.as_str()) && e.get("taskId").and_then(|v| v.as_str()) == Some(task_id.as_str()))).unwrap_or(false);
+                if !dup && !board_id.is_empty() && !task_id.is_empty() {
+                    if let Some(obj) = cfg.as_object_mut() {
+                        let list = obj.entry("scTaskList").or_insert_with(|| json!([]));
+                        if let Some(arr) = list.as_array_mut() {
+                            arr.push(json!({ "boardId": board_id, "taskId": task_id, "addedAt": chrono::Local::now().to_rfc3339() }));
+                        }
+                    }
+                    config::write_config(&serde_json::to_string(&cfg).unwrap_or_default());
+                    let _ = windows::ensure_tasklist(&app);
+                }
+            }
+            json!(true)
         }
         // ---- 未迁移方法兜底：返回空对象，前端不崩（按里程碑补齐）----
         _ => {

@@ -203,3 +203,136 @@ pub fn set_balance_key(provider: &str, key: &str) -> Value {
     crate::config::write_config(&serde_json::to_string(&cfg).unwrap_or_default());
     json!({ "success": true })
 }
+
+// ---------- 余额查询（对齐 getDeepseekBalance/getOpenCodeUsage）----------
+
+const DEEPSEEK_BALANCE_API: &str = "https://api.deepseek.com/user/balance";
+const OPENCODE_USAGE_API: &str = "https://opencode.ai/zen/go/v1/usage";
+
+static LATEST_BALANCE: Mutex<Option<(Value, i64)>> = Mutex::new(None);
+
+fn current_balance_provider() -> &'static str {
+    let raw = crate::config::read_config();
+    let cfg: Value = if raw.is_empty() { json!({}) } else { serde_json::from_str(&raw).unwrap_or(json!({})) };
+    let island = cfg.get("island").cloned().unwrap_or(json!({}));
+    let provider = island.get("balanceProvider").and_then(|v| v.as_str()).unwrap_or("");
+    if provider == "deepseek" || provider == "opencode" {
+        match provider {
+            "opencode" => return "opencode",
+            _ => return "deepseek",
+        }
+    }
+    if island.get("deepseekEnabled").and_then(|v| v.as_bool()).unwrap_or(false) {
+        "deepseek"
+    } else {
+        "none"
+    }
+}
+
+fn island_api_key(field: &str) -> Option<String> {
+    let raw = crate::config::read_config();
+    let cfg: Value = if raw.is_empty() { json!({}) } else { serde_json::from_str(&raw).unwrap_or(json!({})) };
+    cfg.get("island").and_then(|i| i.get(field)).and_then(|v| v.as_str()).map(|s| s.to_string()).filter(|s| !s.is_empty())
+}
+
+fn deepseek_balance(force: bool) -> Value {
+    let Some(api_key) = island_api_key("deepseekApiKey") else {
+        return json!({ "provider": "deepseek", "configured": false, "error": "未配置 API Key" });
+    };
+    {
+        let guard = LATEST_BALANCE.lock().unwrap();
+        if let Some((v, at)) = guard.as_ref() {
+            if !force && v.get("provider").and_then(|x| x.as_str()) == Some("deepseek") && chrono::Utc::now().timestamp_millis() - *at < 60_000 {
+                return v.clone();
+            }
+        }
+    }
+    let result = ureq::get(DEEPSEEK_BALANCE_API)
+        .timeout(std::time::Duration::from_millis(10_000))
+        .set("Authorization", &format!("Bearer {}", api_key))
+        .set("Accept", "application/json")
+        .call();
+    let out = match result {
+        Ok(resp) => match resp.into_json::<Value>() {
+            Ok(data) => {
+                let info = data.get("balance_infos").and_then(|v| v.as_array()).and_then(|a| a.first()).cloned().unwrap_or(json!({}));
+                json!({
+                    "provider": "deepseek",
+                    "configured": true,
+                    "currency": info.get("currency").and_then(|v| v.as_str()).unwrap_or("CNY"),
+                    "balance": info.get("total_balance").and_then(|v| v.as_str()).and_then(|s| s.parse::<f64>().ok()),
+                    "granted": info.get("granted_balance").and_then(|v| v.as_str()).and_then(|s| s.parse::<f64>().ok()),
+                    "toppedUp": info.get("topped_up_balance").and_then(|v| v.as_str()).and_then(|s| s.parse::<f64>().ok()),
+                    "available": data.get("is_available").and_then(|v| v.as_bool()).unwrap_or(true),
+                })
+            }
+            Err(_) => json!({ "provider": "deepseek", "configured": true, "error": "余额获取失败" }),
+        },
+        Err(_) => json!({ "provider": "deepseek", "configured": true, "error": "余额获取失败" }),
+    };
+    *LATEST_BALANCE.lock().unwrap() = Some((out.clone(), chrono::Utc::now().timestamp_millis()));
+    out
+}
+
+fn opencode_usage(force: bool) -> Value {
+    let Some(api_key) = island_api_key("opencodeApiKey") else {
+        return json!({ "provider": "opencode", "configured": false, "error": "未配置 API Key" });
+    };
+    {
+        let guard = LATEST_BALANCE.lock().unwrap();
+        if let Some((v, at)) = guard.as_ref() {
+            if !force && v.get("provider").and_then(|x| x.as_str()) == Some("opencode") && chrono::Utc::now().timestamp_millis() - *at < 60_000 {
+                return v.clone();
+            }
+        }
+    }
+    let out = match ureq::get(OPENCODE_USAGE_API)
+        .timeout(std::time::Duration::from_millis(10_000))
+        .set("Authorization", &format!("Bearer {}", api_key))
+        .set("Accept", "application/json")
+        .call()
+    {
+        Ok(resp) => {
+            if resp.status() >= 400 {
+                let status = resp.status();
+                json!({ "provider": "opencode", "configured": true, "error": if status == 401 { "API Key 无效" } else { "请求失败" } })
+            } else {
+                match resp.into_json::<Value>() {
+                    Ok(data) => {
+                        let usage = data.get("usage").cloned().unwrap_or(json!({}));
+                        let pick = |w: Value| -> Value {
+                            if !w.is_object() {
+                                return Value::Null;
+                            }
+                            let percent = w.get("percent").and_then(|v| v.as_f64());
+                            json!({
+                                "status": w.get("status").and_then(|v| v.as_str()).unwrap_or("ok"),
+                                "percent": percent.map(|p| p.clamp(0.0, 100.0)),
+                                "resetsAt": w.get("resetsAt").cloned().unwrap_or(Value::Null),
+                            })
+                        };
+                        json!({
+                            "provider": "opencode",
+                            "configured": true,
+                            "rolling": pick(usage.get("rolling").cloned().unwrap_or(Value::Null)),
+                            "weekly": pick(usage.get("weekly").cloned().unwrap_or(Value::Null)),
+                            "monthly": pick(usage.get("monthly").cloned().unwrap_or(Value::Null)),
+                        })
+                    }
+                    Err(_) => json!({ "provider": "opencode", "configured": true, "error": "用量获取失败" }),
+                }
+            }
+        }
+        Err(_) => json!({ "provider": "opencode", "configured": true, "error": "用量获取失败" }),
+    };
+    *LATEST_BALANCE.lock().unwrap() = Some((out.clone(), chrono::Utc::now().timestamp_millis()));
+    out
+}
+
+pub fn get_balance_data(force: bool) -> Value {
+    match current_balance_provider() {
+        "deepseek" => deepseek_balance(force),
+        "opencode" => opencode_usage(force),
+        _ => json!({ "provider": "none", "configured": false }),
+    }
+}
