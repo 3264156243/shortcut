@@ -5,6 +5,7 @@
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::Read;
+use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{
@@ -496,6 +497,90 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
                 })
             }
         }
+
+        // ---- M5：更新检查（读 electron-updater latest.yml 对比版本；完整下载安装 M6 接 tauri updater）----
+        "getUpdateState" => {
+            json!({ "status": "idle", "checking": false, "downloading": false })
+        }
+        "checkForUpdates" => {
+            match tauri::async_runtime::block_on(async {
+                tokio::task::spawn_blocking(|| {
+                    let resp = ureq::get("https://shortcut.326415.xyz/updates/latest.yml")
+                        .timeout(std::time::Duration::from_millis(10_000))
+                        .call()
+                        .map_err(|e| e.to_string())?;
+                    resp.into_string().map_err(|e| e.to_string())
+                }).await.map_err(|e| e.to_string())?
+            }) {
+                Ok(yml) => {
+                    let latest = yml.lines()
+                        .find_map(|l| l.strip_prefix("version: ").map(|v| v.trim().trim_matches('"').trim_matches('\'').to_string()))
+                        .unwrap_or_default();
+                    let current = app.package_info().version.to_string();
+                    let has_update = version_gt(&latest, &current);
+                    json!({ "status": if has_update { "available" } else { "up-to-date" }, "current": current, "version": latest, "hasUpdate": has_update })
+                }
+                Err(e) => json!({ "status": "error", "error": e }),
+            }
+        }
+
+        // ---- M5：文件系统 ----
+        "fileExists" => {
+            let p = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            json!(std::path::Path::new(p).exists())
+        }
+        "getFileInfo" => {
+            let p = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            match std::fs::metadata(p) {
+                Ok(m) => json!({
+                    "exists": true,
+                    "isFile": m.is_file(),
+                    "isDirectory": m.is_dir(),
+                    "size": m.len(),
+                    "modified": m.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_millis() as i64),
+                }),
+                Err(_) => json!({ "exists": false }),
+            }
+        }
+        "getFileIcon" => {
+            let p = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+            json!(file_icon_cached(&p))
+        }
+        "getFileIcons" => {
+            let paths: Vec<String> = args.first().and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect()).unwrap_or_default();
+            let mut out = Vec::new();
+            for p in &paths {
+                out.push(json!({ "path": p, "icon": file_icon_cached(p) }));
+            }
+            json!(out)
+        }
+        "runBat" => {
+            let p = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+            if !p.is_empty() && std::path::Path::new(&p).exists() {
+                let _ = std::process::Command::new("cmd").args(["/C", &p]).creation_flags(0x08000000).spawn();
+                json!({ "ok": true })
+            } else {
+                json!({ "ok": false, "error": "not found" })
+            }
+        }
+        "getInstalledSoftware" => {
+            json!(tauri::async_runtime::block_on(async {
+                tokio::task::spawn_blocking(|| {
+                    let ps = "$ErrorActionPreference='SilentlyContinue';$out=@();Get-ItemProperty 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' | ForEach-Object { if($_.DisplayName){ $out += [PSCustomObject]@{ name=$_.DisplayName; version=$_.DisplayVersion; publisher=$_.Publisher; installDate=$_.InstallDate } } }; $out | ConvertTo-Json -Compress -Depth 2";
+                    match std::process::Command::new("powershell.exe")
+                        .args(["-NoProfile", "-NonInteractive", "-Command", ps])
+                        .creation_flags(0x08000000)
+                        .output()
+                    {
+                        Ok(o) => {
+                            let text = String::from_utf8_lossy(&o.stdout);
+                            serde_json::from_str::<Value>(&text).unwrap_or(json!([]))
+                        }
+                        Err(_) => json!([]),
+                    }
+                }).await.unwrap_or(json!([]))
+            }))
+        }
         // ---- 未迁移方法兜底：返回空对象，前端不崩（按里程碑补齐）----
         _ => {
             log::debug!("[shim] 未实现的 electronAPI 方法: {}", method);
@@ -626,6 +711,81 @@ fn fetch_website_icon(raw: &str) -> Result<Value, String> {
     let mut buf = Vec::new();
     icon.into_reader().take(300 * 1024).read_to_end(&mut buf).map_err(|e| e.to_string())?;
     Ok(json!(format!("data:{};base64,{}", mime, control::base64_encode(&buf))))
+}
+
+/// M5：语义化版本比较（latest > current 才提示更新）
+fn version_gt(a: &str, b: &str) -> bool {
+    let parse = |v: &str| -> Vec<u64> {
+        v.trim_start_matches('v').split('.').map(|p| p.chars().filter_map(|c| c.to_digit(10)).fold(0u64, |acc, d| acc * 10 + d as u64)).collect()
+    };
+    let (pa, pb) = (parse(a), parse(b));
+    for i in 0..3 {
+        let x = pa.get(i).copied().unwrap_or(0);
+        let y = pb.get(i).copied().unwrap_or(0);
+        if x != y { return x > y; }
+    }
+    false
+}
+
+/// M5：文件图标提取（PowerShell ExtractAssociatedIcon + icons 目录缓存）
+fn file_icon_cached(path: &str) -> Value {
+    if path.is_empty() || !std::path::Path::new(path).exists() {
+        return Value::Null;
+    }
+    // 缓存键：路径哈希（FNV-1a）+ 文件名
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for b in path.as_bytes() {
+        hash ^= *b as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    let fname = std::path::Path::new(path)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    let cache = config::icons_dir().join(format!("fileicon-{:016x}-{}.png", hash, fname.chars().filter(|c| c.is_ascii_alphanumeric()).take(20).collect::<String>()));
+    if let Ok(data) = std::fs::read(&cache) {
+        return json!(format!("data:image/png;base64,{}", control::base64_encode(&data)));
+    }
+    // PowerShell 提取
+    let esc = path.replace('\'', "''");
+    let ps = format!(
+        "$ErrorActionPreference='SilentlyContinue';Add-Type -AssemblyName System.Drawing;$i=[System.Drawing.Icon]::ExtractAssociatedIcon('{}');if($i){{$ms=New-Object IO.MemoryStream;$i.ToBitmap().Save($ms,[System.Drawing.Imaging.ImageFormat]::Png);[Console]::Out.Write([Convert]::ToBase64String($ms.ToArray()))}}",
+        esc
+    );
+    let out = std::process::Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-Command", &ps])
+        .creation_flags(0x08000000)
+        .output();
+    if let Ok(o) = out {
+        let b64 = String::from_utf8_lossy(&o.stdout).trim().to_string();
+        if !b64.is_empty() {
+            if let Ok(bytes) = use_base64_decode(&b64) {
+                let _ = std::fs::create_dir_all(config::icons_dir());
+                let _ = std::fs::write(&cache, &bytes);
+            }
+            return json!(format!("data:image/png;base64,{}", b64));
+        }
+    }
+    Value::Null
+}
+
+/// 简易 base64 解码（仅缓存写入用）
+fn use_base64_decode(s: &str) -> Result<Vec<u8>, ()> {
+    const TBL: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut vals = Vec::with_capacity(s.len());
+    for b in s.bytes() {
+        if b == b'=' || b == b'\r' || b == b'\n' { continue; }
+        vals.push(TBL.iter().position(|t| *t == b).ok_or(())? as u32);
+    }
+    let mut out = Vec::with_capacity(vals.len() * 3 / 4);
+    for chunk in vals.chunks(4) {
+        if chunk.len() < 2 { break; }
+        let n = (chunk[0] << 18) | (chunk[1] << 12) | (chunk.get(2).copied().unwrap_or(0) << 6) | chunk.get(3).copied().unwrap_or(0);
+        out.push((n >> 16) as u8);
+        if chunk.len() > 2 { out.push((n >> 8) as u8); }
+        if chunk.len() > 3 { out.push(n as u8); }
+    }
+    Ok(out)
 }
 /// 下载/主目录等兜底解析
 fn dirs_home() -> std::path::PathBuf {
