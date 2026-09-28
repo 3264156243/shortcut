@@ -16,6 +16,7 @@ use tauri:: {
 };
 
 mod cloud;
+mod codex;
 mod license;
 mod sidecar;
 mod sync;
@@ -964,6 +965,67 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
                 }
             }
             json!(true)
+        }
+
+        // ---- M5：Codex 供应商预设（codex:* 对齐）----
+        "getCodexState" => codex::read_current_state(),
+        "saveCurrentCodexPreset" => {
+            let data = args.first().cloned().unwrap_or(json!({}));
+            codex::save_current_preset(&data)
+        }
+        "saveCodexPreset" => {
+            let data = args.first().cloned().unwrap_or(json!({}));
+            codex::save_preset(&data)
+        }
+        "deleteCodexPreset" => {
+            let id = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            codex::delete_preset(id)
+        }
+        "applyCodexPreset" => match codex::apply_preset(args.first().and_then(|v| v.as_str()).unwrap_or("")) {
+            Ok(_) => {
+                let mut out = json!({ "success": true });
+                if let Some(obj) = out.as_object_mut() {
+                    obj.insert("state".into(), codex::read_current_state());
+                }
+                out
+            }
+            Err(e) => json!({ "success": false, "error": e }),
+        },
+        "restoreCodexPreset" => match codex::restore_config() {
+            Ok(_) => {
+                let mut out = json!({ "success": true });
+                if let Some(obj) = out.as_object_mut() {
+                    obj.insert("state".into(), codex::read_current_state());
+                }
+                out
+            }
+            Err(e) => json!({ "success": false, "error": e }),
+        },
+        "openCodexFile" => {
+            use tauri_plugin_opener::OpenerExt;
+            let which = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            let path = match which {
+                "auth" => codex::codex_home_dir().join("auth.json"),
+                "models" => codex::codex_home_dir().join("models.json"),
+                _ => codex::codex_home_dir().join("config.toml"),
+            };
+            if !path.exists() {
+                json!({ "success": false, "error": "文件不存在" })
+            } else {
+                let _ = app.opener().open_path(path.to_string_lossy(), None::<&str>);
+                json!({ "success": true })
+            }
+        }
+        "openCodexPresetDir" => {
+            use tauri_plugin_opener::OpenerExt;
+            let id = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            let dir = codex::codex_home_dir().join("shortcut-presets").join(id);
+            if !dir.exists() {
+                json!({ "success": false, "error": "方案目录不存在" })
+            } else {
+                let _ = app.opener().open_path(dir.to_string_lossy(), None::<&str>);
+                json!({ "success": true })
+            }
         }
         // ---- 未迁移方法兜底：返回空对象，前端不崩（按里程碑补齐）----
         _ => {
