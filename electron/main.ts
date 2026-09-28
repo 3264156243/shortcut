@@ -3886,6 +3886,14 @@ if (!gotSingleInstanceLock) {
   setInterval(() => applyIslandVisibility(), 1500);
   syncModuleServices();
 
+  // 内存采样监控（阶段 1 基线数据，ROADMAP §三）
+  try {
+    const { startMemoryMonitor } = require('./memory-monitor');
+    startMemoryMonitor();
+  } catch (err: any) {
+    console.error('memory monitor init failed:', err?.message || err);
+  }
+
   // 语音输入（右 Alt）初始化 + 麦克风权限
   try {
     session.defaultSession.setPermissionRequestHandler((_wc: any, permission: string, callback: (grant: boolean) => void) => {
@@ -3990,6 +3998,7 @@ if (!gotSingleInstanceLock) {
     stopHardwareMonitor();
     try { require('./control-service').stopControlService(); } catch { }
     try { require('./control-cloud').stopCloudControl(); } catch { }
+    try { require('./memory-monitor').stopMemoryMonitor(); } catch { }
     if (usageFlushTimer) clearInterval(usageFlushTimer);
     stopUsageMonitor();
     if (captureOverlay && !captureOverlay.isDestroyed()) captureOverlay.destroy();
