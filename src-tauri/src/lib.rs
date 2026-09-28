@@ -6,10 +6,11 @@ use serde_json::{json, Value};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    Manager, WebviewUrl, WebviewWindowBuilder,
+    Emitter, Manager, WebviewUrl, WebviewWindowBuilder,
 };
 
 mod config;
+mod usage;
 
 /// electronAPI shim：渲染层每次访问 window.electronAPI 的任意方法都落到 invoke('electron_api')。
 /// 回调型（onXxx）映射到 tauri 事件 'electron:<name>'。
@@ -118,6 +119,98 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
             Value::Null
         }
 
+        // ---- M2：使用统计（usage-record.json 数据层；采集器 M5 接入）----
+        "getUsageData" => {
+            let date = args.first().and_then(|v| v.as_str()).map(|s| s.to_string());
+            let record = usage::UsageRecord::load();
+            json!(usage::payload(&record, date.as_deref()))
+        }
+        "setUsageEnabled" => {
+            let mut record = usage::UsageRecord::load();
+            record.enabled = args.first().and_then(|v| v.as_bool()).unwrap_or(true);
+            record.save();
+            json!(usage::payload(&record, None))
+        }
+        "clearUsageData" => {
+            let mut record = usage::UsageRecord::load();
+            record.days.clear();
+            record.save();
+            json!(usage::payload(&record, None))
+        }
+        "deleteUsageDay" => {
+            let mut record = usage::UsageRecord::load();
+            if let Some(key) = args.first().and_then(|v| v.as_str()).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
+                record.days.remove(&key);
+                record.save();
+                json!(usage::payload(&record, Some(&key)))
+            } else {
+                json!(usage::payload(&record, None))
+            }
+        }
+        "addUsageIgnored" => {
+            let mut record = usage::UsageRecord::load();
+            if let Some(key) = args.first().and_then(|v| v.as_str()).map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()) {
+                if !record.ignored.contains(&key) {
+                    record.ignored.push(key);
+                    record.save();
+                }
+            }
+            json!(usage::payload(&record, None))
+        }
+        "removeUsageIgnored" => {
+            let mut record = usage::UsageRecord::load();
+            if let Some(key) = args.first().and_then(|v| v.as_str()).map(|s| s.trim().to_lowercase()) {
+                record.ignored.retain(|item| item != &key);
+                record.save();
+            }
+            json!(usage::payload(&record, None))
+        }
+        "addUsageBackgroundApp" => {
+            let mut record = usage::UsageRecord::load();
+            if let Some(key) = args.first().and_then(|v| v.as_str()).map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()) {
+                if !record.background_apps.contains(&key) {
+                    record.background_apps.push(key);
+                    record.save();
+                }
+            }
+            json!(usage::payload(&record, None))
+        }
+        "removeUsageBackgroundApp" => {
+            let mut record = usage::UsageRecord::load();
+            if let Some(key) = args.first().and_then(|v| v.as_str()).map(|s| s.trim().to_lowercase()) {
+                record.background_apps.retain(|item| item != &key);
+                record.save();
+            }
+            json!(usage::payload(&record, None))
+        }
+
+        // ---- M2：剪贴板 / 文件操作 ----
+        "copyText" => {
+            use tauri_plugin_clipboard_manager::ClipboardExt;
+            if let Some(text) = args.first().and_then(|v| v.as_str()) {
+                let _ = app.clipboard().write_text(text);
+            }
+            Value::Null
+        }
+        "openFile" => {
+            if let Some(p) = args.first().and_then(|v| v.as_str()) {
+                let _ = std::process::Command::new("cmd").args(["/C", "start", "", p]).spawn();
+            }
+            Value::Null
+        }
+        "openFolder" => {
+            if let Some(p) = args.first().and_then(|v| v.as_str()) {
+                let _ = std::process::Command::new("explorer").arg(p).spawn();
+            }
+            Value::Null
+        }
+        "showInFolder" => {
+            if let Some(p) = args.first().and_then(|v| v.as_str()) {
+                let _ = std::process::Command::new("explorer").arg("/select,").arg(p).spawn();
+            }
+            Value::Null
+        }
+
         // ---- 未迁移方法兜底：返回空对象，前端不崩（按里程碑补齐）----
         _ => {
             log::debug!("[shim] 未实现的 electronAPI 方法: {}", method);
@@ -148,6 +241,19 @@ fn handle_tray_event(app: &tauri::AppHandle, id: &str) {
     }
 }
 
+/// 主面板开关（Alt+Space，与 Electron toggleWindow 一致：可见则隐藏，否则唤起）
+fn toggle_main_window(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        if w.is_visible().unwrap_or(false) {
+            let _ = w.hide();
+        } else {
+            let _ = w.show();
+            let _ = w.unminimize();
+            let _ = w.set_focus();
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -157,9 +263,38 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(
+            // 全局快捷键（键位与 Electron 版一致）：Alt+Space 壳内消化；
+            // Alt+I/Alt+U/Alt+S/Alt+D 以事件转发前端（灵动岛/任务墙/截图在 M3/M5 接线）
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        let key = shortcut.into_string().to_lowercase();
+                        match key.as_str() {
+                            "alt+space" => toggle_main_window(app),
+                            "alt+i" => { let _ = app.emit("electron:shortcut", "island"); }
+                            "alt+u" => { let _ = app.emit("electron:shortcut", "tasklist"); }
+                            "alt+s" => { let _ = app.emit("electron:shortcut", "screenshot-full"); }
+                            "alt+d" => { let _ = app.emit("electron:shortcut", "screenshot-region"); }
+                            _ => {}
+                        }
+                    }
+                })
+                .build(),
+        )
         .setup(|app| {
             // 配置损坏自愈（与 Electron 启动行为一致）
             config::restore_from_backup_if_needed();
+
+            // 注册全局快捷键（注册失败静默——与 Electron console.error 同语义不阻断启动）
+            {
+                use tauri_plugin_global_shortcut::GlobalShortcutExt;
+                let gs = app.global_shortcut();
+                for k in ["alt+space", "alt+i", "alt+u", "alt+s", "alt+d"] {
+                    let _ = gs.register(k);
+                }
+            }
 
             if cfg!(debug_assertions) {
                 app.handle().plugin(
