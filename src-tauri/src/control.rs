@@ -103,7 +103,7 @@ impl Injector {
 
 // ---------- VK 表（照抄 server.js）----------
 
-fn resolve_vk(name: &Value) -> Option<u32> {
+pub fn resolve_vk(name: &Value) -> Option<u32> {
     if let Some(n) = name.as_i64() {
         return Some((n & 0xffff_ffff) as u32);
     }
@@ -214,7 +214,7 @@ pub fn lan_urls_pub(port: u16) -> Vec<String> {
     lan_urls(port)
 }
 
-fn now_ms() -> i64 {
+pub fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }
 
@@ -253,7 +253,7 @@ fn is_authorized(state: &ControlState, headers: &HeaderMap) -> bool {
 
 // ---------- 剪贴板 ----------
 
-async fn read_pc_clipboard() -> Option<String> {
+pub async fn read_pc_clipboard() -> Option<String> {
     let ps = "$ErrorActionPreference='SilentlyContinue';\n[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;\nAdd-Type -AssemblyName System.Windows.Forms;\n$t=[System.Windows.Forms.Clipboard]::GetText();\nif ($null -eq $t) { $t = '' };\n[Console]::Out.Write($t)";
     let out = Command::new("powershell.exe")
         .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", ps])
@@ -709,7 +709,7 @@ async fn pc_status_page(State(st): State<Arc<ControlState>>) -> axum::response::
 
 // ---------- 基础工具 ----------
 
-fn base64_encode(data: &[u8]) -> String {
+pub fn base64_encode(data: &[u8]) -> String {
     const TBL: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity((data.len() + 2) / 3 * 4);
     for chunk in data.chunks(3) {

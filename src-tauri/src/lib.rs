@@ -12,6 +12,7 @@ use tauri::{
     Emitter, Manager, WebviewUrl, WebviewWindowBuilder,
 };
 
+mod cloud;
 mod config;
 mod control;
 mod usage;
@@ -362,6 +363,31 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
             }
         }
 
+        // ---- M4 云控制（wss relay；与局域网模式互斥）----
+        "startCloudControl" => match cloud::start_cloud(sj_static_root(&app)) {
+            Ok(_handle) => {
+                app.state::<CloudHandleState>().0.lock().unwrap().replace(_handle);
+                let state = app.state::<CloudHandleState>().0.lock().unwrap().as_ref().map(|h| h.state.status_json()).unwrap_or(json!({}));
+                json!({ "success": true, "status": state })
+            }
+            Err(e) => json!({ "success": false, "error": e }),
+        },
+        "stopCloudControl" => {
+            let state = app.state::<CloudHandleState>();
+            if let Some(h) = state.0.lock().unwrap().take() {
+                let _ = h.shutdown.send(true);
+            }
+            json!({ "ok": true })
+        }
+        "getCloudControlStatus" => {
+            let state = app.state::<CloudHandleState>();
+            let guard = state.0.lock().unwrap();
+            match guard.as_ref() {
+                Some(h) => h.state.status_json(),
+                None => json!({ "active": false, "connected": false, "connecting": false, "injector": false, "lastError": "" }),
+            }
+        }
+
         // ---- 未迁移方法兜底：返回空对象，前端不崩（按里程碑补齐）----
         _ => {
             log::debug!("[shim] 未实现的 electronAPI 方法: {}", method);
@@ -380,6 +406,9 @@ fn dirs_home() -> std::path::PathBuf {
 /// M4 控制服务句柄（shutdown 通道 + 状态）
 pub struct ControlHandle(pub Mutex<Option<(Arc<control::ControlState>, control::ControlServer)>>);
 
+/// M4 云控制句柄
+pub struct CloudHandleState(pub Mutex<Option<cloud::CloudHandle>>);
+
 /// sj 静态资源目录：生产=resource_dir/resources/sj，开发=CARGO_MANIFEST_DIR/../resources/sj
 fn sj_static_root(app: &tauri::AppHandle) -> PathBuf {
     if let Ok(rd) = app.path().resource_dir() {
@@ -395,7 +424,7 @@ fn start_control(app: &tauri::AppHandle, port: u16, auth_mode: &str) -> Result<V
     // 已在运行则先停掉
     {
         let state = app.state::<ControlHandle>();
-        let mut guard = state.0.lock().unwrap();
+        let guard = state.0.lock().unwrap();
         if guard.is_some() {
             drop(guard);
             drop(state);
@@ -478,6 +507,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(ControlHandle(std::sync::Mutex::new(None)))
+        .manage(CloudHandleState(std::sync::Mutex::new(None)))
         .plugin(
             // 全局快捷键（键位与 Electron 版一致）：Alt+Space 壳内消化；
             // Alt+I/Alt+U/Alt+S/Alt+D 以事件转发前端（灵动岛/任务墙/截图在 M3/M5 接线）

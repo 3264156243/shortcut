@@ -24,6 +24,9 @@ rand = "0.9"
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "json"] }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "process", "sync", "time", "macros"] }
 tokio-stream = "0.1"
+futures-util = "0.3"
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+ureq = { version = "2", default-features = false, features = ["json", "tls"] }
 tauri = { version = "2.12.0", features = ["tray-icon", "image-ico"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2"
