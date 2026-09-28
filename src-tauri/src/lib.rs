@@ -17,6 +17,7 @@ use tauri:: {
 
 mod cloud;
 mod codex;
+mod voice;
 mod license;
 mod sidecar;
 mod sync;
@@ -1025,6 +1026,42 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
             } else {
                 let _ = app.opener().open_path(dir.to_string_lossy(), None::<&str>);
                 json!({ "success": true })
+            }
+        }
+
+        // ---- M5：语音输入（voice:* 对齐 voice-input.ts）----
+        "voiceOpen" => voice::voice_open(&app),
+        "voiceStart" => voice::voice_start(&app),
+        "voiceConfirm" => voice::voice_confirm(&app),
+        "voiceToggle" => voice::voice_toggle(&app),
+        "voiceCancel" => voice::voice_cancel(&app),
+        "voiceGetConfig" => voice::voice_get_config(&app),
+        "voiceGetStats" => voice::get_voice_stats(),
+        "voiceAudio" => {
+            let chunk = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            voice::voice_audio(chunk)
+        }
+        "voiceRegisterShortcut" => {
+            voice::register_shortcut(&app);
+            json!(true)
+        }
+        "voiceBridgeEvent" => {
+            // 桥按键事件（SPACE/ENTER/ESC）由窗口层转发
+            let event = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            match event {
+                "toggle" => {
+                    voice::toggle_pause(&app);
+                    json!(true)
+                }
+                "confirm" => {
+                    voice::confirm_and_type(&app);
+                    json!(true)
+                }
+                "cancel" => {
+                    voice::cancel_session(&app);
+                    json!(true)
+                }
+                _ => json!(true),
             }
         }
         // ---- 未迁移方法兜底：返回空对象，前端不崩（按里程碑补齐）----
