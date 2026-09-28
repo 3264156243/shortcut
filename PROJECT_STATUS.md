@@ -160,6 +160,8 @@ Remove-SSHSession -SessionId $s.SessionId | Out-Null
 
 ## 更新记录
 
+- [2026-09-29] **Tauri 2 M5 第四批（74/139）**（提交 `179d866`）：修正两处对齐错位——`openFile` 实为文件选择对话框（打开文件走 `openTarget`）、`runBat` 参数是 bat 内容（临时文件+Start-Process 可提权）。新增 tauri-plugin-dialog 对话框系（openFile/openImportFile/openIconFile→data:URL/saveFile）、readFile/writeFile、任务提醒全链路（30s 扫描 reminderAt→透明提醒窗堆叠→confirm/view）+ toggleTaskDone。测试 5 绿。
+
 - [2026-09-29] **Tauri 2 M5 三批推进（62/139 命令对账）**（提交 `597b4c8`）：①任务墙数据管道（getTaskList/addTaskFromDrag/completeTaskInList/removeTaskFromList/locateTaskFromList，config.scTaskList + taskBoards.notes 语义照抄）+ translateText（代理 API 12s 超时 + 14 语言白名单）+ getWebsiteIcon（favicon 抓取→data:URL）+ syncGetBinding；②更新检查（latest.yml 语义化版本对比）+ fileExists/getFileInfo/runBat/getInstalledSoftware（注册表三键枚举）+ getFileIcon(s)（PowerShell ExtractAssociatedIcon→PNG data:URL + FNV-1a 哈希缓存）；③激活授权 license 全系列（指纹脚本照抄 + 机器码 sha256 算法逐字节对齐 Electron 版——**实测同机同码 `5FB0DB8C…C265`，服务端视为同一设备**）+ gate 广播。新依赖 sha2。测试 4 绿。剩余：音乐桥/平台余额/Codex 预设/语音输入/快传/提醒/任务回调/翻译胶囊动态 HTML。
 
 - [2026-09-29] **Tauri 2 M4 全部完成**（提交 `afec662`）：云控制 WS 客户端 cloud.rs（约 470 行）对齐 control-cloud.ts——ticket 换取（ureq POST sync/api.php，10s 超时）→ wss://shortcut.326415.xyz/relay-ws → auth 握手 → 25s 心跳 → `{t:api}` 转发注入器（进程内直调不走 HTTP）→ `{t:api-res}` 回包 + 8s 超时 + 指数退避重连（3s×1.6^n 上限 30s 重取 ticket）。绑定身份读 config.sync 节；诊断日志同路径 `userData/logs/control-cloud.log`。新依赖 tokio-tungstenite(rustls)/ureq(rustls)/futures-util。测试 handle_api_semantics 全过（ping/空超长 400/无效键 400/combo VK 解析/clipboard clear/unknown path），与局域网测试合计 2 绿。M4 里程碑闭环：局域网（axum HTTP + powershell 注入器）+ 云端（WS relay 转发）双模式均摆脱 node 运行时。
