@@ -160,6 +160,8 @@ Remove-SSHSession -SessionId $s.SessionId | Out-Null
 
 ## 更新记录
 
+- [2026-09-29] **Tauri 2 M4 全部完成**（提交 `afec662`）：云控制 WS 客户端 cloud.rs（约 470 行）对齐 control-cloud.ts——ticket 换取（ureq POST sync/api.php，10s 超时）→ wss://shortcut.326415.xyz/relay-ws → auth 握手 → 25s 心跳 → `{t:api}` 转发注入器（进程内直调不走 HTTP）→ `{t:api-res}` 回包 + 8s 超时 + 指数退避重连（3s×1.6^n 上限 30s 重取 ticket）。绑定身份读 config.sync 节；诊断日志同路径 `userData/logs/control-cloud.log`。新依赖 tokio-tungstenite(rustls)/ureq(rustls)/futures-util。测试 handle_api_semantics 全过（ping/空超长 400/无效键 400/combo VK 解析/clipboard clear/unknown path），与局域网测试合计 2 绿。M4 里程碑闭环：局域网（axum HTTP + powershell 注入器）+ 云端（WS relay 转发）双模式均摆脱 node 运行时。
+
 - [2026-09-29] **Tauri 2 M4 局域网控制服务 Rust 化完成**（提交 `9a58f28`）：control.rs（约 850 行）逐条对齐 resources/sj/server.js——HTTP 15 端点（config/status/pair/unbind/ping/type/key/combo/mouse/click/wheel/clipboard refresh·paste·clear/reset-code）、常驻 powershell 注入器（stdin 管道 TYPE/KEY/COMBO/MOUSE/CLICK/WHEEL + READY 握手，tokio mpsc）、VK 表、Bearer/x-token + pair 会话鉴权、剪贴板历史、静态文件服务（MIME 白名单+路径穿越防护）、/pc 状态页。桌面壳内 tokio task 直接跑，**彻底摆脱 node 运行时**（Electron 版靠 ELECTRON_RUN_AS_NODE）。集成测试 control_server_full_flow 全绿（HTTP 全链路 0.33s）。踩坑：①`#[tokio::test]` 默认单线程 runtime，同步阻塞 IO 饿死 server 任务，须 `flavor="multi_thread"`；②Windows `canonicalize` 返回 `\\?\` 前缀路径，与未规范化 root 做 starts_with 永远失败；③`State<ControlHandle>` 链式 `.0.lock()` 临时值 E0716，先绑变量再 lock。M4 剩余：云控制 WS 客户端（control-cloud.ts → tokio-tungstenite）。
 
 - [2026-09-29] **Tauri 2 M3 透明窗家族全通过**（提交 `e6fd0dd`）：build_overlay 通用覆盖窗工厂后，任务墙（340×430）与 SC球（46×46）同模式点亮，截图验证**岛+任务墙双透明窗并存**、位置精确锚定岛右侧。Alt+U 切换任务墙（与 Electron 行为一致：存在即销毁）、SC 球随岛移动跟随。任务墙数据管道（sendTaskListData/pruneTaskList）M5 接入；翻译胶囊（Electron 版为 data:URL 动态 HTML、与翻译流程耦合）留 M5 翻译板块一起做。M3 里程碑核心目标（透明窗技术验证+主要窗口迁移）完成。
