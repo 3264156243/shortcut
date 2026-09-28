@@ -4,7 +4,7 @@
 //! 360×340，位置预设 top-center(0.5,0.08) 等，custom 用 config.island.x/y。
 
 use serde_json::{json, Value};
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::config;
 
@@ -256,5 +256,58 @@ pub fn position_deepseekball(app: &tauri::AppHandle) {
     if let Some(win) = app.get_webview_window("deepseekball") {
         let (ix, iy, iw, _) = island_anchor(app);
         let _ = win.set_position(tauri::LogicalPosition::new(ix + iw + 8.0, iy + 8.0));
+    }
+}
+
+/// M5 提醒窗：340×128 透明窗，岛上方堆叠（对齐 createReminderWindow）
+pub fn ensure_reminder_window(app: &tauri::AppHandle, board_id: &str, task_id: &str, index: usize) -> bool {
+    let label = format!("reminder-{}-{}", board_id, task_id);
+    if app.get_webview_window(&label).is_some() {
+        return false;
+    }
+    // 岛位置锚定
+    let (ix, iy, iw) = match app.get_webview_window("island") {
+        Some(island) => {
+            let pos = island.outer_position().ok();
+            let scale = island.current_monitor().ok().flatten().map(|m| m.scale_factor()).unwrap_or(1.0);
+            let size = island.outer_size().ok();
+            match (pos, size) {
+                (Some(p), Some(s)) => ((p.x as f64 / scale).round() as i32, (p.y as f64 / scale).round() as i32, (s.width as f64 / scale).round() as i32),
+                _ => (120, 120, 360),
+            }
+        }
+        None => (120, 120, 360),
+    };
+    let x = ix + (iw - 340) / 2;
+    let y = iy + 60 + (index as i32) * 132;
+    let url = WebviewUrl::App("reminder.html".into());
+    let result = WebviewWindowBuilder::new(app, &label, url)
+        .title("reminder")
+        .inner_size(340.0, 128.0)
+        .position(x as f64, y as f64)
+        .decorations(false)
+        .transparent(true)
+        .resizable(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .shadow(false)
+        .focused(false)
+        .visible(false)
+        .initialization_script(crate::SHIM_JS)
+        .build();
+    match result {
+        Ok(w) => {
+            let _ = w.set_focusable(false);
+            let _ = w.set_position(tauri::LogicalPosition::new(x as f64, y as f64));
+            let _ = w.show();
+            let payload = serde_json::json!({ "boardId": board_id, "taskId": task_id });
+            let _ = app.emit_to(&label, "electron:ReminderData", payload);
+            log::info!("[windows] 提醒窗已创建 {} idx={}", label, index);
+            true
+        }
+        Err(e) => {
+            log::error!("[windows] 提醒窗创建失败 {}: {:?}", label, e);
+            false
+        }
     }
 }

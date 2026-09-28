@@ -8,7 +8,8 @@ use std::io::Read;
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use tauri::{
+use tauri_plugin_dialog::DialogExt;
+use tauri:: {
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
     Emitter, Manager, WebviewUrl, WebviewWindowBuilder,
@@ -201,11 +202,64 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
             }
             Value::Null
         }
-        "openFile" => {
+        "openTarget" => {
             if let Some(p) = args.first().and_then(|v| v.as_str()) {
                 let _ = std::process::Command::new("cmd").args(["/C", "start", "", p]).spawn();
             }
             Value::Null
+        }
+        // ---- M5：文件选择对话框（tauri-plugin-dialog，对齐 dialog:* IPC）----
+        "openFile" => {
+            match app.dialog().file().blocking_pick_file() {
+                Some(p) => json!(p.to_string()),
+                None => Value::Null,
+            }
+        }
+        "openImportFile" => {
+            match app.dialog().file().add_filter("JSON", &["json"]).blocking_pick_file() {
+                Some(p) => json!(p.to_string()),
+                None => Value::Null,
+            }
+        }
+        "openIconFile" => {
+            match app.dialog().file().add_filter("Images", &["png", "jpg", "jpeg", "webp", "ico", "svg"]).blocking_pick_file() {
+                Some(p) => {
+                    let path = p.to_string();
+                    match std::fs::read(&path) {
+                        Ok(data) => {
+                            let mime = match path.rsplit('.').next().unwrap_or("").to_lowercase().as_str() {
+                                "png" => "image/png",
+                                "jpg" | "jpeg" => "image/jpeg",
+                                "webp" => "image/webp",
+                                "svg" => "image/svg+xml",
+                                _ => "image/x-icon",
+                            };
+                            json!(format!("data:{};base64,{}", mime, control::base64_encode(&data)))
+                        }
+                        Err(_) => Value::Null,
+                    }
+                }
+                None => Value::Null,
+            }
+        }
+        "saveFile" => {
+            let default_name = args.first().and_then(|v| v.as_str()).unwrap_or("export.json").to_string();
+            match app.dialog().file().add_filter("JSON", &["json"]).set_file_name(&default_name).blocking_save_file() {
+                Some(p) => json!(p.to_string()),
+                None => Value::Null,
+            }
+        }
+        "readFile" => {
+            let p = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            std::fs::read_to_string(p).map(|s| json!(s)).unwrap_or(Value::Null)
+        }
+        "writeFile" => {
+            let p = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let data = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            match std::fs::write(&p, data) {
+                Ok(_) => json!({ "success": true }),
+                Err(e) => json!({ "success": false, "error": e.to_string() }),
+            }
         }
         "openFolder" => {
             if let Some(p) = args.first().and_then(|v| v.as_str()) {
@@ -556,12 +610,30 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
             json!(out)
         }
         "runBat" => {
-            let p = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
-            if !p.is_empty() && std::path::Path::new(&p).exists() {
-                let _ = std::process::Command::new("cmd").args(["/C", &p]).creation_flags(0x08000000).spawn();
-                json!({ "ok": true })
+            // 对齐 shell:runBat：参数是 bat 内容，写临时文件后 Start-Process 隐藏运行
+            let content = args.first().and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            let run_as_admin = args.get(1).and_then(|v| v.as_bool()).unwrap_or(false);
+            if content.is_empty() {
+                json!({ "success": false, "error": "BAT content is empty" })
             } else {
-                json!({ "ok": false, "error": "not found" })
+                let bat_dir = config::user_data_dir().join("bat");
+                let _ = std::fs::create_dir_all(&bat_dir);
+                let bat_path = bat_dir.join(format!("shortcut-{}.bat", chrono::Local::now().timestamp_millis()));
+                let normalized = content.trim_start_matches('\u{feff}');
+                let _ = std::fs::write(&bat_path, format!("@chcp 65001 >nul\r\n{}\r\n", normalized));
+                let target = bat_path.to_string_lossy().to_string();
+                let cwd = bat_path.parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+                let admin = if run_as_admin { "1" } else { "0" };
+                let ps = "$ErrorActionPreference='Stop';$params=@{FilePath=$env:SHORTCUT_TARGET;WorkingDirectory=$env:SHORTCUT_CWD;PassThru=$true};if($env:SHORTCUT_RUN_AS_ADMIN -eq '1'){$params.Verb='RunAs'};$process=Start-Process @params;if(-not $process){throw 'Windows did not create the target process.'}";
+                let ok = std::process::Command::new("powershell.exe")
+                    .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", ps])
+                    .env("SHORTCUT_TARGET", &target)
+                    .env("SHORTCUT_CWD", &cwd)
+                    .env("SHORTCUT_RUN_AS_ADMIN", admin)
+                    .creation_flags(0x08000000)
+                    .spawn()
+                    .is_ok();
+                json!({ "success": ok, "error": if ok { Value::Null } else { json!("启动失败") } })
             }
         }
         "getInstalledSoftware" => {
@@ -650,6 +722,81 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
                 let _ = windows::ensure_tasklist(&app);
             }
             json!(true)
+        }
+
+        // ---- M5：任务提醒（reminder，对齐 reminder:* IPC + 30s 扫描）----
+        "getReminderData" => {
+            // 窗口 label 编码任务键：reminder-<boardId>-<taskId>
+            let label = window.label().to_string();
+            let rest = label.strip_prefix("reminder-").unwrap_or("");
+            let (board_id, task_id) = match rest.split_once('-') {
+                Some((b, t)) => (b.to_string(), t.to_string()),
+                None => (String::new(), String::new()),
+            };
+            let cfg = task_cfg(&app);
+            let task = cfg.get("taskBoards").and_then(|b| b.as_array())
+                .and_then(|boards| boards.iter().find(|b| b.get("id").and_then(|v| v.as_str()) == Some(board_id.as_str())))
+                .and_then(|b| b.get("notes").and_then(|n| n.as_array()))
+                .and_then(|notes| notes.iter().find(|n| n.get("id").and_then(|v| v.as_str()) == Some(task_id.as_str())));
+            match task {
+                Some(t) => json!({ "boardId": board_id, "taskId": task_id, "title": t.get("text").and_then(|v| v.as_str()).unwrap_or("任务提醒") }),
+                None => Value::Null,
+            }
+        }
+        "confirmReminder" => {
+            let board_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            let task_id = args.get(1).and_then(|v| v.as_str()).unwrap_or("");
+            mark_task_reminded(&app, board_id, task_id);
+            if let Some(w) = app.get_webview_window(&format!("reminder-{}-{}", board_id, task_id)) {
+                let _ = w.destroy();
+            }
+            json!(true)
+        }
+        "viewReminder" => {
+            let board_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            let task_id = args.get(1).and_then(|v| v.as_str()).unwrap_or("");
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.set_focus();
+                let _ = app.emit("electron:TaskLocate", json!({ "boardId": board_id, "taskId": task_id }));
+            }
+            let b = board_id.to_string();
+            let t = task_id.to_string();
+            let handle = app.clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                if let Some(w) = handle.get_webview_window(&format!("reminder-{}-{}", b, t)) {
+                    let _ = w.destroy();
+                }
+            });
+            json!(true)
+        }
+
+        // ---- M5：任务看板勾选（toggleTaskDone）----
+        "toggleTaskDone" => {
+            let board_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let task_id = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let raw = config::read_config();
+            let mut cfg: Value = if raw.is_empty() { json!({}) } else { serde_json::from_str(&raw).unwrap_or(json!({})) };
+            let mut changed = false;
+            if let Some(boards) = cfg.as_object_mut().unwrap().get_mut("taskBoards").and_then(|v| v.as_array_mut()) {
+                if let Some(board) = boards.iter_mut().find(|b| b.get("id").and_then(|v| v.as_str()) == Some(board_id.as_str())) {
+                    if let Some(notes) = board.get_mut("notes").and_then(|n| n.as_array_mut()) {
+                        if let Some(note) = notes.iter_mut().find(|n| n.get("id").and_then(|v| v.as_str()) == Some(task_id.as_str())) {
+                            if let Some(obj) = note.as_object_mut() {
+                                let cur = obj.get("done").and_then(|v| v.as_bool()).unwrap_or(false);
+                                obj.insert("done".into(), json!(!cur));
+                                obj.insert("updatedAt".into(), json!(chrono::Local::now().to_rfc3339()));
+                                changed = true;
+                            }
+                        }
+                    }
+                }
+            }
+            if changed {
+                config::write_config(&serde_json::to_string(&cfg).unwrap_or_default());
+            }
+            json!({ "ok": changed })
         }
         // ---- 未迁移方法兜底：返回空对象，前端不崩（按里程碑补齐）----
         _ => {
@@ -958,6 +1105,62 @@ fn toggle_main_window(app: &tauri::AppHandle) {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// M5 提醒：标记任务已提醒（remindedAt + done=true）
+fn mark_task_reminded(_app: &tauri::AppHandle, board_id: &str, task_id: &str) {
+    let raw = config::read_config();
+    let mut cfg: Value = if raw.is_empty() { json!({}) } else { serde_json::from_str(&raw).unwrap_or(json!({})) };
+    let mut changed = false;
+    if let Some(boards) = cfg.as_object_mut().unwrap().get_mut("taskBoards").and_then(|v| v.as_array_mut()) {
+        if let Some(board) = boards.iter_mut().find(|b| b.get("id").and_then(|v| v.as_str()) == Some(board_id)) {
+            if let Some(notes) = board.get_mut("notes").and_then(|n| n.as_array_mut()) {
+                if let Some(note) = notes.iter_mut().find(|n| n.get("id").and_then(|v| v.as_str()) == Some(task_id)) {
+                    if let Some(obj) = note.as_object_mut() {
+                        obj.insert("remindedAt".into(), json!(chrono::Local::now().to_rfc3339()));
+                        obj.insert("done".into(), json!(true));
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+    if changed {
+        config::write_config(&serde_json::to_string(&cfg).unwrap_or_default());
+    }
+}
+
+/// M5 提醒：扫描到期任务并弹提醒窗（对齐 scanDueReminders，30s 周期）
+fn scan_due_reminders(app: &tauri::AppHandle) {
+    let raw = config::read_config();
+    let cfg: Value = if raw.is_empty() { json!({}) } else { serde_json::from_str(&raw).unwrap_or(json!({})) };
+    let tasks_enabled = cfg.get("island").and_then(|i| i.get("tasksEnabled")).and_then(|v| v.as_bool()).unwrap_or(true);
+    if !tasks_enabled {
+        return;
+    }
+    let now = chrono::Utc::now().timestamp_millis();
+    let mut count = 0usize;
+    if let Some(boards) = cfg.get("taskBoards").and_then(|v| v.as_array()) {
+        for board in boards {
+            let board_id = board.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            if let Some(notes) = board.get("notes").and_then(|v| v.as_array()) {
+                for note in notes {
+                    let reminder_at = note.get("reminderAt").and_then(|v| v.as_str()).unwrap_or("");
+                    let reminded = note.get("remindedAt").and_then(|v| v.as_str()).unwrap_or("");
+                    if reminder_at.is_empty() || !reminded.is_empty() {
+                        continue;
+                    }
+                    let due = chrono::DateTime::parse_from_rfc3339(reminder_at).map(|d| d.timestamp_millis()).unwrap_or(i64::MIN);
+                    if due > now {
+                        continue;
+                    }
+                    let task_id = note.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    if windows::ensure_reminder_window(app, &board_id, &task_id, count) {
+                        count += 1;
+                    }
+                }
+            }
+        }
+    }
+}
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(
@@ -967,6 +1170,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(ControlHandle(std::sync::Mutex::new(None)))
         .manage(CloudHandleState(std::sync::Mutex::new(None)))
         .plugin(
@@ -1060,7 +1264,17 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            Ok(())
+            // M5：任务提醒扫描（30s 周期）
+    {
+        let handle = app.handle().clone();
+        tauri::async_runtime::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                scan_due_reminders(&handle);
+            }
+        });
+    }
+    Ok(())
         })
         .invoke_handler(tauri::generate_handler![electron_api])
         .run(tauri::generate_context!())
