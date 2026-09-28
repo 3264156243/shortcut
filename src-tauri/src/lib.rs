@@ -46,7 +46,7 @@ const SHIM_JS: &str = r#"
 "#;
 
 #[tauri::command]
-fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: String, args: Value) -> Value {
+fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: String, args: Vec<Value>) -> Value {
     match method.as_str() {
         // ---- 应用信息 ----
         "getAppVersion" => json!(app.package_info().version.to_string()),
@@ -169,16 +169,19 @@ pub fn run() {
                 )?;
             }
 
-            // 主窗口（conf 已定义，这里拿句柄挂 shim）
+            // 主窗口：Rust builder 创建（initialization_script 只能挂在 builder 上；conf 不再定义窗口）
             let win = app
                 .get_webview_window("main")
                 .unwrap_or_else(|| {
-                    WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
+                    WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                         .title("ShortCut")
+                        .inner_size(1280.0, 800.0)
+                        .min_inner_size(960.0, 640.0)
+                        .resizable(true)
+                        .initialization_script(SHIM_JS)
                         .build()
-                        .unwrap()
+                        .expect("failed to build main window")
                 });
-            let _ = win.initialization_script(SHIM_JS);
 
             // 托盘：显示主面板 / 退出
             let show = MenuItem::with_id(app, "show", "显示主面板", true, None::<&str>)?;
@@ -201,7 +204,6 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
-            let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
             Ok(())
         })

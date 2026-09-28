@@ -1,4 +1,4 @@
-# electronAPI → Rust 命令对账清单
+﻿# electronAPI → Rust 命令对账清单
 
 > 来源：`electron/preload.ts`（139 个方法）。前端调用 `electronAPI.xxx()` → invoke `electron_api(method=xxx)`。
 > 状态图例：✅ 已实现 · 🔲 待实现（按里程碑）· 📞 回调型（onXxx → emit `electron:<name>` 事件）
