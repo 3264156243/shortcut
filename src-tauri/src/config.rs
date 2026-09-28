@@ -138,3 +138,10 @@ pub fn write_config(data: &str) {
         let _ = fs::rename(&tmp, config_file());
     }
 }
+
+/// M5：岛驾驶舱开关（config.island.cockpitEnabled，默认 false）
+pub fn read_config_island_cockpit_enabled() -> bool {
+    let raw = read_config();
+    let cfg: serde_json::Value = if raw.is_empty() { serde_json::json!({}) } else { serde_json::from_str(&raw).unwrap_or(serde_json::json!({})) };
+    cfg.get("island").and_then(|i| i.get("cockpitEnabled")).and_then(|v| v.as_bool()).unwrap_or(false)
+}

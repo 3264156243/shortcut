@@ -17,6 +17,7 @@ use tauri:: {
 
 mod cloud;
 mod license;
+mod sidecar;
 mod config;
 mod control;
 mod usage;
@@ -798,6 +799,90 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
             }
             json!({ "ok": changed })
         }
+
+        // ---- M5：音乐桥 + 硬件监控 + 余额开关（sidecar/配置类）----
+        "startMusicBridge" => {
+            let st = app.state::<MusicHandle>();
+            sidecar::start_music_bridge(app.clone(), st.0.clone())
+        }
+        "stopMusicBridge" => {
+            let st = app.state::<MusicHandle>();
+            sidecar::stop_music_bridge(&st.0);
+            json!(true)
+        }
+        "getMusicState" => {
+            let st = app.state::<MusicHandle>();
+            let latest = st.0.latest.lock().unwrap().clone();
+            if latest.is_null() { json!({ "available": false }) } else { latest }
+        }
+        "controlMusic" => {
+            let action = args.first().and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+            if let Some(script) = sidecar::music_bridge_script_pub() {
+                sidecar::run_music_command(&script, &["-Control".to_string(), action])
+            } else {
+                json!({ "success": false, "error": "音乐桥接脚本不存在" })
+            }
+        }
+        "seekMusic" => {
+            let ms = args.first().and_then(|v| v.as_f64()).unwrap_or(0.0).round() as i64;
+            if let Some(script) = sidecar::music_bridge_script_pub() {
+                sidecar::run_music_command(&script, &["-Seek".to_string(), ms.to_string()])
+            } else {
+                json!({ "success": false, "error": "音乐桥接脚本不存在" })
+            }
+        }
+        "startCockpit" => {
+            let st = app.state::<CockpitHandle>();
+            st.0.main_active.store(true, std::sync::atomic::Ordering::SeqCst);
+            let result = sidecar::sync_cockpit(app.clone(), st.0.clone());
+            result
+        }
+        "stopCockpit" => {
+            let st = app.state::<CockpitHandle>();
+            st.0.main_active.store(false, std::sync::atomic::Ordering::SeqCst);
+            sidecar::sync_cockpit(app.clone(), st.0.clone());
+            json!(true)
+        }
+        "getIslandCockpitState" => {
+            let st = app.state::<CockpitHandle>();
+            let latest = st.0.latest.lock().unwrap().clone();
+            if latest.is_null() { json!({}) } else { latest }
+        }
+        "setBalanceKey" | "setDeepseekKey" | "setOpenCodeKey" => {
+            let key = args.get(1).and_then(|v| v.as_str()).or_else(|| args.first().and_then(|v| v.as_str())).unwrap_or("");
+            let provider = if method == "setOpenCodeKey" { "opencode" } else if method == "setDeepseekKey" { "deepseek" } else { args.first().and_then(|v| v.as_str()).unwrap_or("deepseek") };
+            sidecar::set_balance_key(provider, key)
+        }
+        "setBalanceMusicPlaying" | "setDeepseekMusicPlaying" => {
+            let playing = args.first().and_then(|v| v.as_bool()).unwrap_or(false);
+            if playing {
+                let _ = windows::ensure_deepseekball(&app);
+            } else {
+                windows::destroy_deepseekball(&app);
+            }
+            json!(true)
+        }
+        "openBalancePlatform" => {
+            let provider = args.first().and_then(|v| v.as_str()).unwrap_or("deepseek");
+            let url = if provider == "opencode" { "https://opencode.net" } else { "https://platform.deepseek.com" };
+            use tauri_plugin_opener::OpenerExt;
+            let _ = app.opener().open_url(url, None::<&str>);
+            json!(true)
+        }
+        "openDeepseekPlatform" => {
+            use tauri_plugin_opener::OpenerExt;
+            let _ = app.opener().open_url("https://platform.deepseek.com", None::<&str>);
+            json!(true)
+        }
+        "openOpenCodePlatform" => {
+            use tauri_plugin_opener::OpenerExt;
+            let _ = app.opener().open_url("https://opencode.net", None::<&str>);
+            json!(true)
+        }
+        "getBalanceData" | "getDeepseekBalance" => {
+            // 余额轮询（deepseek API）下批接入；先返回不可用态
+            json!({ "available": false })
+        }
         // ---- 未迁移方法兜底：返回空对象，前端不崩（按里程碑补齐）----
         _ => {
             log::debug!("[shim] 未实现的 electronAPI 方法: {}", method);
@@ -1014,6 +1099,10 @@ fn dirs_home() -> std::path::PathBuf {
 /// M4 控制服务句柄（shutdown 通道 + 状态）
 pub struct ControlHandle(pub Mutex<Option<(Arc<control::ControlState>, control::ControlServer)>>);
 
+/// M5 sidecar 句柄
+pub struct MusicHandle(pub Arc<sidecar::MusicState>);
+pub struct CockpitHandle(pub Arc<sidecar::CockpitState>);
+
 /// M4 云控制句柄
 pub struct CloudHandleState(pub Mutex<Option<cloud::CloudHandle>>);
 
@@ -1025,6 +1114,10 @@ fn sj_static_root(app: &tauri::AppHandle) -> PathBuf {
             return p;
         }
     }
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("resources").join("sj")
+}
+
+pub fn sj_static_root_pub() -> std::path::PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("resources").join("sj")
 }
 
@@ -1173,6 +1266,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(ControlHandle(std::sync::Mutex::new(None)))
         .manage(CloudHandleState(std::sync::Mutex::new(None)))
+        .manage(MusicHandle(Arc::new(sidecar::MusicState { child: std::sync::Arc::new(std::sync::Mutex::new(None)), latest: std::sync::Arc::new(std::sync::Mutex::new(Value::Null)) })))
+        .manage(CockpitHandle(Arc::new(sidecar::CockpitState { child: std::sync::Arc::new(std::sync::Mutex::new(None)), latest: std::sync::Arc::new(std::sync::Mutex::new(Value::Null)), main_active: std::sync::atomic::AtomicBool::new(false) })))
         .plugin(
             // 全局快捷键（键位与 Electron 版一致）：Alt+Space 壳内消化；
             // Alt+I/Alt+U/Alt+S/Alt+D 以事件转发前端（灵动岛/任务墙/截图在 M3/M5 接线）

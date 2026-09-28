@@ -311,3 +311,9 @@ pub fn ensure_reminder_window(app: &tauri::AppHandle, board_id: &str, task_id: &
         }
     }
 }
+/// M5：销毁 SC 球
+pub fn destroy_deepseekball(app: &tauri::AppHandle) {
+    if let Some(win) = app.get_webview_window("deepseekball") {
+        let _ = win.destroy();
+    }
+}
