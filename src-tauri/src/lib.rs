@@ -15,6 +15,7 @@ use tauri::{
 };
 
 mod cloud;
+mod license;
 mod config;
 mod control;
 mod usage;
@@ -580,6 +581,75 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
                     }
                 }).await.unwrap_or(json!([]))
             }))
+        }
+
+        // ---- M5：激活授权（license 系列，对齐 license:* IPC）----
+        "getLicenseState" => {
+            let mut st = license::read_license_pub();
+            if let Some(obj) = st.as_object_mut() {
+                obj.insert("machineCode".into(), json!(license::machine_code()));
+            }
+            st
+        }
+        "activateLicense" => {
+            let code = args.first().and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            let result = license::check_license(&app, Some(code.clone()));
+            let success = result.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+            let mut out = result;
+            if let Some(obj) = out.as_object_mut() {
+                obj.insert("code".into(), json!(code));
+                obj.insert("status".into(), json!(if success { "active" } else { "invalid" }));
+            }
+            license::broadcast_gate(&app);
+            out
+        }
+        "getLicensePolicy" => license::license_request_pub(
+            "policy",
+            json!({ "machineCode": license::machine_code(), "clientInfo": license::client_info(&app) }),
+        )
+        .unwrap_or_else(|_| json!({ "success": false, "message": "无法连接激活服务器" })),
+        "startTrial" => {
+            let result = license::license_request_pub(
+                "trial",
+                json!({ "machineCode": license::machine_code(), "clientInfo": license::client_info(&app) }),
+            )
+            .unwrap_or_else(|_| json!({ "success": false, "message": "无法连接激活服务器" }));
+            let success = result.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+            let got_code = result.get("code").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            if success && !got_code.is_empty() {
+                license::write_license_pub(&app, json!({
+                    "code": got_code,
+                    "machineCode": license::machine_code(),
+                    "plan": result.get("tier").cloned().unwrap_or(Value::Null),
+                    "status": "active",
+                    "expiresAt": result.get("expiresAt").cloned().unwrap_or(Value::Null),
+                    "lastCheckAt": chrono::Local::now().to_rfc3339(),
+                    "message": result.get("message").cloned().unwrap_or(Value::Null),
+                    "tier": result.get("tier").cloned().unwrap_or(Value::Null),
+                    "activationPolicy": result.get("activationPolicy").cloned().unwrap_or(Value::Null),
+                    "moduleAccess": result.get("moduleAccess").cloned().unwrap_or(Value::Null),
+                    "featureAccess": result.get("featureAccess").cloned().unwrap_or(Value::Null),
+                    "guestEnabled": result.get("guestEnabled").cloned().unwrap_or(Value::Null),
+                    "contactLine": result.get("contactLine").cloned().unwrap_or(Value::Null),
+                }));
+                license::broadcast_gate(&app);
+            }
+            let mut out = result;
+            if let Some(obj) = out.as_object_mut() {
+                obj.insert("machineCode".into(), json!(license::machine_code()));
+            }
+            out
+        }
+        "checkLicenseCmd" => license::check_license(&app, None),
+        "getLicenseGate" => license::gate_payload(&app, Some(license::check_license(&app, None))),
+        "licenseGatePassed" => {
+            // gate 通过：任务墙按需创建（island.tasksEnabled !== false 且有任务）
+            let cfg = task_cfg(&app);
+            let tasks_enabled = cfg.get("island").and_then(|i| i.get("tasksEnabled")).and_then(|v| v.as_bool()).unwrap_or(true);
+            if tasks_enabled && !resolve_task_list(&cfg).is_empty() {
+                let _ = windows::ensure_tasklist(&app);
+            }
+            json!(true)
         }
         // ---- 未迁移方法兜底：返回空对象，前端不崩（按里程碑补齐）----
         _ => {

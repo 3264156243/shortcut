@@ -3647,6 +3647,7 @@ dependencies = [
  "rand 0.9.5",
  "serde",
  "serde_json",
+ "sha2",
  "tauri",
  "tauri-build",
  "tauri-plugin-autostart",
