@@ -1011,6 +1011,7 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
         }
         "controlMusic" => {
             let action = args.first().and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+            log::info!("[music] controlMusic 请求: {}", action);
             if let Some(script) = sidecar::music_bridge_script_pub() {
                 sidecar::run_music_command(&script, &["-Control".to_string(), action])
             } else {
@@ -1060,8 +1061,9 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             let provider = args.first().and_then(|v| v.as_str()).unwrap_or("deepseek");
             let url = if provider == "opencode" { "https://opencode.net" } else { "https://platform.deepseek.com" };
             use tauri_plugin_opener::OpenerExt;
-            let _ = app.opener().open_url(url, None::<&str>);
-            json!(true)
+            let opened = app.opener().open_url(url, None::<&str>);
+            log::info!("[ball] openBalancePlatform provider={} url={} ok={:?}", provider, url, opened.is_ok());
+            json!(opened.is_ok())
         }
         "openDeepseekPlatform" => {
             use tauri_plugin_opener::OpenerExt;
@@ -1613,6 +1615,17 @@ fn url_encode(s: &str) -> String {
     out
 }
 
+/// 音乐控制（Alt+Z/X/C → 音乐桥 -Control，对齐 Electron runMusicBridgeCommand）
+fn run_music_control(app: &tauri::AppHandle, action: &str) {
+    if let Some(script) = sidecar::music_bridge_script_pub() {
+        let r = sidecar::run_music_command(&script, &["-Control".to_string(), action.to_string()]);
+        log::info!("[music] 快捷键控制 {}: {:?}", action, r.get("success"));
+    } else {
+        log::warn!("[music] 快捷键控制失败：音乐桥接脚本不存在");
+    }
+    let _ = app;
+}
+
 /// SC 球状态对齐配置（对齐 Electron applyConfig）：
 /// provider 关 / island.balance feature 关 / island 模块关 → 销毁；
 /// 球已存在（音乐驱动或此前创建）且配置变了 → 重建以刷新样式与供应商；
@@ -1676,6 +1689,7 @@ pub fn show_translation_bubble(app: &tauri::AppHandle, source: &str, translated:
         .inner_size(390.0, 280.0)
         .decorations(false)
         .transparent(true)
+        .shadow(false) // Windows DWM 会给窗口画 1px 边框/阴影，这就是"外层线框"
         .resizable(false)
         .always_on_top(true)
         .skip_taskbar(true)
@@ -1808,6 +1822,10 @@ pub fn run() {
                             "alt+s" => { let _ = app.emit("electron:shortcut", "screenshot-full"); }
                             "alt+d" => { let _ = app.emit("electron:shortcut", "screenshot-region"); }
                             "alt+e" => translate_current_selection(app),
+                            // 音乐控制（对齐 Electron musicHotkeys：Alt+Z/X/C）
+                            "alt+z" => run_music_control(app, "prev"),
+                            "alt+x" => run_music_control(app, "toggle"),
+                            "alt+c" => run_music_control(app, "next"),
                             _ => {}
                         }
                     }
@@ -1852,7 +1870,7 @@ pub fn run() {
                     }
                 }
                 // Alt+E 划词翻译：translate 模块启用（bubble 特性未被禁）才注册，对齐 Electron ensureGlobalShortcut
-                let (translate_on, bubble_on) = {
+                let (translate_on, bubble_on, music_on) = {
                     let cfg = config::read_config_value().unwrap_or(json!({}));
                     let translate_on = cfg.get("modules").and_then(|m| m.as_array())
                         .map(|a| a.iter().any(|m| m.get("id").and_then(|v| v.as_str()) == Some("translate") && m.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true)))
@@ -1860,7 +1878,14 @@ pub fn run() {
                     let bubble_on = cfg.get("license").and_then(|l| l.get("featureAccess")).and_then(|f| f.as_array())
                         .and_then(|a| a.iter().find(|f| f.get("id").and_then(|v| v.as_str()) == Some("translate.bubble")).and_then(|f| f.get("allowed")).and_then(|v| v.as_bool()))
                         .unwrap_or(true);
-                    (translate_on, bubble_on)
+                    // 音乐控制快捷键：island 模块 + island.music feature（对齐 Electron islandMusicOk）
+                    let island_module_on = cfg.get("modules").and_then(|m| m.as_array())
+                        .map(|a| a.iter().any(|m| m.get("id").and_then(|v| v.as_str()) == Some("island") && m.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true)))
+                        .unwrap_or(true);
+                    let music_feature = cfg.get("license").and_then(|l| l.get("featureAccess")).and_then(|f| f.as_array())
+                        .and_then(|a| a.iter().find(|f| f.get("id").and_then(|v| v.as_str()) == Some("island.music")).and_then(|f| f.get("allowed")).and_then(|v| v.as_bool()))
+                        .unwrap_or(true);
+                    (translate_on, bubble_on, island_module_on && music_feature)
                 };
                 if translate_on && bubble_on {
                     match gs.register("alt+e") {
@@ -1869,6 +1894,16 @@ pub fn run() {
                     }
                 } else {
                     log::info!("[hotkey] 划词翻译模块未启用，跳过 alt+e");
+                }
+                if music_on {
+                    for k in ["alt+z", "alt+x", "alt+c"] {
+                        match gs.register(k) {
+                            Ok(_) => log::info!("[hotkey] 注册成功: {}（音乐控制）", k),
+                            Err(e) => log::error!("[hotkey] 注册失败: {} ({})", k, e),
+                        }
+                    }
+                } else {
+                    log::info!("[hotkey] 岛音乐未启用，跳过 alt+z/x/c");
                 }
             }
 
