@@ -42,7 +42,7 @@ pub struct CockpitState {
     pub starting: AtomicBool,
 }
 
-fn kill_child(child: &Arc<Mutex<Option<tokio::process::Child>>>) {
+pub fn kill_child(child: &Arc<Mutex<Option<tokio::process::Child>>>) {
     if let Some(mut c) = child.lock().unwrap().take() {
         let _ = c.start_kill();
     }

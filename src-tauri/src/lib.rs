@@ -72,10 +72,14 @@ pub(crate) const SHIM_JS: &str = r#"
           const ev = EVENT_ALIASES[prop];
           return (cb) => {
             try {
-              const p = window.__TAURI__.event.listen(ev, (e) => { try { cb(e.payload); } catch (_) {} });
+              const p = window.__TAURI__.event.listen(ev, (e) => {
+                if (ev === 'island:config') { try { window.__TAURI__.core.invoke('electron_api', { method: 'debugLog', args: ['收到 island:config @' + location.pathname] }); } catch (_) {} }
+                try { cb(e.payload); } catch (_) {}
+              });
+              try { window.__TAURI__.core.invoke('electron_api', { method: 'debugLog', args: ['listen注册: ' + ev] }); } catch (_) {}
               if (p && typeof p.then === 'function') {
                 let unlisten = null;
-                p.then((fn) => { unlisten = fn; }).catch(() => {});
+                p.then((fn) => { unlisten = fn; }).catch(() => { try { window.__TAURI__.core.invoke('electron_api', { method: 'debugLog', args: ['listen失败: ' + ev] }); } catch (_) {} });
                 return () => { if (unlisten) { try { unlisten(); } catch (_) {} } else { p.then((fn) => { try { fn(); } catch (_) {} }).catch(() => {}); } };
               }
               return p;
@@ -376,6 +380,7 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
                 ("balanceProvider".to_string(), arg(11)),
             ].into_iter().filter(|(_, v)| !v.is_null()));
             if !patch.is_empty() {
+                log::info!("[island] setIsland patch 字段: {:?}", patch.keys().collect::<Vec<_>>());
                 let was_pos = windows::island_prefs();
                 windows::patch_island_config(&app, Value::Object(patch));
                 if let Some(win) = app.get_webview_window("island") {
@@ -1075,8 +1080,13 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             }
             json!(true)
         }
-        "openBalancePlatform" => {
-            let provider = args.first().and_then(|v| v.as_str()).unwrap_or("deepseek");
+        // shim listen 注册诊断（岛/球事件不生效排查）
+        "debugLog" => {
+            let msg = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+            log::info!("[shim] {}", msg);
+            Value::Null
+        }
+        "openBalancePlatform" => {            let provider = args.first().and_then(|v| v.as_str()).unwrap_or("deepseek");
             let url = if provider == "opencode" { "https://opencode.net" } else { "https://platform.deepseek.com" };
             use tauri_plugin_opener::OpenerExt;
             let opened = app.opener().open_url(url, None::<&str>);
@@ -1874,6 +1884,25 @@ pub fn run() {
                     .build(),
             )?;
 
+            // 清理历史崩溃/强杀遗留的孤儿进程（专属进程名，安全）：
+            // 1) 硬件监控进程；2) 音乐桥 powershell（按命令行精确匹配，不误伤用户其他 powershell）
+            {
+                let hk = std::process::Command::new("taskkill")
+                    .args(["/F", "/IM", "ShortCut.HardwareMonitor.exe"])
+                    .creation_flags(0x08000000)
+                    .output();
+                if let Ok(o) = hk {
+                    if o.status.success() { log::info!("[cleanup] 已清理硬件监控孤儿进程"); }
+                }
+                let mk = std::process::Command::new("powershell.exe")
+                    .args(["-NoProfile", "-Command", "Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | Where-Object { $_.CommandLine -match 'netmusic-bridge' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"])
+                    .creation_flags(0x08000000)
+                    .output();
+                if let Ok(o) = mk {
+                    if o.status.success() { log::info!("[cleanup] 已清理音乐桥孤儿进程"); }
+                }
+            }
+
             // 配置损坏自愈（与 Electron 启动行为一致）
             config::restore_from_backup_if_needed();
 
@@ -2048,6 +2077,18 @@ pub fn run() {
     Ok(())
         })
         .invoke_handler(tauri::generate_handler![electron_api])
-        .run(tauri::generate_context!())
-        .expect("error while building tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                // 退出清理 sidecar 子进程，避免孤儿（音乐桥 powershell / 硬件监控进程）
+                use tauri::Manager;
+                if let Some(mh) = app.try_state::<MusicHandle>() {
+                    sidecar::kill_child(&mh.0.child);
+                }
+                if let Some(ch) = app.try_state::<CockpitHandle>() {
+                    sidecar::kill_child(&ch.0.child);
+                }
+            }
+        });
 }
