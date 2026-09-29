@@ -103,7 +103,9 @@ pub(crate) const SHIM_JS: &str = r#"
 "#;
 
 #[tauri::command]
-fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: String, args: Vec<Value>) -> Value {
+async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: String, args: Vec<Value>) -> Value {
+    // async 命令：跑在 Tauri 运行时线程池——同步命令会占主线程，
+    // 其中的 block_on 会死锁（唤醒信号也要走主线程消息循环 → 转圈圈不返回）
     match method.as_str() {
         // ---- 应用信息 ----
         "getAppVersion" | "getVersion" => json!(app.package_info().version.to_string()),
@@ -116,6 +118,7 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
         "hideWindow" => { let _ = window.hide(); Value::Null }
         "closeWindow" => { let _ = window.hide(); Value::Null } // 主窗口关闭=隐藏到托盘（与 Electron 行为一致）
         "showWindow" => {
+            let _ = app.emit("window:will-show", ());
             let _ = window.show();
             let _ = window.unminimize();
             let _ = window.set_focus();
@@ -363,6 +366,7 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
                     if pos_changed {
                         let (x, y, _, _) = windows::island_bounds(&app, &now);
                         let _ = win.set_position(tauri::LogicalPosition::new(x, y));
+                        windows::position_deepseekball(&app);
                     }
                     windows::apply_passthrough(&win);
                 }
@@ -457,7 +461,7 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
                 .and_then(|v| v.as_str())
                 .unwrap_or("pair")
                 .to_string();
-            match start_control(&app, port, &auth_mode) {
+            match start_control(&app, port, &auth_mode).await {
                 Ok(status) => status,
                 Err(e) => json!({ "ok": false, "error": e }),
             }
@@ -476,7 +480,7 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
                 }
             };
             stop_control(&app);
-            match start_control(&app, port, &mode) {
+            match start_control(&app, port, &mode).await {
                 Ok(status) => status,
                 Err(e) => json!({ "ok": false, "error": e }),
             }
@@ -616,17 +620,16 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
             } else if !LANGS.contains(&from.as_str()) || !LANGS.contains(&to.as_str()) || to == "auto" {
                 json!({ "success": false, "error": "不支持的语言类型" })
             } else {
-                match tauri::async_runtime::block_on(async {
-                    tokio::task::spawn_blocking(move || {
-                        let resp = ureq::post("https://shortcut.326415.xyz/api/translate")
-                            .timeout(std::time::Duration::from_millis(12_000))
-                            .send_json(json!({ "text": text, "from": from, "to": to }))
-                            .map_err(|e| e.to_string())?;
-                        resp.into_json::<Value>().map_err(|e| e.to_string())
-                    }).await.map_err(|e| e.to_string())?
-                }) {
-                    Ok(payload) => payload,
-                    Err(e) => json!({ "success": false, "error": e }),
+                match tokio::task::spawn_blocking(move || {
+                    let resp = ureq::post("https://shortcut.326415.xyz/api/translate")
+                        .timeout(std::time::Duration::from_millis(12_000))
+                        .send_json(json!({ "text": text, "from": from, "to": to }))
+                        .map_err(|e| e.to_string())?;
+                    resp.into_json::<Value>().map_err(|e| e.to_string())
+                }).await {
+                    Ok(Ok(payload)) => payload,
+                    Ok(Err(e)) => json!({ "success": false, "error": e }),
+                    Err(e) => json!({ "success": false, "error": e.to_string() }),
                 }
             }
         }
@@ -634,12 +637,9 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
         // ---- M5：网站图标（抓页面找 favicon → data:URL）----
         "getWebsiteIcon" => {
             let raw = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
-            match tauri::async_runtime::block_on(async {
-                tokio::task::spawn_blocking(move || fetch_website_icon(&raw)).await
-                    .map_err(|e| e.to_string())?
-            }) {
-                Ok(icon) => icon,
-                Err(_) => Value::Null,
+            match tokio::task::spawn_blocking(move || fetch_website_icon(&raw)).await {
+                Ok(Ok(icon)) => icon,
+                _ => Value::Null,
             }
         }
 
@@ -655,16 +655,12 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
         }
         "fileTransferSendFile" => {
             let path = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
-            tauri::async_runtime::block_on(async {
-                tokio::task::spawn_blocking(move || transfer::send_file(&path)).await.unwrap_or_else(|e| json!({ "success": false, "message": e.to_string() }))
-            })
+            tokio::task::spawn_blocking(move || transfer::send_file(&path)).await.unwrap_or_else(|e| json!({ "success": false, "message": e.to_string() }))
         }
         "fileTransferDownload" => {
             let file_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
             let name = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
-            tauri::async_runtime::block_on(async {
-                tokio::task::spawn_blocking(move || transfer::download(&file_id, &name)).await.unwrap_or_else(|e| json!({ "success": false, "message": e.to_string() }))
-            })
+            tokio::task::spawn_blocking(move || transfer::download(&file_id, &name)).await.unwrap_or_else(|e| json!({ "success": false, "message": e.to_string() }))
         }
         "fileTransferDelete" => {
             let id = args.first().and_then(|v| v.as_str()).unwrap_or("");
@@ -691,16 +687,15 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
             json!({ "status": "idle", "checking": false, "downloading": false })
         }
         "checkForUpdates" => {
-            match tauri::async_runtime::block_on(async {
-                tokio::task::spawn_blocking(|| {
-                    let resp = ureq::get("https://shortcut.326415.xyz/updates/latest.yml")
-                        .timeout(std::time::Duration::from_millis(10_000))
-                        .call()
-                        .map_err(|e| e.to_string())?;
-                    resp.into_string().map_err(|e| e.to_string())
-                }).await.map_err(|e| e.to_string())?
-            }) {
-                Ok(yml) => {
+            match tokio::task::spawn_blocking(|| {
+                let resp = ureq::get("https://shortcut.326415.xyz/updates/latest.yml")
+                    .timeout(std::time::Duration::from_millis(10_000))
+                    .call()
+                    .map_err(|e| e.to_string())?;
+                resp.into_string().map_err(|e| e.to_string())
+            }).await
+            {
+                Ok(Ok(yml)) => {
                     let latest = yml.lines()
                         .find_map(|l| l.strip_prefix("version: ").map(|v| v.trim().trim_matches('"').trim_matches('\'').to_string()))
                         .unwrap_or_default();
@@ -708,7 +703,8 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
                     let has_update = version_gt(&latest, &current);
                     json!({ "status": if has_update { "available" } else { "up-to-date" }, "current": current, "version": latest, "hasUpdate": has_update })
                 }
-                Err(e) => json!({ "status": "error", "error": e }),
+                Ok(Err(e)) => json!({ "status": "error", "error": e }),
+                Err(e) => json!({ "status": "error", "error": e.to_string() }),
             }
         }
         // M6：应用内更新（tauri updater，对齐 update:download/install）
@@ -718,7 +714,7 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
                 Ok(u) => u,
                 Err(e) => return json!({ "success": false, "message": e.to_string() }),
             };
-            let update = match tauri::async_runtime::block_on(updater.check()) {
+            let update = match updater.check().await {
                 Ok(Some(u)) => u,
                 Ok(None) => {
                     let _ = app.emit("update:state", json!({ "state": "up-to-date" }));
@@ -731,18 +727,16 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
             };
             let _ = app.emit("update:state", json!({ "state": "downloading" }));
             let app2 = app.clone();
-            let result = tauri::async_runtime::block_on(async {
-                let mut downloaded: u64 = 0;
-                update
-                    .download(
-                        &mut |chunk, total| {
-                            downloaded += chunk as u64;
-                            let _ = app2.emit("update:state", json!({ "state": "downloading", "received": downloaded, "total": total }));
-                        },
-                        &mut || {},
-                    )
-                    .await
-            });
+            let mut downloaded: u64 = 0;
+            let result = update
+                .download(
+                    &mut |chunk, total| {
+                        downloaded += chunk as u64;
+                        let _ = app2.emit("update:state", json!({ "state": "downloading", "received": downloaded, "total": total }));
+                    },
+                    &mut || {},
+                )
+                .await;
             match result {
                 Ok(bytes) => {
                     *update_pending().lock().unwrap() = Some((update, bytes));
@@ -835,22 +829,20 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
             }
         }
         "getInstalledSoftware" => {
-            json!(tauri::async_runtime::block_on(async {
-                tokio::task::spawn_blocking(|| {
-                    let ps = "$ErrorActionPreference='SilentlyContinue';$out=@();Get-ItemProperty 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' | ForEach-Object { if($_.DisplayName){ $out += [PSCustomObject]@{ name=$_.DisplayName; version=$_.DisplayVersion; publisher=$_.Publisher; installDate=$_.InstallDate } } }; $out | ConvertTo-Json -Compress -Depth 2";
-                    match std::process::Command::new("powershell.exe")
-                        .args(["-NoProfile", "-NonInteractive", "-Command", ps])
-                        .creation_flags(0x08000000)
-                        .output()
-                    {
-                        Ok(o) => {
-                            let text = String::from_utf8_lossy(&o.stdout);
-                            serde_json::from_str::<Value>(&text).unwrap_or(json!([]))
-                        }
-                        Err(_) => json!([]),
+            json!(tokio::task::spawn_blocking(|| {
+                let ps = "$ErrorActionPreference='SilentlyContinue';$out=@();Get-ItemProperty 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' | ForEach-Object { if($_.DisplayName){ $out += [PSCustomObject]@{ name=$_.DisplayName; version=$_.DisplayVersion; publisher=$_.Publisher; installDate=$_.InstallDate } } }; $out | ConvertTo-Json -Compress -Depth 2";
+                match std::process::Command::new("powershell.exe")
+                    .args(["-NoProfile", "-NonInteractive", "-Command", ps])
+                    .creation_flags(0x08000000)
+                    .output()
+                {
+                    Ok(o) => {
+                        let text = String::from_utf8_lossy(&o.stdout);
+                        serde_json::from_str::<Value>(&text).unwrap_or(json!([]))
                     }
-                }).await.unwrap_or(json!([]))
-            }))
+                    Err(_) => json!([]),
+                }
+            }).await.unwrap_or(json!([])))
         }
 
         // ---- M5：激活授权（license 系列，对齐 license:* IPC）----
@@ -1079,12 +1071,8 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
         }
         "getBalanceData" | "getDeepseekBalance" => {
             let force = args.first().and_then(|v| v.as_bool()).unwrap_or(false);
-            match tauri::async_runtime::block_on(async {
-                tokio::task::spawn_blocking(move || sidecar::get_balance_data(force)).await
-                    .unwrap_or_else(|e| json!({ "error": e.to_string() }))
-            }) {
-                v => v,
-            }
+            tokio::task::spawn_blocking(move || sidecar::get_balance_data(force)).await
+                .unwrap_or_else(|e| json!({ "error": e.to_string() }))
         }
         "getTheme" => {
             let dark = std::process::Command::new("reg.exe")
@@ -1471,7 +1459,7 @@ pub fn sj_static_root_pub() -> std::path::PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("resources").join("sj")
 }
 
-fn start_control(app: &tauri::AppHandle, port: u16, auth_mode: &str) -> Result<Value, String> {
+async fn start_control(app: &tauri::AppHandle, port: u16, auth_mode: &str) -> Result<Value, String> {
     // 已在运行则先停掉
     {
         let state = app.state::<ControlHandle>();
@@ -1498,7 +1486,7 @@ fn start_control(app: &tauri::AppHandle, port: u16, auth_mode: &str) -> Result<V
         static_root: root,
         running: std::sync::atomic::AtomicBool::new(false),
     });
-    let server = tauri::async_runtime::block_on(control::spawn_server(st.clone()))?;
+    let server = control::spawn_server(st.clone()).await?;
     *app.state::<ControlHandle>().0.lock().unwrap() = Some((st.clone(), server));
     Ok(json!({
         "ok": true,
@@ -1524,6 +1512,7 @@ fn handle_tray_event(app: &tauri::AppHandle, id: &str) {
     match id {
         "show" => {
             if let Some(w) = app.get_webview_window("main") {
+                let _ = app.emit("window:will-show", ());
                 let _ = w.show();
                 let _ = w.unminimize();
                 let _ = w.set_focus();
@@ -1540,6 +1529,8 @@ fn toggle_main_window(app: &tauri::AppHandle) {
         if w.is_visible().unwrap_or(false) {
             let _ = w.hide();
         } else {
+            // 显示前通知前端（对齐 Electron window:will-show）
+            let _ = app.emit("window:will-show", ());
             let _ = w.show();
             let _ = w.unminimize();
             let _ = w.set_focus();
@@ -1604,6 +1595,106 @@ fn scan_due_reminders(app: &tauri::AppHandle) {
             }
         }
     }
+}
+
+/// URL 百分号编码（无新依赖的极简实现）
+fn url_encode(s: &str) -> String {
+    let mut out = String::new();
+    for b in s.as_bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(*b as char),
+            _ => out.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    out
+}
+
+/// 翻译气泡：复刻 Electron showTranslationBubble（data:URL 动态窗 → Tauri 静态 bubble.html + query 传参）
+pub fn show_translation_bubble(app: &tauri::AppHandle, source: &str, translated: &str, error: &str) {
+    let (mx, my) = match app.cursor_position() {
+        Ok(p) => (p.x, p.y),
+        Err(_) => (120.0, 120.0),
+    };
+    if let Some(old) = app.get_webview_window("translationBubble") {
+        let _ = old.close();
+    }
+    let mut url = String::from("bubble.html?");
+    if !error.is_empty() {
+        url.push_str(&format!("e={}", url_encode(error)));
+    } else {
+        url.push_str(&format!("s={}&r={}", url_encode(source), url_encode(translated)));
+    }
+    let _ = tauri::WebviewWindowBuilder::new(app, "translationBubble", tauri::WebviewUrl::App(url.into()))
+        .title("translation")
+        .position(mx + 12.0, my + 16.0)
+        .inner_size(390.0, 280.0)
+        .decorations(false)
+        .transparent(true)
+        .resizable(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .focused(false) // 不抢焦点，不打断用户输入
+        .build();
+    // 未固定 8 秒自动关闭（Electron 版失焦 1.2s；无焦点窗口收不到 blur，改用定时）
+    let app2 = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(8)).await;
+        if let Some(w) = app2.get_webview_window("translationBubble") {
+            let _ = w.close();
+        }
+    });
+}
+
+/// Alt+E 划词翻译：快照剪贴板 → SendKeys ^c → 读回 → 翻译 → 气泡（对齐 Electron translateCurrentSelection）
+pub fn translate_current_selection(app: &tauri::AppHandle) {
+    let app2 = app.clone();
+    tauri::async_runtime::spawn(async move {
+        use tauri_plugin_clipboard_manager::ClipboardExt;
+        let cb = app2.clipboard();
+        let snapshot = cb.read_text().unwrap_or_default();
+        let _ = cb.write_text("");
+        // 模拟 Ctrl+C（STA powershell，与 Electron main.ts 一致；阻塞 ~1s 放 blocking 池）
+        let _ = tokio::task::spawn_blocking(|| {
+            std::process::Command::new("powershell.exe")
+                .args([
+                    "-NoProfile", "-STA", "-WindowStyle", "Hidden", "-Command",
+                    "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^c')",
+                ])
+                .creation_flags(0x08000000)
+                .output()
+        })
+        .await;
+        tokio::time::sleep(std::time::Duration::from_millis(180)).await;
+        let selected: String = cb.read_text().unwrap_or_default().trim().chars().take(5000).collect();
+        let _ = cb.write_text(&snapshot);
+        if selected.is_empty() {
+            show_translation_bubble(&app2, "", "", "没有读取到选中的文字");
+            return;
+        }
+        let body = json!({ "text": selected, "from": "auto", "to": "zh" });
+        let result = tokio::task::spawn_blocking(move || {
+            ureq::post("https://shortcut.326415.xyz/api/translate")
+                .timeout(std::time::Duration::from_millis(12_000))
+                .send_json(body)
+                .map_err(|e| e.to_string())?
+                .into_json::<Value>()
+                .map_err(|e| e.to_string())
+        })
+        .await;
+        match result {
+            Ok(Ok(v)) => {
+                if v.get("success").and_then(|x| x.as_bool()).unwrap_or(false) {
+                    let translated = v.get("translatedText").and_then(|x| x.as_str()).unwrap_or("").to_string();
+                    show_translation_bubble(&app2, &selected, &translated, "");
+                } else {
+                    let err = v.get("error").and_then(|x| x.as_str()).unwrap_or("翻译失败").to_string();
+                    show_translation_bubble(&app2, "", "", &err);
+                }
+            }
+            Ok(Err(e)) => show_translation_bubble(&app2, "", "", &e),
+            Err(e) => show_translation_bubble(&app2, "", "", &e.to_string()),
+        }
+    });
 }
 
 /// 冲突检测：Electron 版在跑 → tasklist 精确匹配（两版并行会竞争写 config.json）
@@ -1676,6 +1767,7 @@ pub fn run() {
                             }
                             "alt+s" => { let _ = app.emit("electron:shortcut", "screenshot-full"); }
                             "alt+d" => { let _ = app.emit("electron:shortcut", "screenshot-region"); }
+                            "alt+e" => translate_current_selection(app),
                             _ => {}
                         }
                     }
@@ -1719,27 +1811,66 @@ pub fn run() {
                         Err(e) => log::error!("[hotkey] 注册失败: {} ({})", k, e),
                     }
                 }
+                // Alt+E 划词翻译：translate 模块启用（bubble 特性未被禁）才注册，对齐 Electron ensureGlobalShortcut
+                let (translate_on, bubble_on) = {
+                    let cfg = config::read_config_value().unwrap_or(json!({}));
+                    let translate_on = cfg.get("modules").and_then(|m| m.as_array())
+                        .map(|a| a.iter().any(|m| m.get("id").and_then(|v| v.as_str()) == Some("translate") && m.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true)))
+                        .unwrap_or(true);
+                    let bubble_on = cfg.get("license").and_then(|l| l.get("featureAccess")).and_then(|f| f.as_array())
+                        .and_then(|a| a.iter().find(|f| f.get("id").and_then(|v| v.as_str()) == Some("translate.bubble")).and_then(|f| f.get("allowed")).and_then(|v| v.as_bool()))
+                        .unwrap_or(true);
+                    (translate_on, bubble_on)
+                };
+                if translate_on && bubble_on {
+                    match gs.register("alt+e") {
+                        Ok(_) => log::info!("[hotkey] 注册成功: alt+e（划词翻译）"),
+                        Err(e) => log::error!("[hotkey] 注册失败: alt+e ({})", e),
+                    }
+                } else {
+                    log::info!("[hotkey] 划词翻译模块未启用，跳过 alt+e");
+                }
             }
 
             // 主窗口：Rust builder 创建（initialization_script 只能挂在 builder 上；conf 不再定义窗口）
+            // 尺寸对齐 Electron 版：900×600 / min 600×400
             let win = app
                 .get_webview_window("main")
                 .unwrap_or_else(|| {                    WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                         .title("ShortCut")
-                        .inner_size(1280.0, 800.0)
-                        .min_inner_size(960.0, 640.0)
+                        .inner_size(900.0, 600.0)
+                        .min_inner_size(600.0, 400.0)
+                        .visible(false) // Electron show:false——启动隐藏，Alt+Space/托盘唤出
                         .resizable(true)
                         .initialization_script(SHIM_JS)
                         .build()
                         .expect("failed to build main window")
                 });
-            // Electron 语义对齐：点关闭按钮 = 隐藏到托盘，不退出进程
+            // Electron 语义对齐：关闭=隐藏到托盘；失焦=自动隐藏（closeOnBlur !== false，与 main.ts blur 一致）
             {
                 let win2 = win.clone();
+                let app2 = app.handle().clone();
                 win.on_window_event(move |event| {
-                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                        api.prevent_close();
-                        let _ = win2.hide();
+                    match event {
+                        tauri::WindowEvent::CloseRequested { api, .. } => {
+                            api.prevent_close();
+                            let _ = win2.hide();
+                        }
+                        tauri::WindowEvent::Focused(false) => {
+                            // closeOnBlur 配置（缺省开启）：主窗失焦自动隐藏
+                            let cfg = crate::config::read_config_value();
+                            let close_on_blur = cfg
+                                .as_ref()
+                                .and_then(|c| c.get("closeOnBlur"))
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(true);
+                            if close_on_blur {
+                                // 有模态子弹窗聚焦时主窗失焦属正常（岛/任务墙是独立窗口不受影响）
+                                let _ = win2.hide();
+                                let _ = &app2;
+                            }
+                        }
+                        _ => {}
                     }
                 });
             }

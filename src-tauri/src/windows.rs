@@ -311,9 +311,12 @@ pub fn ensure_reminder_window(app: &tauri::AppHandle, board_id: &str, task_id: &
         }
     }
 }
-/// M5：销毁 SC 球
+/// M5：销毁 SC 球（销毁前通知合并状态，对齐 Electron destroyDeepseekBall）
 pub fn destroy_deepseekball(app: &tauri::AppHandle) {
     if let Some(win) = app.get_webview_window("deepseekball") {
+        use tauri::Emitter;
+        let _ = app.emit("deepseek:merge", ());
+        let _ = app.emit("balance:merge", ());
         let _ = win.destroy();
     }
 }
