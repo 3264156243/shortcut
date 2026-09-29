@@ -12,6 +12,11 @@ rust-version = "1.90"
 name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+# tauri build 打包时自动启用；直接 cargo build --release 须显式带上，
+# 否则窗口会去连 devUrl（localhost:5173）而不是嵌入的 dist 资源
+custom-protocol = ["tauri/custom-protocol"]
+
 [build-dependencies]
 tauri-build = { version = "2.7.0", features = [] }
 

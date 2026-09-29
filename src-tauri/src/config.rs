@@ -150,22 +150,33 @@ pub fn restore_from_backup_if_needed() {
 
 pub fn write_config(data: &str) {
     ensure_dirs();
-    // 防缩水保险：现有配置健康且含数据，而新数据把核心数组弄丢/清空 → 拒绝写入
+    // 防缩水保险（内容量版）：现有配置数据量大而新数据大幅缩水 → 拒绝写入。
+    // 空骨架可能仍带 1 个空 board/1 个空 tab（顶层长度 >0），不能只看数组长度。
     let f = config_file();
     if f.exists() {
         if let (Ok(old), Ok(new)) = (
             serde_json::from_str::<serde_json::Value>(&fs::read_to_string(&f).unwrap_or_default()),
             serde_json::from_str::<serde_json::Value>(data),
         ) {
-            let old_has_data = array_len(&old, "taskBoards") > 0
-                || array_len(&old, "tabs") > 0
-                || array_len(&old, "scTaskList") > 0;
-            let new_lost_data = old_has_data
-                && array_len(&new, "taskBoards") == 0
-                && array_len(&new, "tabs") == 0
-                && array_len(&new, "scTaskList") == 0;
-            if new_lost_data {
-                log::warn!("[config] 拒绝缩水写入：新配置丢失全部 tabs/taskBoards/scTaskList 数据（原 {} 字节 → 新 {} 字节）", old.to_string().len(), data.len());
+            let count_data = |v: &serde_json::Value| -> usize {
+                let notes: usize = v
+                    .get("taskBoards")
+                    .and_then(|x| x.as_array())
+                    .map(|boards| boards.iter().map(|b| b.get("notes").and_then(|n| n.as_array()).map(|a| a.len()).unwrap_or(0)).sum()).unwrap_or(0);
+                let shortcuts: usize = v
+                    .get("tabs")
+                    .and_then(|x| x.as_array())
+                    .map(|tabs| tabs.iter().map(|t| t.get("groups").and_then(|g| g.as_array()).map(|gs| gs.iter().map(|g| g.get("shortcuts").and_then(|s| s.as_array()).map(|a| a.len()).unwrap_or(0)).sum()).unwrap_or(0)).sum()).unwrap_or(0);
+                let tasks = v.get("scTaskList").and_then(|x| x.as_array()).map(|a| a.len()).unwrap_or(0);
+                notes + shortcuts + tasks
+            };
+            let old_n = count_data(&old);
+            let new_n = count_data(&new);
+            if old_n >= 3 && (new_n as f64) < (old_n as f64) * 0.3 {
+                log::warn!(
+                    "[config] 拒绝缩水写入：数据条目 {} → {}（原 {} 字节 → 新 {} 字节）。若为合法清空操作请手动编辑配置文件",
+                    old_n, new_n, old.to_string().len(), data.len()
+                );
                 return;
             }
         }
@@ -176,10 +187,6 @@ pub fn write_config(data: &str) {
     if fs::write(&tmp, data).is_ok() {
         let _ = fs::rename(&tmp, config_file());
     }
-}
-
-fn array_len(v: &serde_json::Value, key: &str) -> usize {
-    v.get(key).and_then(|x| x.as_array()).map(|a| a.len()).unwrap_or(0)
 }
 
 /// M5：岛驾驶舱开关（config.island.cockpitEnabled，默认 false）

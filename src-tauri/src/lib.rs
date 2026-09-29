@@ -127,9 +127,22 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
         "getSystemInfo" => json!({ "platform": "win32", "arch": "x64", "release": "" }),
 
         // ---- M2：配置（%APPDATA%\ShortCut 硬兼容）----
-        "readConfig" => json!(config::read_config()),
+        "readConfig" => {
+            let mut raw = config::read_config();
+            if raw.is_empty() {
+                // 文件存在但读出空（锁冲突/竞态）→ 尝试从健康备份自愈后再读
+                config::restore_from_backup_if_needed();
+                raw = config::read_config();
+                if !raw.is_empty() {
+                    log::warn!("[config] readConfig 空读取，已从备份自愈 {} 字节", raw.len());
+                }
+            }
+            log::info!("[config] readConfig 命令返回 {} 字节", raw.len());
+            json!(raw)
+        }
         "writeConfig" => {
             let data = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            log::info!("[config] writeConfig 命令收到 {} 字节", data.len());
             config::write_config(data);
             let _ = app.emit("config:changed", json!({ "scope": "all" }));
             Value::Null
@@ -1592,6 +1605,25 @@ fn scan_due_reminders(app: &tauri::AppHandle) {
         }
     }
 }
+
+/// 检测 Electron 版（ShortCut.exe，排除本版 shortcut-tauri.exe）是否正在运行
+fn electron_version_running() -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        std::process::Command::new("tasklist")
+            .args(["/FI", "IMAGENAME eq ShortCut.exe", "/NH", "/FO", "CSV"])
+            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).contains("ShortCut.exe"))
+            .unwrap_or(false)
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(
@@ -1637,6 +1669,21 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
+            // 互斥保护：Electron 版（ShortCut.exe）与本版并行会竞争写 config.json 导致数据覆盖
+            if electron_version_running() {
+                use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+                app.dialog()
+                    .message(
+                        "检测到旧版 ShortCut（Electron）正在运行。\n\n两版同时运行会竞争写配置文件、造成任务墙/快捷方式数据丢失。\n\n请先退出旧版（托盘图标 → 退出），再启动本程序。",
+                    )
+                    .title("ShortCut 启动中止")
+                    .kind(MessageDialogKind::Warning)
+                    .buttons(MessageDialogButtons::Ok)
+                    .blocking_show();
+                app.handle().exit(1);
+                return Ok(());
+            }
+
             // 文件日志最先初始化（%LOCALAPPDATA%\com.wanan.shortcut\logs\tauri.log）
             app.handle().plugin(
                 tauri_plugin_log::Builder::default()
