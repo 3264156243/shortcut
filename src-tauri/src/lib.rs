@@ -9,6 +9,13 @@ use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_updater::Update as UpdaterUpdate;
+
+static UPDATE_PENDING: std::sync::OnceLock<Mutex<Option<(UpdaterUpdate, Vec<u8>)>>> = std::sync::OnceLock::new();
+
+fn update_pending() -> &'static Mutex<Option<(UpdaterUpdate, Vec<u8>)>> {
+    UPDATE_PENDING.get_or_init(|| Mutex::new(None))
+}
 use tauri:: {
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
@@ -689,13 +696,71 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
                 Err(e) => json!({ "status": "error", "error": e }),
             }
         }
-        // M6 前占位：安装包下载/安装走 tauri updater（对齐 update:download/install）
+        // M6：应用内更新（tauri updater，对齐 update:download/install）
         "downloadUpdate" => {
-            let _ = app.emit("update:state", json!({ "state": "unavailable", "message": "应用内更新将在正式版启用" }));
-            json!({ "success": false, "message": "应用内更新将在正式版启用" })
+            use tauri_plugin_updater::UpdaterExt;
+            let updater = match app.updater() {
+                Ok(u) => u,
+                Err(e) => return json!({ "success": false, "message": e.to_string() }),
+            };
+            let update = match tauri::async_runtime::block_on(updater.check()) {
+                Ok(Some(u)) => u,
+                Ok(None) => {
+                    let _ = app.emit("update:state", json!({ "state": "up-to-date" }));
+                    return json!({ "success": false, "message": "当前已是最新版本" });
+                }
+                Err(e) => {
+                    let _ = app.emit("update:state", json!({ "state": "error", "message": e.to_string() }));
+                    return json!({ "success": false, "message": e.to_string() });
+                }
+            };
+            let _ = app.emit("update:state", json!({ "state": "downloading" }));
+            let app2 = app.clone();
+            let result = tauri::async_runtime::block_on(async {
+                let mut downloaded: u64 = 0;
+                update
+                    .download(
+                        &mut |chunk, total| {
+                            downloaded += chunk as u64;
+                            let _ = app2.emit("update:state", json!({ "state": "downloading", "received": downloaded, "total": total }));
+                        },
+                        &mut || {},
+                    )
+                    .await
+            });
+            match result {
+                Ok(bytes) => {
+                    *update_pending().lock().unwrap() = Some((update, bytes));
+                    let _ = app.emit("update:state", json!({ "state": "downloaded" }));
+                    json!({ "success": true })
+                }
+                Err(e) => {
+                    let _ = app.emit("update:state", json!({ "state": "error", "message": e.to_string() }));
+                    json!({ "success": false, "message": e.to_string() })
+                }
+            }
         }
-        "installUpdate" => json!({ "success": false, "message": "应用内更新将在正式版启用" }),
-        "getUpdateState" => json!({ "state": "idle" }),
+        "installUpdate" => {
+            let pending = update_pending().lock().unwrap().take();
+            match pending {
+                Some((update, bytes)) => {
+                    let _ = app.emit("update:state", json!({ "state": "installing" }));
+                    if let Err(e) = update.install(&bytes[..]) {
+                        json!({ "success": false, "message": e.to_string() })
+                    } else {
+                        // install 已启动安装器，正常退出当前实例
+                        std::process::exit(0);
+                        #[allow(unreachable_code)]
+                        json!({ "success": true })
+                    }
+                }
+                None => json!({ "success": false, "message": "请先下载更新" }),
+            }
+        }
+        "getUpdateState" => {
+            let pending = update_pending().lock().unwrap().is_some();
+            json!({ "state": if pending { "downloaded" } else { "idle" } })
+        }
 
         // ---- M5：文件系统 ----
         "fileExists" => {
@@ -1531,6 +1596,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(ControlHandle(std::sync::Mutex::new(None)))
         .manage(CloudHandleState(std::sync::Mutex::new(None)))
         .manage(MusicHandle(Arc::new(sidecar::MusicState { child: std::sync::Arc::new(std::sync::Mutex::new(None)), latest: std::sync::Arc::new(std::sync::Mutex::new(Value::Null)) })))
