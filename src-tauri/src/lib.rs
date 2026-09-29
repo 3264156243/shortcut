@@ -148,6 +148,8 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             log::info!("[config] writeConfig 命令收到 {} 字节", data.len());
             config::write_config(data);
             let _ = app.emit("config:changed", json!({ "scope": "all" }));
+            // 配置可能改了岛/SC球设置（样式/供应商/开关）→ 球状态对齐
+            sync_deepseekball_state(&app);
             Value::Null
         }
         "getPath" => {
@@ -374,6 +376,8 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
                 let _ = app.emit("island:config", now.clone());
                 let _ = app.emit("config:changed", json!({ "scope": "island" }));
                 let _ = app.emit("electron:IslandConfig", now);
+                // SC 球对齐配置（Electron applyConfig 语义：provider 关/feature 关 → 销毁；球在 → 重建刷新样式）
+                sync_deepseekball_state(&app);
             }
             Value::Null
         }
@@ -1609,10 +1613,52 @@ fn url_encode(s: &str) -> String {
     out
 }
 
+/// SC 球状态对齐配置（对齐 Electron applyConfig）：
+/// provider 关 / island.balance feature 关 / island 模块关 → 销毁；
+/// 球已存在（音乐驱动或此前创建）且配置变了 → 重建以刷新样式与供应商；
+/// 球不存在且音乐未驱动 → 不主动创建（等岛 setBalanceMusicPlaying）。
+fn sync_deepseekball_state(app: &tauri::AppHandle) {
+    let cfg = config::read_config_value().unwrap_or(json!({}));
+    let island = cfg.get("island").cloned().unwrap_or(json!({}));
+    let provider_raw = island.get("balanceProvider").and_then(|v| v.as_str()).unwrap_or("");
+    let deepseek_on = island.get("deepseekEnabled").and_then(|v| v.as_bool()).unwrap_or(false);
+    let effective = if provider_raw == "deepseek" || provider_raw == "opencode" {
+        provider_raw
+    } else if deepseek_on {
+        "deepseek"
+    } else {
+        "none"
+    };
+    let island_module_on = cfg.get("modules").and_then(|m| m.as_array())
+        .map(|a| a.iter().any(|m| m.get("id").and_then(|v| v.as_str()) == Some("island") && m.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true)))
+        .unwrap_or(true);
+    let balance_feature_on = cfg.get("license").and_then(|l| l.get("featureAccess")).and_then(|f| f.as_array())
+        .and_then(|a| a.iter().find(|f| f.get("id").and_then(|v| v.as_str()) == Some("island.balance")).and_then(|f| f.get("allowed")).and_then(|v| v.as_bool()))
+        .unwrap_or(true);
+    let should_show = island_module_on && balance_feature_on && effective != "none";
+    if !should_show {
+        if app.get_webview_window("deepseekball").is_some() {
+            windows::destroy_deepseekball(app);
+            log::info!("[deepseekball] 配置关闭余额显示 → 销毁");
+        }
+        return;
+    }
+    if app.get_webview_window("deepseekball").is_some() {
+        // 已存在 → 重建刷新样式/provider
+        windows::destroy_deepseekball(app);
+        let _ = windows::ensure_deepseekball(app);
+        log::info!("[deepseekball] 配置变更 → 重建（provider={}）", effective);
+    }
+}
+
 /// 翻译气泡：复刻 Electron showTranslationBubble（data:URL 动态窗 → Tauri 静态 bubble.html + query 传参）
 pub fn show_translation_bubble(app: &tauri::AppHandle, source: &str, translated: &str, error: &str) {
+    // cursor_position 是物理像素；窗口 position 是逻辑像素 → 除以主显示器缩放
+    let scale = app.primary_monitor().ok().flatten()
+        .map(|m| m.scale_factor())
+        .unwrap_or(1.0);
     let (mx, my) = match app.cursor_position() {
-        Ok(p) => (p.x, p.y),
+        Ok(p) => (p.x / scale, p.y / scale),
         Err(_) => (120.0, 120.0),
     };
     if let Some(old) = app.get_webview_window("translationBubble") {
@@ -1634,15 +1680,9 @@ pub fn show_translation_bubble(app: &tauri::AppHandle, source: &str, translated:
         .always_on_top(true)
         .skip_taskbar(true)
         .focused(false) // 不抢焦点，不打断用户输入
+        .initialization_script(crate::SHIM_JS) // 页面用 electronAPI.closeWindow() 自关
         .build();
-    // 未固定 8 秒自动关闭（Electron 版失焦 1.2s；无焦点窗口收不到 blur，改用定时）
-    let app2 = app.clone();
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_secs(8)).await;
-        if let Some(w) = app2.get_webview_window("translationBubble") {
-            let _ = w.close();
-        }
-    });
+    // 关闭时机由页面控制：5 秒无交互自动关闭 / 固定按钮常显（对齐 Electron 纸条）
 }
 
 /// Alt+E 划词翻译：快照剪贴板 → SendKeys ^c → 读回 → 翻译 → 气泡（对齐 Electron translateCurrentSelection）
@@ -1857,7 +1897,8 @@ pub fn run() {
                             let _ = win2.hide();
                         }
                         tauri::WindowEvent::Focused(false) => {
-                            // closeOnBlur 配置（缺省开启）：主窗失焦自动隐藏
+                            // closeOnBlur 配置（缺省开启）：主窗失焦自动隐藏。
+                            // 但鼠标仍在窗口矩形内 = 用户在拖动/窗口内操作导致的失焦，不隐藏
                             let cfg = crate::config::read_config_value();
                             let close_on_blur = cfg
                                 .as_ref()
@@ -1865,9 +1906,18 @@ pub fn run() {
                                 .and_then(|v| v.as_bool())
                                 .unwrap_or(true);
                             if close_on_blur {
-                                // 有模态子弹窗聚焦时主窗失焦属正常（岛/任务墙是独立窗口不受影响）
-                                let _ = win2.hide();
-                                let _ = &app2;
+                                let in_window = (|| -> Option<bool> {
+                                    let cur = app2.cursor_position().ok()?;
+                                    let pos = win2.outer_position().ok()?;
+                                    let size = win2.outer_size().ok()?;
+                                    let (cx, cy) = (cur.x, cur.y);
+                                    let (wx, wy, ww, wh) = (pos.x as f64, pos.y as f64, size.width as f64, size.height as f64);
+                                    Some(cx >= wx && cx <= wx + ww && cy >= wy && cy <= wy + wh)
+                                })()
+                                .unwrap_or(false);
+                                if !in_window {
+                                    let _ = win2.hide();
+                                }
                             }
                         }
                         _ => {}
@@ -1907,6 +1957,24 @@ pub fn run() {
             }
         });
     }
+
+            // 音乐桥：按配置主动启动（对齐 Electron island.music 启用即采集；
+            // 不依赖岛前端挂载时序——岛 mount 的 startMusicBridge 是唯一入口时存在竞态）
+            {
+                let cfg = config::read_config_value().unwrap_or(json!({}));
+                let island_module_on = cfg.get("modules").and_then(|m| m.as_array())
+                    .map(|a| a.iter().any(|m| m.get("id").and_then(|v| v.as_str()) == Some("island") && m.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true)))
+                    .unwrap_or(true);
+                let music_enabled = cfg.get("island").and_then(|i| i.get("musicEnabled")).and_then(|v| v.as_bool()).unwrap_or(false);
+                let music_feature = cfg.get("license").and_then(|l| l.get("featureAccess")).and_then(|f| f.as_array())
+                    .and_then(|a| a.iter().find(|f| f.get("id").and_then(|v| v.as_str()) == Some("island.music")).and_then(|f| f.get("allowed")).and_then(|v| v.as_bool()))
+                    .unwrap_or(true);
+                if island_module_on && music_enabled && music_feature {
+                    let st = app.state::<MusicHandle>();
+                    sidecar::start_music_bridge(app.handle().clone(), st.0.clone());
+                    log::info!("[music] 启动时按配置预启动音乐桥");
+                }
+            }
     Ok(())
         })
         .invoke_handler(tauri::generate_handler![electron_api])
