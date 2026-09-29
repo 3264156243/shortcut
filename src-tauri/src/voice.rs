@@ -191,15 +191,9 @@ pub fn ensure_bridge(app: &tauri::AppHandle) {
         for line in reader.lines().map_while(Result::ok) {
             let l = line.trim();
             match l {
-                "EVENT|SPACE" => {
-                    let _ = app_handle.emit("voice:bridgeEvent", "toggle");
-                }
-                "EVENT|ENTER" => {
-                    let _ = app_handle.emit("voice:bridgeEvent", "confirm");
-                }
-                "EVENT|ESC" => {
-                    let _ = app_handle.emit("voice:bridgeEvent", "cancel");
-                }
+                "EVENT|SPACE" => toggle_pause(&app_handle),
+                "EVENT|ENTER" => confirm_and_type(&app_handle),
+                "EVENT|ESC" => cancel_session(&app_handle),
                 "READY|HOOK" => {
                     send_to_window(&app_handle, "voice:status", json!({ "state": "ready", "message": "按键控制已就绪（空格=暂停，回车=确认）" }));
                 }

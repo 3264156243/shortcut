@@ -38,9 +38,43 @@ pub(crate) const SHIM_JS: &str = r#"
     if (window.__SHORTCUT_API__) return;
     if (!window.__TAURI__ || !window.__TAURI__.core) return;
     const invoke = (m, ...a) => window.__TAURI__.core.invoke('electron_api', { method: m, args: a });
+    const EVENT_ALIASES = {
+      onIslandMusic: 'electron:IslandMusic',
+      onIslandCockpit: 'electron:IslandCockpit',
+      onCockpitData: 'electron:CockpitData',
+      onTaskLocate: 'electron:TaskLocate',
+      onLicenseChanged: 'electron:LicenseChanged',
+      onReminderData: 'electron:ReminderData',
+      onConfigChanged: 'config:changed',
+      onIslandConfig: 'island:config',
+      onTaskListData: 'tasklist:data',
+      onUpdateState: 'update:state',
+      onShortcutFailed: 'shortcut:failed',
+      onWindowWillShow: 'window:will-show',
+      onBalanceMerge: 'balance:merge',
+      onDeepseekMerge: 'deepseek:merge',
+      onVoiceStatus: 'voice:status',
+      onVoiceSession: 'voice:session',
+      onVoicePolish: 'voice:polish',
+      onVoicePolishError: 'voice:polishError',
+    };
     const api = new Proxy({}, {
       get(_t, prop) {
         if (typeof prop !== 'string') return undefined;
+        if (EVENT_ALIASES[prop]) {
+          const ev = EVENT_ALIASES[prop];
+          return (cb) => {
+            try {
+              const p = window.__TAURI__.event.listen(ev, (e) => { try { cb(e.payload); } catch (_) {} });
+              if (p && typeof p.then === 'function') {
+                let unlisten = null;
+                p.then((fn) => { unlisten = fn; }).catch(() => {});
+                return () => { if (unlisten) { try { unlisten(); } catch (_) {} } else { p.then((fn) => { try { fn(); } catch (_) {} }).catch(() => {}); } };
+              }
+              return p;
+            } catch (_) { return () => {}; }
+          };
+        }
         if (prop.startsWith('on') && prop.length > 2) {
           return (cb) => {
             const ev = 'electron:' + prop.slice(2);
@@ -65,7 +99,7 @@ pub(crate) const SHIM_JS: &str = r#"
 fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: String, args: Vec<Value>) -> Value {
     match method.as_str() {
         // ---- 应用信息 ----
-        "getAppVersion" => json!(app.package_info().version.to_string()),
+        "getAppVersion" | "getVersion" => json!(app.package_info().version.to_string()),
         "getAppName" => json!(app.package_info().name.clone()),
         "getPlatform" => json!("win32"),
 
@@ -90,6 +124,7 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
         "writeConfig" => {
             let data = args.first().and_then(|v| v.as_str()).unwrap_or("");
             config::write_config(data);
+            let _ = app.emit("config:changed", json!({ "scope": "all" }));
             Value::Null
         }
         "getPath" => {
@@ -311,6 +346,10 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
                     }
                     windows::apply_passthrough(&win);
                 }
+                let now = windows::island_prefs();
+                let _ = app.emit("island:config", now.clone());
+                let _ = app.emit("config:changed", json!({ "scope": "island" }));
+                let _ = app.emit("electron:IslandConfig", now);
             }
             Value::Null
         }
@@ -335,6 +374,40 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
             }
             None => Value::Null,
         },
+        // M3 补齐：拖动增量移动（对齐 island:move——delta 逻辑像素，工作区夹紧）
+        "moveIsland" => {
+            let delta_x = args.get(2).and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let delta_y = args.get(3).and_then(|v| v.as_f64()).unwrap_or(0.0);
+            if let Some(win) = app.get_webview_window("island") {
+                let pos = win.outer_position().unwrap_or_default();
+                let size = win.outer_size().unwrap_or_default();
+                let scale = win.current_monitor().ok().flatten().map(|m| m.scale_factor()).unwrap_or(1.0);
+                let (px, py, pw, ph) = (
+                    pos.x as f64 / scale,
+                    pos.y as f64 / scale,
+                    size.width as f64 / scale,
+                    size.height as f64 / scale,
+                );
+                let (mx, my, mw, mh) = windows::monitor_work_area(&app);
+                let next_x = (px + delta_x).clamp(mx, (mx + mw - pw).max(mx));
+                let next_y = (py + delta_y).clamp(my, (my + mh - ph).max(my));
+                let _ = win.set_position(tauri::LogicalPosition::new(next_x, next_y));
+                windows::position_deepseekball(&app);
+                json!({ "success": true })
+            } else {
+                json!({ "success": false, "error": "灵动岛窗口不存在" })
+            }
+        }
+        // M3 补齐：拖动结束——把当前位置写回岛配置（对齐 island:finishMove）
+        "finishIslandMove" => {
+            if let Some(win) = app.get_webview_window("island") {
+                let pos = win.outer_position().unwrap_or_default();
+                let scale = win.current_monitor().ok().flatten().map(|m| m.scale_factor()).unwrap_or(1.0);
+                let (lx, ly) = (pos.x as f64 / scale, pos.y as f64 / scale);
+                windows::patch_island_config(&app, json!({ "position": "custom", "x": lx, "y": ly }));
+            }
+            Value::Null
+        }
 
         // ---- M3：任务墙窗 / SC球壳（数据管道 M5 接入）----
         "startTaskList" | "refreshTaskList" => {
@@ -467,6 +540,7 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
                     if !dup {
                         list.push(json!({ "boardId": board_id, "taskId": task_id, "addedAt": chrono::Local::now().timestamp_millis() }));
                         config::write_config(&serde_json::to_string(&cfg).unwrap_or_default());
+                        let _ = app.emit("tasklist:data", json!(resolve_task_list(&task_cfg(&app))));
                     }
                 }
             }
@@ -475,7 +549,11 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
         "completeTaskInList" => {
             let board_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
             let task_id = args.get(1).and_then(|v| v.as_str()).unwrap_or("");
-            json!({ "ok": patch_task_flag(&app, board_id, task_id, true) })
+            let ok = patch_task_flag(&app, board_id, task_id, true);
+            if ok {
+                let _ = app.emit("tasklist:data", json!(resolve_task_list(&task_cfg(&app))));
+            }
+            json!({ "ok": ok })
         }
         "removeTaskFromList" => {
             let board_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
@@ -490,6 +568,7 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
             }
             if changed {
                 config::write_config(&serde_json::to_string(&cfg).unwrap_or_default());
+                let _ = app.emit("tasklist:data", json!(resolve_task_list(&task_cfg(&app))));
             }
             json!({ "ok": changed })
         }
@@ -610,6 +689,13 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
                 Err(e) => json!({ "status": "error", "error": e }),
             }
         }
+        // M6 前占位：安装包下载/安装走 tauri updater（对齐 update:download/install）
+        "downloadUpdate" => {
+            let _ = app.emit("update:state", json!({ "state": "unavailable", "message": "应用内更新将在正式版启用" }));
+            json!({ "success": false, "message": "应用内更新将在正式版启用" })
+        }
+        "installUpdate" => json!({ "success": false, "message": "应用内更新将在正式版启用" }),
+        "getUpdateState" => json!({ "state": "idle" }),
 
         // ---- M5：文件系统 ----
         "fileExists" => {
@@ -744,7 +830,7 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
             }
             out
         }
-        "checkLicenseCmd" => license::check_license(&app, None),
+        "checkLicenseCmd" | "checkLicense" => license::check_license(&app, None),
         "getLicenseGate" => license::gate_payload(&app, Some(license::check_license(&app, None))),
         "licenseGatePassed" => {
             // gate 通过：任务墙按需创建（island.tasksEnabled !== false 且有任务）
@@ -969,7 +1055,7 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
         }
 
         // ---- M5：Codex 供应商预设（codex:* 对齐）----
-        "getCodexState" => codex::read_current_state(),
+        "getCodexState" | "getCodexPresetState" => codex::read_current_state(),
         "saveCurrentCodexPreset" => {
             let data = args.first().cloned().unwrap_or(json!({}));
             codex::save_current_preset(&data)

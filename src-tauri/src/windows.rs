@@ -333,3 +333,21 @@ pub fn point_in_island(app: &tauri::AppHandle, screen_x: f64, screen_y: f64) -> 
     );
     screen_x >= x && screen_x <= x + w && screen_y >= y && screen_y <= y + h
 }
+
+/// M5：主显示器工作区（逻辑坐标，对齐 display.workArea）
+pub fn monitor_work_area(app: &tauri::AppHandle) -> (f64, f64, f64, f64) {
+    if let Some(m) = app.primary_monitor().ok().flatten() {
+        let scale = m.scale_factor();
+        let pos = m.position();
+        let size = m.size();
+        // 粗略任务栏扣除：底部 48 逻辑像素
+        let logical_h = size.height as f64 / scale;
+        return (
+            pos.x as f64 / scale,
+            pos.y as f64 / scale,
+            size.width as f64 / scale,
+            (logical_h - 48.0).max(200.0),
+        );
+    }
+    (0.0, 0.0, 1536.0, 816.0)
+}
