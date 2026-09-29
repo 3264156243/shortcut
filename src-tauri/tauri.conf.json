@@ -24,7 +24,7 @@
     "updater": {
       "active": true,
       "dialog": false,
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlDREI2OUVGRjhBRUE1OTIKUldTU3BhNzQ3Mm5ibkx2a0htNWtTazFWK0VFRVZ5cVdIcERTMGc5M2ROMlNIN1FQQkVhYmhsNEsK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQ0OEI2NkNDQTk1NkM5MDYKUldRR3lWYXB6R2FMMUJpTUdHWXlzZlJTY2VlNVVkYmVjaFpDQ0QyYjNUYncxd3ZLcG5jb0JBVlQK",
       "endpoints": ["https://shortcut.326415.xyz/updates/latest.json"]
     }
   },

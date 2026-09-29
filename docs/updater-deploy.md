@@ -38,6 +38,21 @@
 
 ## 密钥保管
 
-- 私钥：`%USERPROFILE%\.tauri\shortcut-updater.key`（**丢失则无法再发布更新**，务必备份到安全位置）
+- 私钥：`%USERPROFILE%\.tauri\shortcut-updater.key`，密码：`shortcut2026`（**首版开发密钥**，正式对外发布前建议换新密钥对并把密码移入密码管理器；换钥需同步更新 tauri.conf.json 的 pubkey）
 - 公钥：`%USERPROFILE%\.tauri\shortcut-updater.key.pub`（已嵌入 tauri.conf.json）
-- 建议正式发布前换用带密码的新密钥对，密码存密码管理器
+- 丢失私钥/密码 = 无法再发布更新，务必备份到安全位置
+
+## 构建命令（实测可用）
+
+```cmd
+call vcvars64.bat
+set PATH=%USERPROFILE%\.cargo\bin;%PATH%
+set TAURI_SIGNING_PRIVATE_KEY=%USERPROFILE%\.tauri\shortcut-updater.key
+set TAURI_SIGNING_PRIVATE_KEY_PASSWORD=shortcut2026
+cd /d D:\wenjian\js\ShortCut
+node_modules\.bin\tauri.cmd build
+```
+
+产物：
+- `src-tauri/target/release/bundle/nsis/ShortCut_2.4.5_x64-setup.exe`（3.8 MB）
+- `src-tauri/target/release/bundle/nsis/ShortCut_2.4.5_x64-setup.exe.sig`（updater 签名）
