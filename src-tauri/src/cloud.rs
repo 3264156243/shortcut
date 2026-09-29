@@ -360,7 +360,8 @@ pub fn start_cloud(static_root: PathBuf) -> Result<CloudHandle, String> {
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
     let st2 = st.clone();
-    tokio::spawn(async move {
+    // 可能从同步命令路径调用（主线程无 reactor）——tauri::async_runtime::spawn 内部自带运行时
+    tauri::async_runtime::spawn(async move {
         // 等注入器就绪（最多 8 秒），未就绪也继续——指令会 503
         for _ in 0..40 {
             if st2.injector.is_ready() {

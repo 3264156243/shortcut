@@ -1606,26 +1606,40 @@ fn scan_due_reminders(app: &tauri::AppHandle) {
     }
 }
 
-/// 检测 Electron 版（ShortCut.exe，排除本版 shortcut-tauri.exe）是否正在运行
-fn electron_version_running() -> bool {
+/// 冲突检测：Electron 版在跑 → tasklist 精确匹配（两版并行会竞争写 config.json）
+/// 本程序多开由 tauri-plugin-single-instance（命名互斥体）兜底
+fn conflicting_instance_running() -> Option<String> {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        std::process::Command::new("tasklist")
-            .args(["/FI", "IMAGENAME eq ShortCut.exe", "/NH", "/FO", "CSV"])
+        let out = std::process::Command::new("tasklist")
+            .args(["/NH", "/FO", "CSV"])
             .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
             .output()
-            .map(|o| String::from_utf8_lossy(&o.stdout).contains("ShortCut.exe"))
-            .unwrap_or(false)
+            .ok()?;
+        let text = String::from_utf8_lossy(&out.stdout);
+        for line in text.lines() {
+            let first = line.split(',').next().unwrap_or("").trim_matches('"').to_ascii_lowercase();
+            if first == "shortcut.exe" {
+                return Some(
+                    "检测到旧版 ShortCut（Electron）正在运行。\n\n两版同时运行会竞争写配置文件、造成任务墙/快捷方式数据丢失。\n\n请先退出旧版（托盘图标 → 退出），再启动本程序。".to_string(),
+                );
+            }
+        }
     }
-    #[cfg(not(windows))]
-    {
-        false
-    }
+    None
 }
 
 pub fn run() {
     tauri::Builder::default()
+        // 单实例必须最先注册：第二实例启动时回调把已有实例带到前台，自身退出
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.unminimize();
+                let _ = w.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
@@ -1637,8 +1651,8 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(ControlHandle(std::sync::Mutex::new(None)))
         .manage(CloudHandleState(std::sync::Mutex::new(None)))
-        .manage(MusicHandle(Arc::new(sidecar::MusicState { child: std::sync::Arc::new(std::sync::Mutex::new(None)), latest: std::sync::Arc::new(std::sync::Mutex::new(Value::Null)) })))
-        .manage(CockpitHandle(Arc::new(sidecar::CockpitState { child: std::sync::Arc::new(std::sync::Mutex::new(None)), latest: std::sync::Arc::new(std::sync::Mutex::new(Value::Null)), main_active: std::sync::atomic::AtomicBool::new(false) })))
+        .manage(MusicHandle(Arc::new(sidecar::MusicState { child: std::sync::Arc::new(std::sync::Mutex::new(None)), latest: std::sync::Arc::new(std::sync::Mutex::new(Value::Null)), starting: std::sync::atomic::AtomicBool::new(false) })))
+        .manage(CockpitHandle(Arc::new(sidecar::CockpitState { child: std::sync::Arc::new(std::sync::Mutex::new(None)), latest: std::sync::Arc::new(std::sync::Mutex::new(Value::Null)), main_active: std::sync::atomic::AtomicBool::new(false), starting: std::sync::atomic::AtomicBool::new(false) })))
         .plugin(
             // 全局快捷键（键位与 Electron 版一致）：Alt+Space 壳内消化；
             // Alt+I/Alt+U/Alt+S/Alt+D 以事件转发前端（灵动岛/任务墙/截图在 M3/M5 接线）
@@ -1669,13 +1683,11 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
-            // 互斥保护：Electron 版（ShortCut.exe）与本版并行会竞争写 config.json 导致数据覆盖
-            if electron_version_running() {
+            // 实例守卫：Electron 版并行 / 自身多开都会竞争写 config.json
+            if let Some(reason) = conflicting_instance_running() {
                 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
                 app.dialog()
-                    .message(
-                        "检测到旧版 ShortCut（Electron）正在运行。\n\n两版同时运行会竞争写配置文件、造成任务墙/快捷方式数据丢失。\n\n请先退出旧版（托盘图标 → 退出），再启动本程序。",
-                    )
+                    .message(reason)
                     .title("ShortCut 启动中止")
                     .kind(MessageDialogKind::Warning)
                     .buttons(MessageDialogButtons::Ok)
@@ -1721,7 +1733,16 @@ pub fn run() {
                         .build()
                         .expect("failed to build main window")
                 });
-            let _ = win;
+            // Electron 语义对齐：点关闭按钮 = 隐藏到托盘，不退出进程
+            {
+                let win2 = win.clone();
+                win.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = win2.hide();
+                    }
+                });
+            }
 
             // 托盘：显示主面板 / 退出
             let show = MenuItem::with_id(app, "show", "显示主面板", true, None::<&str>)?;

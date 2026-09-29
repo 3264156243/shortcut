@@ -40,7 +40,8 @@ impl Injector {
         child_arc: Arc<Mutex<Option<Child>>>,
     ) -> mpsc::Sender<String> {
         let (tx, mut rx) = mpsc::channel::<String>(64);
-        tokio::spawn(async move {
+        // 可能从同步命令路径调用（主线程无 reactor）——tauri::async_runtime::spawn 内部自带运行时
+        tauri::async_runtime::spawn(async move {
             let mut child = match Command::new("powershell.exe")
                 .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File"])
                 .arg(&ps_path)
@@ -805,7 +806,8 @@ pub async fn spawn_server(
         .map_err(|e| format!("端口 {} 占用: {}", port, e))?;
     log::info!("[control] 服务启动 :{}", port);
 
-    tokio::spawn(async move {
+    // 处于 async 上下文（block_on/任务内）也可用 tauri 运行时包裹，行为一致
+    tauri::async_runtime::spawn(async move {
         let serve = axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>());
         tokio::select! {
             _ = serve => {}

@@ -31,12 +31,15 @@ fn hardware_monitor_exe() -> Option<std::path::PathBuf> {
 pub struct MusicState {
     pub child: Arc<Mutex<Option<tokio::process::Child>>>,
     pub latest: Arc<Mutex<Value>>,
+    /// 启动中防抖（async spawn 到 child 落位之间有窗口）
+    pub starting: AtomicBool,
 }
 
 pub struct CockpitState {
     pub child: Arc<Mutex<Option<tokio::process::Child>>>,
     pub latest: Arc<Mutex<Value>>,
     pub main_active: AtomicBool,
+    pub starting: AtomicBool,
 }
 
 fn kill_child(child: &Arc<Mutex<Option<tokio::process::Child>>>) {
@@ -50,33 +53,41 @@ fn kill_child(child: &Arc<Mutex<Option<tokio::process::Child>>>) {
 pub fn start_music_bridge(app: tauri::AppHandle, st: Arc<MusicState>) -> Value {
     {
         let guard = st.child.lock().unwrap();
-        if guard.is_some() {
+        if guard.is_some() || st.starting.swap(true, Ordering::SeqCst) {
+            if guard.is_some() {
+                st.starting.store(false, Ordering::SeqCst);
+            }
             return json!({ "success": true });
         }
     }
     let Some(script) = music_bridge_script() else {
+        st.starting.store(false, Ordering::SeqCst);
         return json!({ "success": false, "error": "音乐桥接脚本不存在" });
     };
-    match tokio::process::Command::new("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            &script.to_string_lossy(),
-        ])
-        .creation_flags(0x08000000)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-    {
-        Ok(mut child) => {
-            let stdout = child.stdout.take().unwrap();
-            let app2 = app.clone();
-            let latest = st.latest.clone();
-            let child_slot = st.child.clone();
-            tokio::spawn(async move {
+    let st2 = st.clone();
+    // 命令是同步函数（跑在主线程，无 Tokio reactor）——必须走 tauri::async_runtime::spawn
+    tauri::async_runtime::spawn(async move {
+        match tokio::process::Command::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                &script.to_string_lossy(),
+            ])
+            .creation_flags(0x08000000)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+        {
+            Ok(mut child) => {
+                let stdout = child.stdout.take().unwrap();
+                let app2 = app.clone();
+                let latest = st2.latest.clone();
+                let child_slot = st2.child.clone();
+                *child_slot.lock().unwrap() = Some(child);
+                log::info!("[music] 音乐桥已启动");
                 let reader = BufReader::new(stdout);
                 let mut lines = reader.lines();
                 while let Ok(Some(line)) = lines.next_line().await {
@@ -90,17 +101,16 @@ pub fn start_music_bridge(app: tauri::AppHandle, st: Arc<MusicState>) -> Value {
                 }
                 // 进程退出：清理槽位
                 *child_slot.lock().unwrap() = None;
+                st2.starting.store(false, Ordering::SeqCst);
                 log::info!("[music] 音乐桥进程退出");
-            });
-            *st.child.lock().unwrap() = Some(child);
-            log::info!("[music] 音乐桥已启动");
-            json!({ "success": true })
+            }
+            Err(e) => {
+                log::error!("[music] 音乐桥启动失败: {}", e);
+                st2.starting.store(false, Ordering::SeqCst);
+            }
         }
-        Err(e) => {
-            log::error!("[music] 音乐桥启动失败: {}", e);
-            json!({ "success": false, "error": e.to_string() })
-        }
-    }
+    });
+    json!({ "success": true })
 }
 
 pub fn stop_music_bridge(st: &Arc<MusicState>) {
@@ -141,27 +151,35 @@ pub fn sync_cockpit(app: tauri::AppHandle, st: Arc<CockpitState>) -> Value {
 fn start_cockpit(app: tauri::AppHandle, st: Arc<CockpitState>) -> Value {
     {
         let guard = st.child.lock().unwrap();
-        if guard.is_some() {
+        if guard.is_some() || st.starting.swap(true, Ordering::SeqCst) {
+            if guard.is_some() {
+                st.starting.store(false, Ordering::SeqCst);
+            }
             return json!({ "success": true });
         }
     }
     let Some(exe) = hardware_monitor_exe() else {
+        st.starting.store(false, Ordering::SeqCst);
         return json!({ "success": false, "error": "硬件监控组件不存在" });
     };
     let cwd = exe.parent().map(|p| p.to_path_buf());
-    match tokio::process::Command::new(&exe)
-        .current_dir(cwd.unwrap_or_else(|| std::path::PathBuf::from(".")))
-        .creation_flags(0x08000000)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-    {
-        Ok(mut child) => {
-            let stdout = child.stdout.take().unwrap();
-            let app2 = app.clone();
-            let latest = st.latest.clone();
-            let child_slot = st.child.clone();
-            tokio::spawn(async move {
+    let st2 = st.clone();
+    // 命令是同步函数（跑在主线程，无 Tokio reactor）——必须走 tauri::async_runtime::spawn
+    tauri::async_runtime::spawn(async move {
+        match tokio::process::Command::new(&exe)
+            .current_dir(cwd.unwrap_or_else(|| std::path::PathBuf::from(".")))
+            .creation_flags(0x08000000)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+        {
+            Ok(mut child) => {
+                let stdout = child.stdout.take().unwrap();
+                let app2 = app.clone();
+                let latest = st2.latest.clone();
+                let child_slot = st2.child.clone();
+                *child_slot.lock().unwrap() = Some(child);
+                log::info!("[cockpit] 硬件监控已启动");
                 let reader = BufReader::new(stdout);
                 let mut lines = reader.lines();
                 while let Ok(Some(line)) = lines.next_line().await {
@@ -175,18 +193,17 @@ fn start_cockpit(app: tauri::AppHandle, st: Arc<CockpitState>) -> Value {
                     }
                 }
                 *child_slot.lock().unwrap() = None;
+                st2.starting.store(false, Ordering::SeqCst);
                 log::info!("[cockpit] 硬件监控进程退出");
-            });
-            *st.child.lock().unwrap() = Some(child);
-            log::info!("[cockpit] 硬件监控已启动");
-            json!({ "success": true })
+            }
+            Err(e) => {
+                log::error!("[cockpit] 硬件监控启动失败: {}", e);
+                st2.starting.store(false, Ordering::SeqCst);
+                kill_child(&st2.child);
+            }
         }
-        Err(e) => {
-            log::error!("[cockpit] 硬件监控启动失败: {}", e);
-            kill_child(&st.child);
-            json!({ "success": false, "error": e.to_string() })
-        }
-    }
+    });
+    json!({ "success": true })
 }
 
 /// balance setKey：写 config.island.deepseekApiKey / opencodeApiKey（对齐 handleBalanceSetKey）
