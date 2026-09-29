@@ -540,8 +540,9 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
             let board_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
             let task_id = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
             if !board_id.is_empty() && !task_id.is_empty() {
-                let raw = config::read_config();
-                let mut cfg: Value = if raw.is_empty() { json!({}) } else { serde_json::from_str(&raw).unwrap_or(json!({})) };
+                let Some(mut cfg) = config::read_config_value() else {
+                    return json!(resolve_task_list(&task_cfg(&app)));
+                };
                 if let Some(list) = cfg.as_object_mut().unwrap().entry("scTaskList").or_insert_with(|| json!([])).as_array_mut() {
                     let dup = list.iter().any(|e| e.get("boardId").and_then(|v| v.as_str()) == Some(board_id.as_str()) && e.get("taskId").and_then(|v| v.as_str()) == Some(task_id.as_str()));
                     if !dup {
@@ -565,8 +566,9 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
         "removeTaskFromList" => {
             let board_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
             let task_id = args.get(1).and_then(|v| v.as_str()).unwrap_or("");
-            let raw = config::read_config();
-            let mut cfg: Value = if raw.is_empty() { json!({}) } else { serde_json::from_str(&raw).unwrap_or(json!({})) };
+            let Some(mut cfg) = config::read_config_value() else {
+                return json!({ "ok": false });
+            };
             let mut changed = false;
             if let Some(list) = cfg.as_object_mut().unwrap().get_mut("scTaskList").and_then(|v| v.as_array_mut()) {
                 let before = list.len();
@@ -959,8 +961,9 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
         "toggleTaskDone" => {
             let board_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
             let task_id = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let raw = config::read_config();
-            let mut cfg: Value = if raw.is_empty() { json!({}) } else { serde_json::from_str(&raw).unwrap_or(json!({})) };
+            let Some(mut cfg) = config::read_config_value() else {
+                return json!({ "ok": false });
+            };
             let mut changed = false;
             if let Some(boards) = cfg.as_object_mut().unwrap().get_mut("taskBoards").and_then(|v| v.as_array_mut()) {
                 if let Some(board) = boards.iter_mut().find(|b| b.get("id").and_then(|v| v.as_str()) == Some(board_id.as_str())) {
@@ -1102,8 +1105,9 @@ fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, method: Str
             let task_id = args.get(3).and_then(|v| v.as_str()).unwrap_or("").to_string();
             let tasks_enabled = task_cfg(&app).get("island").and_then(|i| i.get("tasksEnabled")).and_then(|v| v.as_bool()).unwrap_or(true);
             if tasks_enabled && windows::point_in_island(&app, sx, sy) {
-                let raw = config::read_config();
-                let mut cfg: Value = if raw.is_empty() { json!({}) } else { serde_json::from_str(&raw).unwrap_or(json!({})) };
+                let Some(mut cfg) = config::read_config_value() else {
+                    return json!(true);
+                };
                 let dup = cfg.get("scTaskList").and_then(|v| v.as_array()).map(|l| l.iter().any(|e| e.get("boardId").and_then(|v| v.as_str()) == Some(board_id.as_str()) && e.get("taskId").and_then(|v| v.as_str()) == Some(task_id.as_str()))).unwrap_or(false);
                 if !dup && !board_id.is_empty() && !task_id.is_empty() {
                     if let Some(obj) = cfg.as_object_mut() {
@@ -1259,8 +1263,9 @@ fn resolve_task_list(cfg: &Value) -> Vec<Value> {
 
 /// M5 任务墙：置任务 done 标志（写回 config.taskBoards）
 fn patch_task_flag(_app: &tauri::AppHandle, board_id: &str, task_id: &str, done: bool) -> bool {
-    let raw = config::read_config();
-    let mut cfg: Value = if raw.is_empty() { json!({}) } else { serde_json::from_str(&raw).unwrap_or(json!({})) };
+    let Some(mut cfg) = config::read_config_value() else {
+        return false;
+    };
     let mut changed = false;
     if let Some(boards) = cfg.as_object_mut().unwrap().get_mut("taskBoards").and_then(|v| v.as_array_mut()) {
         if let Some(board) = boards.iter_mut().find(|b| b.get("id").and_then(|v| v.as_str()) == Some(board_id)) {
@@ -1532,8 +1537,9 @@ fn toggle_main_window(app: &tauri::AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 /// M5 提醒：标记任务已提醒（remindedAt + done=true）
 fn mark_task_reminded(_app: &tauri::AppHandle, board_id: &str, task_id: &str) {
-    let raw = config::read_config();
-    let mut cfg: Value = if raw.is_empty() { json!({}) } else { serde_json::from_str(&raw).unwrap_or(json!({})) };
+    let Some(mut cfg) = config::read_config_value() else {
+        return;
+    };
     let mut changed = false;
     if let Some(boards) = cfg.as_object_mut().unwrap().get_mut("taskBoards").and_then(|v| v.as_array_mut()) {
         if let Some(board) = boards.iter_mut().find(|b| b.get("id").and_then(|v| v.as_str()) == Some(board_id)) {

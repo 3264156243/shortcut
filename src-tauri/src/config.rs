@@ -47,7 +47,26 @@ pub fn read_config() -> String {
     if !f.exists() {
         return String::new();
     }
-    fs::read_to_string(&f).unwrap_or_default()
+    // Windows 上多进程（Tauri/Electron 同时跑）可能瞬时锁冲突：重试 3 次
+    for attempt in 0..3 {
+        match fs::read_to_string(&f) {
+            Ok(text) => return text,
+            Err(_) if attempt < 2 => {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Err(_) => return String::new(),
+        }
+    }
+    String::new()
+}
+
+/// 读配置并解析；**parse 失败返回 None**（调用方必须中止 read-modify-write，绝不能用空对象当基准写回）
+pub fn read_config_value() -> Option<serde_json::Value> {
+    let raw = read_config();
+    if raw.is_empty() {
+        return Some(serde_json::json!({}));
+    }
+    serde_json::from_str(&raw).ok()
 }
 
 /// 备份名：config.backup-YYYYMMDDHHMMSS.json（与 Electron 正则 ^config\.backup-\d{14}\.json$ 兼容）
@@ -131,12 +150,36 @@ pub fn restore_from_backup_if_needed() {
 
 pub fn write_config(data: &str) {
     ensure_dirs();
+    // 防缩水保险：现有配置健康且含数据，而新数据把核心数组弄丢/清空 → 拒绝写入
+    let f = config_file();
+    if f.exists() {
+        if let (Ok(old), Ok(new)) = (
+            serde_json::from_str::<serde_json::Value>(&fs::read_to_string(&f).unwrap_or_default()),
+            serde_json::from_str::<serde_json::Value>(data),
+        ) {
+            let old_has_data = array_len(&old, "taskBoards") > 0
+                || array_len(&old, "tabs") > 0
+                || array_len(&old, "scTaskList") > 0;
+            let new_lost_data = old_has_data
+                && array_len(&new, "taskBoards") == 0
+                && array_len(&new, "tabs") == 0
+                && array_len(&new, "scTaskList") == 0;
+            if new_lost_data {
+                log::warn!("[config] 拒绝缩水写入：新配置丢失全部 tabs/taskBoards/scTaskList 数据（原 {} 字节 → 新 {} 字节）", old.to_string().len(), data.len());
+                return;
+            }
+        }
+    }
     backup_config();
     // 临时文件 + rename 原子写（崩溃安全，与 Electron 一致）
     let tmp = config_file().with_extension("json.tmp");
     if fs::write(&tmp, data).is_ok() {
         let _ = fs::rename(&tmp, config_file());
     }
+}
+
+fn array_len(v: &serde_json::Value, key: &str) -> usize {
+    v.get(key).and_then(|x| x.as_array()).map(|a| a.len()).unwrap_or(0)
 }
 
 /// M5：岛驾驶舱开关（config.island.cockpitEnabled，默认 false）

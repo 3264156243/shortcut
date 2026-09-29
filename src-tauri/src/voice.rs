@@ -24,8 +24,11 @@ fn voice_config() -> Value {
 }
 
 fn write_voice_config(patch: &Value) {
-    let raw = crate::config::read_config();
-    let mut cfg: Value = if raw.is_empty() { json!({}) } else { serde_json::from_str(&raw).unwrap_or(json!({})) };
+    // parse 失败绝不能把空骨架写回（防数据覆盖）
+    let Some(mut cfg) = crate::config::read_config_value() else {
+        log::warn!("[voice] write_voice_config 跳过：config.json 解析失败");
+        return;
+    };
     if let Some(obj) = cfg.as_object_mut() {
         let voice = obj.entry("voice").or_insert_with(|| json!({}));
         if let (Some(vo), Some(po)) = (voice.as_object_mut(), patch.as_object()) {

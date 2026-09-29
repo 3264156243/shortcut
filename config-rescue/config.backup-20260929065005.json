@@ -1,0 +1,223 @@
+{
+  "version": 1,
+  "theme": "dark",
+  "locale": "zh-CN",
+  "panelAnimation": "bottom",
+  "globalHotkey": "Alt+Space",
+  "openOnStartup": true,
+  "rememberWindowSize": true,
+  "closeOnBlur": true,
+  "searchHistory": [],
+  "activeModule": "translate",
+  "tasks": [],
+  "taskBoards": [
+    {
+      "id": "default-task-board",
+      "name": "默认任务墙",
+      "notes": [],
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "activeTaskBoardId": "default-task-board",
+  "tabs": [
+    {
+      "id": "default",
+      "name": "通用",
+      "sort": 0,
+      "groups": [
+        {
+          "id": "default-group",
+          "name": "收藏",
+          "collapsed": false,
+          "sort": 0,
+          "shortcuts": []
+        }
+      ]
+    }
+  ],
+  "activeTabId": "default",
+  "scTaskList": [],
+  "modules": [
+    {
+      "id": "shortcuts",
+      "enabled": true,
+      "visible": true,
+      "group": "primary"
+    },
+    {
+      "id": "tasks",
+      "enabled": true,
+      "visible": true,
+      "group": "primary"
+    },
+    {
+      "id": "cockpit",
+      "enabled": true,
+      "visible": true,
+      "group": "primary"
+    },
+    {
+      "id": "translate",
+      "enabled": true,
+      "visible": true,
+      "group": "primary"
+    },
+    {
+      "id": "fileTransfer",
+      "enabled": true,
+      "visible": true,
+      "group": "primary"
+    },
+    {
+      "id": "usage",
+      "enabled": true,
+      "visible": true,
+      "group": "more"
+    },
+    {
+      "id": "island",
+      "enabled": true,
+      "visible": true,
+      "group": "more"
+    },
+    {
+      "id": "codexProvider",
+      "enabled": true,
+      "visible": true,
+      "group": "more"
+    },
+    {
+      "id": "usageManage",
+      "enabled": true,
+      "visible": true
+    },
+    {
+      "id": "activation",
+      "enabled": true,
+      "visible": true,
+      "group": "more"
+    },
+    {
+      "id": "voiceInput",
+      "enabled": true,
+      "visible": true,
+      "group": "more"
+    },
+    {
+      "id": "control",
+      "enabled": true,
+      "visible": true,
+      "group": "more"
+    }
+  ],
+  "island": {
+    "enabled": true,
+    "style": "capsule",
+    "position": "top-center",
+    "autoHideFullscreen": true,
+    "musicEnabled": true,
+    "lyricBounce": true,
+    "orbitGlow": true,
+    "barsEnabled": true,
+    "displayState": "collapsed"
+  },
+  "voiceInput": {
+    "enabled": true,
+    "polishMode": "llm"
+  },
+  "license": {
+    "activationPolicy": "premium_only",
+    "moduleAccess": [
+      {
+        "id": "shortcuts",
+        "level": "大会员",
+        "allowed": true
+      },
+      {
+        "id": "tasks",
+        "level": "大会员",
+        "allowed": true
+      },
+      {
+        "id": "cockpit",
+        "level": "大会员",
+        "allowed": true
+      },
+      {
+        "id": "translate",
+        "level": "大会员",
+        "allowed": true
+      },
+      {
+        "id": "fileTransfer",
+        "level": "大会员",
+        "allowed": true
+      },
+      {
+        "id": "usage",
+        "level": "大会员",
+        "allowed": true
+      },
+      {
+        "id": "island",
+        "level": "大会员",
+        "allowed": true
+      },
+      {
+        "id": "codexProvider",
+        "level": "大会员",
+        "allowed": true
+      },
+      {
+        "id": "voiceInput",
+        "level": "大会员",
+        "allowed": true
+      },
+      {
+        "id": "control",
+        "level": "大会员",
+        "allowed": true
+      }
+    ],
+    "featureAccess": [
+      {
+        "id": "island.music",
+        "module": "island",
+        "label": "SC球-音乐",
+        "allowed": true
+      },
+      {
+        "id": "island.tasks",
+        "module": "island",
+        "label": "SC球-任务提醒",
+        "allowed": true
+      },
+      {
+        "id": "island.cockpit",
+        "module": "island",
+        "label": "SC球-驾驶舱数据",
+        "allowed": true
+      },
+      {
+        "id": "island.balance",
+        "module": "island",
+        "label": "SC球-余额(DeepSeek/OpenCode)",
+        "allowed": true
+      },
+      {
+        "id": "translate.bubble",
+        "module": "translate",
+        "label": "翻译-划词气泡 Alt+E",
+        "allowed": true
+      }
+    ],
+    "tier": "大会员",
+    "guestEnabled": true,
+    "contactLine": "激活码请联系管理员获取，QQ：3264156243",
+    "code": "SHC-544B-1FE3-8851",
+    "status": "active",
+    "expiresAt": "2027-09-16T09:17:05+08:00",
+    "message": "激活成功"
+  }
+}

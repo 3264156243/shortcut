@@ -32,8 +32,11 @@ fn stored_binding() -> Option<(String, String, String)> {
 }
 
 fn store_binding(bind_id: &str, code: &str, bind_url: &str) {
-    let raw = config::read_config();
-    let mut cfg: Value = if raw.is_empty() { json!({}) } else { serde_json::from_str(&raw).unwrap_or(json!({})) };
+    // parse 失败绝不能把空骨架写回（防数据覆盖）
+    let Some(mut cfg) = config::read_config_value() else {
+        log::warn!("[sync] store_binding 跳过：config.json 解析失败");
+        return;
+    };
     if let Some(obj) = cfg.as_object_mut() {
         let sync = obj.entry("sync").or_insert_with(|| json!({}));
         if let Some(sobj) = sync.as_object_mut() {
@@ -183,9 +186,10 @@ pub fn pull_taskwall() -> Value {
         return json!({ "board": "taskwall", "count": 0 });
     }
 
-    // 写入 config.taskBoards
-    let raw = config::read_config();
-    let mut cfg: Value = if raw.is_empty() { json!({}) } else { serde_json::from_str(&raw).unwrap_or(json!({})) };
+    // 写入 config.taskBoards（parse 失败中止，防覆盖）
+    let Some(mut cfg) = config::read_config_value() else {
+        return json!({ "board": "taskwall", "count": 0, "error": "本地配置读取失败，云端任务已保留" });
+    };
     let mut imported = 0i64;
     {
         let obj = cfg.as_object_mut().unwrap();
