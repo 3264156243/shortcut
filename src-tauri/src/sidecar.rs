@@ -90,11 +90,24 @@ pub fn start_music_bridge(app: tauri::AppHandle, st: Arc<MusicState>) -> Value {
                 log::info!("[music] 音乐桥已启动");
                 let reader = BufReader::new(stdout);
                 let mut lines = reader.lines();
+                let mut last_avail: Option<bool> = None;
                 while let Ok(Some(line)) = lines.next_line().await {
                     if line.trim().is_empty() {
                         continue;
                     }
                     if let Ok(v) = serde_json::from_str::<Value>(&line) {
+                        // 状态变化诊断（含歌词字段存在性——排查封面/歌词不显示）
+                        let avail = v.get("available").and_then(|x| x.as_bool());
+                        if avail != last_avail {
+                            log::info!(
+                                "[music] 桥状态: available={:?} title={:?} has_lyrics={} cover={:?}",
+                                avail,
+                                v.get("title").and_then(|t| t.as_str()).unwrap_or(""),
+                                v.get("lyrics").map(|l| l.as_str().map(|s| !s.is_empty()).unwrap_or(false)).unwrap_or(false),
+                                v.get("coverUrl").and_then(|c| c.as_str()).map(|s| !s.is_empty()).unwrap_or(false),
+                            );
+                            last_avail = avail;
+                        }
                         *latest.lock().unwrap() = v.clone();
                         let _ = tauri::Emitter::emit(&app2, "electron:IslandMusic", v);
                     }

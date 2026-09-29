@@ -357,9 +357,27 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             state
         }
         "setIsland" => {
-            if let Some(patch) = args.first().cloned() {
+            // Electron 签名对齐（IslandPanel.updateIsland 传 12 个位置参数）：
+            // setIsland(enabled, style, position, autoHideFullscreen, musicEnabled, lyricBounce,
+            //           displayState, orbitGlow, barsEnabled, tasksEnabled, cockpitEnabled, provider)
+            let arg = |i: usize| args.get(i).cloned().unwrap_or(Value::Null);
+            let patch = serde_json::Map::from_iter([
+                ("enabled".to_string(), arg(0)),
+                ("style".to_string(), arg(1)),
+                ("position".to_string(), arg(2)),
+                ("autoHideFullscreen".to_string(), arg(3)),
+                ("musicEnabled".to_string(), arg(4)),
+                ("lyricBounce".to_string(), arg(5)),
+                ("displayState".to_string(), arg(6)),
+                ("orbitGlow".to_string(), arg(7)),
+                ("barsEnabled".to_string(), arg(8)),
+                ("tasksEnabled".to_string(), arg(9)),
+                ("cockpitEnabled".to_string(), arg(10)),
+                ("balanceProvider".to_string(), arg(11)),
+            ].into_iter().filter(|(_, v)| !v.is_null()));
+            if !patch.is_empty() {
                 let was_pos = windows::island_prefs();
-                windows::patch_island_config(&app, patch);
+                windows::patch_island_config(&app, Value::Object(patch));
                 if let Some(win) = app.get_webview_window("island") {
                     let now = windows::island_prefs();
                     let pos_changed = now.get("position") != was_pos.get("position")
@@ -1915,6 +1933,7 @@ pub fn run() {
                         .title("ShortCut")
                         .inner_size(900.0, 600.0)
                         .min_inner_size(600.0, 400.0)
+                        .decorations(false) // 前端自绘标题栏，去掉系统标题栏（之前漏了导致双层）
                         .visible(false) // Electron show:false——启动隐藏，Alt+Space/托盘唤出
                         .resizable(true)
                         .initialization_script(SHIM_JS)
@@ -2008,6 +2027,22 @@ pub fn run() {
                     let st = app.state::<MusicHandle>();
                     sidecar::start_music_bridge(app.handle().clone(), st.0.clone());
                     log::info!("[music] 启动时按配置预启动音乐桥");
+                }
+                // 岛（SC球）：配置启用则启动即显示（对齐 Electron createIslandWindow，不再需要 Alt+I 手动唤出）
+                {
+                    let cfg2 = config::read_config_value().unwrap_or(json!({}));
+                    let island_on = cfg2.get("island").and_then(|i| i.get("enabled")).and_then(|v| v.as_bool()).unwrap_or(false);
+                    if island_module_on && island_on {
+                        if app.get_webview_window("island").is_none() {
+                            let handle = app.handle().clone();
+                            match windows::ensure_island(&handle) {
+                                Ok(_) => log::info!("[island] 启动时按配置创建并显示"),
+                                Err(e) => log::error!("[island] 启动创建失败: {}", e),
+                            }
+                        }
+                        // SC 球（余额/音乐球）状态对齐
+                        sync_deepseekball_state(app.handle());
+                    }
                 }
             }
     Ok(())
