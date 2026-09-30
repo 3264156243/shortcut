@@ -363,8 +363,8 @@ export default function TaskBoard() {
           >
             <Plus size={14} />
           </button>
-          {/* 任务清单设置入口（板块右上角） */}
-          <div className="relative flex shrink-0 items-center">
+          {/* 任务清单设置入口（板块右上角，点击弹出独立悬浮设置弹窗） */}
+          <div className="flex shrink-0 items-center">
             <button
               onClick={() => setShowTasksSettings((v) => !v)}
               className="flex h-8 w-8 items-center justify-center rounded transition-all duration-150 hover:opacity-85"
@@ -377,29 +377,46 @@ export default function TaskBoard() {
             >
               <Settings size={14} />
             </button>
-            {showTasksSettings && (
-              <div
-                className="absolute right-0 top-9 z-50 w-60 rounded-xl p-3 shadow-xl"
-                style={{ background: '#1c1714', border: '1px solid rgba(245,240,232,.14)' }}
-              >
-                <div className="mb-2 text-xs font-semibold" style={{ color: '#f5f0e8' }}>任务清单设置</div>
-                <label className="flex cursor-pointer items-center justify-between py-1">
-                  <span className="text-xs" style={{ color: 'rgba(245,240,232,.8)' }}>任务模块</span>
-                  <input
-                    type="checkbox"
-                    checked={islandCfg?.tasksEnabled !== false}
-                    onChange={(e) => setTasksModule(e.target.checked)}
-                    className="h-4 w-4 cursor-pointer"
-                    style={{ accentColor: '#9b2335' }}
-                  />
-                </label>
-                <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'rgba(245,240,232,.45)' }}>
-                  禁用后任务清单球立即消失；按 Alt+U 可重新启用
-                </div>
-              </div>
-            )}
           </div>
         </div>
+        {showTasksSettings && (
+          <div
+            className="fixed inset-0 z-[80] flex items-center justify-center"
+            style={{ background: 'rgba(8,6,5,.55)' }}
+            onClick={() => setShowTasksSettings(false)}
+          >
+            <div
+              className="w-80 rounded-2xl p-5 shadow-2xl"
+              style={{ background: '#1c1714', border: '1px solid rgba(245,240,232,.16)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-sm font-semibold" style={{ color: '#f5f0e8' }}>任务清单设置</div>
+                <button
+                  onClick={() => setShowTasksSettings(false)}
+                  className="flex h-7 w-7 items-center justify-center rounded transition-all duration-150 hover:opacity-85"
+                  style={{ background: 'rgba(245,240,232,.08)', color: 'rgba(245,240,232,.6)' }}
+                  title="关闭"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <label className="flex cursor-pointer items-center justify-between rounded-lg px-2 py-2.5" style={{ background: 'rgba(245,240,232,.06)' }}>
+                <span className="text-xs" style={{ color: 'rgba(245,240,232,.85)' }}>任务模块</span>
+                <input
+                  type="checkbox"
+                  checked={islandCfg?.tasksEnabled !== false}
+                  onChange={(e) => setTasksModule(e.target.checked)}
+                  className="h-4 w-4 cursor-pointer"
+                  style={{ accentColor: '#9b2335' }}
+                />
+              </label>
+              <div className="mt-3 text-[11px] leading-relaxed" style={{ color: 'rgba(245,240,232,.45)' }}>
+                启用时 SC 球旁显示任务清单球；禁用后立即消失，按 Alt+U 可重新启用。
+              </div>
+            </div>
+          </div>
+        )}
         {activeBoard && (
           <div className="flex shrink-0 items-center">
             <button
