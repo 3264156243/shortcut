@@ -12,12 +12,6 @@
     "windows": [],
     "security": {
       "csp": null
-    },
-    "trayIcon": {
-      "id": "main-tray",
-      "iconPath": "icons/icon.ico",
-      "iconAsTemplate": false,
-      "tooltip": "ShortCut"
     }
   },
   "plugins": {

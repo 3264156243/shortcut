@@ -381,21 +381,64 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             ].into_iter().filter(|(_, v)| !v.is_null()));
             if !patch.is_empty() {
                 log::info!("[island] setIsland patch 字段: {:?}", patch.keys().collect::<Vec<_>>());
-                let was_pos = windows::island_prefs();
+                let was = windows::island_prefs();
                 windows::patch_island_config(&app, Value::Object(patch));
-                if let Some(win) = app.get_webview_window("island") {
-                    let now = windows::island_prefs();
-                    let pos_changed = now.get("position") != was_pos.get("position")
-                        || now.get("x") != was_pos.get("x")
-                        || now.get("y") != was_pos.get("y");
+                let now = windows::island_prefs();
+                let enabled = now.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+                let display_changed = now.get("displayState") != was.get("displayState");
+                // ── 岛窗口级响应（对齐 Electron applyConfig 的岛分支）──
+                if !enabled {
+                    // 启用开关关闭 → 隐藏岛（Electron destroyIslandWindow；隐藏可保留窗口以便快速恢复）
+                    if let Some(win) = app.get_webview_window("island") {
+                        let _ = win.hide();
+                        log::info!("[island] 已按配置隐藏岛");
+                    }
+                } else if display_changed || app.get_webview_window("island").is_none() {
+                    // 显示模式切换（collapsed/mini/expanded 尺寸位置不同）→ 重建窗口（前端重载后按新配置渲染）
+                    if let Some(win) = app.get_webview_window("island") {
+                        let _ = win.destroy();
+                    }
+                    match windows::ensure_island(&app) {
+                        Ok(_) => log::info!("[island] 已按新模式重建岛"),
+                        Err(e) => log::error!("[island] 重建失败: {}", e),
+                    }
+                    windows::position_deepseekball(&app);
+                } else if let Some(win) = app.get_webview_window("island") {
+                    let pos_changed = now.get("position") != was.get("position")
+                        || now.get("x") != was.get("x")
+                        || now.get("y") != was.get("y");
                     if pos_changed {
                         let (x, y, _, _) = windows::island_bounds(&app, &now);
                         let _ = win.set_position(tauri::LogicalPosition::new(x, y));
                         windows::position_deepseekball(&app);
                     }
+                    let _ = win.show();
                     windows::apply_passthrough(&win);
                 }
-                let now = windows::island_prefs();
+                // ── 板块级响应 ──
+                // 任务板块关闭 → 销毁任务墙 + 全部提醒窗（Electron islandTasksOk=false 分支）
+                let tasks_ok = now.get("tasksEnabled").and_then(|v| v.as_bool()).unwrap_or(true);
+                if !tasks_ok {
+                    if let Some(w) = app.get_webview_window("tasklist") {
+                        let _ = w.destroy();
+                    }
+                    for (label, w) in app.webview_windows() {
+                        if label.starts_with("reminder") {
+                            let _ = w.destroy();
+                        }
+                    }
+                    log::info!("[island] 任务板块已关闭：任务墙/提醒窗已销毁");
+                }
+                // 音乐板块关闭 → 停音乐桥；开启 → 确保桥在跑（Electron islandMusicOk 分支）
+                let music_ok = now.get("musicEnabled").and_then(|v| v.as_bool()).unwrap_or(true);
+                let mh = app.state::<MusicHandle>();
+                if !music_ok {
+                    sidecar::stop_music_bridge(&mh.0);
+                    log::info!("[island] 音乐板块已关闭：音乐桥已停止");
+                } else if island_feature_ok(&app) {
+                    sidecar::start_music_bridge(app.clone(), mh.0.clone());
+                }
+                // 事件广播（岛前端已确认能收到 island:config）
                 let _ = app.emit("island:config", now.clone());
                 let _ = app.emit("config:changed", json!({ "scope": "island" }));
                 let _ = app.emit("electron:IslandConfig", now);
@@ -1643,6 +1686,15 @@ fn url_encode(s: &str) -> String {
     out
 }
 
+/// island.music 授权特性是否可用（license.featureAccess，默认允许）
+fn island_feature_ok(app: &tauri::AppHandle) -> bool {
+    let _ = app;
+    let cfg = config::read_config_value().unwrap_or(json!({}));
+    cfg.get("license").and_then(|l| l.get("featureAccess")).and_then(|f| f.as_array())
+        .and_then(|a| a.iter().find(|f| f.get("id").and_then(|v| v.as_str()) == Some("island.music")).and_then(|f| f.get("allowed")).and_then(|v| v.as_bool()))
+        .unwrap_or(true)
+}
+
 /// 音乐控制（Alt+Z/X/C → 音乐桥 -Control，对齐 Electron runMusicBridgeCommand）
 fn run_music_control(app: &tauri::AppHandle, action: &str) {
     if let Some(script) = sidecar::music_bridge_script_pub() {
@@ -1969,6 +2021,17 @@ pub fn run() {
                         .build()
                         .expect("failed to build main window")
                 });
+            // 首次启动主窗直接显示（用户期望启动即见；之后关闭=隐藏到托盘）
+            {
+                let w = win.clone();
+                std::thread::spawn(move || {
+                    // 等 WebView 首帧渲染，避免白屏闪烁
+                    std::thread::sleep(std::time::Duration::from_millis(450));
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                    log::info!("[main] 启动显示主窗");
+                });
+            }
             // Electron 语义对齐：关闭=隐藏到托盘；失焦=自动隐藏（closeOnBlur !== false，与 main.ts blur 一致）
             {
                 let win2 = win.clone();
