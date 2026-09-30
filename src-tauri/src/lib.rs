@@ -155,6 +155,8 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             log::info!("[config] writeConfig 命令收到 {} 字节", data.len());
             config::write_config(data);
             let _ = app.emit("config:changed", json!({ "scope": "all" }));
+            // 岛同步刷新（完整字段 payload，对齐 Electron applyConfig → sendIslandConfig）
+            let _ = app.emit("island:config", windows::island_full_prefs());
             // 配置可能改了岛/SC球设置（样式/供应商/开关）→ 球状态对齐
             sync_deepseekball_state(&app);
             Value::Null
@@ -442,9 +444,18 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
                     sidecar::start_music_bridge(app.clone(), mh.0.clone());
                 }
                 // 事件广播（岛前端已确认能收到 island:config）
-                let _ = app.emit("island:config", now.clone());
+                // 关键：payload 必须是完整 island 配置（island_prefs 只有 5 个壳字段，
+                // 之前用它导致前端 style/musicEnabled 等全部 undefined → 永远回退旧值）
+                let full = windows::island_full_prefs();
+                log::info!("[island] 广播 island:config style={} music={} cockpit={} provider={} display={}",
+                    full.get("style").and_then(|v| v.as_str()).unwrap_or(""),
+                    full.get("musicEnabled").and_then(|v| v.as_bool()).unwrap_or(false),
+                    full.get("cockpitEnabled").and_then(|v| v.as_bool()).unwrap_or(false),
+                    full.get("balanceProvider").and_then(|v| v.as_str()).unwrap_or(""),
+                    full.get("displayState").and_then(|v| v.as_str()).unwrap_or(""));
+                let _ = app.emit("island:config", full.clone());
                 let _ = app.emit("config:changed", json!({ "scope": "island" }));
-                let _ = app.emit("electron:IslandConfig", now);
+                let _ = app.emit("electron:IslandConfig", full);
                 // SC 球对齐配置（Electron applyConfig 语义：provider 关/feature 关 → 销毁；球在 → 重建刷新样式）
                 sync_deepseekball_state(&app);
             }

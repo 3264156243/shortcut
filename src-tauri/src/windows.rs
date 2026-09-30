@@ -41,6 +41,47 @@ pub fn island_prefs() -> Value {
     })
 }
 
+/// 读 config.island 完整字段（事件广播给岛前端用；带 Electron getIslandPreferences 的默认值兜底）
+pub fn island_full_prefs() -> Value {
+    let raw = config::read_config();
+    let cfg: Value = if raw.is_empty() {
+        json!({})
+    } else {
+        serde_json::from_str(&raw).unwrap_or(json!({}))
+    };
+    let island = cfg.get("island").cloned().unwrap_or(json!({}));
+    let g = |k: &str, d: bool| island.get(k).and_then(|v| v.as_bool()).unwrap_or(d);
+    let s = |k: &str, d: &str| island.get(k).and_then(|v| v.as_str()).unwrap_or(d).to_string();
+    let legacy_deepseek = g("deepseekEnabled", false);
+    let provider = island.get("balanceProvider").and_then(|v| v.as_str()).unwrap_or("");
+    let balance_provider = if provider == "deepseek" || provider == "opencode" {
+        provider.to_string()
+    } else if legacy_deepseek {
+        "deepseek".to_string()
+    } else {
+        "none".to_string()
+    };
+    json!({
+        "enabled": g("enabled", false),
+        "style": s("style", "capsule"),
+        "position": s("position", "top-center"),
+        "autoHideFullscreen": g("autoHideFullscreen", true),
+        "musicEnabled": g("musicEnabled", true),
+        "tasksEnabled": g("tasksEnabled", true),
+        "cockpitEnabled": g("cockpitEnabled", false),
+        "balanceProvider": balance_provider,
+        "lyricBounce": g("lyricBounce", true),
+        "orbitGlow": g("orbitGlow", true),
+        "barsEnabled": g("barsEnabled", true),
+        "displayState": s("displayState", "collapsed"),
+        "deepseekEnabled": legacy_deepseek,
+        "deepseekApiKey": island.get("deepseekApiKey").cloned().unwrap_or(Value::Null),
+        "opencodeApiKey": island.get("opencodeApiKey").cloned().unwrap_or(Value::Null),
+        "x": island.get("x").cloned().unwrap_or(Value::Null),
+        "y": island.get("y").cloned().unwrap_or(Value::Null),
+    })
+}
+
 /// 计算窗口 bounds（primary monitor，逻辑像素=Electron DIP 基准；工作区差异=任务栏，M3 先用整屏）
 pub fn island_bounds(app: &tauri::AppHandle, prefs: &Value) -> (f64, f64, f64, f64) {
     let mut area = (0.0, 0.0, 1280.0, 800.0); // x, y, width, height 逻辑像素兜底
