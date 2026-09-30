@@ -1152,6 +1152,45 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             log::info!("[shim] {}", msg);
             Value::Null
         }
+        // 区域截图：选区窗加载源图（base64 data URL）
+        "getScreenshotData" => {
+            let p = capture_temp_path();
+            match std::fs::read(&p) {
+                Ok(bytes) => {
+                    use base64::Engine as _;
+                    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                    json!({ "success": true, "dataUrl": format!("data:image/png;base64,{}", b64) })
+                }
+                Err(e) => json!({ "success": false, "error": e.to_string() }),
+            }
+        }
+        // 区域截图：物理坐标裁剪 → 剪贴板 → 关选区窗
+        "captureRegion" => {
+            let num = |i: usize| args.get(i).and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let (lx, ly, lw, lh) = (num(0), num(1), num(2), num(3));
+            let scale = app.get_webview_window("capture")
+                .and_then(|w| w.current_monitor().ok().flatten())
+                .map(|m| m.scale_factor())
+                .unwrap_or(1.0);
+            let (x, y, w, h) = ((lx * scale).round() as i64, (ly * scale).round() as i64, (lw * scale).round() as i64, (lh * scale).round() as i64);
+            if w < 1 || h < 1 {
+                return json!({ "success": false, "error": "选区无效" });
+            }
+            match ps_crop_to_clipboard(x, y, w, h) {
+                Ok(_) => {
+                    if let Some(w) = app.get_webview_window("capture") {
+                        let _ = w.destroy();
+                    }
+                    notify(&app, "所选区域已写入剪贴板");
+                    log::info!("[capture] 区域截图完成 {}x{} @{},{} (scale={})", w, h, x, y, scale);
+                    json!({ "success": true })
+                }
+                Err(e) => {
+                    log::error!("[capture] 区域裁剪失败: {}", e);
+                    json!({ "success": false, "error": "裁剪写入剪贴板失败" })
+                }
+            }
+        }
         "openBalancePlatform" => {            let provider = args.first().and_then(|v| v.as_str()).unwrap_or("deepseek");
             let url = if provider == "opencode" { "https://opencode.net" } else { "https://platform.deepseek.com" };
             use tauri_plugin_opener::OpenerExt;
@@ -1757,6 +1796,136 @@ fn restore_window_state(win: &tauri::WebviewWindow) {
         v.get("maximized").and_then(|z| z.as_bool()).unwrap_or(false));
 }
 
+/// ---------- 截图（对齐 Electron captureCurrentDisplay / startRegionCapture）----------
+const CAPTURE_TEMP_PNG: &str = "shortcut-capture.png";
+
+fn capture_temp_path() -> std::path::PathBuf {
+    std::env::temp_dir().join(CAPTURE_TEMP_PNG)
+}
+
+/// 光标所在屏全屏截图（物理像素）→ 可选写剪贴板/存临时 PNG
+/// PowerShell -STA（Clipboard 需要 STA）+ System.Drawing CopyFromScreen
+fn ps_capture_screen(to_clipboard: bool, save_path: Option<&std::path::Path>) -> Result<(), String> {
+    use std::os::windows::process::CommandExt as _;
+    let save = save_path
+        .map(|p| p.to_string_lossy().replace('\\', "\\\\"))
+        .unwrap_or_default();
+    let clip = if to_clipboard { "$true" } else { "$false" };
+    let script = format!(
+        "Add-Type -AssemblyName System.Drawing; Add-Type -AssemblyName System.Windows.Forms; \
+         $s=[System.Windows.Forms.Screen]::FromPoint([System.Windows.Forms.Cursor]::Position); \
+         $b=$s.Bounds; \
+         $bmp=New-Object System.Drawing.Bitmap($b.Width,$b.Height); \
+         $g=[System.Drawing.Graphics]::FromImage($bmp); \
+         $g.CopyFromScreen($b.Left,$b.Top,0,0,$bmp.Size); \
+         if ({clip}) {{ [System.Windows.Forms.Clipboard]::SetImage($bmp); }}; \
+         if ('{save}' -ne '') {{ $bmp.Save('{save}',[System.Drawing.Imaging.ImageFormat]::Png); }}; \
+         Write-Output ok",
+        clip = clip,
+        save = save,
+    );
+    let out = std::process::Command::new("powershell.exe")
+        .args(["-NoProfile", "-STA", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", &script])
+        .creation_flags(0x08000000)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if out.status.success() && String::from_utf8_lossy(&out.stdout).contains("ok") {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).to_string())
+    }
+}
+
+/// 裁剪临时 PNG 的指定物理区域 → 写剪贴板（对齐 Electron image.crop + clipboard.writeImage）
+fn ps_crop_to_clipboard(x: i64, y: i64, w: i64, h: i64) -> Result<(), String> {
+    use std::os::windows::process::CommandExt as _;
+    let p = capture_temp_path().to_string_lossy().replace('\\', "\\\\");
+    let script = format!(
+        "Add-Type -AssemblyName System.Drawing; Add-Type -AssemblyName System.Windows.Forms; \
+         $src=[System.Drawing.Bitmap]::FromFile('{p}'); \
+         $rect=New-Object System.Drawing.Rectangle({x},{y},{w},{h}); \
+         $crop=$src.Clone($rect,$src.PixelFormat); \
+         [System.Windows.Forms.Clipboard]::SetImage($crop); \
+         $src.Dispose(); \
+         Remove-Item '{p}' -ErrorAction SilentlyContinue; \
+         Write-Output ok",
+        p = p, x = x, y = y, w = w, h = h,
+    );
+    let out = std::process::Command::new("powershell.exe")
+        .args(["-NoProfile", "-STA", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", &script])
+        .creation_flags(0x08000000)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if out.status.success() && String::from_utf8_lossy(&out.stdout).contains("ok") {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).to_string())
+    }
+}
+
+fn notify(app: &tauri::AppHandle, body: &str) {
+    use tauri_plugin_notification::NotificationExt;
+    let _ = app.notification().builder().title("ShortCut").body(body).show();
+}
+
+/// Alt+S：当前屏幕全屏 → 剪贴板
+fn capture_full_screen(app: &tauri::AppHandle) {
+    match ps_capture_screen(true, None) {
+        Ok(_) => {
+            notify(app, "当前屏幕已写入剪贴板");
+            log::info!("[capture] 全屏截图完成");
+        }
+        Err(e) => {
+            log::error!("[capture] 全屏截图失败: {}", e);
+            notify(app, "全屏截图失败");
+        }
+    }
+}
+
+/// Alt+D：区域截图（全屏快照 → 全屏遮罩选区窗 → 裁剪写剪贴板）
+fn start_region_capture(app: &tauri::AppHandle) {
+    use tauri::WebviewUrl;
+    use tauri::WebviewWindowBuilder;
+    // 光标所在屏 bounds（物理）
+    let (mx, my, mw, mh, scale) = match app.cursor_position().ok().and_then(|pos| app.monitor_from_point(pos.x, pos.y).ok().flatten()) {
+        Some(m) => {
+            let b = m.position();
+            let s = m.size();
+            (b.x, b.y, s.width, s.height, m.scale_factor())
+        }
+        None => (0, 0, 1920, 1080, 1.0),
+    };
+    if let Err(e) = ps_capture_screen(false, Some(&capture_temp_path())) {
+        log::error!("[capture] 快照失败: {}", e);
+        return;
+    }
+    // 旧选区窗销毁重建（对齐 Electron captureOverlay.destroy）
+    if let Some(old) = app.get_webview_window("capture") {
+        let _ = old.destroy();
+    }
+    let build = WebviewWindowBuilder::new(app, "capture", WebviewUrl::App("capture.html".into()))
+        .title("ShortCut 区域截图")
+        .decorations(false)
+        .resizable(false)
+        .maximizable(false)
+        .minimizable(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .shadow(false)
+        .focused(true)
+        .visible(false)
+        .initialization_script(crate::SHIM_JS)
+        .position(mx as f64 / scale, my as f64 / scale)
+        .inner_size(mw as f64 / scale, mh as f64 / scale);
+    match build.build() {
+        Ok(w) => {
+            let _ = w.show();
+            log::info!("[capture] 区域截图选区窗已显示 ({}x{} @{},{} scale={})", mw, mh, mx, my, scale);
+        }
+        Err(e) => log::error!("[capture] 选区窗创建失败: {}", e),
+    }
+}
+
 /// island.music 授权特性是否可用（license.featureAccess，默认允许）
 fn island_feature_ok(app: &tauri::AppHandle) -> bool {
     let _ = app;
@@ -1970,8 +2139,8 @@ pub fn run() {
                                     let _ = windows::ensure_tasklist(app);
                                 }
                             }
-                            "alt+s" => { let _ = app.emit("electron:shortcut", "screenshot-full"); }
-                            "alt+d" => { let _ = app.emit("electron:shortcut", "screenshot-region"); }
+                            "alt+s" => capture_full_screen(app),
+                            "alt+d" => start_region_capture(app),
                             "alt+e" => translate_current_selection(app),
                             // 音乐控制（对齐 Electron musicHotkeys：Alt+Z/X/C）
                             "alt+z" => run_music_control(app, "prev"),
