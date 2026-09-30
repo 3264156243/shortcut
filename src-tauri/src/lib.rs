@@ -17,7 +17,7 @@ fn update_pending() -> &'static Mutex<Option<(UpdaterUpdate, Vec<u8>)>> {
     UPDATE_PENDING.get_or_init(|| Mutex::new(None))
 }
 use tauri:: {
-    menu::{Menu, MenuItem},
+    menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
     Emitter, Manager, WebviewUrl, WebviewWindowBuilder,
 };
@@ -2144,23 +2144,28 @@ pub fn run() {
                 });
             }
 
-            // 托盘：显示主面板 / 退出
+            // 托盘：显示主面板 / 退出（对齐 Electron：显示/隐藏 + 分隔线 + 退出）
             let show = MenuItem::with_id(app, "show", "显示主面板", true, None::<&str>)?;
+            let sep = PredefinedMenuItem::separator(app)?;
             let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &quit])?;
+            let menu = Menu::with_items(app, &[&show, &sep, &quit])?;
             let _tray = TrayIconBuilder::with_id("main-tray")
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| handle_tray_event(app, event.id.as_ref()))
                 .on_tray_icon_event(|tray, event| {
-                    // 左键单击 = 显示主面板
+                    // 左键单击 = 切换主面板（对齐 Electron tray.on('click', toggleWindow)）
                     if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, button_state: tauri::tray::MouseButtonState::Up, .. } = event {
                         let app = tray.app_handle();
                         if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.unminimize();
-                            let _ = w.set_focus();
+                            if w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false) {
+                                let _ = w.hide();
+                            } else {
+                                let _ = w.show();
+                                let _ = w.unminimize();
+                                let _ = w.set_focus();
+                            }
                         }
                     }
                 })
