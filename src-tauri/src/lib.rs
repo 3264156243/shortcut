@@ -125,7 +125,11 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
         "hideWindow" => { let _ = window.hide(); Value::Null }
         "closeWindow" => { let _ = window.hide(); Value::Null } // 主窗口关闭=隐藏到托盘（与 Electron 行为一致）
         "showWindow" => {
-            let _ = app.emit("window:will-show", ());
+            // 仅从隐藏转显示时通知（已可见时重复 show 是 no-op，
+            // 多余的 will-show 会让前端重置选中项/重播动画 → "点一下面板就刷新"）
+            if !window.is_visible().unwrap_or(false) {
+                let _ = app.emit("window:will-show", ());
+            }
             let _ = window.show();
             let _ = window.unminimize();
             let _ = window.set_focus();
@@ -432,10 +436,9 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
                     }
                     log::info!("[island] 任务板块已关闭：任务墙/提醒窗已销毁");
                 } else {
-                    // 启用即默认显示（Electron 语义：任务墙 ready 后 showInactive）
+                    // 启用即默认显示（ensure_tasklist 内部用无激活显示，不抢主窗焦点）
                     match windows::ensure_tasklist(&app) {
-                        Ok(w) => {
-                            let _ = w.show();
+                        Ok(_w) => {
                             log::info!("[island] 任务板块已启用：任务墙已显示");
                         }
                         Err(e) => log::error!("[island] 任务墙启用失败: {}", e),
@@ -1663,7 +1666,10 @@ fn handle_tray_event(app: &tauri::AppHandle, id: &str) {
     match id {
         "show" => {
             if let Some(w) = app.get_webview_window("main") {
-                let _ = app.emit("window:will-show", ());
+                // 仅从隐藏转显示时通知（已可见时是 no-op，多余通知会让前端重播动画）
+                if !w.is_visible().unwrap_or(false) {
+                    let _ = app.emit("window:will-show", ());
+                }
                 let _ = w.show();
                 let _ = w.unminimize();
                 let _ = w.set_focus();
@@ -2144,11 +2150,22 @@ pub fn run() {
                             "alt+space" => toggle_main_window(app),
                             "alt+i" => windows::toggle_island(app),
                             "alt+u" => {
-                                // 与 Electron taskListHotkey 一致：存在则销毁，否则创建
-                                if app.get_webview_window("tasklist").is_some() {
-                                    windows::destroy_tasklist(app);
+                                // 任务模块禁用时 Alt+U 完全无效（除非在设置里重新启用）
+                                let tasks_on = config::read_config_value()
+                                    .as_ref()
+                                    .and_then(|c| c.get("island"))
+                                    .and_then(|i| i.get("tasksEnabled"))
+                                    .and_then(|v| v.as_bool())
+                                    .unwrap_or(true);
+                                if tasks_on {
+                                    // 与 Electron taskListHotkey 一致：存在则销毁，否则创建
+                                    if app.get_webview_window("tasklist").is_some() {
+                                        windows::destroy_tasklist(app);
+                                    } else {
+                                        let _ = windows::ensure_tasklist(app);
+                                    }
                                 } else {
-                                    let _ = windows::ensure_tasklist(app);
+                                    log::info!("[hotkey] Alt+U 已忽略：任务模块未启用");
                                 }
                             }
                             "alt+s" => capture_full_screen(app),
@@ -2394,12 +2411,11 @@ pub fn run() {
                         // SC 球（余额/音乐球）状态对齐
                         sync_deepseekball_state(app.handle());
                     }
-                    // 任务板块启用时启动即显示任务墙（对齐 Electron taskListWindow.showInactive）
+                    // 任务板块启用时启动即显示任务墙（ensure_tasklist 内部无激活显示）
                     let tasks_enabled = cfg2.get("island").and_then(|i| i.get("tasksEnabled")).and_then(|v| v.as_bool()).unwrap_or(true);
                     if island_module_on && tasks_enabled && app.get_webview_window("tasklist").is_none() {
                         let handle = app.handle().clone();
-                        if let Ok(w) = windows::ensure_tasklist(&handle) {
-                            let _ = w.show();
+                        if windows::ensure_tasklist(&handle).is_ok() {
                             log::info!("[tasklist] 启动时按配置显示任务墙");
                         }
                     }

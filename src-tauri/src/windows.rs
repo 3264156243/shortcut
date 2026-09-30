@@ -166,7 +166,7 @@ pub fn ensure_island(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWind
     apply_passthrough(&win);
     // 逻辑坐标定位（与 Electron DIP 一致，DPI 缩放下位置记忆兼容）
     let _ = win.set_position(tauri::LogicalPosition::new(x, y));
-    let _ = win.show();
+    show_inactive(&win); // 对齐 Electron islandWindow.showInactive()
     log::info!("[island] 已显示");
     Ok(win)
 }
@@ -178,7 +178,7 @@ pub fn toggle_island(app: &tauri::AppHandle) {
             if win.is_visible().unwrap_or(false) {
                 let _ = win.hide();
             } else {
-                let _ = win.show();
+                show_inactive(&win); // 对齐 Electron showInactive：不抢主窗焦点
             }
         }
         None => {
@@ -258,19 +258,26 @@ fn build_overlay(
     Ok(win)
 }
 
+/// 无激活显示（Tauri 无 show_inactive：临时置不可聚焦再显示，语义等价 Electron showInactive）
+pub fn show_inactive(win: &tauri::WebviewWindow) {
+    let _ = win.set_focusable(false);
+    let _ = win.show();
+    let _ = win.set_focusable(true);
+}
+
 /// 任务墙窗口（340×430，岛右侧；Alt+U 切换创建/销毁）
 pub fn ensure_tasklist(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> {
     if let Some(win) = app.get_webview_window("tasklist") {
-        // 已显示则 no-op（避免显示路径的任何潜在焦点切换）
+        // 已显示则 no-op；未显示用无激活显示（不抢焦点 → 主窗不会失焦隐藏）
         if !win.is_visible().unwrap_or(false) {
-            let _ = win.show();
+            show_inactive(&win);
         }
         return Ok(win);
     }
     let (ix, iy, iw, _) = island_anchor(app);
     let win = build_overlay(app, "tasklist", "tasklist.html", ix + iw + 8.0, iy, 340.0, 430.0, false);
     if let Ok(ref w) = win {
-        let _ = w.show();
+        show_inactive(w);
     }
     win
 }
@@ -290,7 +297,7 @@ pub fn ensure_deepseekball(app: &tauri::AppHandle) -> tauri::Result<tauri::Webvi
     let (ix, iy, iw, _) = island_anchor(app);
     let win = build_overlay(app, "deepseekball", "deepseekball.html", ix + iw + 8.0, iy + 8.0, 46.0, 46.0, false);
     if let Ok(ref w) = win {
-        let _ = w.show();
+        show_inactive(w); // 对齐 Electron deepseekBallWindow.showInactive()
     }
     win
 }
