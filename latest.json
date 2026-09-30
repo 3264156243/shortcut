@@ -1,0 +1,11 @@
+{
+    "version":  "2.4.6",
+    "notes":  "Tauri 2 重构版：内存占用 -30%，体积 -94%；岛设置全面生效；音乐控制/截图/翻译/任务墙/语音胶囊全功能对齐；窗口状态记忆；进程清理机制。",
+    "pub_date":  "2026-09-30T12:05:53Z",
+    "platforms":  {
+                      "windows-x86_64":  {
+                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRR3lWYXB6R2FMMUhQRUg0azVvWm9QMGFPVzltcFBwMDlSUDJEQkwyZnZLRXpaV05sMU9XNk5zWWZUYWlkM2lLdDNEUXdDZnQzK0hpRnJQcXk2SW00eEVJVElWakdGRFE4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkwNzY5OTMyCWZpbGU6U2hvcnRDdXRfMi40LjZfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjIuNC42Cmp4eE56VzBmMXJQL2o1WWk2OEZkMzJ6dlJoRFZRTnhydFpoLzl4eEZ0TEF5ZzQ1QzcwTXlVN255OTNyRDREVW5KallJYnptK1VLMWpBT2VBNnI3c0FnPT0K",
+                                             "url":  "https://shortcut.326415.xyz/updates/ShortCut_2.4.6_x64-setup.exe"
+                                         }
+                  }
+}
