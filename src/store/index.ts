@@ -232,7 +232,7 @@ declare global {
       openCodexFile: (which: string) => Promise<{ success: boolean; error?: string }>;
       openCodexPresetDir: (id: string) => Promise<{ success: boolean; error?: string }>;
       getIslandState: () => Promise<{ enabled: boolean; style: string; position: string; autoHideFullscreen: boolean; musicEnabled?: boolean }>;
-      setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string, orbitGlow: boolean, barsEnabled: boolean, tasksEnabled: boolean, cockpitEnabled: boolean, balanceProvider: string) => Promise<{ success: boolean; error?: string }>;
+      setIsland: (enabled: boolean, style: string, position: string, autoHideFullscreen: boolean, musicEnabled: boolean, lyricBounce: boolean, displayState: string, orbitGlow: boolean, barsEnabled: boolean, tasksEnabled: boolean, cockpitEnabled: boolean, balanceProvider: string) => Promise<{ success: boolean; error?: string; island?: Record<string, unknown> }>;
       moveIsland: (screenX: number, screenY: number, deltaX: number, deltaY: number) => Promise<{ success: boolean; error?: string }>;
       getIslandBounds: () => Promise<{ x: number; y: number; width: number; height: number } | null>;
       moveIslandTo: (x: number, y: number) => Promise<{ success: boolean; error?: string }>;

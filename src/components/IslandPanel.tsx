@@ -42,6 +42,13 @@ export default function IslandPanel() {
     if (result && !result.success && result.error) {
       console.error(result.error);
     }
+    // 服务端权威配置回填（任务墙等他处改动经 setIsland 返回值同步到本地 store）
+    if (result && result.success && result.island) {
+      const authoritative = result.island as Record<string, unknown>;
+      useStore.setState((s) => ({
+        config: { ...s.config, island: { ...s.config.island, ...authoritative } as typeof s.config.island },
+      }));
+    }
   };
 
   const saveBalanceKey = async (provider: BalanceProvider) => {
@@ -144,16 +151,7 @@ export default function IslandPanel() {
           </div>
         </div>
 
-        {/* 任务板块设置 */}
-        <div style={sectionStyle}>
-          <div style={titleStyle}>任务板块设置</div>
-          <div className="flex flex-col gap-3">
-            {toggleRow('任务模块', island.tasksEnabled !== false, (v) => void updateIsland({ tasksEnabled: v }), !featureOk('island.tasks'))}
-            <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-              <Film size={14} /> Alt+U 可隐藏或显示任务清单球
-            </div>
-          </div>
-        </div>
+        {/* 任务模块开关已迁移至任务墙右上角设置入口（tasklist.tsx） */}
 
         {/* 驾驶舱板块设置 */}
         <div style={sectionStyle}>

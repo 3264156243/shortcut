@@ -356,7 +356,8 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             Value::Null
         }
         "getIslandState" => {
-            let prefs = windows::island_prefs();
+            // 完整配置（前端任务墙设置页需要 tasksEnabled 等功能字段）
+            let prefs = windows::island_full_prefs();
             let visible = app
                 .get_webview_window("island")
                 .and_then(|w| w.is_visible().ok())
@@ -388,9 +389,11 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             ].into_iter().filter(|(_, v)| !v.is_null()));
             if !patch.is_empty() {
                 log::info!("[island] setIsland patch 字段: {:?}", patch.keys().collect::<Vec<_>>());
-                let was = windows::island_prefs();
+                // 关键：窗口级响应判断必须用完整配置——island_prefs() 只有 5 个壳字段，
+                // 之前 now.get("tasksEnabled") 恒为 None → unwrap_or(true) → 禁用永远不生效
+                let was = windows::island_full_prefs();
                 windows::patch_island_config(&app, Value::Object(patch));
-                let now = windows::island_prefs();
+                let now = windows::island_full_prefs();
                 let enabled = now.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
                 let display_changed = now.get("displayState") != was.get("displayState");
                 // ── 岛窗口级响应（对齐 Electron applyConfig 的岛分支）──
@@ -478,10 +481,13 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
                     let _ = island.emit("electron:IslandConfig", full.clone());
                 }
                 if let Some(ball) = app.get_webview_window("deepseekball") {
-                    let _ = ball.emit("island:config", full);
+                    let _ = ball.emit("island:config", full.clone());
                 }
                 // SC 球对齐配置（Electron applyConfig 语义：provider 关/feature 关 → 销毁；球在 → 重建刷新样式）
                 sync_deepseekball_state(&app);
+                // 对齐 Electron return { success, island }：发起方（主窗/任务墙）凭返回值
+                // 同步本地 store，避免后续全量回写用旧值覆盖他处刚改的开关
+                return json!({ "success": true, "island": full });
             }
             Value::Null
         }
@@ -2150,7 +2156,9 @@ pub fn run() {
                             "alt+space" => toggle_main_window(app),
                             "alt+i" => windows::toggle_island(app),
                             "alt+u" => {
-                                // 任务模块禁用时 Alt+U 完全无效（除非在设置里重新启用）
+                                // 任务模块开关已迁移到任务墙右上角设置入口。
+                                // 禁用状态下墙被销毁（入口随之消失），Alt+U 成为唯一重新启用通道：
+                                // tasksEnabled=false → Alt+U = 重新启用并显示
                                 let tasks_on = config::read_config_value()
                                     .as_ref()
                                     .and_then(|c| c.get("island"))
@@ -2165,7 +2173,12 @@ pub fn run() {
                                         let _ = windows::ensure_tasklist(app);
                                     }
                                 } else {
-                                    log::info!("[hotkey] Alt+U 已忽略：任务模块未启用");
+                                    // 重新启用：写回配置 + 显示任务墙
+                                    windows::patch_island_config(app, json!({ "tasksEnabled": true }));
+                                    match windows::ensure_tasklist(app) {
+                                        Ok(_) => log::info!("[tasklist] Alt+U 重新启用任务模块"),
+                                        Err(e) => log::error!("[tasklist] Alt+U 重新启用失败: {}", e),
+                                    }
                                 }
                             }
                             "alt+s" => capture_full_screen(app),
