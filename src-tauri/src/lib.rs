@@ -124,6 +124,15 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
         "maximizeWindow" => { let _ = window.is_maximized().map(|m| if m { let _ = window.unmaximize(); } else { let _ = window.maximize(); }); Value::Null }
         "hideWindow" => { let _ = window.hide(); Value::Null }
         "closeWindow" => { let _ = window.hide(); Value::Null } // 主窗口关闭=隐藏到托盘（与 Electron 行为一致）
+        "resizeWindow" => {
+            // 内容自适应窗口（任务墙高度跟随任务条目数；窗口=发起 invoke 的窗口）
+            let w = args.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let h = args.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0);
+            if w >= 1.0 && h >= 1.0 {
+                let _ = window.set_size(tauri::LogicalSize::new(w, h));
+            }
+            Value::Null
+        }
         "showWindow" => {
             // 仅从隐藏转显示时通知（已可见时重复 show 是 no-op，
             // 多余的 will-show 会让前端重置选中项/重播动画 → "点一下面板就刷新"）

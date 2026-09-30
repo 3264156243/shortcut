@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Check, Film, Settings, Trash2 } from 'lucide-react';
+import { Check, Trash2 } from 'lucide-react';
 import './tasklist.css';
 
 interface TaskListItem {
@@ -12,27 +12,11 @@ interface TaskListItem {
   addedAt: string;
 }
 
-interface IslandConfig {
-  enabled?: boolean;
-  style?: string;
-  position?: string;
-  autoHideFullscreen?: boolean;
-  musicEnabled?: boolean;
-  lyricBounce?: boolean;
-  displayState?: string;
-  orbitGlow?: boolean;
-  barsEnabled?: boolean;
-  tasksEnabled?: boolean;
-  cockpitEnabled?: boolean;
-  balanceProvider?: string;
-}
-
 function TaskListApp() {
   const [items, setItems] = useState<TaskListItem[]>([]);
   const [typingIds, setTypingIds] = useState<string[]>([]);
-  const [showSettings, setShowSettings] = useState(false);
-  const [tasksEnabled, setTasksEnabled] = useState(true);
   const prevIdsRef = useRef<string[]>([]);
+  const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const applyData = (raw: unknown) => {
@@ -56,36 +40,19 @@ function TaskListApp() {
     return unsubscribe;
   }, []);
 
-  // 打开设置浮层时拉取当前岛配置（含 tasksEnabled）
-  const toggleSettings = () => {
-    if (!showSettings) {
-      void window.electronAPI?.getIslandState?.().then((cfg: IslandConfig) => {
-        setTasksEnabled(cfg?.tasksEnabled !== false);
-      });
-    }
-    setShowSettings((v) => !v);
-  };
-
-  // 任务模块开关：写入配置。禁用 → Rust 销毁任务墙（本设置浮层随之关闭）
-  const setTasksModule = (v: boolean) => {
-    setTasksEnabled(v);
-    void window.electronAPI?.getIslandState?.().then((cfg: IslandConfig) => {
-      void window.electronAPI?.setIsland(
-        cfg?.enabled !== false,
-        cfg?.style || 'capsule',
-        cfg?.position || 'top-center',
-        cfg?.autoHideFullscreen !== false,
-        cfg?.musicEnabled !== false,
-        cfg?.lyricBounce !== false,
-        cfg?.displayState || 'collapsed',
-        cfg?.orbitGlow !== false,
-        cfg?.barsEnabled !== false,
-        v,
-        cfg?.cockpitEnabled === true,
-        cfg?.balanceProvider || 'none',
-      );
-    });
-  };
+  // 窗口高度跟随内容（不留透明空白区挡鼠标；宽度固定 340，高度钳制在 header~430）
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const report = () => {
+      const h = Math.min(430, Math.max(34, Math.ceil(el.getBoundingClientRect().height)));
+      void window.electronAPI?.resizeWindow?.(340, h);
+    };
+    report();
+    const ro = new ResizeObserver(report);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const remove = (item: TaskListItem) => {
     void window.electronAPI?.removeTaskFromList?.(item.boardId, item.taskId);
@@ -100,55 +67,8 @@ function TaskListApp() {
   };
 
   return (
-    <div className="tasklist-root">
-      <div className="tasklist-header">
-        <span>SC任务清单</span>
-        <button
-          className="tasklist-settings-btn"
-          onClick={toggleSettings}
-          title="任务清单设置"
-          style={{
-            background: 'transparent', border: 'none', cursor: 'pointer',
-            padding: 2, borderRadius: 6, display: 'flex', alignItems: 'center',
-            color: showSettings ? 'var(--color-accent, #6366f1)' : 'inherit',
-          }}
-        >
-          <Settings size={13} />
-        </button>
-      </div>
-      <AnimatePresence>
-        {showSettings && (
-          <motion.div
-            key="settings"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.16 }}
-            style={{ overflow: 'hidden' }}
-          >
-            <div
-              style={{
-                margin: '6px 10px 2px', padding: '10px 12px', borderRadius: 12,
-                background: 'rgba(20,20,26,0.92)', border: '1px solid rgba(255,255,255,0.10)',
-                display: 'flex', flexDirection: 'column', gap: 8,
-              }}
-            >
-              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
-                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.82)' }}>任务模块</span>
-                <input
-                  type="checkbox"
-                  checked={tasksEnabled}
-                  onChange={(e) => setTasksModule(e.target.checked)}
-                  style={{ width: 15, height: 15, accentColor: '#6366f1', cursor: 'pointer' }}
-                />
-              </label>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                <Film size={12} /> 禁用后按 Alt+U 重新启用
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+    <div className="tasklist-root" ref={rootRef}>
+      <div className="tasklist-header">SC任务清单</div>
       <div className="tasklist-items">
         <AnimatePresence initial={false}>
           {items.map((item) => (

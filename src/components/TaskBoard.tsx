@@ -1,6 +1,6 @@
-﻿import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, Check, FileText, Plus, Trash2, X } from 'lucide-react';
+import { Bell, Check, FileText, Plus, Settings, Trash2, X } from 'lucide-react';
 import { useStore } from '../store';
 import { TaskBoardConfig, TaskEditorDraft, TaskNote } from '../types';
 import TaskDateTimePicker, { createDefaultReminderValue } from './TaskDateTimePicker';
@@ -42,6 +42,34 @@ export default function TaskBoard() {
   const wallRef = useRef<HTMLDivElement>(null);
   const taskInputRef = useRef<HTMLInputElement>(null);
   const lastInputSpaceAt = useRef(0);
+  // 任务清单设置（右上角齿轮）：任务模块总开关写入岛配置
+  const [showTasksSettings, setShowTasksSettings] = useState(false);
+  const islandCfg = config.island;
+  const setTasksModule = (v: boolean) => {
+    const cfg = islandCfg;
+    void window.electronAPI?.setIsland(
+      cfg?.enabled !== false,
+      cfg?.style || 'capsule',
+      cfg?.position || 'top-center',
+      cfg?.autoHideFullscreen !== false,
+      cfg?.musicEnabled !== false,
+      cfg?.lyricBounce !== false,
+      cfg?.displayState || 'collapsed',
+      cfg?.orbitGlow !== false,
+      cfg?.barsEnabled !== false,
+      v,
+      cfg?.cockpitEnabled === true,
+      (cfg?.balanceProvider || (cfg?.deepseekEnabled === true ? 'deepseek' : 'none')) as string,
+    ).then((result) => {
+      // 服务端权威配置回填（保持本面板与其他入口的开关一致）
+      if (result && result.success && result.island) {
+        const authoritative = result.island as Record<string, unknown>;
+        useStore.setState((s) => ({
+          config: { ...s.config, island: { ...s.config.island, ...authoritative } as typeof s.config.island },
+        }));
+      }
+    });
+  };
   const [draft, setDraft] = useState('');
   const [longTextEnabled, setLongTextEnabled] = useState(false);
   const [reminderEnabled, setReminderEnabled] = useState(false);
@@ -335,6 +363,42 @@ export default function TaskBoard() {
           >
             <Plus size={14} />
           </button>
+          {/* 任务清单设置入口（板块右上角） */}
+          <div className="relative flex shrink-0 items-center">
+            <button
+              onClick={() => setShowTasksSettings((v) => !v)}
+              className="flex h-8 w-8 items-center justify-center rounded transition-all duration-150 hover:opacity-85"
+              style={{
+                background: showTasksSettings ? 'rgba(155,35,53,.25)' : 'rgba(245,240,232,.1)',
+                border: '1px solid rgba(245,240,232,.14)',
+                color: showTasksSettings ? '#eaa2ad' : '#f5f0e8',
+              }}
+              title="任务清单设置"
+            >
+              <Settings size={14} />
+            </button>
+            {showTasksSettings && (
+              <div
+                className="absolute right-0 top-9 z-50 w-60 rounded-xl p-3 shadow-xl"
+                style={{ background: '#1c1714', border: '1px solid rgba(245,240,232,.14)' }}
+              >
+                <div className="mb-2 text-xs font-semibold" style={{ color: '#f5f0e8' }}>任务清单设置</div>
+                <label className="flex cursor-pointer items-center justify-between py-1">
+                  <span className="text-xs" style={{ color: 'rgba(245,240,232,.8)' }}>任务模块</span>
+                  <input
+                    type="checkbox"
+                    checked={islandCfg?.tasksEnabled !== false}
+                    onChange={(e) => setTasksModule(e.target.checked)}
+                    className="h-4 w-4 cursor-pointer"
+                    style={{ accentColor: '#9b2335' }}
+                  />
+                </label>
+                <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'rgba(245,240,232,.45)' }}>
+                  禁用后任务清单球立即消失；按 Alt+U 可重新启用
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         {activeBoard && (
           <div className="flex shrink-0 items-center">

@@ -261,6 +261,7 @@ declare global {
       onIslandMusic: (callback: (state: unknown) => void) => () => void;
       onIslandCockpit: (callback: (data: unknown) => void) => () => void;
       closeWindow: () => Promise<void>;
+      resizeWindow: (width: number, height: number) => Promise<void>;
       minimizeWindow: () => Promise<void>;
       maximizeWindow: () => Promise<boolean>;
       isMaximized: () => Promise<boolean>;
