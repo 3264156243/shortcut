@@ -45,6 +45,17 @@ tauri-plugin-clipboard-manager = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-log = "2"
 tauri-plugin-single-instance = "2"
+# ── 转换板块（纯 Rust 本地转换，计划见 docs/文件转换板块开发计划.md）──
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp", "tiff", "webp", "ico"] }
+zip = { version = "2.2", default-features = false, features = ["deflate", "aes-crypto"] }
+tar = "0.4"
+flate2 = "1"
+bzip2 = "0.4"
+xz2 = "0.1"
+zstd = "0.13"
+walkdir = "2"
+encoding_rs = "0.8"
+ico = "0.3"
 
 [profile.release]
 opt-level = "s"

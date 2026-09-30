@@ -1,4 +1,5 @@
 import {
+  ArrowLeftRight,
   BarChart3,
   Bot,
   CheckSquare,
@@ -29,6 +30,7 @@ export const MODULE_REGISTRY: ModuleMeta[] = [
   { id: 'cockpit', label: '驾驶舱', icon: Gauge, group: 'primary', defaultEnabled: true, defaultVisible: true },
   { id: 'translate', label: '翻译', icon: Languages, group: 'primary', defaultEnabled: true, defaultVisible: true },
   { id: 'fileTransfer', label: '快传', icon: Send, group: 'primary', defaultEnabled: true, defaultVisible: true },
+  { id: 'converter', label: '转换', icon: ArrowLeftRight, group: 'primary', defaultEnabled: true, defaultVisible: true },
   { id: 'usage', label: '统计', icon: BarChart3, group: 'more', defaultEnabled: true, defaultVisible: true },
   { id: 'island', label: 'SC球', icon: Smartphone, group: 'more', defaultEnabled: true, defaultVisible: true },
   { id: 'codexProvider', label: '供应商', icon: Bot, group: 'more', defaultEnabled: true, defaultVisible: true },

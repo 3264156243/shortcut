@@ -29,6 +29,11 @@ pub fn usage_file() -> PathBuf {
     user_data_dir().join("usage-record.json")
 }
 
+/// 转换板块数据：历史记录（独立文件，不污染 config.json）
+pub fn converter_history_file() -> PathBuf {
+    config_dir().join("converter-history.json")
+}
+
 pub fn ensure_dirs() {
     let _ = fs::create_dir_all(config_dir());
     let _ = fs::create_dir_all(icons_dir());

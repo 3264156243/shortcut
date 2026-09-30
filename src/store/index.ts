@@ -179,6 +179,19 @@ declare global {
       onTaskListData: (callback: (data: unknown) => void) => () => void;
       onConfigChanged: (callback: () => void) => () => void;
       onTaskLocate: (callback: (data: unknown) => void) => () => void;
+      // ── 转换板块 ──
+      converterDetect: (paths: string[]) => Promise<Array<{ path: string; name: string; kind: string; ext: string; size: number; targets: string[]; flavor?: string }>>;
+      converterConvert: (path: string, target: string, quality?: number, outDir?: string | null) => Promise<{ success: boolean; id: string }>;
+      converterExtract: (path: string, password?: string | null, outDir?: string | null) => Promise<{ success: boolean; id: string }>;
+      converterCompress: (paths: string[], flavor: string, outPath?: string | null, password?: string | null, level?: number) => Promise<{ success: boolean; id: string }>;
+      converterPickFiles: () => Promise<string[] | null>;
+      converterPickDir: () => Promise<string | null>;
+      converterHistory: () => Promise<Array<{ id: string; time: string; action: string; src: string; out: string; status: string; note: string }>>;
+      converterHistoryRemove: (id: string) => Promise<unknown>;
+      onConverterDrop: (callback: (data: { paths: string[] }) => void) => () => void;
+      onConverterProgress: (callback: (data: { id: string; pct: number; note: string }) => void) => () => void;
+      onConverterDone: (callback: (data: { id: string; out: string; out_dir: string; items: number }) => void) => () => void;
+      onConverterError: (callback: (data: { id: string; message: string }) => void) => () => void;
       fileTransferGetState: () => Promise<any>;
       fileTransferSendText: (text: string) => Promise<any>;
       fileTransferSendFile: (filePath: string) => Promise<any>;

@@ -31,6 +31,7 @@ mod sync;
 mod transfer;
 mod config;
 mod control;
+mod converter;
 mod usage;
 mod windows;
 
@@ -64,6 +65,10 @@ pub(crate) const SHIM_JS: &str = r#"
       onVoiceSession: 'voice:session',
       onVoicePolish: 'voice:polish',
       onVoicePolishError: 'voice:polishError',
+      onConverterDrop: 'converter:drop',
+      onConverterProgress: 'converter:progress',
+      onConverterDone: 'converter:done',
+      onConverterError: 'converter:error',
     };
     const api = new Proxy({}, {
       get(_t, prop) {
@@ -132,6 +137,78 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
                 let _ = window.set_size(tauri::LogicalSize::new(w, h));
             }
             Value::Null
+        }
+        // ── 转换板块（docs/文件转换板块开发计划.md）──
+        "converterDetect" => {
+            let paths: Vec<String> = args
+                .first()
+                .and_then(|v| v.as_array())
+                .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+                .unwrap_or_default();
+            json!(converter::detect_files(paths))
+        }
+        "converterConvert" => {
+            let id = converter::uuid_like::new_id();
+            let src = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let target = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let quality = args.get(2).and_then(|v| v.as_f64()).unwrap_or(85.0) as u8;
+            let out_dir = args.get(3).and_then(|v| v.as_str()).map(String::from);
+            converter::start_convert(app.clone(), id.clone(), src, target, quality, out_dir);
+            json!({ "success": true, "id": id })
+        }
+        "converterExtract" => {
+            let id = converter::uuid_like::new_id();
+            let src = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let password = args.get(1).and_then(|v| v.as_str()).map(String::from);
+            let out_dir = args.get(2).and_then(|v| v.as_str()).map(String::from);
+            converter::start_extract(app.clone(), id.clone(), src, password, out_dir);
+            json!({ "success": true, "id": id })
+        }
+        "converterCompress" => {
+            let id = converter::uuid_like::new_id();
+            let paths: Vec<String> = args
+                .first()
+                .and_then(|v| v.as_array())
+                .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+                .unwrap_or_default();
+            let flavor = args.get(1).and_then(|v| v.as_str()).unwrap_or("zip").to_string();
+            let out_path = args.get(2).and_then(|v| v.as_str()).map(String::from);
+            let password = args.get(3).and_then(|v| v.as_str()).map(String::from);
+            let level = args.get(4).and_then(|v| v.as_f64()).unwrap_or(6.0) as i64;
+            converter::start_compress(app.clone(), id.clone(), paths, flavor, out_path, password, level);
+            json!({ "success": true, "id": id })
+        }
+        "converterPickFiles" => {
+            use tauri_plugin_dialog::DialogExt;
+            let app2 = app.clone();
+            let files = tauri::async_runtime::spawn_blocking(move || {
+                app2.dialog().file().blocking_pick_files()
+            })
+            .await
+            .unwrap_or(None);
+            json!(files.map(|list| list.iter().map(|f| f.to_string()).collect::<Vec<_>>()))
+        }
+        "converterPickDir" => {
+            use tauri_plugin_dialog::DialogExt;
+            let app2 = app.clone();
+            let dir = tauri::async_runtime::spawn_blocking(move || {
+                app2.dialog().file().blocking_pick_folder()
+            })
+            .await
+            .unwrap_or(None);
+            json!(dir.map(|d| d.to_string()))
+        }
+        "converterHistory" => {
+            json!(converter::history::load())
+        }
+        "converterHistoryRemove" => {
+            let id = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            if id == "clear" {
+                converter::history::clear();
+            } else if !id.is_empty() {
+                converter::history::remove(id);
+            }
+            json!({ "success": true })
         }
         "showWindow" => {
             // 仅从隐藏转显示时通知（已可见时重复 show 是 no-op，
@@ -2328,6 +2405,8 @@ pub fn run() {
             {
                 let win2 = win.clone();
                 let app2 = app.handle().clone();
+                // 拖放悬停标志：拖放期间资源管理器持有焦点，主窗不得自动隐藏
+                static DRAG_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
                 win.on_window_event(move |event| {
                     match event {
                         tauri::WindowEvent::CloseRequested { api, .. } => {
@@ -2335,7 +2414,31 @@ pub fn run() {
                             save_window_state(&win2);
                             let _ = win2.hide();
                         }
+                        tauri::WindowEvent::DragDrop(ev) => match ev {
+                            tauri::DragDropEvent::Enter { .. } => {
+                                DRAG_ACTIVE.store(true, std::sync::atomic::Ordering::Relaxed);
+                            }
+                            tauri::DragDropEvent::Drop { paths, .. } => {
+                                DRAG_ACTIVE.store(false, std::sync::atomic::Ordering::Relaxed);
+                                let list: Vec<String> = paths
+                                    .iter()
+                                    .map(|p| p.to_string_lossy().into_owned())
+                                    .collect();
+                                let _ = app2.emit(
+                                    "converter:drop",
+                                    serde_json::json!({ "paths": list }),
+                                );
+                            }
+                            tauri::DragDropEvent::Leave { .. } => {
+                                DRAG_ACTIVE.store(false, std::sync::atomic::Ordering::Relaxed);
+                            }
+                            _ => {}
+                        },
                         tauri::WindowEvent::Focused(false) => {
+                            // 拖放进行中不隐藏（文件正从资源管理器拖入）
+                            if DRAG_ACTIVE.load(std::sync::atomic::Ordering::Relaxed) {
+                                return;
+                            }
                             // closeOnBlur 配置（缺省开启）：主窗失焦自动隐藏。
                             // 但鼠标仍在窗口矩形内 = 用户在拖动/窗口内操作导致的失焦，不隐藏
                             let cfg = crate::config::read_config_value();

@@ -15,6 +15,7 @@ import UpdateModal from './components/UpdateModal';
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal';
 import TranslatePanel from './components/TranslatePanel';
 import CockpitPanel from './components/CockpitPanel';
+import ConverterPanel from './components/ConverterPanel';
 import IslandPanel from './components/IslandPanel';
 import UsagePanel from './components/UsagePanel';
 import UsageManagePanel from './components/UsageManagePanel';
@@ -563,6 +564,8 @@ export default function App() {
               <ActivationPanel />
             ) : activeModule === 'voiceInput' ? (
               <VoiceInputPanel />
+            ) : activeModule === 'converter' ? (
+              <ConverterPanel />
             ) : activeModule === 'fileTransfer' ? (
               <FileTransferPanel />
             ) : activeModule === 'control' ? (
