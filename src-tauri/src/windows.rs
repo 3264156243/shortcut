@@ -261,7 +261,10 @@ fn build_overlay(
 /// 任务墙窗口（340×430，岛右侧；Alt+U 切换创建/销毁）
 pub fn ensure_tasklist(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> {
     if let Some(win) = app.get_webview_window("tasklist") {
-        let _ = win.show();
+        // 已显示则 no-op（避免显示路径的任何潜在焦点切换）
+        if !win.is_visible().unwrap_or(false) {
+            let _ = win.show();
+        }
         return Ok(win);
     }
     let (ix, iy, iw, _) = island_anchor(app);

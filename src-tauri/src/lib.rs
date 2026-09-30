@@ -154,10 +154,8 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             let data = args.first().and_then(|v| v.as_str()).unwrap_or("");
             log::info!("[config] writeConfig 命令收到 {} 字节", data.len());
             config::write_config(data);
-            let _ = app.emit("config:changed", json!({ "scope": "all" }));
-            // 岛同步刷新（完整字段 payload，对齐 Electron applyConfig → sendIslandConfig）
-            let _ = app.emit("island:config", windows::island_full_prefs());
-            // 配置可能改了岛/SC球设置（样式/供应商/开关）→ 球状态对齐
+            // 对齐 Electron config:write：只写文件 + syncModuleServices，零事件广播。
+            // （主窗是发起者，config:changed/island:config 回声会让主窗全量重载 → 面板闪屏）
             sync_deepseekball_state(&app);
             Value::Null
         }
@@ -462,9 +460,23 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
                     full.get("cockpitEnabled").and_then(|v| v.as_bool()).unwrap_or(false),
                     full.get("balanceProvider").and_then(|v| v.as_str()).unwrap_or(""),
                     full.get("displayState").and_then(|v| v.as_str()).unwrap_or(""));
-                let _ = app.emit("island:config", full.clone());
-                let _ = app.emit("config:changed", json!({ "scope": "island" }));
-                let _ = app.emit("electron:IslandConfig", full);
+                // 事件通知：对齐 Electron——island:config 只发岛窗口（webContents.send 语义）。
+                // 不全局广播：主窗是发起者，回声会覆盖前端 state（开关跳回原状/面板重渲闪屏）。
+                // Electron setIsland 里也没有 config:changed，删除。
+                let full = windows::island_full_prefs();
+                log::info!("[island] setIsland 通知 style={} music={} cockpit={} provider={} display={}",
+                    full.get("style").and_then(|v| v.as_str()).unwrap_or(""),
+                    full.get("musicEnabled").and_then(|v| v.as_bool()).unwrap_or(false),
+                    full.get("cockpitEnabled").and_then(|v| v.as_bool()).unwrap_or(false),
+                    full.get("balanceProvider").and_then(|v| v.as_str()).unwrap_or(""),
+                    full.get("displayState").and_then(|v| v.as_str()).unwrap_or(""));
+                if let Some(island) = app.get_webview_window("island") {
+                    let _ = island.emit("island:config", full.clone());
+                    let _ = island.emit("electron:IslandConfig", full.clone());
+                }
+                if let Some(ball) = app.get_webview_window("deepseekball") {
+                    let _ = ball.emit("island:config", full);
+                }
                 // SC 球对齐配置（Electron applyConfig 语义：provider 关/feature 关 → 销毁；球在 → 重建刷新样式）
                 sync_deepseekball_state(&app);
             }
