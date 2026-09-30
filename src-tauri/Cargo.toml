@@ -1,6 +1,6 @@
 [package]
 name = "shortcut-tauri"
-version = "2.4.5"
+version = "2.4.6"
 description = "ShortCut - Desktop quick panel for shortcuts (Tauri 2)"
 authors = ["wanan"]
 license = ""
@@ -13,8 +13,8 @@ name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
-# tauri build 打包时自动启用；直接 cargo build --release 须显式带上，
-# 否则窗口会去连 devUrl（localhost:5173）而不是嵌入的 dist 资源
+# tauri build 鎵撳寘鏃惰嚜鍔ㄥ惎鐢紱鐩存帴 cargo build --release 椤绘樉寮忓甫涓婏紝
+# 鍚﹀垯绐楀彛浼氬幓杩?devUrl锛坙ocalhost:5173锛夎€屼笉鏄祵鍏ョ殑 dist 璧勬簮
 custom-protocol = ["tauri/custom-protocol"]
 
 [build-dependencies]
