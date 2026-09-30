@@ -433,6 +433,15 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
                         }
                     }
                     log::info!("[island] 任务板块已关闭：任务墙/提醒窗已销毁");
+                } else {
+                    // 启用即默认显示（Electron 语义：任务墙 ready 后 showInactive）
+                    match windows::ensure_tasklist(&app) {
+                        Ok(w) => {
+                            let _ = w.show();
+                            log::info!("[island] 任务板块已启用：任务墙已显示");
+                        }
+                        Err(e) => log::error!("[island] 任务墙启用失败: {}", e),
+                    }
                 }
                 // 音乐板块关闭 → 停音乐桥；开启 → 确保桥在跑（Electron islandMusicOk 分支）
                 let music_ok = now.get("musicEnabled").and_then(|v| v.as_bool()).unwrap_or(true);
@@ -1700,6 +1709,54 @@ fn url_encode(s: &str) -> String {
     out
 }
 
+/// 主窗状态持久化（独立文件 window-state.json，避免被前端 writeConfig 全量覆盖）
+fn window_state_path() -> std::path::PathBuf {
+    config::user_data_dir().join("window-state.json")
+}
+
+fn save_window_state(win: &tauri::WebviewWindow) {
+    let pos = win.outer_position().unwrap_or_default();
+    let size = win.outer_size().unwrap_or_default();
+    let maximized = win.is_maximized().unwrap_or(false);
+    // 明显异常的坐标（显示器外漂移）不保存，回退默认位置
+    if pos.x.abs() > 20000 || pos.y.abs() > 20000 {
+        return;
+    }
+    let st = json!({
+        "x": pos.x, "y": pos.y,
+        "width": size.width, "height": size.height,
+        "maximized": maximized,
+    });
+    let _ = std::fs::write(window_state_path(), st.to_string());
+}
+
+fn restore_window_state(win: &tauri::WebviewWindow) {
+    let p = window_state_path();
+    let txt = match std::fs::read_to_string(&p) {
+        Ok(t) => t,
+        Err(_) => return, // 首次运行无状态文件 → 默认 900×600 居中
+    };
+    let v: Value = match serde_json::from_str(&txt) {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+    let num = |k: &str| v.get(k).and_then(|z| z.as_f64());
+    let (x, y, w, h) = match (num("x"), num("y"), num("width"), num("height")) {
+        (Some(x), Some(y), Some(w), Some(h)) => (x, y, w, h),
+        _ => return,
+    };
+    if w < 600.0 || h < 400.0 || w > 20000.0 || h > 20000.0 {
+        return;
+    }
+    let _ = win.set_size(tauri::PhysicalSize::new(w as u32, h as u32));
+    let _ = win.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
+    if v.get("maximized").and_then(|z| z.as_bool()).unwrap_or(false) {
+        let _ = win.maximize();
+    }
+    log::info!("[main] 已恢复上次窗口状态: pos=({},{}) size={}x{} maximized={}", x as i32, y as i32, w as u32, h as u32,
+        v.get("maximized").and_then(|z| z.as_bool()).unwrap_or(false));
+}
+
 /// island.music 授权特性是否可用（license.featureAccess，默认允许）
 fn island_feature_ok(app: &tauri::AppHandle) -> bool {
     let _ = app;
@@ -1961,7 +2018,7 @@ pub fn run() {
                     if o.status.success() { log::info!("[cleanup] 已清理硬件监控孤儿进程"); }
                 }
                 let mk = std::process::Command::new("powershell.exe")
-                    .args(["-NoProfile", "-Command", "Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | Where-Object { $_.CommandLine -match 'netmusic-bridge' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"])
+                    .args(["-NoProfile", "-Command", "Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -match 'netmusic-bridge' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"])
                     .creation_flags(0x08000000)
                     .output();
                 if let Ok(o) = mk {
@@ -2037,6 +2094,7 @@ pub fn run() {
                 });
             // 首次启动主窗直接显示（用户期望启动即见；之后关闭=隐藏到托盘）
             {
+                restore_window_state(&win);
                 let w = win.clone();
                 std::thread::spawn(move || {
                     // 等 WebView 首帧渲染，避免白屏闪烁
@@ -2054,6 +2112,7 @@ pub fn run() {
                     match event {
                         tauri::WindowEvent::CloseRequested { api, .. } => {
                             api.prevent_close();
+                            save_window_state(&win2);
                             let _ = win2.hide();
                         }
                         tauri::WindowEvent::Focused(false) => {
@@ -2149,6 +2208,15 @@ pub fn run() {
                         // SC 球（余额/音乐球）状态对齐
                         sync_deepseekball_state(app.handle());
                     }
+                    // 任务板块启用时启动即显示任务墙（对齐 Electron taskListWindow.showInactive）
+                    let tasks_enabled = cfg2.get("island").and_then(|i| i.get("tasksEnabled")).and_then(|v| v.as_bool()).unwrap_or(true);
+                    if island_module_on && tasks_enabled && app.get_webview_window("tasklist").is_none() {
+                        let handle = app.handle().clone();
+                        if let Ok(w) = windows::ensure_tasklist(&handle) {
+                            let _ = w.show();
+                            log::info!("[tasklist] 启动时按配置显示任务墙");
+                        }
+                    }
                 }
             }
     Ok(())
@@ -2158,6 +2226,10 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
+                // 退出前保存主窗状态
+                if let Some(w) = app.get_webview_window("main") {
+                    save_window_state(&w);
+                }
                 // 退出清理 sidecar 子进程，避免孤儿（音乐桥 powershell / 硬件监控进程）
                 use tauri::Manager;
                 if let Some(mh) = app.try_state::<MusicHandle>() {
