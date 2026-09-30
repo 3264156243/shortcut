@@ -73,8 +73,11 @@ pub(crate) const SHIM_JS: &str = r#"
           return (cb) => {
             try {
               const p = window.__TAURI__.event.listen(ev, (e) => {
-                if (ev === 'island:config') { try { window.__TAURI__.core.invoke('electron_api', { method: 'debugLog', args: ['收到 island:config @' + location.pathname] }); } catch (_) {} }
-                try { cb(e.payload); } catch (_) {}
+                if (ev === 'island:config') {
+                  const pv = e && e.payload ? e.payload : null;
+                  try { window.__TAURI__.core.invoke('electron_api', { method: 'debugLog', args: ['收到 island:config @' + location.pathname + ' style=' + (pv && pv.style) + ' display=' + (pv && pv.displayState)] }); } catch (_) {}
+                }
+                try { cb(e.payload); } catch (err) { try { window.__TAURI__.core.invoke('electron_api', { method: 'debugLog', args: ['回调异常 ' + ev + ': ' + err] }); } catch (_) {} }
               });
               try { window.__TAURI__.core.invoke('electron_api', { method: 'debugLog', args: ['listen注册: ' + ev] }); } catch (_) {}
               if (p && typeof p.then === 'function') {
