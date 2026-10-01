@@ -2,6 +2,7 @@
 //! 音频（symphonia + 编码器）为 P2，detect 已识别类型但 targets 为空。
 
 pub mod archive;
+pub mod audio;
 pub mod detect;
 pub mod history;
 pub mod image;
@@ -111,10 +112,11 @@ pub fn start_convert(
     src: String,
     target: String,
     quality: u8,
+    bitrate_kbps: u32,
     out_dir: Option<String>,
 ) {
     spawn_job(app, id, "convert", src.clone(), move || {
-        run_convert_inner(&src, &target, quality, out_dir)
+        run_convert_inner(&src, &target, quality, bitrate_kbps, out_dir)
     });
 }
 
@@ -122,24 +124,46 @@ fn run_convert_inner(
     src: &str,
     target: &str,
     quality: u8,
+    bitrate_kbps: u32,
     out_dir: Option<String>,
 ) -> Result<(String, String, usize), String> {
-    // run_convert 需要 app 只为事件（图片单文件很快，暂不逐帧报进度）
     let src_path = PathBuf::from(src);
     if !src_path.exists() {
         return Err("源文件不存在".into());
     }
-    if !image::can_decode(&src_path) {
-        return Err("不支持的图片输入格式".into());
-    }
-    if !image::is_valid_target(target) {
-        return Err(format!("不支持的图片目标格式: {}", target));
-    }
-    if image::same_format(&detect::normalize_ext(&src_path), target) {
-        return Err("源文件已是该格式".into());
-    }
+    let kind = detect::kind_of(&src_path);
     let out = out_file_for(&src_path, target, out_dir.as_deref());
-    image::convert(&src_path, target, quality, &out)?;
+    match kind {
+        FileKind::Image => {
+            if !image::can_decode(&src_path) {
+                return Err("不支持的图片输入格式".into());
+            }
+            if !image::is_valid_target(target) {
+                return Err(format!("不支持的图片目标格式: {}", target));
+            }
+            if image::same_format(&detect::normalize_ext(&src_path), target) {
+                return Err("源文件已是该格式".into());
+            }
+            image::convert(&src_path, target, quality, &out)?;
+        }
+        FileKind::Audio => {
+            if !audio::is_valid_target(target) {
+                return Err(format!("不支持的音频目标格式: {}", target));
+            }
+            if audio::same_format(&detect::normalize_ext(&src_path), target) {
+                return Err("源文件已是该格式".into());
+            }
+            let decoded = audio::decode(&src_path)?;
+            match target.to_ascii_lowercase().as_str() {
+                "wav" => audio::encode_wav(&decoded, &out)?,
+                "mp3" => audio::encode_mp3(&decoded, &out, bitrate_kbps)?,
+                "flac" => audio::encode_flac(&decoded, &out)?,
+                "opus" => audio::encode_opus(&decoded, &out, bitrate_kbps)?,
+                other => return Err(format!("不支持的音频目标格式: {}", other)),
+            }
+        }
+        other => return Err(format!("该文件类型不支持转换: {:?}", other)),
+    }
     let out_dir = out
         .parent()
         .map(|p| p.to_string_lossy().into_owned())
@@ -312,5 +336,75 @@ mod tests {
         assert!(det.targets.contains(&"jpg".to_string()));
         assert!(det.flavor.is_none());
         assert_eq!(detect::detect("y.tar.gz").flavor.as_deref(), Some("tar.gz"));
+    }
+
+    #[test]
+    fn test_audio_wav_to_all_targets() {
+        let dir = temp_dir("audio");
+        // 合成 1 秒 440Hz 正弦波立体声 @44100
+        let rate = 44_100u32;
+        let frames = rate as usize;
+        let mut samples = Vec::with_capacity(frames * 2);
+        for n in 0..frames {
+            let v = (2.0 * std::f32::consts::PI * 440.0 * n as f32 / rate as f32).sin() * 0.6;
+            samples.push(v);
+            samples.push(v);
+        }
+        let wav = dir.join("src.wav");
+        audio::write_test_wav(&wav, &samples, 2, rate);
+        let out_wav = dir.join("out.wav");
+        let decoded = audio::decode(&wav).unwrap();
+        assert_eq!(decoded.channels, 2);
+        assert_eq!(decoded.sample_rate, 44_100);
+        audio::encode_wav(&decoded, &out_wav).unwrap();
+        assert!(out_wav.metadata().unwrap().len() > 40_000);
+        let out_mp3 = dir.join("out.mp3");
+        audio::encode_mp3(&decoded, &out_mp3, 192).unwrap();
+        assert!(out_mp3.metadata().unwrap().len() > 10_000);
+        let out_flac = dir.join("out.flac");
+        audio::encode_flac(&decoded, &out_flac).unwrap();
+        assert!(out_flac.metadata().unwrap().len() > 5_000);
+        // 立体声 flac 也回解验证
+        let flac_back = audio::decode(&out_flac).unwrap();
+        assert_eq!(flac_back.channels, 2);
+        // wav → opus（含 44100→48000 重采样）
+        let out_opus = dir.join("out.opus");
+        audio::encode_opus(&decoded, &out_opus, 128).unwrap();
+        assert!(out_opus.metadata().unwrap().len() > 5_000);
+        let head = std::fs::read(&out_opus).unwrap();
+        assert_eq!(&head[..4], b"OggS");
+        assert!(head.windows(8).any(|w| w == b"OpusHead"));
+    }
+
+    #[test]
+    fn test_audio_decode_roundtrip_flac() {
+        let dir = temp_dir("flacrt");
+        let rate = 44_100u32;
+        let frames = 8_000usize;
+        let mut samples = Vec::with_capacity(frames);
+        for n in 0..frames {
+            samples.push((2.0 * std::f32::consts::PI * 440.0 * n as f32 / rate as f32).sin() * 0.5);
+        }
+        let wav = dir.join("src.wav");
+        audio::write_test_wav(&wav, &samples, 1, rate);
+        let flac = dir.join("rt.flac");
+        let decoded = audio::decode(&wav).unwrap();
+        audio::encode_flac(&decoded, &flac).unwrap();
+        let decoded2 = audio::decode(&flac).unwrap();
+        assert_eq!(decoded2.channels, 1);
+        assert_eq!(decoded2.sample_rate, 44_100);
+        assert!((decoded2.samples.len() as i64 - samples.len() as i64).abs() < 4096);
+    }
+
+    #[test]
+    fn test_audio_same_format_and_targets() {
+        assert!(audio::same_format("mp3", "mp3"));
+        assert!(!audio::same_format("wav", "mp3"));
+        assert!(audio::is_valid_target("opus"));
+        assert!(!audio::is_valid_target("aac"));
+        let det = detect::detect("song.mp3");
+        assert!(det.targets.contains(&"flac".to_string()));
+        assert!(!det.targets.contains(&"mp3".to_string()));
+        assert!(detect::detect("old.wma").targets.is_empty());
     }
 }

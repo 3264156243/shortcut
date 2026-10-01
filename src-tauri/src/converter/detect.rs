@@ -21,8 +21,10 @@ pub const IMAGE_TARGET_EXTS: &[&str] = &["png", "jpg", "webp", "bmp", "gif", "ti
 pub const ARCHIVE_EXTS: &[&str] = &[
     "zip", "tar", "gz", "tgz", "bz2", "tbz", "xz", "txz", "zst", "tzst",
 ];
-/// 音频：可解码输入（P2 生效，本期能识别并提示"即将支持"）
+/// 音频：可解码输入（symphonia 覆盖；.opus/.wma 无解码器 → 识别但 targets 空）
 pub const AUDIO_INPUT_EXTS: &[&str] = &["wav", "mp3", "flac", "ogg", "m4a", "aac", "opus", "wma"];
+/// 音频：可编码输出
+pub const AUDIO_TARGET_EXTS: &[&str] = &["wav", "mp3", "flac", "opus"];
 
 pub fn normalize_ext(path: &Path) -> String {
     path.extension()
@@ -93,6 +95,13 @@ pub fn detect(path: &str) -> DetectedFile {
         FileKind::Image => IMAGE_TARGET_EXTS
             .iter()
             .filter(|t| **t != ext && !(ext == "jpeg" && **t == "jpg") && !(ext == "tif" && **t == "tiff"))
+            .map(|t| t.to_string())
+            .collect(),
+        // symphonia 无 opus/wma 解码器 → 识别为音频但 targets 置空（UI 提示暂不支持）
+        FileKind::Audio if ext == "wma" || ext == "opus" => Vec::new(),
+        FileKind::Audio => AUDIO_TARGET_EXTS
+            .iter()
+            .filter(|t| **t != ext)
             .map(|t| t.to_string())
             .collect(),
         _ => Vec::new(),

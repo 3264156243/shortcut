@@ -152,8 +152,9 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             let src = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
             let target = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
             let quality = args.get(2).and_then(|v| v.as_f64()).unwrap_or(85.0) as u8;
-            let out_dir = args.get(3).and_then(|v| v.as_str()).map(String::from);
-            converter::start_convert(app.clone(), id.clone(), src, target, quality, out_dir);
+            let bitrate = args.get(3).and_then(|v| v.as_f64()).unwrap_or(192.0) as u32;
+            let out_dir = args.get(4).and_then(|v| v.as_str()).map(String::from);
+            converter::start_convert(app.clone(), id.clone(), src, target, quality, bitrate, out_dir);
             json!({ "success": true, "id": id })
         }
         "converterExtract" => {

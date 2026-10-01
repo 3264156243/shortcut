@@ -67,6 +67,7 @@ export default function ConverterPanel() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [outDir, setOutDir] = useState<string>('');
   const [zipPwd, setZipPwd] = useState('');
+  const [bitrate, setBitrate] = useState(192);
   const [showHistory, setShowHistory] = useState(true);
   const idSeq = useRef(0);
 
@@ -124,7 +125,8 @@ export default function ConverterPanel() {
     const t = target || file.target;
     if (!t) return;
     setFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, status: 'busy', message: undefined } : f)));
-    void window.electronAPI?.converterConvert?.(file.path, t, 85, outDir || null);
+    // 图片第 4 参是质量(85)；音频第 4 参是码率 kbps——Rust 端按文件类型区分使用
+    void window.electronAPI?.converterConvert?.(file.path, t, 85, bitrate, outDir || null);
   };
 
   const extractOne = (file: ConvFile) => {
@@ -209,7 +211,6 @@ export default function ConverterPanel() {
                     {file.status === 'ok' && <span style={{ color: '#4ade80' }}>· 完成</span>}
                     {file.status === 'fail' && <span style={{ color: '#f87171' }}>· {file.message || '失败'}</span>}
                     {file.status === 'busy' && <span>· 处理中…</span>}
-                    {file.kind === 'audio' && <span>· 音频转换即将支持</span>}
                   </div>
                 </div>
                 {/* 图片：目标格式选择 + 转换 */}
@@ -233,6 +234,46 @@ export default function ConverterPanel() {
                       转换
                     </button>
                   </div>
+                )}
+                {/* 音频：目标格式 + 码率（mp3/opus）+ 转换 */}
+                {file.kind === 'audio' && (
+                  file.targets.length > 0 ? (
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <select
+                        value={file.target}
+                        onChange={(e) => setFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, target: e.target.value } : f)))}
+                        className="rounded-lg px-2 py-1.5 text-xs outline-none"
+                        style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
+                        disabled={file.status === 'busy'}
+                      >
+                        {!file.target && <option value="">转出为…</option>}
+                        {file.targets.map((t) => (
+                          <option key={t} value={t}>.{t}</option>
+                        ))}
+                      </select>
+                      {(file.target === 'mp3' || file.target === 'opus') && (
+                        <select
+                          value={String(bitrate)}
+                          onChange={(e) => setBitrate(Number(e.target.value))}
+                          className="rounded-lg px-2 py-1.5 text-xs outline-none"
+                          style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
+                          disabled={file.status === 'busy'}
+                          title="码率 kbps"
+                        >
+                          {[128, 192, 256, 320].map((b) => (
+                            <option key={b} value={b}>{b}k</option>
+                          ))}
+                        </select>
+                      )}
+                      <button onClick={() => convertOne(file)} disabled={!file.target || file.status === 'busy'}
+                        className="rounded-lg px-3 py-1.5 text-xs transition-all duration-150 hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-35"
+                        style={{ background: 'var(--color-accent)', color: '#fff' }}>
+                        转换
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="shrink-0 text-[10px]" style={{ color: 'var(--color-text-muted)' }}>该输入格式暂不支持</span>
+                  )
                 )}
                 {/* 压缩包：解压 */}
                 {file.kind === 'archive' && (

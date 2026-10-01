@@ -181,7 +181,7 @@ declare global {
       onTaskLocate: (callback: (data: unknown) => void) => () => void;
       // ── 转换板块 ──
       converterDetect: (paths: string[]) => Promise<Array<{ path: string; name: string; kind: string; ext: string; size: number; targets: string[]; flavor?: string }>>;
-      converterConvert: (path: string, target: string, quality?: number, outDir?: string | null) => Promise<{ success: boolean; id: string }>;
+      converterConvert: (path: string, target: string, quality?: number, bitrateKbps?: number, outDir?: string | null) => Promise<{ success: boolean; id: string }>;
       converterExtract: (path: string, password?: string | null, outDir?: string | null) => Promise<{ success: boolean; id: string }>;
       converterCompress: (paths: string[], flavor: string, outPath?: string | null, password?: string | null, level?: number) => Promise<{ success: boolean; id: string }>;
       converterPickFiles: () => Promise<string[] | null>;

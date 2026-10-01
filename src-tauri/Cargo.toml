@@ -56,6 +56,13 @@ zstd = "0.13"
 walkdir = "2"
 encoding_rs = "0.8"
 ico = "0.3"
+# ── 音频转换（P2：symphonia 解码 + mp3/flac/opus/wav 编码）──
+symphonia = { version = "0.5", default-features = false, features = ["wav", "mp3", "flac", "ogg", "isomp4", "pcm", "vorbis", "aac"] }
+mp3lame-encoder = "0.2"
+flacenc = "0.4.0"  # 0.5 fork 有 STREAMINFO 序列化 bug（symphonia 无法解码），锁定原版
+opus = "0.3"
+ogg = "0.9"
+rubato = "0.16"
 
 [profile.release]
 opt-level = "s"
