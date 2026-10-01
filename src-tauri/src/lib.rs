@@ -16,6 +16,39 @@ static UPDATE_PENDING: std::sync::OnceLock<Mutex<Option<(UpdaterUpdate, Vec<u8>)
 fn update_pending() -> &'static Mutex<Option<(UpdaterUpdate, Vec<u8>)>> {
     UPDATE_PENDING.get_or_init(|| Mutex::new(None))
 }
+
+/// 启动参数 / 右键菜单带来的待处理文件（前端挂载时 take 走）
+/// (paths, action) —— action ∈ {"convert", "extract"}
+static PENDING_DROP: Mutex<Option<(Vec<String>, String)>> = Mutex::new(None);
+
+/// 把命令行带来的文件交给前端：写 pending + 发事件（两路都走，谁先到都能拿到）
+fn queue_drop(app: &tauri::AppHandle, paths: Vec<String>, action: String) {
+    if paths.is_empty() {
+        return;
+    }
+    if let Ok(mut guard) = PENDING_DROP.lock() {
+        // 连续两次右键时合并，避免后者覆盖前者
+        match guard.as_mut() {
+            Some((existing, act)) if *act == action => {
+                for p in paths.iter() {
+                    if !existing.contains(p) {
+                        existing.push(p.clone());
+                    }
+                }
+            }
+            _ => *guard = Some((paths.clone(), action.clone())),
+        }
+    }
+    let merged = PENDING_DROP
+        .lock()
+        .ok()
+        .and_then(|g| g.clone())
+        .unwrap_or((paths, action));
+    let _ = app.emit(
+        "converter:drop",
+        serde_json::json!({ "paths": merged.0, "action": merged.1, "fromShell": true }),
+    );
+}
 use tauri:: {
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
@@ -32,6 +65,7 @@ mod transfer;
 mod config;
 mod control;
 mod converter;
+mod shellmenu;
 mod usage;
 mod windows;
 
@@ -137,6 +171,28 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
                 let _ = window.set_size(tauri::LogicalSize::new(w, h));
             }
             Value::Null
+        }
+        // ── 资源管理器右键菜单（P3）──
+        "shellMenuState" => {
+            json!({ "available": shellmenu::available(), "enabled": shellmenu::is_enabled() })
+        }
+        "shellMenuSet" => {
+            let enabled = args.first().and_then(|v| v.as_bool()).unwrap_or(false);
+            match shellmenu::set_enabled(enabled) {
+                Ok(state) => json!({ "success": true, "enabled": state }),
+                Err(e) => json!({ "success": false, "enabled": false, "error": e }),
+            }
+        }
+        // 前端挂载时取走启动参数/右键菜单带来的文件（取走即清空）
+        "converterTakePending" => {
+            let pending = PENDING_DROP
+                .lock()
+                .ok()
+                .and_then(|mut guard| guard.take());
+            match pending {
+                Some(p) => json!({ "paths": p.0, "action": p.1 }),
+                None => Value::Null,
+            }
         }
         // ── 转换板块（docs/文件转换板块开发计划.md）──
         "converterDetect" => {
@@ -2209,11 +2265,15 @@ fn conflicting_instance_running() -> Option<String> {
 pub fn run() {
     tauri::Builder::default()
         // 单实例必须最先注册：第二实例启动时回调把已有实例带到前台，自身退出
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.show();
                 let _ = w.unminimize();
                 let _ = w.set_focus();
+            }
+            // 右键菜单唤起（--convert/--extract）：把文件转交给已运行实例
+            if let Some((action, paths)) = shellmenu::parse_cli(&args) {
+                queue_drop(app, paths, action);
             }
         }))
         .plugin(tauri_plugin_autostart::init(
@@ -2466,6 +2526,16 @@ pub fn run() {
                         _ => {}
                     }
                 });
+            }
+
+            // 右键菜单 / 命令行启动参数（--convert/--extract）：转交前端。
+            // 事件 + pending 双保险：前端可能还没挂载完成，挂载后会 converterTakePending 取走。
+            if let Some((action, paths)) = shellmenu::parse_cli(&std::env::args().collect::<Vec<_>>()) {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                }
+                queue_drop(app.handle(), paths, action);
             }
 
             // 托盘：显示主面板 / 退出（对齐 Electron：显示/隐藏 + 分隔线 + 退出）

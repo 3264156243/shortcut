@@ -336,6 +336,20 @@ export default function App() {
     });
     return unsubscribe;
   }, [api]);
+
+  // 资源管理器右键菜单 / 命令行（--convert/--extract）：切到转换板块并把文件交给面板
+  useEffect(() => {
+    const handoff = (data?: { paths?: string[]; action?: string }) => {
+      if (!data?.action || !data.paths?.length) return;
+      useStore.getState().setActiveModule('converter');
+      useStore.getState().setPendingConverterDrop({ paths: data.paths, action: data.action });
+    };
+    // 冷启动：前端挂载晚于 Rust 入队时，事件会丢——用 invoke 取走 pending
+    void api?.converterTakePending?.().then((pending) => handoff(pending || undefined));
+    if (!api?.onConverterDrop) return;
+    const unsubscribe = api.onConverterDrop((data) => handoff(data as { paths?: string[]; action?: string }));
+    return unsubscribe;
+  }, [api]);
   useEffect(() => {
     if (!api?.onConfigChanged) return;
     const unsubscribe = api.onConfigChanged(() => {

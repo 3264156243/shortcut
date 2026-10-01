@@ -45,10 +45,13 @@ interface AppState {
   licensePolicy: ActivationPolicy;
   licenseModuleAccess: Record<ModuleId, boolean>;
   licenseFeatureAccess: Record<string, boolean>;
+  /** 右键菜单/命令行带入转换板块的文件（App 收到后置入，面板挂载时取走） */
+  pendingConverterDrop: { paths: string[]; action: string } | null;
 
   // Actions
   loadConfig: () => Promise<void>;
   saveConfig: () => Promise<void>;
+  setPendingConverterDrop: (drop: { paths: string[]; action: string } | null) => void;
   setTheme: (theme: 'dark' | 'light' | 'system') => void;
   setLocale: (locale: Locale) => void;
   setPanelAnimation: (animation: PanelAnimation) => void;
@@ -188,7 +191,10 @@ declare global {
       converterPickDir: () => Promise<string | null>;
       converterHistory: () => Promise<Array<{ id: string; time: string; action: string; src: string; out: string; status: string; note: string }>>;
       converterHistoryRemove: (id: string) => Promise<unknown>;
-      onConverterDrop: (callback: (data: { paths: string[] }) => void) => () => void;
+      shellMenuState: () => Promise<{ available: boolean; enabled: boolean }>;
+      shellMenuSet: (enabled: boolean) => Promise<{ success: boolean; enabled: boolean; error?: string }>;
+      converterTakePending: () => Promise<{ paths: string[]; action?: string } | null>;
+      onConverterDrop: (callback: (data: { paths: string[]; action?: string; fromShell?: boolean }) => void) => () => void;
       onConverterProgress: (callback: (data: { id: string; pct: number; note: string }) => void) => () => void;
       onConverterDone: (callback: (data: { id: string; out: string; out_dir: string; items: number }) => void) => () => void;
       onConverterError: (callback: (data: { id: string; message: string }) => void) => () => void;
@@ -357,6 +363,9 @@ export const useStore = create<AppState>((set, get) => ({
     MODULE_REGISTRY.map((meta) => [meta.id, true]),
   ) as Record<ModuleId, boolean>,
   licenseFeatureAccess: {},
+
+  pendingConverterDrop: null,
+  setPendingConverterDrop: (drop) => set({ pendingConverterDrop: drop }),
 
   loadConfig: async () => {
     let raw = '';

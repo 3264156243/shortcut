@@ -63,6 +63,9 @@ flacenc = "0.4.0"  # 0.5 fork 有 STREAMINFO 序列化 bug（symphonia 无法解
 opus = "0.3"
 ogg = "0.9"
 rubato = "0.16"
+# ── 资源管理器右键菜单（P3，仅 Windows）──
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
 
 [profile.release]
 opt-level = "s"

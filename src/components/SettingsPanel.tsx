@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -106,6 +107,24 @@ export default function SettingsPanel() {
   const setModuleGroup = useStore((s) => s.setModuleGroup);
   const licenseModuleAccess = useStore((s) => s.licenseModuleAccess);
   const { t } = useTranslation();
+  // 资源管理器右键菜单（仅 Windows）：注册表为准，开面板时读一次
+  const [shellMenu, setShellMenu] = useState<{ available: boolean; enabled: boolean }>({ available: false, enabled: false });
+  const [shellMenuBusy, setShellMenuBusy] = useState(false);
+  const [shellMenuError, setShellMenuError] = useState('');
+  useEffect(() => {
+    void window.electronAPI?.shellMenuState?.().then((s) => s && setShellMenu(s));
+  }, []);
+  const setShellMenuEnabled = async (enabled: boolean) => {
+    setShellMenuBusy(true);
+    setShellMenuError('');
+    const res = await window.electronAPI?.shellMenuSet?.(enabled);
+    if (res?.success) {
+      setShellMenu((prev) => ({ ...prev, enabled: res.enabled }));
+    } else {
+      setShellMenuError(res?.error || '设置失败');
+    }
+    setShellMenuBusy(false);
+  };
   const themes: { value: 'dark' | 'light' | 'system'; labelKey: string; icon: typeof Moon }[] = [
     { value: 'dark', labelKey: 'settings.theme.dark', icon: Moon },
     { value: 'light', labelKey: 'settings.theme.light', icon: Sun },
@@ -223,6 +242,31 @@ export default function SettingsPanel() {
                 </label>
               </div>
             </div>
+
+            {/* Explorer integration (Windows only) */}
+            {shellMenu.available && (
+              <div style={sectionStyle}>
+                <h3 className="text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>资源管理器集成</h3>
+                <p className="mb-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                  在当前用户下注册右键菜单，无需管理员权限；关闭即删除注册表项。
+                </p>
+                <label className="flex items-center justify-between cursor-pointer">
+                  <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                    右键菜单：转换为… / 解压（zip）
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={shellMenu.enabled}
+                    disabled={shellMenuBusy}
+                    onChange={(e) => setShellMenuEnabled(e.target.checked)}
+                    className="w-4 h-4 accent-indigo-500"
+                  />
+                </label>
+                {shellMenuError && (
+                  <p className="mt-2 text-xs" style={{ color: '#f87171' }}>{shellMenuError}</p>
+                )}
+              </div>
+            )}
 
             {/* Data */}
             <div style={sectionStyle}>

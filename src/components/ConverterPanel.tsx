@@ -79,8 +79,9 @@ export default function ConverterPanel() {
 
   useEffect(() => {
     refreshHistory();
-    // 拖放：Rust 层窗口 DragDrop 事件转发
+    // 拖放：Rust 层窗口 DragDrop 事件转发（手动拖入，无 action 字段）
     const offDrop = window.electronAPI?.onConverterDrop?.((data) => {
+      if (data?.action) return; // 右键菜单/命令行走 pendingConverterDrop（App 切模块后由本组件消费）
       void addPaths(data?.paths || []);
     });
     const offDone = window.electronAPI?.onConverterDone?.((data) => {
@@ -99,22 +100,47 @@ export default function ConverterPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const addPaths = async (paths: string[]) => {
-    if (!paths.length) return;
+  const addPaths = async (paths: string[]): Promise<ConvFile[]> => {
+    if (!paths.length) return [];
     const detected = (await window.electronAPI?.converterDetect?.(paths)) || [];
+    const fresh: ConvFile[] = detected.map((d, i) => ({
+      ...d,
+      id: `local-${Date.now()}-${(idSeq.current += 1) + i}`,
+      target: d.targets[0] || '',
+      status: 'idle' as const,
+    }));
     setFiles((prev) => {
       const known = new Set(prev.map((f) => f.path));
-      const fresh = detected
-        .filter((d) => !known.has(d.path))
-        .map((d, i) => ({
-          ...d,
-          id: `local-${Date.now()}-${(idSeq.current += 1) + i}`,
-          target: d.targets[0] || '',
-          status: 'idle' as const,
-        }));
-      return [...prev, ...fresh];
+      return [...prev, ...fresh.filter((f) => !known.has(f.path))];
     });
+    return fresh;
   };
+
+  const pendingDrop = useStore((s) => s.pendingConverterDrop);
+  const setPendingDrop = useStore((s) => s.setPendingConverterDrop);
+
+  // 右键菜单/命令行带入：加进列表；extract 动作直接开始解压
+  useEffect(() => {
+    if (!pendingDrop?.paths?.length) return;
+    const payload = pendingDrop;
+    setPendingDrop(null);
+    void (async () => {
+      const fresh = await addPaths(payload.paths);
+      if (payload.action !== 'extract') return;
+      const archives = fresh.filter((f) => f.kind === 'archive');
+      for (const item of archives) {
+        void extractOne(item);
+      }
+      if (archives.length === 0 && fresh.length > 0) {
+        setFiles((prev) =>
+          prev.map((f) =>
+            fresh.some((n) => n.id === f.id) ? { ...f, status: 'fail', message: '该文件不是压缩包' } : f,
+          ),
+        );
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingDrop]);
 
   const pickFiles = async () => {
     const picked = await window.electronAPI?.converterPickFiles?.();
