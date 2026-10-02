@@ -4322,6 +4322,8 @@ dependencies = [
  "tokio-tungstenite",
  "ureq",
  "walkdir",
+ "webview2-com",
+ "windows-core 0.62.2",
  "winreg 0.55.0",
  "xz2",
  "zip 2.4.2",

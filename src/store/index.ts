@@ -195,6 +195,9 @@ declare global {
       shellMenuSet: (enabled: boolean) => Promise<{ success: boolean; enabled: boolean; error?: string }>;
       converterTakePending: () => Promise<{ paths: string[]; action?: string } | null>;
       onConverterDrop: (callback: (data: { paths: string[]; action?: string; fromShell?: boolean }) => void) => () => void;
+      onConverterDragover: (callback: (data: { active: boolean }) => void) => () => void;
+      setBlurGuard: (on: boolean) => Promise<{ success: boolean; guard: boolean }>;
+      debugLog: (msg: string) => Promise<unknown>;
       onConverterProgress: (callback: (data: { id: string; pct: number; note: string }) => void) => () => void;
       onConverterDone: (callback: (data: { id: string; out: string; out_dir: string; items: number }) => void) => () => void;
       onConverterError: (callback: (data: { id: string; message: string }) => void) => () => void;

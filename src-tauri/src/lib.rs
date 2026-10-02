@@ -21,11 +21,17 @@ fn update_pending() -> &'static Mutex<Option<(UpdaterUpdate, Vec<u8>)>> {
 /// (paths, action) —— action ∈ {"convert", "extract"}
 static PENDING_DROP: Mutex<Option<(Vec<String>, String)>> = Mutex::new(None);
 
+/// 转换板块"失焦不自动隐藏"守卫：前端切到转换页时置 true。
+/// 拖文件进面板时焦点在资源管理器上，若此时按 closeOnBlur 隐藏，拖放必然失败。
+static BLUR_GUARD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// 把命令行带来的文件交给前端：写 pending + 发事件（两路都走，谁先到都能拿到）
 fn queue_drop(app: &tauri::AppHandle, paths: Vec<String>, action: String) {
     if paths.is_empty() {
+        log::info!("[drop] queue_drop 收到空文件列表 action={}（忽略）", action);
         return;
     }
+    log::info!("[drop] queue_drop action={} 文件数={} 首个={:?}", action, paths.len(), paths.first());
     if let Ok(mut guard) = PENDING_DROP.lock() {
         // 连续两次右键时合并，避免后者覆盖前者
         match guard.as_mut() {
@@ -44,10 +50,13 @@ fn queue_drop(app: &tauri::AppHandle, paths: Vec<String>, action: String) {
         .ok()
         .and_then(|g| g.clone())
         .unwrap_or((paths, action));
-    let _ = app.emit(
+    match app.emit(
         "converter:drop",
         serde_json::json!({ "paths": merged.0, "action": merged.1, "fromShell": true }),
-    );
+    ) {
+        Ok(_) => log::info!("[drop] 已 emit converter:drop（前端挂载前会丢，靠 pending 兜底）"),
+        Err(e) => log::error!("[drop] emit converter:drop 失败: {}", e),
+    }
 }
 use tauri:: {
     menu::{Menu, MenuItem, PredefinedMenuItem},
@@ -66,6 +75,7 @@ mod config;
 mod control;
 mod converter;
 mod shellmenu;
+mod webviewdrop;
 mod usage;
 mod windows;
 
@@ -100,6 +110,7 @@ pub(crate) const SHIM_JS: &str = r#"
       onVoicePolish: 'voice:polish',
       onVoicePolishError: 'voice:polishError',
       onConverterDrop: 'converter:drop',
+      onConverterDragover: 'converter:dragover',
       onConverterProgress: 'converter:progress',
       onConverterDone: 'converter:done',
       onConverterError: 'converter:error',
@@ -173,6 +184,19 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             Value::Null
         }
         // ── 资源管理器右键菜单（P3）──
+        "setBlurGuard" => {
+            // 转换板块：拖放期间焦点在资源管理器，不能按 closeOnBlur 隐藏
+            let on = args.first().and_then(|v| v.as_bool()).unwrap_or(false);
+            BLUR_GUARD.store(on, std::sync::atomic::Ordering::Relaxed);
+            log::info!("[blur] 失焦隐藏守卫 = {}", on);
+            json!({ "success": true, "guard": on })
+        }
+        // 前端日志通道（拖放/右键菜单链路排查用，写进 tauri.log）
+        "debugLog" => {
+            let msg = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            log::info!("[fe] {}", msg);
+            Value::Null
+        }
         "shellMenuState" => {
             json!({ "available": shellmenu::available(), "enabled": shellmenu::is_enabled() })
         }
@@ -422,10 +446,29 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             Value::Null
         }
         "openTarget" => {
-            if let Some(p) = args.first().and_then(|v| v.as_str()) {
-                let _ = std::process::Command::new("cmd").args(["/C", "start", "", p]).spawn();
+            // 用 opener 插件（ShellExecute）：原实现是 `cmd /C start "" <path>`，
+            // 目标文件不存在时静默失败（转换失败/文件被移走 → 点了"没反应"），
+            // 且会闪黑框、对特殊字符路径解析不可靠。
+            use tauri_plugin_opener::OpenerExt;
+            let p = args.first().and_then(|v| v.as_str()).unwrap_or("").trim();
+            if p.is_empty() {
+                json!({ "success": false, "error": "路径为空" })
+            } else {
+                let path = std::path::Path::new(p);
+                let target: Option<std::path::PathBuf> = if path.exists() {
+                    Some(path.to_path_buf())
+                } else {
+                    // 文件不在了 → 退化为打开所在文件夹（避免"点了没反应"）
+                    path.parent().filter(|d| d.exists()).map(|d| d.to_path_buf())
+                };
+                match target {
+                    Some(t) => match app.opener().open_path(t.to_string_lossy().to_string(), None::<&str>) {
+                        Ok(_) => json!({ "success": true, "opened": t.to_string_lossy() }),
+                        Err(e) => json!({ "success": false, "error": format!("打开失败: {}", e) }),
+                    },
+                    None => json!({ "success": false, "error": format!("路径不存在: {}", p) }),
+                }
             }
-            Value::Null
         }
         // ---- M5：文件选择对话框（tauri-plugin-dialog，对齐 dialog:* IPC）----
         "openFile" => {
@@ -2266,14 +2309,16 @@ pub fn run() {
     tauri::Builder::default()
         // 单实例必须最先注册：第二实例启动时回调把已有实例带到前台，自身退出
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            log::info!("[drop] 第二实例转交 args={:?}", args);
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.show();
                 let _ = w.unminimize();
                 let _ = w.set_focus();
             }
             // 右键菜单唤起（--convert/--extract）：把文件转交给已运行实例
-            if let Some((action, paths)) = shellmenu::parse_cli(&args) {
-                queue_drop(app, paths, action);
+            match shellmenu::parse_cli(&args) {
+                Some((action, paths)) => queue_drop(app, paths, action),
+                None => log::info!("[drop] 第二实例参数无 --convert/--extract，仅前台化"),
             }
         }))
         .plugin(tauri_plugin_autostart::init(
@@ -2439,13 +2484,19 @@ pub fn run() {
             // 尺寸对齐 Electron 版：900×600 / min 600×400
             let win = app
                 .get_webview_window("main")
-                .unwrap_or_else(|| {                    WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+                .unwrap_or_else(|| {
+                    let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                         .title("ShortCut")
                         .inner_size(900.0, 600.0)
                         .min_inner_size(600.0, 400.0)
                         .decorations(false) // 前端自绘标题栏，去掉系统标题栏（之前漏了导致双层）
                         .visible(false) // Electron show:false——启动隐藏，Alt+Space/托盘唤出
-                        .resizable(true)
+                        .resizable(true);
+                    // 拖放显式开启（同 windows.rs build_overlay）：不开启则窗口没有 OLE
+                    // IDropTarget，拖文件进面板会显示禁止光标（拖放彻底失效的根因）
+                    #[cfg(windows)]
+                    let builder = builder.drag_and_drop(true);
+                    builder
                         .initialization_script(SHIM_JS)
                         .build()
                         .expect("failed to build main window")
@@ -2453,6 +2504,11 @@ pub fn run() {
             // 首次启动主窗直接显示（用户期望启动即见；之后关闭=隐藏到托盘）
             {
                 restore_window_state(&win);
+                // 让 WebView2 交还外部拖放（wry 把它关了 → 整窗禁止光标、拖放事件永不触发；
+                // 详见 webviewdrop.rs）。改回 true 后 wry 的 WindowEvent::DragDrop 恢复，
+                // 并且**带真实文件路径**，前端直接进转换列表。
+                #[cfg(windows)]
+                webviewdrop::allow_external_drop(app.handle(), "main");
                 let w = win.clone();
                 std::thread::spawn(move || {
                     // 等 WebView 首帧渲染，避免白屏闪烁
@@ -2478,6 +2534,8 @@ pub fn run() {
                         tauri::WindowEvent::DragDrop(ev) => match ev {
                             tauri::DragDropEvent::Enter { .. } => {
                                 DRAG_ACTIVE.store(true, std::sync::atomic::Ordering::Relaxed);
+                                log::info!("[drop] 拖放进入窗口");
+                                let _ = app2.emit("converter:dragover", serde_json::json!({ "active": true }));
                             }
                             tauri::DragDropEvent::Drop { paths, .. } => {
                                 DRAG_ACTIVE.store(false, std::sync::atomic::Ordering::Relaxed);
@@ -2485,19 +2543,27 @@ pub fn run() {
                                     .iter()
                                     .map(|p| p.to_string_lossy().into_owned())
                                     .collect();
+                                log::info!("[drop] 窗口内松手，文件数={}", list.len());
                                 let _ = app2.emit(
                                     "converter:drop",
-                                    serde_json::json!({ "paths": list }),
+                                    serde_json::json!({ "paths": list, "action": "convert" }),
                                 );
+                                let _ = app2.emit("converter:dragover", serde_json::json!({ "active": false }));
                             }
                             tauri::DragDropEvent::Leave { .. } => {
                                 DRAG_ACTIVE.store(false, std::sync::atomic::Ordering::Relaxed);
+                                let _ = app2.emit("converter:dragover", serde_json::json!({ "active": false }));
                             }
                             _ => {}
                         },
                         tauri::WindowEvent::Focused(false) => {
                             // 拖放进行中不隐藏（文件正从资源管理器拖入）
                             if DRAG_ACTIVE.load(std::sync::atomic::Ordering::Relaxed) {
+                                return;
+                            }
+                            // 转换板块不隐藏（BLUR_GUARD）：拖文件进来时焦点在资源管理器，
+                            // 一旦隐藏就再也接不到 drop
+                            if BLUR_GUARD.load(std::sync::atomic::Ordering::Relaxed) {
                                 return;
                             }
                             // closeOnBlur 配置（缺省开启）：主窗失焦自动隐藏。
@@ -2530,12 +2596,17 @@ pub fn run() {
 
             // 右键菜单 / 命令行启动参数（--convert/--extract）：转交前端。
             // 事件 + pending 双保险：前端可能还没挂载完成，挂载后会 converterTakePending 取走。
-            if let Some((action, paths)) = shellmenu::parse_cli(&std::env::args().collect::<Vec<_>>()) {
-                if let Some(w) = app.get_webview_window("main") {
-                    let _ = w.show();
-                    let _ = w.set_focus();
+            let cli: Vec<String> = std::env::args().collect();
+            match shellmenu::parse_cli(&cli) {
+                Some((action, paths)) => {
+                    log::info!("[drop] 冷启动参数 action={} 文件数={}", action, paths.len());
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                    }
+                    queue_drop(app.handle(), paths, action);
                 }
-                queue_drop(app.handle(), paths, action);
+                None => log::info!("[drop] 冷启动无 --convert/--extract（args={:?}）", cli),
             }
 
             // 托盘：显示主面板 / 退出（对齐 Electron：显示/隐藏 + 分隔线 + 退出）

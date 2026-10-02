@@ -341,15 +341,26 @@ export default function App() {
   useEffect(() => {
     const handoff = (data?: { paths?: string[]; action?: string }) => {
       if (!data?.action || !data.paths?.length) return;
+      void api?.debugLog?.(`handoff action=${data.action} 文件数=${data.paths.length}`);
       useStore.getState().setActiveModule('converter');
       useStore.getState().setPendingConverterDrop({ paths: data.paths, action: data.action });
     };
     // 冷启动：前端挂载晚于 Rust 入队时，事件会丢——用 invoke 取走 pending
-    void api?.converterTakePending?.().then((pending) => handoff(pending || undefined));
+    void api?.converterTakePending?.().then((pending) => {
+      if (pending?.paths?.length) {
+        void api?.debugLog?.(`takePending 命中 ${pending.paths.length} 个文件`);
+        handoff(pending);
+      }
+    });
     if (!api?.onConverterDrop) return;
     const unsubscribe = api.onConverterDrop((data) => handoff(data as { paths?: string[]; action?: string }));
     return unsubscribe;
   }, [api]);
+
+  // 转换板块：失焦不自动隐藏（拖文件时焦点在资源管理器，隐藏了就再也接不到 drop）
+  useEffect(() => {
+    void api?.setBlurGuard?.(activeModule === 'converter');
+  }, [api, activeModule]);
   useEffect(() => {
     if (!api?.onConfigChanged) return;
     const unsubscribe = api.onConfigChanged(() => {

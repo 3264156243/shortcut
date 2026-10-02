@@ -66,7 +66,9 @@ rubato = "0.16"
 # ── 资源管理器右键菜单（P3，仅 Windows）──
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
-
+# 拖放支持：改回 WebView2 自己的外部拖放（见 src/dropstage.rs）
+webview2-com = "0.39"
+windows-core = "0.62"
 [profile.release]
 opt-level = "s"
 lto = true

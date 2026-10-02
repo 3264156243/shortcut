@@ -239,7 +239,7 @@ fn build_overlay(
     h: f64,
     focusable: bool,
 ) -> tauri::Result<tauri::WebviewWindow> {
-    let win = WebviewWindowBuilder::new(app, id, WebviewUrl::App(url.into()))
+    let builder = WebviewWindowBuilder::new(app, id, WebviewUrl::App(url.into()))
         .title(format!("ShortCut {}", id))
         .decorations(false)
         .transparent(true)
@@ -250,7 +250,13 @@ fn build_overlay(
         .focused(false)
         .visible(false)
         .position(x, y)
-        .inner_size(w, h)
+        .inner_size(w, h);
+    // 拖放必须显式开启：wry 只在拿到 drag-drop handler 时才注册 OLE IDropTarget，
+    // 而 tauri.conf.json 的 dragDropEnabled 只作用于配置里声明的窗口（本项目全部动态创建）。
+    // 不开启时 Windows 找不到 drop 接收者 → 拖文件显示禁止光标（P3 拖放失效的根因）。
+    #[cfg(windows)]
+    let builder = builder.drag_and_drop(true);
+    let win = builder
         .initialization_script(crate::SHIM_JS)
         .build()?;
     let _ = win.set_focusable(focusable);
@@ -293,11 +299,13 @@ pub fn ensure_deepseekball(app: &tauri::AppHandle) -> tauri::Result<tauri::Webvi
     if let Some(win) = app.get_webview_window("deepseekball") {
         position_deepseekball(app);
         return Ok(win);
-    }
-    let (ix, iy, iw, _) = island_anchor(app);
+    }    let (ix, iy, iw, _) = island_anchor(app);
     let win = build_overlay(app, "deepseekball", "deepseekball.html", ix + iw + 8.0, iy + 8.0, 46.0, 46.0, false);
     if let Ok(ref w) = win {
         show_inactive(w); // 对齐 Electron deepseekBallWindow.showInactive()
+        // SC球要能接收"拖文件到球上"（Batch 2）：同样需要交还 WebView2 的外部拖放
+        #[cfg(windows)]
+        crate::webviewdrop::allow_external_drop(app, "deepseekball");
     }
     win
 }

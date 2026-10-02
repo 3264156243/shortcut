@@ -69,6 +69,7 @@ export default function ConverterPanel() {
   const [zipPwd, setZipPwd] = useState('');
   const [bitrate, setBitrate] = useState(192);
   const [showHistory, setShowHistory] = useState(true);
+  const [dragOver, setDragOver] = useState(false);
   const idSeq = useRef(0);
 
   const featureOk = licenseFeatureAccess['converter'] !== false;
@@ -79,10 +80,16 @@ export default function ConverterPanel() {
 
   useEffect(() => {
     refreshHistory();
-    // 拖放：Rust 层窗口 DragDrop 事件转发（手动拖入，无 action 字段）
+    // 拖放：Rust 层窗口 DragDrop 事件转发（手动拖入，无 action 字段；
+    // 带 action 的来自右键菜单/命令行，走 pendingConverterDrop 由 App 切模块后交给本组件）
     const offDrop = window.electronAPI?.onConverterDrop?.((data) => {
-      if (data?.action) return; // 右键菜单/命令行走 pendingConverterDrop（App 切模块后由本组件消费）
+      if (data?.action) return;
+      void window.electronAPI?.debugLog?.(`面板直接收到拖放 ${data?.paths?.length || 0} 个文件`);
       void addPaths(data?.paths || []);
+    });
+    // 拖放悬停：给出"松手加入列表"的可见反馈（也是拖放链路是否打通的直观证据）
+    const offOver = window.electronAPI?.onConverterDragover?.((data) => {
+      setDragOver(!!data?.active);
     });
     const offDone = window.electronAPI?.onConverterDone?.((data) => {
       setFiles((prev) => prev.map((f) => (f.id === data.id ? { ...f, status: 'ok', out: data.out } : f)));
@@ -94,6 +101,7 @@ export default function ConverterPanel() {
     });
     return () => {
       offDrop?.();
+      offOver?.();
       offDone?.();
       offError?.();
     };
@@ -103,6 +111,9 @@ export default function ConverterPanel() {
   const addPaths = async (paths: string[]): Promise<ConvFile[]> => {
     if (!paths.length) return [];
     const detected = (await window.electronAPI?.converterDetect?.(paths)) || [];
+    void window.electronAPI?.debugLog?.(
+      `detect ${paths.length} 个 → 可识别 ${detected.length} 个${detected.length !== paths.length ? '（有文件类型不支持）' : ''}`,
+    );
     const fresh: ConvFile[] = detected.map((d, i) => ({
       ...d,
       id: `local-${Date.now()}-${(idSeq.current += 1) + i}`,
@@ -116,6 +127,9 @@ export default function ConverterPanel() {
     return fresh;
   };
 
+  // ── 拖入文件：由 Rust 窗口级 DragDrop 事件提供**真实路径**（见 onConverterDrop）──
+  // 悬停提示由 converter:dragover 事件驱动；这条链路在 webviewdrop.rs 修好
+  // WebView2 的 AllowExternalDrop 之后才真正可用。
   const pendingDrop = useStore((s) => s.pendingConverterDrop);
   const setPendingDrop = useStore((s) => s.setPendingConverterDrop);
 
@@ -125,6 +139,7 @@ export default function ConverterPanel() {
     const payload = pendingDrop;
     setPendingDrop(null);
     void (async () => {
+      void window.electronAPI?.debugLog?.(`pending 消费 action=${payload.action} 文件数=${payload.paths.length}`);
       const fresh = await addPaths(payload.paths);
       if (payload.action !== 'extract') return;
       const archives = fresh.filter((f) => f.kind === 'archive');
@@ -160,6 +175,18 @@ export default function ConverterPanel() {
     void window.electronAPI?.converterExtract?.(file.path, zipPwd || null, outDir || null);
   };
 
+  // 打开输出文件/所在目录：Rust 失败时给出可见提示（原实现静默失败="点了没反应"）
+  const openTarget = async (target?: string) => {
+    if (!target) {
+      useStore.getState().addToast('没有可打开的输出路径', 'error');
+      return;
+    }
+    const res = await window.electronAPI?.openTarget?.(target);
+    if (res && res.success === false) {
+      useStore.getState().addToast(res.error || '打开失败', 'error');
+    }
+  };
+
   const compressSelected = async (flavor: string) => {
     const chosen = files.filter((f) => f.status === 'idle' || f.status === 'ok');
     if (!chosen.length) return;
@@ -185,7 +212,22 @@ export default function ConverterPanel() {
   const busyCount = files.filter((f) => f.status === 'busy').length;
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden" style={{ background: 'var(--color-bg-panel)' }}>
+    <div
+      className="relative flex h-full w-full flex-col overflow-hidden"
+      style={{ background: 'var(--color-bg-panel)' }}
+    >
+      {/* 拖放悬停提示：拖文件进入窗口时出现（拖放链路打通的直观反馈） */}
+      {dragOver && (
+        <div
+          className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.55)', border: '2px dashed var(--color-accent)' }}>
+          <div className="flex flex-col items-center gap-1">
+            <FilePlus2 size={26} style={{ color: 'var(--color-accent)' }} />
+            <span className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>松手加入转换列表</span>
+            <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>自动识别图片 / 音频 / 压缩包</span>
+          </div>
+        </div>
+      )}
       {/* 头部 */}
       <div className="flex shrink-0 items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid var(--color-border)' }}>
         <div className="flex items-center gap-2">
@@ -208,8 +250,6 @@ export default function ConverterPanel() {
 
       {/* 拖放区 */}
       <div
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => { e.preventDefault(); /* 路径经 Rust DragDrop 事件到达 */ }}
         className="mx-4 mt-3 shrink-0 rounded-xl px-4 py-4 text-center text-xs"
         style={{ border: '1.5px dashed var(--color-border)', color: 'var(--color-text-muted)' }}
       >
@@ -382,7 +422,7 @@ export default function ConverterPanel() {
                   </span>
                   <span style={{ color: 'var(--color-text-muted)' }}>{h.time}</span>
                   {h.status === 'ok' && h.out && (
-                    <button onClick={() => void window.electronAPI?.openTarget?.(h.out)} className="text-[10px]" style={{ color: 'var(--color-accent)' }}>打开</button>
+                    <button onClick={() => void openTarget(h.out)} className="text-[10px]" style={{ color: 'var(--color-accent)' }}>打开</button>
                   )}
                   <button
                     onClick={() => { void window.electronAPI?.converterHistoryRemove?.(h.id); setHistory((prev) => prev.filter((x) => x.id !== h.id)); }}

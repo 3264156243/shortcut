@@ -68,3 +68,35 @@
 
 ## 十二、内存基线
 - [ ] Tauri 版启动 5 分钟 WorkingSet vs Electron 版（基线记录 docs/memory-baseline.md）
+
+## 十三、P3 拖放 / 右键菜单 实测结论（2026-10-02）
+> 这一轮把"外壳能跑但功能不工作"的三个问题定位到根因并修好了，结论记在这里避免重复排查。
+
+### 13.1 文件拖入窗口无效（禁止光标、无任何事件）
+- 根因：**wry 把 WebView2 的 `AllowExternalDrop` 置成了 false**（wry 以为自己的 IDropTarget 接住了），
+  而它自己的 IDropTarget 是在 webview 创建瞬间枚举子窗注册的，那一刻 WebView2 的子窗还不存在 → 没注册上。
+  光标下最近的 drop target 变成 Chromium 自己的（msedgewebview2 进程），它一律返回 `DROPEFFECT_NONE`
+  → 整窗禁止光标 + `WindowEvent::DragDrop` 永不触发。
+- 无效尝试（已排除）：在自有窗口上重新 `RegisterDragDrop`。跨进程窗口调用返回成功但不生效；
+  即便把窗口链上 15 个窗口全部接管（含 Chromium 的），`DragEnter` 一次都没被调用。
+- 有效修复：窗口建好后把 `AllowExternalDrop` 改回 true（`src-tauri/src/webviewdrop.rs`，带重试）。
+  Chromium 收下拖放后**转交给宿主(wry)的 drop target**，`WindowEvent::DragDrop` 恢复且**带真实路径**。
+- 验证方式：真实资源管理器拖放（自动化要点见下）。
+
+### 13.2 右键菜单"点了没反应"
+- 链路：注册表命令 → 第二实例 → 单实例回调（显示/前台主窗）→ `parse_cli` → `queue_drop` → 前端 handoff → 面板消费。
+- 已用**注册表里的真实命令行**端到端验证通过；实例数保持 1。
+
+### 13.3 转换面板「打开文件」无效
+- 根因：原实现用 `cmd /C start "" <path>`，输出文件不存在时静默失败（无任何提示），特殊字符也易出错。
+- 修复：改用 tauri-plugin-opener + 存在性检查，失败经 toast 显式提示（输出不存在时回退打开所在目录）。
+
+### 13.4 拖放自动化验证要点（踩过的坑）
+1. **必须声明 DPI 感知**（`SetProcessDpiAwarenessContext(PER_MONITOR_AWARE_V2)`，且在任何 UI 代码之前）：
+   UIA 返回物理像素而 `GetWindowRect/SetCursorPos` 用虚拟坐标，不声明会导致鼠标落到别的窗口。
+2. **提升目标窗口必须用 `HWND_TOPMOST→HWND_NOTOPMOST`**：普通 `HWND_TOP` 提升不了置顶窗口（例如最大化的 Edge）。
+3. **绝不能在拖动前激活目标窗口**：对非激活窗口的第一次按下只会激活窗口、不会开始拖动；
+   正确顺序＝先移动并激活源窗口 → 在文件项上"预热点击" → 用 `SWP_NOACTIVATE` 提升目标 → 起拖。
+4. 拖动前用 `WindowFromPoint` 校验"文件项属于源窗口、落点属于目标窗口"。
+5. **权限/完整性级别**：Explorer 是 Medium；若应用以 High（管理员）运行，UIPI 会直接阻断拖放。
+   验证必须在与用户一致的 **Medium** 下进行（用 `explorer.exe <exe>` 从管理员会话里降权启动）。
