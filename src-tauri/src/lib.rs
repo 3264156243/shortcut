@@ -24,6 +24,8 @@ static PENDING_DROP: Mutex<Option<(Vec<String>, String)>> = Mutex::new(None);
 /// 转换板块"失焦不自动隐藏"守卫：前端切到转换页时置 true。
 /// 拖文件进面板时焦点在资源管理器上，若此时按 closeOnBlur 隐藏，拖放必然失败。
 static BLUR_GUARD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// 冷启动专为右键"直接执行"而启动：不显示主窗/岛屿，干完退出（"不走软件"）
+static DIRECT_COLD_START: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// 把命令行带来的文件交给前端：写 pending + 发事件（两路都走，谁先到都能拿到）
 fn queue_drop(app: &tauri::AppHandle, paths: Vec<String>, action: String) {
@@ -198,12 +200,19 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             Value::Null
         }
         "shellMenuState" => {
-            json!({ "available": shellmenu::available(), "enabled": shellmenu::is_enabled() })
+            let (_, format) = shellmenu::load_settings();
+            json!({
+                "available": shellmenu::available(),
+                "enabled": shellmenu::is_enabled(),
+                "format": format,
+                "formats": shellmenu::COMPRESS_FORMATS,
+            })
         }
         "shellMenuSet" => {
             let enabled = args.first().and_then(|v| v.as_bool()).unwrap_or(false);
-            match shellmenu::set_enabled(enabled) {
-                Ok(state) => json!({ "success": true, "enabled": state }),
+            let format = args.get(1).and_then(|v| v.as_str()).unwrap_or("zip");
+            match shellmenu::set_enabled_with_format(enabled, format) {
+                Ok(state) => json!({ "success": true, "enabled": state, "format": shellmenu::normalize_format(format) }),
                 Err(e) => json!({ "success": false, "enabled": false, "error": e }),
             }
         }
@@ -2310,15 +2319,43 @@ pub fn run() {
         // 单实例必须最先注册：第二实例启动时回调把已有实例带到前台，自身退出
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             log::info!("[drop] 第二实例转交 args={:?}", args);
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.show();
-                let _ = w.unminimize();
-                let _ = w.set_focus();
-            }
-            // 右键菜单唤起（--convert/--extract）：把文件转交给已运行实例
             match shellmenu::parse_cli(&args) {
-                Some((action, paths)) => queue_drop(app, paths, action),
-                None => log::info!("[drop] 第二实例参数无 --convert/--extract，仅前台化"),
+                Some((action, paths)) if action.starts_with("shellmenu-") => {
+                    let enabled = action == "shellmenu-on";
+                    let format = paths.first().cloned().unwrap_or_else(shellmenu::default_format);
+                    match shellmenu::set_enabled_with_format(enabled, &format) {
+                        Ok(state) => log::info!("[shell] 右键菜单 enabled={} format={}", state, format),
+                        Err(e) => log::error!("[shell] 写入右键菜单失败: {}", e),
+                    }
+                }
+                Some((action, paths)) if action == "compress" || action == "extract" => {
+                    // 右键"直接执行"：不开面板、不动前台，后台干完发通知
+                    log::info!("[shell] 直接执行 action={} 文件数={}", action, paths.len());
+                    converter::start_shell_direct(
+                        app.clone(),
+                        converter::uuid_like::new_id(),
+                        action,
+                        paths,
+                        shellmenu::default_format(),
+                        false,
+                    );
+                }
+                Some((action, paths)) => {
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.show();
+                        let _ = w.unminimize();
+                        let _ = w.set_focus();
+                    }
+                    queue_drop(app, paths, action);
+                }
+                None => {
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.show();
+                        let _ = w.unminimize();
+                        let _ = w.set_focus();
+                    }
+                    log::info!("[shell] 第二实例参数无动作，仅前台化");
+                }
             }
         }))
         .plugin(tauri_plugin_autostart::init(
@@ -2513,6 +2550,11 @@ pub fn run() {
                 std::thread::spawn(move || {
                     // 等 WebView 首帧渲染，避免白屏闪烁
                     std::thread::sleep(std::time::Duration::from_millis(450));
+                    // 冷启动专为右键"直接执行"：不显示主窗（干完就退出）
+                    if DIRECT_COLD_START.load(std::sync::atomic::Ordering::Relaxed) {
+                        log::info!("[main] 直接执行模式，跳过显示主窗");
+                        return;
+                    }
                     let _ = w.show();
                     let _ = w.set_focus();
                     log::info!("[main] 启动显示主窗");
@@ -2594,19 +2636,46 @@ pub fn run() {
                 });
             }
 
-            // 右键菜单 / 命令行启动参数（--convert/--extract）：转交前端。
-            // 事件 + pending 双保险：前端可能还没挂载完成，挂载后会 converterTakePending 取走。
+            // 右键菜单 / 命令行启动参数：
+            //  - --compress/--extract = **直接执行**（不开面板、不显示窗口；冷启动干完就退出）
+            //  - --convert = 老流程，转交前端加进转换列表
             let cli: Vec<String> = std::env::args().collect();
             match shellmenu::parse_cli(&cli) {
                 Some((action, paths)) => {
-                    log::info!("[drop] 冷启动参数 action={} 文件数={}", action, paths.len());
-                    if let Some(w) = app.get_webview_window("main") {
-                        let _ = w.show();
-                        let _ = w.set_focus();
+                    log::info!("[shell] 冷启动参数 action={} 文件数={}", action, paths.len());
+                    if action == "compress" || action == "extract" {
+                        DIRECT_COLD_START.store(true, std::sync::atomic::Ordering::Relaxed);
+                        converter::start_shell_direct(
+                            app.handle().clone(),
+                            converter::uuid_like::new_id(),
+                            action.clone(),
+                            paths,
+                            shellmenu::default_format(),
+                            true,
+                        );
+                    } else if action.starts_with("shellmenu-") {
+                        // --shellmenu-on [格式] / --shellmenu-off：写注册表后直接退出（不建界面）
+                        DIRECT_COLD_START.store(true, std::sync::atomic::Ordering::Relaxed);
+                        let enabled = action == "shellmenu-on";
+                        let format = paths.first().cloned().unwrap_or_else(shellmenu::default_format);
+                        match shellmenu::set_enabled_with_format(enabled, &format) {
+                            Ok(state) => log::info!("[shell] 右键菜单 enabled={} format={}", state, format),
+                            Err(e) => log::error!("[shell] 写入右键菜单失败: {}", e),
+                        }
+                        let handle = app.handle().clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(std::time::Duration::from_millis(600));
+                            handle.exit(0);
+                        });
+                    } else {
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        }
+                        queue_drop(app.handle(), paths, action);
                     }
-                    queue_drop(app.handle(), paths, action);
                 }
-                None => log::info!("[drop] 冷启动无 --convert/--extract（args={:?}）", cli),
+                None => log::info!("[shell] 冷启动无动作参数（args={:?}）", cli),
             }
 
             // 托盘：显示主面板 / 退出（对齐 Electron：显示/隐藏 + 分隔线 + 退出）
@@ -2658,13 +2727,18 @@ pub fn run() {
                 let music_feature = cfg.get("license").and_then(|l| l.get("featureAccess")).and_then(|f| f.as_array())
                     .and_then(|a| a.iter().find(|f| f.get("id").and_then(|v| v.as_str()) == Some("island.music")).and_then(|f| f.get("allowed")).and_then(|v| v.as_bool()))
                     .unwrap_or(true);
-                if island_module_on && music_enabled && music_feature {
+                if island_module_on && music_enabled && music_feature
+                    && !DIRECT_COLD_START.load(std::sync::atomic::Ordering::Relaxed)
+                {
                     let st = app.state::<MusicHandle>();
                     sidecar::start_music_bridge(app.handle().clone(), st.0.clone());
                     log::info!("[music] 启动时按配置预启动音乐桥");
                 }
                 // 岛（SC球）：配置启用则启动即显示（对齐 Electron createIslandWindow，不再需要 Alt+I 手动唤出）
-                {
+                if DIRECT_COLD_START.load(std::sync::atomic::Ordering::Relaxed) {
+                    // 右键"直接执行"专用冷启动：不建岛、不建托盘 UI，干完直接退出
+                    log::info!("[island] 直接执行模式，跳过启动显示");
+                } else {
                     let cfg2 = config::read_config_value().unwrap_or(json!({}));
                     let island_on = cfg2.get("island").and_then(|i| i.get("enabled")).and_then(|v| v.as_bool()).unwrap_or(false);
                     if island_module_on && island_on {

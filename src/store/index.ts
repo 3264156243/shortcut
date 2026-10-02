@@ -191,8 +191,8 @@ declare global {
       converterPickDir: () => Promise<string | null>;
       converterHistory: () => Promise<Array<{ id: string; time: string; action: string; src: string; out: string; status: string; note: string }>>;
       converterHistoryRemove: (id: string) => Promise<unknown>;
-      shellMenuState: () => Promise<{ available: boolean; enabled: boolean }>;
-      shellMenuSet: (enabled: boolean) => Promise<{ success: boolean; enabled: boolean; error?: string }>;
+      shellMenuState: () => Promise<{ available: boolean; enabled: boolean; format: string; formats: string[] }>;
+      shellMenuSet: (enabled: boolean, format?: string) => Promise<{ success: boolean; enabled: boolean; format?: string; error?: string }>;
       converterTakePending: () => Promise<{ paths: string[]; action?: string } | null>;
       onConverterDrop: (callback: (data: { paths: string[]; action?: string; fromShell?: boolean }) => void) => () => void;
       onConverterDragover: (callback: (data: { active: boolean }) => void) => () => void;

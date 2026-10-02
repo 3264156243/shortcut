@@ -108,18 +108,19 @@ export default function SettingsPanel() {
   const licenseModuleAccess = useStore((s) => s.licenseModuleAccess);
   const { t } = useTranslation();
   // 资源管理器右键菜单（仅 Windows）：注册表为准，开面板时读一次
-  const [shellMenu, setShellMenu] = useState<{ available: boolean; enabled: boolean }>({ available: false, enabled: false });
+  const [shellMenu, setShellMenu] = useState<{ available: boolean; enabled: boolean; format: string; formats?: string[] }>({ available: false, enabled: false, format: 'zip' });
   const [shellMenuBusy, setShellMenuBusy] = useState(false);
   const [shellMenuError, setShellMenuError] = useState('');
   useEffect(() => {
     void window.electronAPI?.shellMenuState?.().then((s) => s && setShellMenu(s));
   }, []);
-  const setShellMenuEnabled = async (enabled: boolean) => {
+  const setShellMenuEnabled = async (enabled: boolean, format?: string) => {
     setShellMenuBusy(true);
     setShellMenuError('');
-    const res = await window.electronAPI?.shellMenuSet?.(enabled);
+    const fmt = format || shellMenu.format;
+    const res = await window.electronAPI?.shellMenuSet?.(enabled, fmt);
     if (res?.success) {
-      setShellMenu((prev) => ({ ...prev, enabled: res.enabled }));
+      setShellMenu((prev) => ({ ...prev, enabled: res.enabled, format: res.format || fmt }));
     } else {
       setShellMenuError(res?.error || '设置失败');
     }
@@ -249,19 +250,37 @@ export default function SettingsPanel() {
                 <h3 className="text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>资源管理器集成</h3>
                 <p className="mb-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
                   在当前用户下注册右键菜单，无需管理员权限；关闭即删除注册表项。
+                  点菜单项**直接执行**，不打开面板：文件/文件夹 → 压缩为所选格式（生成在同目录），压缩包 → 解压到同名文件夹。
                 </p>
                 <label className="flex items-center justify-between cursor-pointer">
                   <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                    右键菜单：转换为… / 解压（zip）
+                    右键菜单：压缩 / 解压
                   </span>
                   <input
                     type="checkbox"
                     checked={shellMenu.enabled}
                     disabled={shellMenuBusy}
-                    onChange={(e) => setShellMenuEnabled(e.target.checked)}
+                    onChange={(e) => setShellMenuEnabled(e.target.checked, shellMenu.format)}
                     className="w-4 h-4 accent-indigo-500"
                   />
                 </label>
+                <label className="mt-3 flex items-center justify-between gap-3">
+                  <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>默认压缩格式</span>
+                  <select
+                    value={shellMenu.format}
+                    disabled={shellMenuBusy}
+                    onChange={(e) => setShellMenuEnabled(shellMenu.enabled || true, e.target.value)}
+                    className="rounded-lg px-2 py-1.5 text-xs"
+                    style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
+                  >
+                    {(shellMenu.formats || ['zip']).map((f) => (
+                      <option key={f} value={f}>{f.toUpperCase()}</option>
+                    ))}
+                  </select>
+                </label>
+                <p className="mt-2 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                  菜单文字会随格式变化（如「压缩为 TAR.GZ（ShortCut）」）。改格式会自动重写菜单项。
+                </p>
                 {shellMenuError && (
                   <p className="mt-2 text-xs" style={{ color: '#f87171' }}>{shellMenuError}</p>
                 )}

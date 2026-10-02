@@ -205,8 +205,7 @@ pub fn start_compress(
     out_path: Option<String>,
     password: Option<String>,
     level: i64,
-) {
-    let src_summary = paths.first().cloned().unwrap_or_default();
+) {    let src_summary = paths.first().cloned().unwrap_or_default();
     spawn_job(app, id, "compress", src_summary, move || {
         let first = PathBuf::from(paths.first().ok_or("没有要压缩的文件")?);
         let dir = first.parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
@@ -232,6 +231,135 @@ pub fn start_compress(
             .map(|p| p.to_string_lossy().into_owned())
             .unwrap_or_default();
         Ok((out.to_string_lossy().into_owned(), out_dir, 0))
+    });
+}
+
+/// 右键菜单「直接执行」：压缩或解压，**不打开主面板**。
+///
+/// 与 `start_*` 的区别：
+/// - 一次调用把所有选中项处理完（多选解压 = 逐个解到各自同名文件夹）；压缩只产出一个包；
+/// - 只写历史、不发前端事件（前端没打开也不影响），结束时发系统通知 + 刷新资源管理器；
+/// - `exit_after` 为 true 时（冷启动专为这次操作而启动）干完自动退出，不留托盘/岛屿。
+pub fn start_shell_direct(
+    app: AppHandle,
+    id: String,
+    action: String,
+    paths: Vec<String>,
+    flavor: String,
+    exit_after: bool,
+) {
+    let src_summary = if paths.len() > 1 {
+        format!("{} 等 {} 项", paths.first().cloned().unwrap_or_default(), paths.len())
+    } else {
+        paths.first().cloned().unwrap_or_default()
+    };
+    let act: &'static str = if action == "compress" { "compress" } else { "extract" };
+    let id_for_job = id.clone();
+    tauri::async_runtime::spawn(async move {
+        let result: Result<(String, String, usize, String), String> = (|| {
+            if paths.is_empty() {
+                return Err("没有要处理的文件".to_string());
+            }
+            if act == "extract" {
+                let mut last_dir = String::new();
+                let mut total = 0usize;
+                for p in &paths {
+                    let src = PathBuf::from(p);
+                    if !src.exists() {
+                        return Err(format!("文件不存在: {}", p));
+                    }
+                    let mut noop = |_: usize| {};
+                    let (count, dir) = archive::extract(&src, None, None, &mut noop)?;
+                    total += count;
+                    last_dir = dir.to_string_lossy().into_owned();
+                }
+                let note = format!("解压 {} 个压缩包，共 {} 个条目", paths.len(), total);
+                Ok((last_dir.clone(), last_dir, total, note))
+            } else {
+                let first = PathBuf::from(&paths[0]);
+                if !first.exists() {
+                    return Err(format!("路径不存在: {}", paths[0]));
+                }
+                let dir = first.parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
+                // 单个文件→用文件名；多选/文件夹→用所在文件夹名（与常见压缩工具一致）
+                let base = if paths.len() == 1 && first.is_file() {
+                    first.file_stem().and_then(|s| s.to_str()).unwrap_or("archive").to_string()
+                } else if first.is_dir() {
+                    first.file_name().and_then(|s| s.to_str()).unwrap_or("archive").to_string()
+                } else {
+                    dir.file_name().and_then(|s| s.to_str()).unwrap_or("archive").to_string()
+                };
+                let out = archive::resolve_conflict(&dir.join(format!("{}.{}", base, flavor)));
+                let mut noop = |_: usize| {};
+                archive::compress(&paths, &flavor, &out, None, 6, &mut noop)?;
+                let out_dir = out.parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+                let note = format!("已压缩为 {}", flavor.to_uppercase());
+                Ok((out.to_string_lossy().into_owned(), out_dir, 0, note))
+            }
+        })();
+
+        match result {
+            Ok((out, _out_dir, items, note)) => {
+                let note = if items > 0 { format!("{}（{} 项）", note, items) } else { note };
+                history::push(history::HistoryItem {
+                    id: id_for_job.clone(),
+                    time: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+                    action: act.to_string(),
+                    src: src_summary.clone(),
+                    out: out.clone(),
+                    status: "ok".into(),
+                    note: format!("右键直接执行：{}", note),
+                });
+                log::info!("[shell] 直接执行完成 action={} → {}", act, out);
+                crate::shellmenu::refresh_dir(std::path::Path::new(&out).parent().unwrap_or(std::path::Path::new(".")));
+                notify_result(&app, "ShortCut", &format!("{}：{}", note, file_label(&out)));
+                finish_direct(&app, exit_after, 1200);
+            }
+            Err(message) => {
+                history::push(history::HistoryItem {
+                    id: id_for_job.clone(),
+                    time: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+                    action: act.to_string(),
+                    src: src_summary.clone(),
+                    out: String::new(),
+                    status: "fail".into(),
+                    note: message.clone(),
+                });
+                log::error!("[shell] 直接执行失败 action={}: {}", act, message);
+                notify_result(&app, "ShortCut 操作失败", &message);
+                finish_direct(&app, exit_after, 2500);
+            }
+        }
+    });
+}
+
+/// 取路径最后一段用于提示文字
+fn file_label(path: &str) -> String {
+    PathBuf::from(path)
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.to_string())
+}
+
+/// 系统通知（失败不影响主流程，仅记日志）
+fn notify_result(app: &AppHandle, title: &str, body: &str) {
+    use tauri_plugin_notification::NotificationExt;
+    match app.notification().builder().title(title).body(body).show() {
+        Ok(()) => log::info!("[shell] 已发送通知: {} / {}", title, body),
+        Err(e) => log::warn!("[shell] 发送通知失败: {}", e),
+    }
+}
+
+/// 冷启动专为这次操作而启动时：等通知能显示出来再退出
+fn finish_direct(app: &AppHandle, exit_after: bool, delay_ms: u64) {
+    if !exit_after {
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+        log::info!("[shell] 直接执行结束，退出进程");
+        app.exit(0);
     });
 }
 
