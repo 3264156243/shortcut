@@ -57,3 +57,83 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
   from { transform: scale(.15) translateX(-46px); opacity: 0; }
   to { transform: scale(1) translateX(0); opacity: 1; }
 }
+
+/* ── Batch 2：拖入高亮 / 吸附动画 / 格式菜单 ── */
+.ball-wrap { position: absolute; inset: 0; }
+
+/* 拖入悬停：球放大 + 高亮外圈（"吸附"的准备动作） */
+.ball-wrap.drag-over .deepseek-ball-root {
+  transform: scale(1.16);
+  border-color: rgba(120, 150, 255, .85);
+  box-shadow: 0 0 0 4px rgba(109, 140, 255, .3), 0 8px 22px rgba(0, 0, 0, .45);
+}
+
+/* 松手吸附：回弹一下再从球里长出菜单 */
+.ball-wrap.suction .deepseek-ball-root { animation: ball-suction 460ms cubic-bezier(.22,1.2,.36,1); }
+@keyframes ball-suction {
+  0% { transform: scale(1.16); }
+  35% { transform: scale(.86); }
+  70% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+/* 拖入提示气泡（Rust 侧把窗口放大到 190×64 时才显示得下） */
+.ball-hint {
+  position: absolute;
+  left: 54px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  white-space: nowrap;
+  color: #e8eaf0;
+  background: rgba(24,26,32,.94);
+  border: 1px solid rgba(120,150,255,.75);
+  box-shadow: 0 6px 18px rgba(0,0,0,.4);
+  animation: ball-hint-in 160ms ease-out;
+}
+@keyframes ball-hint-in {
+  from { opacity: 0; transform: translateY(-50%) translateX(-6px); }
+  to { opacity: 1; transform: translateY(-50%) translateX(0); }
+}
+
+/* 格式菜单（Rust 侧把窗口放大到 310×380；球钉在左上角 46×46 不变） */
+.ball-menu {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px 12px 58px;
+  border-radius: 14px;
+  background: rgba(22,24,30,.97);
+  border: 1px solid rgba(255,255,255,.14);
+  box-shadow: 0 12px 34px rgba(0,0,0,.5);
+  animation: ball-menu-in 240ms cubic-bezier(.22,1,.36,1);
+  overflow: hidden;
+}
+@keyframes ball-menu-in {
+  from { opacity: 0; transform: translateY(-8px) scale(.94); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.ball-menu .deepseek-ball-root { box-shadow: 0 0 0 4px rgba(109,140,255,.22), 0 6px 18px rgba(0,0,0,.45); }
+.ball-menu-title { font-size: 12px; font-weight: 600; color: #e8eaf0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ball-menu-sub { margin-top: 2px; font-size: 11px; color: #8b90a0; }
+.ball-menu-grid { margin-top: 10px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.ball-menu-btn {
+  padding: 7px 6px; border-radius: 9px; font-size: 11.5px; text-align: center; cursor: pointer;
+  color: #c8ccd8; background: #23262e; border: 1px solid rgba(255,255,255,.12);
+  font-family: inherit; transition: all 130ms ease;
+}
+.ball-menu-btn:hover:not(:disabled) { color: #fff; border-color: rgba(120,150,255,.8); transform: translateY(-1px); }
+.ball-menu-btn:disabled { opacity: .45; cursor: default; }
+.ball-menu-btn.primary { grid-column: span 3; color: #e8eaf0; border-color: rgba(120,150,255,.8); background: rgba(109,140,255,.16); }
+.ball-menu-status { margin-top: 8px; font-size: 11.5px; color: #c8ccd8; word-break: break-all; }
+.ball-menu-foot { margin-top: 10px; display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #8b90a0; }
+.ball-menu-link { cursor: pointer; color: #7f9cff; }
+.ball-menu-link:hover { text-decoration: underline; }
+
+/* 穿透开启时的视觉提示（球变虚） */
+.ball-wrap.passthrough .deepseek-ball-root { opacity: .55; }

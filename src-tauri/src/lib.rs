@@ -25,7 +25,6 @@ static PENDING_DROP: Mutex<Option<(Vec<String>, String)>> = Mutex::new(None);
 /// 拖文件进面板时焦点在资源管理器上，若此时按 closeOnBlur 隐藏，拖放必然失败。
 static BLUR_GUARD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 /// 冷启动专为右键"直接执行"而启动：不显示主窗/岛屿，干完退出（"不走软件"）
-static DIRECT_COLD_START: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// 把命令行带来的文件交给前端：写 pending + 发事件（两路都走，谁先到都能拿到）
 fn queue_drop(app: &tauri::AppHandle, paths: Vec<String>, action: String) {
@@ -76,6 +75,7 @@ mod transfer;
 mod config;
 mod control;
 mod converter;
+mod directcmd;
 mod shellmenu;
 mod webviewdrop;
 mod usage;
@@ -113,6 +113,9 @@ pub(crate) const SHIM_JS: &str = r#"
       onVoicePolishError: 'voice:polishError',
       onConverterDrop: 'converter:drop',
       onConverterDragover: 'converter:dragover',
+  onBallDragover: 'ball:dragover',
+  onBallDrop: 'ball:drop',
+  onBallPassthrough: 'ball:passthrough',
       onConverterProgress: 'converter:progress',
       onConverterDone: 'converter:done',
       onConverterError: 'converter:error',
@@ -226,6 +229,37 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
                 Some(p) => json!({ "paths": p.0, "action": p.1 }),
                 None => Value::Null,
             }
+        }
+        // ── SC 球（Batch 2：拖放转格式 + 穿透开关）──
+        "ballShape" => {
+            let shape = args.first().and_then(|v| v.as_str()).unwrap_or("collapsed");
+            match windows::set_ball_shape(&app, shape) {
+                Ok(()) => json!({ "success": true, "shape": shape }),
+                Err(e) => json!({ "success": false, "error": e }),
+            }
+        }
+        "ballPassthrough" => {
+            let on = args.first().and_then(|v| v.as_bool()).unwrap_or(false);
+            windows::set_ball_passthrough(&app, on);
+            json!({ "success": true, "on": on })
+        }
+        "ballState" => json!({
+            "passthrough": windows::ball_passthrough(),
+            "shortcut": ball_passthrough_shortcut(),
+        }),
+        // 球菜单里的"打开转换面板"：把文件交给主面板（复用既有 pending 通道，会自动切模块）
+        "ballOpenInPanel" => {
+            let paths: Vec<String> = args
+                .first()
+                .and_then(|v| v.as_array())
+                .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+                .unwrap_or_default();
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+            queue_drop(&app, paths, "convert".into());
+            json!({ "success": true })
         }
         // ── 转换板块（docs/文件转换板块开发计划.md）──
         "converterDetect" => {
@@ -1354,12 +1388,11 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             sidecar::set_balance_key(provider, key)
         }
         "setBalanceMusicPlaying" | "setDeepseekMusicPlaying" => {
+            // 球是**常驻**余额挂件：音乐播放时"并"进岛（前端 merge 动画），不销毁窗口；
+            // 音乐结束再飘回来。销毁只由配置（余额显示关闭/模块关闭）决定。
             let playing = args.first().and_then(|v| v.as_bool()).unwrap_or(false);
-            if playing {
-                let _ = windows::ensure_deepseekball(&app);
-            } else {
-                windows::destroy_deepseekball(&app);
-            }
+            let _ = windows::ensure_deepseekball(&app);
+            let _ = app.emit("balance:merge", serde_json::json!({ "merged": playing }));
             json!(true)
         }
         // shim listen 注册诊断（岛/球事件不生效排查）
@@ -2195,11 +2228,28 @@ fn sync_deepseekball_state(app: &tauri::AppHandle) {
         }
         return;
     }
-    if app.get_webview_window("deepseekball").is_some() {
-        // 已存在 → 重建刷新样式/provider
-        windows::destroy_deepseekball(app);
-        let _ = windows::ensure_deepseekball(app);
-        log::info!("[deepseekball] 配置变更 → 重建（provider={}）", effective);
+    let style = island.get("style").and_then(|v| v.as_str()).unwrap_or("capsule").to_string();
+    let signature = format!("{}|{}", effective, style);
+    static LAST_BALL_SIG: std::sync::OnceLock<std::sync::Mutex<String>> = std::sync::OnceLock::new();
+    let slot = LAST_BALL_SIG.get_or_init(|| std::sync::Mutex::new(String::new()));
+    let changed = {
+        let mut last = slot.lock().unwrap_or_else(|e| e.into_inner());
+        if *last == signature { false } else { *last = signature.clone(); true }
+    };
+    match app.get_webview_window("deepseekball") {
+        // 配置说该显示但窗口不在（启动、或刚从音乐态恢复）→ 创建
+        None => match windows::ensure_deepseekball(app) {
+            Ok(_) => log::info!("[deepseekball] 按配置创建（provider={} style={}）", effective, style),
+            Err(e) => log::error!("[deepseekball] 创建失败: {}", e),
+        },
+        // 已存在且 provider/style 变了 → 重建刷新
+        Some(_) if changed => {
+            windows::destroy_deepseekball(app);
+            let _ = windows::ensure_deepseekball(app);
+            log::info!("[deepseekball] 配置变更 → 重建（provider={} style={}）", effective, style);
+        }
+        // 已存在且无变化 → 什么都不做（避免每次写配置都闪一下）
+        Some(_) => {}
     }
 }
 
@@ -2314,32 +2364,42 @@ fn conflicting_instance_running() -> Option<String> {
     None
 }
 
+/// SC 球鼠标穿透的全局快捷键（配置 island.ballPassthroughShortcut，缺省 Ctrl+Alt+B）
+fn ball_passthrough_shortcut() -> String {
+    config::read_config_value()
+        .and_then(|c| c.get("island").and_then(|i| i.get("ballPassthroughShortcut")).and_then(|v| v.as_str()).map(String::from))
+        .unwrap_or_else(|| "Ctrl+Alt+B".to_string())
+}
+
+/// 快捷键归一化：注册名与插件回传的 W3C code 名对齐（keyb → b、大写转小写）
+fn normalize_accel(acc: &str) -> String {
+    let lower = acc.to_lowercase();
+    let parts: Vec<String> = lower
+        .split('+')
+        .map(|p| p.trim().to_string())
+        .map(|p| match p.as_str() {
+            "keyb" | "b" => "b".to_string(),
+            other if other.starts_with("key") && other.len() == 4 => other[3..].to_string(),
+            other => other.to_string(),
+        })
+        .collect();
+    parts.join("+")
+}
+
 pub fn run() {
+    // 右键菜单/脚本的"直接执行"参数（--compress/--extract/--shellmenu-on/off）：
+    // 在进 Tauri 之前同步干完并结束进程——不建窗口、不依赖正在运行的实例，
+    // 也不受"运行中的实例是管理员"影响（UIPI 会拦住普通权限进程的转发）。
+    if directcmd::try_run() {
+        return;
+    }
     tauri::Builder::default()
         // 单实例必须最先注册：第二实例启动时回调把已有实例带到前台，自身退出
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             log::info!("[drop] 第二实例转交 args={:?}", args);
+            // 注：--compress/--extract/--shellmenu-* 已在进 Tauri 之前由 directcmd 处理并结束进程，
+            // 这里只会收到 --convert（老流程）或无参数（仅前台化）。
             match shellmenu::parse_cli(&args) {
-                Some((action, paths)) if action.starts_with("shellmenu-") => {
-                    let enabled = action == "shellmenu-on";
-                    let format = paths.first().cloned().unwrap_or_else(shellmenu::default_format);
-                    match shellmenu::set_enabled_with_format(enabled, &format) {
-                        Ok(state) => log::info!("[shell] 右键菜单 enabled={} format={}", state, format),
-                        Err(e) => log::error!("[shell] 写入右键菜单失败: {}", e),
-                    }
-                }
-                Some((action, paths)) if action == "compress" || action == "extract" => {
-                    // 右键"直接执行"：不开面板、不动前台，后台干完发通知
-                    log::info!("[shell] 直接执行 action={} 文件数={}", action, paths.len());
-                    converter::start_shell_direct(
-                        app.clone(),
-                        converter::uuid_like::new_id(),
-                        action,
-                        paths,
-                        shellmenu::default_format(),
-                        false,
-                    );
-                }
                 Some((action, paths)) => {
                     if let Some(w) = app.get_webview_window("main") {
                         let _ = w.show();
@@ -2413,6 +2473,12 @@ pub fn run() {
                             "alt+s" => capture_full_screen(app),
                             "alt+d" => start_region_capture(app),
                             "alt+e" => translate_current_selection(app),
+                            // SC 球鼠标穿透切换（需求 5.2，默认 Ctrl+Alt+B）
+                            k if k == normalize_accel(&ball_passthrough_shortcut()) => {
+                                let next = !windows::ball_passthrough();
+                                windows::set_ball_passthrough(app, next);
+                                log::info!("[ball] 快捷键切换穿透 → {}", next);
+                            }
                             // 音乐控制（对齐 Electron musicHotkeys：Alt+Z/X/C）
                             "alt+z" => run_music_control(app, "prev"),
                             "alt+x" => run_music_control(app, "toggle"),
@@ -2478,6 +2544,12 @@ pub fn run() {
                         Ok(_) => log::info!("[hotkey] 注册成功: {}", k),
                         Err(e) => log::error!("[hotkey] 注册失败: {} ({})", k, e),
                     }
+                }
+                // Ctrl+Alt+B 切换 SC 球鼠标穿透（需求 5.2）
+                let ball_acc = ball_passthrough_shortcut();
+                match gs.register(ball_acc.as_str()) {
+                    Ok(_) => log::info!("[hotkey] 注册成功: {}（SC球穿透切换）", ball_acc),
+                    Err(e) => log::error!("[hotkey] 注册失败: {} ({})", ball_acc, e),
                 }
                 // Alt+E 划词翻译：translate 模块启用（bubble 特性未被禁）才注册，对齐 Electron ensureGlobalShortcut
                 let (translate_on, bubble_on, music_on) = {
@@ -2550,11 +2622,6 @@ pub fn run() {
                 std::thread::spawn(move || {
                     // 等 WebView 首帧渲染，避免白屏闪烁
                     std::thread::sleep(std::time::Duration::from_millis(450));
-                    // 冷启动专为右键"直接执行"：不显示主窗（干完就退出）
-                    if DIRECT_COLD_START.load(std::sync::atomic::Ordering::Relaxed) {
-                        log::info!("[main] 直接执行模式，跳过显示主窗");
-                        return;
-                    }
                     let _ = w.show();
                     let _ = w.set_focus();
                     log::info!("[main] 启动显示主窗");
@@ -2643,37 +2710,12 @@ pub fn run() {
             match shellmenu::parse_cli(&cli) {
                 Some((action, paths)) => {
                     log::info!("[shell] 冷启动参数 action={} 文件数={}", action, paths.len());
-                    if action == "compress" || action == "extract" {
-                        DIRECT_COLD_START.store(true, std::sync::atomic::Ordering::Relaxed);
-                        converter::start_shell_direct(
-                            app.handle().clone(),
-                            converter::uuid_like::new_id(),
-                            action.clone(),
-                            paths,
-                            shellmenu::default_format(),
-                            true,
-                        );
-                    } else if action.starts_with("shellmenu-") {
-                        // --shellmenu-on [格式] / --shellmenu-off：写注册表后直接退出（不建界面）
-                        DIRECT_COLD_START.store(true, std::sync::atomic::Ordering::Relaxed);
-                        let enabled = action == "shellmenu-on";
-                        let format = paths.first().cloned().unwrap_or_else(shellmenu::default_format);
-                        match shellmenu::set_enabled_with_format(enabled, &format) {
-                            Ok(state) => log::info!("[shell] 右键菜单 enabled={} format={}", state, format),
-                            Err(e) => log::error!("[shell] 写入右键菜单失败: {}", e),
-                        }
-                        let handle = app.handle().clone();
-                        std::thread::spawn(move || {
-                            std::thread::sleep(std::time::Duration::from_millis(600));
-                            handle.exit(0);
-                        });
-                    } else {
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
-                        }
-                        queue_drop(app.handle(), paths, action);
+                    // --compress/--extract/--shellmenu-* 不会走到这里（directcmd 已在进 Tauri 前处理）
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.show();
+                        let _ = w.set_focus();
                     }
+                    queue_drop(app.handle(), paths, action);
                 }
                 None => log::info!("[shell] 冷启动无动作参数（args={:?}）", cli),
             }
@@ -2728,17 +2770,13 @@ pub fn run() {
                     .and_then(|a| a.iter().find(|f| f.get("id").and_then(|v| v.as_str()) == Some("island.music")).and_then(|f| f.get("allowed")).and_then(|v| v.as_bool()))
                     .unwrap_or(true);
                 if island_module_on && music_enabled && music_feature
-                    && !DIRECT_COLD_START.load(std::sync::atomic::Ordering::Relaxed)
                 {
                     let st = app.state::<MusicHandle>();
                     sidecar::start_music_bridge(app.handle().clone(), st.0.clone());
                     log::info!("[music] 启动时按配置预启动音乐桥");
                 }
                 // 岛（SC球）：配置启用则启动即显示（对齐 Electron createIslandWindow，不再需要 Alt+I 手动唤出）
-                if DIRECT_COLD_START.load(std::sync::atomic::Ordering::Relaxed) {
-                    // 右键"直接执行"专用冷启动：不建岛、不建托盘 UI，干完直接退出
-                    log::info!("[island] 直接执行模式，跳过启动显示");
-                } else {
+                {
                     let cfg2 = config::read_config_value().unwrap_or(json!({}));
                     let island_on = cfg2.get("island").and_then(|i| i.get("enabled")).and_then(|v| v.as_bool()).unwrap_or(false);
                     if island_module_on && island_on {

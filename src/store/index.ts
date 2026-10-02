@@ -196,6 +196,14 @@ declare global {
       converterTakePending: () => Promise<{ paths: string[]; action?: string } | null>;
       onConverterDrop: (callback: (data: { paths: string[]; action?: string; fromShell?: boolean }) => void) => () => void;
       onConverterDragover: (callback: (data: { active: boolean }) => void) => () => void;
+      // ── SC 球（Batch 2：拖放转格式 + 穿透开关）──
+      onBallDragover: (callback: (data: { active: boolean; paths?: string[] }) => void) => () => void;
+      onBallDrop: (callback: (data: { paths: string[] }) => void) => () => void;
+      onBallPassthrough: (callback: (data: { on: boolean }) => void) => () => void;
+      ballShape: (shape: 'collapsed' | 'hint' | 'menu') => Promise<{ success: boolean; shape?: string; error?: string }>;
+      ballPassthrough: (on: boolean) => Promise<{ success: boolean; on: boolean }>;
+      ballState: () => Promise<{ passthrough: boolean; shortcut: string }>;
+      ballOpenInPanel: (paths: string[]) => Promise<{ success: boolean }>;
       setBlurGuard: (on: boolean) => Promise<{ success: boolean; guard: boolean }>;
       debugLog: (msg: string) => Promise<unknown>;
       onConverterProgress: (callback: (data: { id: string; pct: number; note: string }) => void) => () => void;
