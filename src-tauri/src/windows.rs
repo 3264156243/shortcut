@@ -355,6 +355,70 @@ pub fn set_ball_passthrough(app: &tauri::AppHandle, on: bool) {
     log::info!("[ball] 鼠标穿透 = {}", on);
 }
 
+/// 拖放守卫：Windows 命中测试会整体跳过"穿透"窗口，所以穿透开着时文件拖到球上收不到。
+/// 这里用轻量轮询：光标进入球的范围且左键按住（= 正在拖东西）→ 临时解除穿透让拖放落下来；
+/// 松手或移开 → 恢复用户设定的穿透状态。这样"文件拖放"就不受穿透开关影响了。
+pub fn spawn_ball_drop_guard(app: &tauri::AppHandle) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static STARTED: AtomicBool = AtomicBool::new(false);
+    if STARTED.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        #[link(name = "user32")]
+        unsafe extern "system" {
+            fn GetAsyncKeyState(vkey: i32) -> i16;
+        }
+        #[repr(C)]
+        struct Pt { x: i32, y: i32 }
+        #[link(name = "user32")]
+        unsafe extern "system" {
+            fn GetCursorPos(p: *mut Pt) -> i32;
+        }
+        const VK_LBUTTON: i32 = 0x01;
+        let mut armed = false;
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(120));
+            let Some(win) = app.get_webview_window("deepseekball") else {
+                continue;
+            };
+            if !ball_passthrough() {
+                // 用户没开穿透 → 无需特殊处理，清掉可能残留的 armed
+                if armed {
+                    let _ = win.set_ignore_cursor_events(false);
+                    armed = false;
+                }
+                continue;
+            }
+            let down = unsafe { GetAsyncKeyState(VK_LBUTTON) } < 0;
+            let mut pt = Pt { x: 0, y: 0 };
+            let ok = unsafe { GetCursorPos(&mut pt) } != 0;
+            let mut inside = false;
+            if ok {
+                if let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) {
+                    // outer_position/outer_size 都是物理像素；球本体在窗口左上 46 逻辑像素处
+                    let scale = win.scale_factor().unwrap_or(1.0);
+                    let w = (BALL_SIZE * scale).round() as i32;
+                    let h = (BALL_SIZE * scale).round() as i32;
+                    let (x, y) = (pos.x, pos.y);
+                    inside = pt.x >= x - 6 && pt.x <= x + w + 6 && pt.y >= y - 6 && pt.y <= y + h + 6;
+                }
+            }
+            let want = down && inside;
+            if want != armed {
+                armed = want;
+                let _ = win.set_ignore_cursor_events(!want);
+                log::info!(
+                    "[ball] 拖放守卫：{}穿透（光标在球上且按住左键={}）",
+                    if want { "临时解除" } else { "恢复" },
+                    down
+                );
+            }
+        }
+    });
+}
+
 /// 球的展开形态：collapsed（46×46）/ hint（拖入提示）/ menu（格式菜单）
 pub fn set_ball_shape(app: &tauri::AppHandle, shape: &str) -> Result<(), String> {
     let win = app
@@ -433,6 +497,7 @@ pub fn ensure_deepseekball(app: &tauri::AppHandle) -> tauri::Result<tauri::Webvi
         // SC球要能接收"拖文件到球上"（Batch 2）：同样需要交还 WebView2 的外部拖放
         #[cfg(windows)]
         crate::webviewdrop::allow_external_drop(app, "deepseekball");
+        spawn_ball_drop_guard(app);
     }
     win
 }

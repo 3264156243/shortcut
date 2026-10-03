@@ -2373,19 +2373,32 @@ fn ball_passthrough_shortcut() -> String {
 
 /// 快捷键归一化：注册名与插件回传的 W3C code 名对齐（keyb → b、大写转小写）
 fn normalize_accel(acc: &str) -> String {
+    // 插件回传的是 W3C code 名（control+alt+keyb），配置里写的是 Ctrl+Alt+B：
+    // 修饰键也必须归一化，否则两边永远不相等（Ctrl+Alt+B 之前就是这么失效的）。
     let lower = acc.to_lowercase();
-    let parts: Vec<String> = lower
+    let mut parts: Vec<String> = lower
         .split('+')
         .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty())
         .map(|p| match p.as_str() {
-            "keyb" | "b" => "b".to_string(),
-            other if other.starts_with("key") && other.len() == 4 => other[3..].to_string(),
-            other => other.to_string(),
+            "ctrl" | "control" => "control".to_string(),
+            "win" | "meta" | "super" | "cmd" => "super".to_string(),
+            "option" => "alt".to_string(),
+            other => {
+                if let Some(rest) = other.strip_prefix("key") {
+                    if rest.len() == 1 { rest.to_string() } else { other.to_string() }
+                } else if let Some(rest) = other.strip_prefix("digit") {
+                    rest.to_string()
+                } else {
+                    other.to_string()
+                }
+            }
         })
         .collect();
+    parts.sort();
+    parts.dedup();
     parts.join("+")
 }
-
 pub fn run() {
     // 右键菜单/脚本的"直接执行"参数（--compress/--extract/--shellmenu-on/off）：
     // 在进 Tauri 之前同步干完并结束进程——不建窗口、不依赖正在运行的实例，
@@ -2474,7 +2487,7 @@ pub fn run() {
                             "alt+d" => start_region_capture(app),
                             "alt+e" => translate_current_selection(app),
                             // SC 球鼠标穿透切换（需求 5.2，默认 Ctrl+Alt+B）
-                            k if k == normalize_accel(&ball_passthrough_shortcut()) => {
+                            k if normalize_accel(k) == normalize_accel(&ball_passthrough_shortcut()) => {
                                 let next = !windows::ball_passthrough();
                                 windows::set_ball_passthrough(app, next);
                                 log::info!("[ball] 快捷键切换穿透 → {}", next);
