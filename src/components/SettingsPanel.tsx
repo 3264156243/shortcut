@@ -111,6 +111,22 @@ export default function SettingsPanel() {
   const [shellMenu, setShellMenu] = useState<{ available: boolean; enabled: boolean; format: string; formats?: string[] }>({ available: false, enabled: false, format: 'zip' });
   const [shellMenuBusy, setShellMenuBusy] = useState(false);
   const [shellMenuError, setShellMenuError] = useState('');
+  // SC 球鼠标穿透（可直接点，便于区分"快捷键没用"还是"功能没实现"）
+  const [ballThrough, setBallThrough] = useState(false);
+  const [ballShortcut, setBallShortcut] = useState('Ctrl+Alt+B');
+  useEffect(() => {
+    void window.electronAPI?.ballState?.().then((s) => {
+      if (!s) return;
+      setBallThrough(!!s.passthrough);
+      if (s.shortcut) setBallShortcut(s.shortcut);
+    });
+    return window.electronAPI?.onBallPassthrough?.((d) => setBallThrough(!!d?.on));
+  }, []);
+  const toggleBallThrough = async (on: boolean) => {
+    setBallThrough(on);
+    const res = await window.electronAPI?.ballPassthrough?.(on);
+    if (res && res.success === false) setBallThrough(!on);
+  };
   useEffect(() => {
     void window.electronAPI?.shellMenuState?.().then((s) => s && setShellMenu(s));
   }, []);
@@ -286,6 +302,26 @@ export default function SettingsPanel() {
                 )}
               </div>
             )}
+
+            {/* SC 球 */}
+            <div style={sectionStyle}>
+              <h3 className="text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>SC 球</h3>
+              <p className="mb-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                鼠标穿透 = 点击落在球下面的窗口上（不挡桌面操作）；开启后拖文件到球上时会自动临时解除。
+              </p>
+              <label className="flex items-center justify-between cursor-pointer">
+                <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>启用穿透</span>
+                <input
+                  type="checkbox"
+                  checked={ballThrough}
+                  onChange={(e) => void toggleBallThrough(e.target.checked)}
+                  className="w-4 h-4 accent-indigo-500"
+                />
+              </label>
+              <p className="mt-2 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                当前：{ballThrough ? '已穿透' : '未穿透（可点击球）'} · 快捷键 {ballShortcut}
+              </p>
+            </div>
 
             {/* Data */}
             <div style={sectionStyle}>
