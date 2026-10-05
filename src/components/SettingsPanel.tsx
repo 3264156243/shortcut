@@ -303,11 +303,13 @@ export default function SettingsPanel() {
               </div>
             )}
 
-            {/* SC 球 */}
+            {/* SC 球（岛） */}
             <div style={sectionStyle}>
               <h3 className="text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>SC 球</h3>
               <p className="mb-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                鼠标穿透 = 点击落在球下面的窗口上（不挡桌面操作）；开启后拖文件到球上时会自动临时解除。
+                SC 球 = 屏幕上显示余额/歌词/时间的岛。拖文件到岛上可直接转换（松手后出格式菜单）。
+                「启用穿透」= 点击落在岛下面的窗口上（不挡桌面操作）；旁边小球跟随同一状态。
+                不管是否开启穿透，拖文件到岛上都会自动临时解除穿透接收文件。
               </p>
               <label className="flex items-center justify-between cursor-pointer">
                 <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>启用穿透</span>
@@ -319,7 +321,7 @@ export default function SettingsPanel() {
                 />
               </label>
               <p className="mt-2 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
-                当前：{ballThrough ? '已穿透' : '未穿透（可点击球）'} · 快捷键 {ballShortcut}
+                当前：{ballThrough ? '已穿透（岛 + 旁边小球都不挡鼠标）' : '未穿透（收起态仍按岛的显示状态：收起穿透、展开可交互）'} · 快捷键 {ballShortcut}
               </p>
             </div>
 

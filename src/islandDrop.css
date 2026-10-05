@@ -1,0 +1,112 @@
+/* ── SC球（岛）拖放层：拖入高亮 / 吸附动画 / 格式菜单（Batch 2 从小球迁移到岛上） ──
+   岛窗口是 360×340 的透明窗，本层铺满整窗：默认不拦鼠标，只有菜单自身可点，
+   这样岛的胶囊/展开面板交互不受影响。 */
+
+.island-drop-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 40;
+}
+
+/* 穿透开启：可见提示（快捷键 Ctrl+Alt+B / 设置里切换都能一眼看到） */
+.island-drop-passthru {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  color: #9fb0ff;
+  background: rgba(22,24,30,.9);
+  border: 1px solid rgba(120,150,255,.5);
+  box-shadow: 0 6px 16px rgba(0,0,0,.35);
+  animation: island-drop-fade 160ms ease-out;
+}
+
+/* 拖入高亮：整窗描边（比原 46px 小球好瞄准得多） */
+.island-drop-outline {
+  position: absolute;
+  inset: 4px;
+  border-radius: 18px;
+  border: 2px dashed rgba(120,150,255,.85);
+  box-shadow: inset 0 0 26px rgba(109,140,255,.22);
+  animation: island-drop-pulse 900ms ease-in-out infinite;
+}
+@keyframes island-drop-pulse {
+  0%, 100% { opacity: .55; }
+  50% { opacity: 1; }
+}
+
+/* 拖入提示气泡 */
+.island-drop-hint {
+  position: absolute;
+  left: 50%;
+  top: 62px;
+  transform: translateX(-50%);
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  white-space: nowrap;
+  color: #e8eaf0;
+  background: rgba(24,26,32,.94);
+  border: 1px solid rgba(120,150,255,.75);
+  box-shadow: 0 6px 18px rgba(0,0,0,.4);
+  animation: island-drop-fade 160ms ease-out;
+}
+@keyframes island-drop-fade {
+  from { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* 松手吸附：岛身回弹一下再长出菜单 */
+.island-root.drop-suction .island-shell {
+  animation: island-drop-suction 460ms cubic-bezier(.22,1.2,.36,1);
+}
+@keyframes island-drop-suction {
+  0% { transform: scale(1.06); }
+  35% { transform: scale(.94); }
+  70% { transform: scale(1.03); }
+  100% { transform: scale(1); }
+}
+
+/* 格式菜单：岛窗口内展开（不改窗口尺寸，按 360×340 收边） */
+.island-drop-menu {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 64px;
+  max-height: 262px;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 10px 12px 12px;
+  border-radius: 14px;
+  background: rgba(22,24,30,.97);
+  border: 1px solid rgba(255,255,255,.14);
+  box-shadow: 0 12px 34px rgba(0,0,0,.5);
+  animation: ball-menu-in 240ms cubic-bezier(.22,1,.36,1);
+  pointer-events: auto;
+  cursor: default;
+}
+@keyframes ball-menu-in {
+  from { opacity: 0; transform: translateY(-8px) scale(.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.island-drop-menu::-webkit-scrollbar { width: 6px; }
+.island-drop-menu::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 3px; }
+
+.ball-menu-title { font-size: 12px; font-weight: 600; color: #e8eaf0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ball-menu-sub { margin-top: 2px; font-size: 11px; color: #8b90a0; }
+.ball-menu-grid { margin-top: 10px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.ball-menu-btn {
+  padding: 7px 6px; border-radius: 9px; font-size: 11.5px; text-align: center; cursor: pointer;
+  color: #c8ccd8; background: #23262e; border: 1px solid rgba(255,255,255,.12);
+  font-family: inherit; transition: all 130ms ease;
+}
+.ball-menu-btn:hover:not(:disabled) { color: #fff; border-color: rgba(120,150,255,.8); transform: translateY(-1px); }
+.ball-menu-btn:disabled { opacity: .45; cursor: default; }
+.ball-menu-btn.primary { grid-column: span 3; color: #e8eaf0; border-color: rgba(120,150,255,.8); background: rgba(109,140,255,.16); }
+.ball-menu-status { margin-top: 8px; font-size: 11.5px; color: #c8ccd8; word-break: break-all; }
+.ball-menu-foot { margin-top: 10px; display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #8b90a0; }
+.ball-menu-link { cursor: pointer; color: #7f9cff; }
+.ball-menu-link:hover { text-decoration: underline; }

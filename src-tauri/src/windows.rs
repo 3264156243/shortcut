@@ -125,11 +125,44 @@ pub fn island_bounds(app: &tauri::AppHandle, prefs: &Value) -> (f64, f64, f64, f
     (x, y, w, h)
 }
 
-/// 应用鼠标穿透：收起态穿透，展开态可交互（与 Electron applyIslandMousePassthrough 一致）
+/// 应用鼠标穿透（SC球=岛）：开关打开→恒定穿透；关闭→沿用原岛规则（收起态穿透、展开态可交互）；
+/// 拖放菜单打开期间强制不穿透（否则点不到菜单）。
 pub fn apply_passthrough(win: &tauri::WebviewWindow) {
+    let _ = win.set_ignore_cursor_events(effective_island_passthrough());
+}
+
+/// SC球（岛）当前是否穿透——唯一判定入口：快捷键 / 设置开关 / 拖放守卫 / 状态变化都走这里。
+/// 优先级：拖放菜单打开（不穿透）> 用户开关（穿透）> 岛自身显示状态（收起穿透、展开可交互）。
+/// 用"菜单打开"而不是硬编码 false，避免用户开关被别处覆盖。
+pub fn effective_island_passthrough() -> bool {
+    use std::sync::atomic::Ordering;
+    if ISLAND_MENU_OPEN.load(Ordering::Relaxed) {
+        return false;
+    }
+    if BALL_PASSTHROUGH.load(Ordering::Relaxed) {
+        return true;
+    }
     let prefs = island_prefs();
-    let expanded = prefs.get("displayState").and_then(|v| v.as_str()) == Some("expanded");
-    let _ = win.set_ignore_cursor_events(!expanded);
+    prefs.get("displayState").and_then(|v| v.as_str()) != Some("expanded")
+}
+
+/// 把穿透状态同时落到岛和旁边小球（小球跟随岛，不单独开关）
+pub fn apply_island_and_ball_passthrough(app: &tauri::AppHandle) {
+    use std::sync::atomic::Ordering;
+    let on = effective_island_passthrough();
+    if let Some(win) = app.get_webview_window("island") {
+        let _ = win.set_ignore_cursor_events(on);
+    }
+    if let Some(win) = app.get_webview_window("deepseekball") {
+        let _ = win.set_ignore_cursor_events(on);
+    }
+    log::info!(
+        "[island] 穿透生效 = {}（用户开关={} 菜单打开={} 显示态={:?}）",
+        on,
+        BALL_PASSTHROUGH.load(Ordering::Relaxed),
+        ISLAND_MENU_OPEN.load(Ordering::Relaxed),
+        island_prefs().get("displayState").cloned().unwrap_or(Value::Null)
+    );
 }
 
 /// 创建或唤起灵动岛窗口
@@ -140,7 +173,7 @@ pub fn ensure_island(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWind
     let prefs = island_prefs();
     let (x, y, w, h) = island_bounds(app, &prefs);
     log::info!("[island] 创建窗口: pos=({}, {}) size=({}, {}) state={:?}", x, y, w, h, prefs);
-    let win = match WebviewWindowBuilder::new(app, "island", WebviewUrl::App("island.html".into()))
+    let builder = WebviewWindowBuilder::new(app, "island", WebviewUrl::App("island.html".into()))
         .title("ShortCut Island")
         .decorations(false)
         .transparent(true)
@@ -152,8 +185,13 @@ pub fn ensure_island(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWind
         .visible(false)
         .position(x, y)
         .inner_size(w, h)
-        .initialization_script(crate::SHIM_JS)
-        .build()
+        .initialization_script(crate::SHIM_JS);
+    // 拖放必须显式开启：wry 只在拿到 drag-drop handler 时才交还 WebView2 的外部拖放，
+    // 而 tauri.conf.json 的 dragDropEnabled 只作用于配置里声明的窗口（本项目全部动态创建）。
+    // Batch 2 迁移：拖放接收方从"旁边小球"改到 SC球（岛）本体。
+    #[cfg(windows)]
+    let builder = builder.drag_and_drop(true);
+    let win = match builder.build()
     {
         Ok(w) => w,
         Err(e) => {
@@ -161,14 +199,47 @@ pub fn ensure_island(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWind
             return Err(e);
         }
     };
+    attach_island_drop_handler(&win, app);
     let _ = win.set_focusable(false);
     let _ = win.set_always_on_top(true);
+    restore_passthrough_from_config();
     apply_passthrough(&win);
+    #[cfg(windows)]
+    crate::webviewdrop::allow_external_drop(app, "island");
+    spawn_island_drop_guard(app);
     // 逻辑坐标定位（与 Electron DIP 一致，DPI 缩放下位置记忆兼容）
     let _ = win.set_position(tauri::LogicalPosition::new(x, y));
     show_inactive(&win); // 对齐 Electron islandWindow.showInactive()
     log::info!("[island] 已显示");
     Ok(win)
+}
+
+/// SC球（岛）拖放事件 → 岛前端：拖入高亮 / 松手吸附动画 + 格式菜单。
+/// 事件名沿用 ball:* （前端 onBallDragover/onBallDrop 别名已就绪），避免大范围改名。
+fn attach_island_drop_handler(win: &tauri::WebviewWindow, app: &tauri::AppHandle) {
+    let app_ev = app.clone();
+    win.on_window_event(move |event| {
+        if let tauri::WindowEvent::DragDrop(ev) = event {
+            match ev {
+                tauri::DragDropEvent::Enter { paths, .. } => {
+                    let list: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+                    log::info!("[island] 拖入 {} 个文件", list.len());
+                    let _ = app_ev.emit("ball:dragover", serde_json::json!({ "active": true, "paths": list }));
+                }
+                tauri::DragDropEvent::Over { .. } => {}
+                tauri::DragDropEvent::Leave => {
+                    let _ = app_ev.emit("ball:dragover", serde_json::json!({ "active": false }));
+                }
+                tauri::DragDropEvent::Drop { paths, .. } => {
+                    let list: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+                    log::info!("[island] 球上松手，文件数={}", list.len());
+                    let _ = app_ev.emit("ball:dragover", serde_json::json!({ "active": false }));
+                    let _ = app_ev.emit("ball:drop", serde_json::json!({ "paths": list }));
+                }
+                _ => {}
+            }
+        }
+    });
 }
 
 /// Alt+I / 前端 toggleIsland：存在则切换可见性，否则创建
@@ -256,37 +327,10 @@ fn build_overlay(
     // 不开启时 Windows 找不到 drop 接收者 → 拖文件显示禁止光标（P3 拖放失效的根因）。
     #[cfg(windows)]
     let builder = builder.drag_and_drop(true);
-    let label = id.to_string();
-    let app_ev = app.clone();
     let win = builder
         .initialization_script(crate::SHIM_JS)
         .build()?;
-    // SC 球拖放：拖入 → 高亮提示；松手 → 交给球前端弹格式菜单
-    // （on_window_event 是 WebviewWindow 上的方法，不是 builder 的）
-    if label == "deepseekball" {
-        win.on_window_event(move |event| {
-            if let tauri::WindowEvent::DragDrop(ev) = event {
-                match ev {
-                    tauri::DragDropEvent::Enter { paths, .. } => {
-                        let list: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
-                        log::info!("[ball] 拖入 {} 个文件", list.len());
-                        let _ = app_ev.emit("ball:dragover", serde_json::json!({ "active": true, "paths": list }));
-                    }
-                    tauri::DragDropEvent::Over { .. } => {}
-                    tauri::DragDropEvent::Leave => {
-                        let _ = app_ev.emit("ball:dragover", serde_json::json!({ "active": false }));
-                    }
-                    tauri::DragDropEvent::Drop { paths, .. } => {
-                        let list: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
-                        log::info!("[ball] 球上松手，文件数={}", list.len());
-                        let _ = app_ev.emit("ball:dragover", serde_json::json!({ "active": false }));
-                        let _ = app_ev.emit("ball:drop", serde_json::json!({ "paths": list }));
-                    }
-                    _ => {}
-                }
-            }
-        });
-    }
+    // Batch 2 迁移：拖放/高亮/格式菜单改由 SC球（岛）承载，旁边小球不再单独接拖放事件。
     let _ = win.set_focusable(focusable);
     let _ = win.set_always_on_top(true);
     Ok(win)
@@ -322,28 +366,34 @@ pub fn destroy_tasklist(app: &tauri::AppHandle) {
     }
 }
 
-/// SC 球展开菜单（拖入/松手后）：保持球视觉位置不动，向右下生长；越界则向左上生长
+/// 旁边小球尺寸（46×46，贴岛右侧；不接拖放，只跟随岛的穿透状态）
 pub const BALL_SIZE: f64 = 46.0;
-pub const BALL_HINT_W: f64 = 190.0;
-pub const BALL_HINT_H: f64 = 64.0;
-pub const BALL_MENU_W: f64 = 310.0;
-pub const BALL_MENU_H: f64 = 380.0;
 
-/// 球的鼠标穿透开关（true=穿透，点击落到下层）。用静态变量记住状态：
+/// SC球（岛）鼠标穿透开关（true=穿透，点击落到下层）。用静态变量记住状态：
 /// Tauri 没有 ignore_cursor_events 的 getter，同时写进配置以便重启后保持。
 static BALL_PASSTHROUGH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// 拖放菜单是否打开（打开期间强制不穿透，保证菜单可点）
+static ISLAND_MENU_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// 读取球穿透状态
+/// 读取用户设定的穿透开关（SC球=岛；旁边小球跟随）
 pub fn ball_passthrough() -> bool {
     BALL_PASSTHROUGH.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-/// 设置球穿透（on=true 时球不接收鼠标/拖放）
+/// 从配置恢复穿透开关（island.ballClickThrough；旧版本也写这个键）
+pub fn restore_passthrough_from_config() {
+    let through = config::read_config_value()
+        .and_then(|c| c.get("island").and_then(|i| i.get("ballClickThrough")).and_then(|v| v.as_bool()))
+        .unwrap_or(false);
+    BALL_PASSTHROUGH.store(through, std::sync::atomic::Ordering::Relaxed);
+    log::info!("[island] 从配置恢复穿透开关 = {}", through);
+}
+
+/// 【SC球（岛）鼠标穿透】on=true 岛不接收鼠标；关闭时回到"收起穿透/展开可交互"。
+/// 旁边小球跟随同一状态（不单独开关）。
 pub fn set_ball_passthrough(app: &tauri::AppHandle, on: bool) {
     BALL_PASSTHROUGH.store(on, std::sync::atomic::Ordering::Relaxed);
-    if let Some(win) = app.get_webview_window("deepseekball") {
-        let _ = win.set_ignore_cursor_events(on);
-    }
+    apply_island_and_ball_passthrough(app);
     // 落盘（重启后保持一致）
     if let Some(mut cfg) = config::read_config_value() {
         if let Some(island) = cfg.get_mut("island").and_then(|i| i.as_object_mut()) {
@@ -352,13 +402,33 @@ pub fn set_ball_passthrough(app: &tauri::AppHandle, on: bool) {
         config::write_config(&serde_json::to_string(&cfg).unwrap_or_default());
     }
     let _ = app.emit("ball:passthrough", serde_json::json!({ "on": on }));
-    log::info!("[ball] 鼠标穿透 = {}", on);
+    // 回读 Windows 实际状态（排查"设置里点了没变化"：是没调进去，还是调了没生效）
+    #[cfg(windows)]
+    {
+        #[link(name = "user32")]
+        unsafe extern "system" {
+            fn GetWindowLongW(hwnd: *mut std::ffi::c_void, index: i32) -> i32;
+        }
+        for label in ["island", "deepseekball"] {
+            if let Some(win) = app.get_webview_window(label) {
+                if let Ok(h) = win.hwnd() {
+                    let ex = unsafe { GetWindowLongW(h.0 as *mut std::ffi::c_void, -20) };
+                    log::info!(
+                        "[island] {} 鼠标穿透：请求={} 实际可穿透={} ex=0x{:X}",
+                        label, on, ex & 0x20 != 0, ex
+                    );
+                }
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    log::info!("[island] 鼠标穿透 = {}", on);
 }
 
-/// 拖放守卫：Windows 命中测试会整体跳过"穿透"窗口，所以穿透开着时文件拖到球上收不到。
-/// 这里用轻量轮询：光标进入球的范围且左键按住（= 正在拖东西）→ 临时解除穿透让拖放落下来；
+/// 拖放守卫：Windows 命中测试会整体跳过"穿透"窗口，所以穿透开着时文件拖到 SC球（岛）上收不到。
+/// 这里用轻量轮询：光标进入岛的窗口范围且左键按住（= 正在拖东西）→ 临时解除穿透让拖放落下来；
 /// 松手或移开 → 恢复用户设定的穿透状态。这样"文件拖放"就不受穿透开关影响了。
-pub fn spawn_ball_drop_guard(app: &tauri::AppHandle) {
+pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
     use std::sync::atomic::{AtomicBool, Ordering};
     static STARTED: AtomicBool = AtomicBool::new(false);
     if STARTED.swap(true, Ordering::Relaxed) {
@@ -380,14 +450,14 @@ pub fn spawn_ball_drop_guard(app: &tauri::AppHandle) {
         let mut armed = false;
         loop {
             std::thread::sleep(std::time::Duration::from_millis(120));
-            let Some(win) = app.get_webview_window("deepseekball") else {
+            let Some(win) = app.get_webview_window("island") else {
                 continue;
             };
-            if !ball_passthrough() {
-                // 用户没开穿透 → 无需特殊处理，清掉可能残留的 armed
+            // 只在"当前确实穿透"时才需要守卫；菜单打开/非穿透时清掉残留
+            if !effective_island_passthrough() {
                 if armed {
-                    let _ = win.set_ignore_cursor_events(false);
                     armed = false;
+                    apply_island_and_ball_passthrough(&app);
                 }
                 continue;
             }
@@ -397,20 +467,25 @@ pub fn spawn_ball_drop_guard(app: &tauri::AppHandle) {
             let mut inside = false;
             if ok {
                 if let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) {
-                    // outer_position/outer_size 都是物理像素；球本体在窗口左上 46 逻辑像素处
-                    let scale = win.scale_factor().unwrap_or(1.0);
-                    let w = (BALL_SIZE * scale).round() as i32;
-                    let h = (BALL_SIZE * scale).round() as i32;
-                    let (x, y) = (pos.x, pos.y);
-                    inside = pt.x >= x - 6 && pt.x <= x + w + 6 && pt.y >= y - 6 && pt.y <= y + h + 6;
+                    // outer_position/outer_size 都是物理像素；岛整窗就是拖放落点（远大于原来的 46px 小球）
+                    let (x0, y0) = (pos.x, pos.y);
+                    let (x1, y1) = (x0 + size.width as i32, y0 + size.height as i32);
+                    inside = pt.x >= x0 && pt.x <= x1 && pt.y >= y0 && pt.y <= y1;
                 }
             }
             let want = down && inside;
             if want != armed {
                 armed = want;
-                let _ = win.set_ignore_cursor_events(!want);
+                if want {
+                    let _ = win.set_ignore_cursor_events(false);
+                    if let Some(ball) = app.get_webview_window("deepseekball") {
+                        let _ = ball.set_ignore_cursor_events(false);
+                    }
+                } else {
+                    apply_island_and_ball_passthrough(&app);
+                }
                 log::info!(
-                    "[ball] 拖放守卫：{}穿透（光标在球上且按住左键={}）",
+                    "[island] 拖放守卫：{}穿透（光标在岛上且按住左键={}）",
                     if want { "临时解除" } else { "恢复" },
                     down
                 );
@@ -419,85 +494,33 @@ pub fn spawn_ball_drop_guard(app: &tauri::AppHandle) {
     });
 }
 
-/// 球的展开形态：collapsed（46×46）/ hint（拖入提示）/ menu（格式菜单）
+/// SC球（岛）拖放形态：collapsed（常态）/ hint（拖入提示）/ menu（格式菜单）。
+/// 迁移后菜单在岛自己的 360×340 透明窗内渲染（不再改窗口尺寸），这里只负责
+/// "菜单/提示打开期间一定可交互"，避免穿透把菜单点击吃掉。
 pub fn set_ball_shape(app: &tauri::AppHandle, shape: &str) -> Result<(), String> {
-    let win = app
-        .get_webview_window("deepseekball")
-        .ok_or_else(|| "SC球窗口不存在".to_string())?;
-    let (tw, th) = match shape {
-        "menu" => (BALL_MENU_W, BALL_MENU_H),
-        "hint" => (BALL_HINT_W, BALL_HINT_H),
-        _ => (BALL_SIZE, BALL_SIZE),
-    };
-    // 收起态锚点：岛右侧偏下（与 Electron deepseekBallBounds 一致）
-    let (ax, ay, _, _) = island_anchor(app);
-    let ball_x = ax + island_width(app) + 8.0;
-    let ball_y = ay + 8.0;
-
-    // 生长方向：默认向右下；越界则贴边（保证菜单完整可见）
-    let (mon_w, mon_h) = primary_monitor_size(app).unwrap_or((1920.0, 1080.0));
-    let mut x = ball_x;
-    let mut y = ball_y;
-    if x + tw > mon_w - 8.0 {
-        x = (ball_x + BALL_SIZE - tw).max(8.0);
+    use std::sync::atomic::Ordering;
+    if app.get_webview_window("island").is_none() {
+        return Err("SC球（岛）窗口不存在".to_string());
     }
-    if y + th > mon_h - 8.0 {
-        y = (ball_y + BALL_SIZE - th).max(8.0);
-    }
-    win.set_size(tauri::LogicalSize::new(tw, th))
-        .map_err(|e| format!("改尺寸失败: {e}"))?;
-    win.set_position(tauri::LogicalPosition::new(x, y))
-        .map_err(|e| format!("改位置失败: {e}"))?;
-    // 展开时一定可交互（穿透开着就点不动菜单）
-    if shape != "collapsed" {
-        let _ = win.set_ignore_cursor_events(false);
-    } else if ball_passthrough() {
-        let _ = win.set_ignore_cursor_events(true);
-    }
-    log::info!("[ball] 形态={} 尺寸={}x{} 位置=({:.0},{:.0})", shape, tw, th, x, y);
+    ISLAND_MENU_OPEN.store(shape != "collapsed", Ordering::Relaxed);
+    apply_island_and_ball_passthrough(app);
+    log::info!("[island] 拖放形态={}（菜单打开={}）", shape, shape != "collapsed");
     Ok(())
 }
 
-/// 岛当前宽度（球贴岛右侧用）
-fn island_width(app: &tauri::AppHandle) -> f64 {
-    if let Some(win) = app.get_webview_window("island") {
-        if let Ok(size) = win.outer_size() {
-            let scale = win.scale_factor().unwrap_or(1.0);
-            return size.width as f64 / scale;
-        }
-    }
-    180.0
-}
-
-/// 主显示器逻辑尺寸
-fn primary_monitor_size(app: &tauri::AppHandle) -> Option<(f64, f64)> {
-    let win = app.get_webview_window("deepseekball")?;
-    let mon = win.current_monitor().ok().flatten()?;
-    let scale = mon.scale_factor();
-    Some((mon.size().width as f64 / scale, mon.size().height as f64 / scale))
-}
-
-/// SC球（46×46，岛右侧偏下；位置随岛）
+/// 旁边小球（46×46，岛右侧偏下；位置随岛、穿透随岛，不接拖放）
 pub fn ensure_deepseekball(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> {
     if let Some(win) = app.get_webview_window("deepseekball") {
         position_deepseekball(app);
         return Ok(win);
-    }    let (ix, iy, iw, _) = island_anchor(app);
+    }
+    let (ix, iy, iw, _) = island_anchor(app);
     let win = build_overlay(app, "deepseekball", "deepseekball.html", ix + iw + 8.0, iy + 8.0, BALL_SIZE, BALL_SIZE, false);
     if let Ok(ref w) = win {
         show_inactive(w); // 对齐 Electron deepseekBallWindow.showInactive()
-        // 恢复配置里的穿透状态
-        let through = config::read_config_value()
-            .and_then(|c| c.get("island").and_then(|i| i.get("ballClickThrough")).and_then(|v| v.as_bool()))
-            .unwrap_or(false);
-        BALL_PASSTHROUGH.store(through, std::sync::atomic::Ordering::Relaxed);
-        if through {
-            let _ = w.set_ignore_cursor_events(true);
-        }
-        // SC球要能接收"拖文件到球上"（Batch 2）：同样需要交还 WebView2 的外部拖放
-        #[cfg(windows)]
-        crate::webviewdrop::allow_external_drop(app, "deepseekball");
-        spawn_ball_drop_guard(app);
+        // Batch 2 迁移：小球不再是拖放接收方，穿透状态完全跟随 SC球（岛）
+        restore_passthrough_from_config();
+        apply_island_and_ball_passthrough(app);
     }
     win
 }

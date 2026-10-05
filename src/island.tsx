@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Music, Pause, Play, SkipBack, SkipForward } from 'lucide-react';
 import './island.css';
+import IslandDrop from './IslandDrop';
 import type { BalanceData, BalanceProvider, CockpitData, IslandDisplayState, MusicState } from './types';
 
 type IslandStyle = 'capsule' | 'glass' | 'paper';
@@ -370,6 +371,8 @@ function IslandApp() {
       className={rootClass}
       data-position={state.position}
     >
+      {/* Batch 2：拖放层（拖入高亮 / 松手吸附 / 格式菜单），从旁边小球迁移到岛上 */}
+      <IslandDrop />
       {arrival && showMusic && state.displayState === 'collapsed' && state.orbitGlow ? <div className="island-drop-ball" /> : null}
       {showMusic && state.displayState === 'collapsed' && state.orbitGlow ? (
         <div className="island-orbit">

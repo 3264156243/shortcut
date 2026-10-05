@@ -652,7 +652,8 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
                         windows::position_deepseekball(&app);
                     }
                     let _ = win.show();
-                    windows::apply_passthrough(&win);
+                    // 显示态变化（collapsed/mini/expanded）→ 重算穿透，旁边小球跟随（Batch 2 迁移）
+                    windows::apply_island_and_ball_passthrough(&app);
                 }
                 // ── 板块级响应 ──
                 // 任务板块关闭 → 销毁任务墙 + 全部提醒窗（Electron islandTasksOk=false 分支）

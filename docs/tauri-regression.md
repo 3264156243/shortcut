@@ -100,3 +100,26 @@
 4. 拖动前用 `WindowFromPoint` 校验"文件项属于源窗口、落点属于目标窗口"。
 5. **权限/完整性级别**：Explorer 是 Medium；若应用以 High（管理员）运行，UIPI 会直接阻断拖放。
    验证必须在与用户一致的 **Medium** 下进行（用 `explorer.exe <exe>` 从管理员会话里降权启动）。
+
+## 十四、Batch 2 迁移：拖放/穿透从"旁边小球"搬到 SC球（岛）（2026-10-02）
+> 术语（不要再混）：**SC球 = `island` 窗口**（360×340，显示余额/歌词/时间/驾驶舱）；`deepseekball`（46×46）是**旁边的小球**，不是拖放目标。
+
+### 14.1 迁移内容
+- 拖放接收方：`island` 窗口（`windows.rs::ensure_island` 里 `drag_and_drop(true)` + `attach_island_drop_handler` +
+  `webviewdrop::allow_external_drop(app,"island")`），事件名沿用 `ball:dragover` / `ball:drop`（前端别名 `onBallDragover/onBallDrop` 不变）。
+- 前端：新增 `src/IslandDrop.tsx` + `src/islandDrop.css`，在 `island.tsx` 根节点内渲染 —— 整窗虚线高亮、提示气泡、
+  松手吸附（给 `.island-root` 加 `drop-suction` 类）、格式菜单（**不改窗口尺寸**，在岛窗口 360×340 内展开，超出可滚动）。
+- 旁边小球：不再接拖放、不再有独立穿透开关；位置仍跟随岛，**穿透状态跟随岛**（`apply_island_and_ball_passthrough`）。
+- 设置项：「启用穿透」位于 **SC 球** 板块（`SettingsPanel.tsx`），与快捷键 `Ctrl+Alt+B`（`island.ballPassthroughShortcut`）等价，
+  两处都会调 `set_ball_passthrough` → 落盘 `island.ballClickThrough`。
+
+### 14.2 穿透判定（唯一入口 `effective_island_passthrough()`）
+优先级：**拖放菜单打开（不穿透，否则菜单点不动）** > **用户开关打开（恒定穿透）** > **岛自身显示态（收起穿透、展开可交互）**。
+即：开关关闭时不改变岛原有行为（默认收起态仍穿透），打开时"连展开态也穿透" → 开关一定看得见差别
+（日志 `[island] 穿透生效 = ...`，以及岛右上角「穿透中 · Ctrl+Alt+B」提示）。
+
+### 14.3 穿透 ⇒ 收不到拖放（守卫）
+Windows 命中测试会整体跳过 `WS_EX_TRANSPARENT` 窗口，所以穿透态下拖到岛上不会有任何事件。
+`spawn_island_drop_guard` 用 120ms 轮询：**左键按住 + 光标在岛窗口矩形内** → 临时解除穿透，松手/移开 → 按
+`effective_island_passthrough()` 恢复。落点判定按**整窗矩形**（物理像素 `outer_position/outer_size`），
+比原来 46px 小球宽容得多。
