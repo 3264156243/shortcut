@@ -125,6 +125,41 @@ pub fn island_bounds(app: &tauri::AppHandle, prefs: &Value) -> (f64, f64, f64, f
     (x, y, w, h)
 }
 
+/// 上一次真正下发的穿透值（-1 = 尚未下发）。
+///
+/// 为什么必须缓存：Tauri 的 `set_ignore_cursor_events` 会 `SetWindowPos(..., SWP_FRAMECHANGED)`。
+/// 在**拖拽进行中**重复下发同一个值，会让 Windows 重新做一次拖放命中测试，
+/// 岛会收到一次 Leave、OLE 目标被丢掉 → 松手时 drop 落到岛下面的窗口上，
+/// 表现就是「出现了松手自动识别，但松手之后没有任何反应」（实测日志里永远只有"拖入"、没有"球上松手"）。
+static PASSTHROUGH_APPLIED: std::sync::atomic::AtomicI8 = std::sync::atomic::AtomicI8::new(-1);
+
+/// 拖拽活跃截止时刻（毫秒时间戳，0 = 无拖拽）。
+/// 岛收到 Enter/Leave 都会往后顺延，保证「拖拽期间（含刚 Leave 的短暂瞬间）岛一定可交互」，
+/// 这样即使 Windows 抖了一次 Leave，松手仍然落在岛上，能收到 drop。
+static DRAG_ACTIVE_UNTIL_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// 标记"拖拽活跃"，往后顺延 `ms` 毫秒
+pub fn mark_drag_active(ms: u64) {
+    DRAG_ACTIVE_UNTIL_MS.store(now_ms().saturating_add(ms), std::sync::atomic::Ordering::Relaxed);
+}
+
+/// 立即结束拖拽活跃标记
+pub fn clear_drag_active() {
+    DRAG_ACTIVE_UNTIL_MS.store(0, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn drag_active() -> bool {
+    let until = DRAG_ACTIVE_UNTIL_MS.load(std::sync::atomic::Ordering::Relaxed);
+    until > 0 && now_ms() < until
+}
+
 /// 应用鼠标穿透（SC球=岛）：开关打开→恒定穿透；关闭→沿用原岛规则（收起态穿透、展开态可交互）；
 /// 拖放菜单打开期间强制不穿透（否则点不到菜单）。
 pub fn apply_passthrough(win: &tauri::WebviewWindow) {
@@ -132,10 +167,13 @@ pub fn apply_passthrough(win: &tauri::WebviewWindow) {
 }
 
 /// SC球（岛）当前是否穿透——唯一判定入口：快捷键 / 设置开关 / 拖放守卫 / 状态变化都走这里。
-/// 优先级：拖放菜单打开（不穿透）> 用户开关（穿透）> 岛自身显示状态（收起穿透、展开可交互）。
+/// 优先级：拖拽进行中（不穿透）> 拖放菜单打开（不穿透）> 用户开关（穿透）> 岛自身显示状态。
 /// 用"菜单打开"而不是硬编码 false，避免用户开关被别处覆盖。
 pub fn effective_island_passthrough() -> bool {
     use std::sync::atomic::Ordering;
+    if drag_active() {
+        return false;
+    }
     if ISLAND_MENU_OPEN.load(Ordering::Relaxed) {
         return false;
     }
@@ -148,8 +186,23 @@ pub fn effective_island_passthrough() -> bool {
 
 /// 把穿透状态同时落到岛和旁边小球（小球跟随岛，不单独开关）
 pub fn apply_island_and_ball_passthrough(app: &tauri::AppHandle) {
+    apply_island_and_ball_passthrough_value(app, effective_island_passthrough(), false);
+}
+
+/// 让缓存失效：窗口刚创建/重建、或外部改过样式之后必须调用一次
+pub fn reset_passthrough_cache() {
+    PASSTHROUGH_APPLIED.store(-1, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// 下发穿透；`force=false` 时值没变就不碰窗口样式（见 [`PASSTHROUGH_APPLIED`] 的说明）
+pub fn apply_island_and_ball_passthrough_value(app: &tauri::AppHandle, on: bool, force: bool) {
     use std::sync::atomic::Ordering;
-    let on = effective_island_passthrough();
+    let want: i8 = if on { 1 } else { 0 };
+    let prev = PASSTHROUGH_APPLIED.load(Ordering::Relaxed);
+    if !force && prev == want {
+        return; // 值没变：绝不再调 set_ignore_cursor_events，避免拖拽中途扰动 OLE 目标
+    }
+    PASSTHROUGH_APPLIED.store(want, Ordering::Relaxed);
     if let Some(win) = app.get_webview_window("island") {
         let _ = win.set_ignore_cursor_events(on);
     }
@@ -157,10 +210,11 @@ pub fn apply_island_and_ball_passthrough(app: &tauri::AppHandle) {
         let _ = win.set_ignore_cursor_events(on);
     }
     log::info!(
-        "[island] 穿透生效 = {}（用户开关={} 菜单打开={} 显示态={:?}）",
+        "[island] 穿透生效 = {}（用户开关={} 菜单打开={} 拖拽活跃={} 显示态={:?}）",
         on,
         BALL_PASSTHROUGH.load(Ordering::Relaxed),
         ISLAND_MENU_OPEN.load(Ordering::Relaxed),
+        drag_active(),
         island_prefs().get("displayState").cloned().unwrap_or(Value::Null)
     );
 }
@@ -203,7 +257,9 @@ pub fn ensure_island(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWind
     let _ = win.set_focusable(false);
     let _ = win.set_always_on_top(true);
     restore_passthrough_from_config();
-    apply_passthrough(&win);
+    // 新窗口刚建出来，缓存必须失效，否则"值没变"会让我们跳过真正需要的下发
+    reset_passthrough_cache();
+    apply_island_and_ball_passthrough(app);
     #[cfg(windows)]
     crate::webviewdrop::allow_external_drop(app, "island");
     spawn_island_drop_guard(app);
@@ -224,15 +280,25 @@ fn attach_island_drop_handler(win: &tauri::WebviewWindow, app: &tauri::AppHandle
                 tauri::DragDropEvent::Enter { paths, .. } => {
                     let list: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
                     log::info!("[island] 拖入 {} 个文件", list.len());
+                    // 拖拽期间岛必须保持可交互（否则松手时 drop 会落到岛下面的窗口上）
+                    mark_drag_active(3000);
+                    apply_island_and_ball_passthrough(&app_ev);
                     let _ = app_ev.emit("ball:dragover", serde_json::json!({ "active": true, "paths": list }));
                 }
-                tauri::DragDropEvent::Over { .. } => {}
+                tauri::DragDropEvent::Over { .. } => {
+                    mark_drag_active(3000); // 拖拽持续中，不断续期
+                }
                 tauri::DragDropEvent::Leave => {
+                    // Leave 可能是 Windows 抖出来的（窗口样式/命中测试扰动），
+                    // 所以这里不立刻恢复穿透：留 1.5s 宽限，松手仍能落在岛上收到 drop。
+                    mark_drag_active(1500);
                     let _ = app_ev.emit("ball:dragover", serde_json::json!({ "active": false }));
                 }
                 tauri::DragDropEvent::Drop { paths, .. } => {
                     let list: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
                     log::info!("[island] 球上松手，文件数={}", list.len());
+                    // 松手后交给前端「识别态」维持可交互（menu 形态），这里结束拖拽活跃标记
+                    clear_drag_active();
                     let _ = app_ev.emit("ball:dragover", serde_json::json!({ "active": false }));
                     let _ = app_ev.emit("ball:drop", serde_json::json!({ "paths": list }));
                 }
@@ -480,6 +546,9 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
             }
             let now = std::time::Instant::now();
             let want = if down && inside {
+                // 左键按住且光标在岛上：这次一定是拖放，岛必须保持可交互。
+                // 顺带续期"拖拽活跃"，这样即使拖放事件中途抖没了，松手那一刻岛也是可交互的。
+                mark_drag_active(1000);
                 release_until = None;
                 true
             } else if armed {
@@ -501,10 +570,8 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
             if want != armed {
                 armed = want;
                 if want {
-                    let _ = win.set_ignore_cursor_events(false);
-                    if let Some(ball) = app.get_webview_window("deepseekball") {
-                        let _ = ball.set_ignore_cursor_events(false);
-                    }
+                    // 走带缓存的下发路径：值已是 false 时不会再碰窗口样式（关键，别改回 set_ignore_cursor_events）
+                    apply_island_and_ball_passthrough_value(&app, false, false);
                 } else {
                     apply_island_and_ball_passthrough(&app);
                 }
@@ -544,6 +611,7 @@ pub fn ensure_deepseekball(app: &tauri::AppHandle) -> tauri::Result<tauri::Webvi
         show_inactive(w); // 对齐 Electron deepseekBallWindow.showInactive()
         // Batch 2 迁移：小球不再是拖放接收方，穿透状态完全跟随 SC球（岛）
         restore_passthrough_from_config();
+        reset_passthrough_cache(); // 小球是新窗口，缓存失效后必须真正下发一次
         apply_island_and_ball_passthrough(app);
     }
     win
