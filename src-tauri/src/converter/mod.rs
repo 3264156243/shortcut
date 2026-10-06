@@ -9,6 +9,8 @@ pub mod image;
 
 use serde::Serialize;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
 use uuid_like::new_id;
 
@@ -20,6 +22,98 @@ struct ProgressPayload<'a> {
     id: &'a str,
     pct: u8,
     note: &'a str,
+}
+
+/// 真实进度上报器：只发 `converter:progress`，不做任何"假进度"定时器。
+///
+/// - `set` 只在 pct 比上次**更大**时发事件（天然单调，避免重复/回退事件）；
+/// - 结束时的 `100/完成` 由 [`spawn_job`] 在任务真正成功返回后补发，
+///   因此挂起/失败的任务不会出现"冲到 100 却还在跑"的假象；
+/// - `Progress::noop()` 用于不需要上报的调用方（右键菜单直执、测试）。
+pub struct Progress {
+    app: Option<AppHandle>,
+    id: String,
+    /// 已发出的最大 pct（0 = 还没发过）
+    last: AtomicU8,
+    /// 测试/诊断用：把上报过的 (pct, note) 记在内存里（生产路径为 None）
+    recorder: Option<Arc<Mutex<Vec<(u8, String)>>>>,
+}
+
+impl Progress {
+    /// 绑定到某个任务的进度上报器
+    pub fn new(app: AppHandle, id: &str) -> Self {
+        Self {
+            app: Some(app),
+            id: id.to_string(),
+            last: AtomicU8::new(0),
+            recorder: None,
+        }
+    }
+
+    /// 空上报器：不持有 AppHandle，调用 set 无副作用
+    pub fn noop() -> Self {
+        Self {
+            app: None,
+            id: String::new(),
+            last: AtomicU8::new(0),
+            recorder: None,
+        }
+    }
+
+    /// 测试用：不发事件，把每个上报点记在内存里，供断言"进度是否跟着真实条目走"
+    #[cfg(test)]
+    pub fn recorder() -> (Self, Arc<Mutex<Vec<(u8, String)>>>) {
+        let log = Arc::new(Mutex::new(Vec::new()));
+        (
+            Self {
+                app: None,
+                id: String::new(),
+                last: AtomicU8::new(0),
+                recorder: Some(log.clone()),
+            },
+            log,
+        )
+    }
+
+    /// 上报一个进度点（pct 0~100，note 为当前真实阶段/条目名）
+    pub fn set(&self, pct: u8, note: &str) {
+        let pct = pct.min(100);
+        let last = self.last.load(Ordering::Relaxed);
+        if pct <= last {
+            return; // 不允许回退，也不重复发同一档
+        }
+        self.last.store(pct, Ordering::Relaxed);
+        if let Some(rec) = &self.recorder {
+            if let Ok(mut v) = rec.lock() {
+                v.push((pct, note.to_string()));
+            }
+        }
+        if let Some(app) = &self.app {
+            let _ = app.emit(
+                "converter:progress",
+                ProgressPayload {
+                    id: &self.id,
+                    pct,
+                    note,
+                },
+            );
+        }
+    }
+}
+
+/// 「已处理 i 个 / 总数 n（n=0 表示流式读取未知总数）」映射到 progress 区间 [from, to]。
+///
+/// 未知总数时退化为按已处理条目数递增的估算（步长由 `MAX_UNKNOWN_STEP` 封顶，
+/// 保证不会长时间卡死在一个百分比上）；总数已知时按比例映射。
+fn scaled_pct(done: usize, total: usize, from: u8, to: u8) -> u8 {
+    /// 未知总数时每个条目推进的百分比上限
+    const MAX_UNKNOWN_STEP: usize = 2;
+    let pct = if total == 0 {
+        from as usize + done * MAX_UNKNOWN_STEP
+    } else {
+        from as usize + done.saturating_mul(to.saturating_sub(from) as usize) / total
+    };
+    pct.min(to as usize) as u8
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -67,15 +161,21 @@ fn out_file_for(src: &std::path::Path, target_ext: &str, out_dir: Option<&str>) 
 }
 
 
-/// 统一异步执行 + 事件 + 历史（convert / extract / compress 共用）
+/// 统一异步执行 + 进度 + 事件 + 历史（convert / extract / compress 共用）
+///
+/// `job` 拿到 [`Progress`] 后在**各自真实阶段**上报；任务成功返回后这里补发
+/// `100/完成`——即"干完立刻到 100"，不依赖任何估算/动画。
 fn spawn_job<F>(app: AppHandle, id: String, action: &'static str, src: String, job: F)
 where
-    F: FnOnce() -> Result<(String, String, usize), String> + Send + 'static,
+    F: FnOnce(&Progress) -> Result<(String, String, usize), String> + Send + 'static,
 {
+    let progress = Progress::new(app.clone(), &id);
     tauri::async_runtime::spawn(async move {
-        let result = job();
+        progress.set(2, "开始");
+        let result = job(&progress);
         match result {
             Ok((out, out_dir, items)) => {
+                progress.set(100, "完成");
                 history::push(history::HistoryItem {
                     id: id.clone(),
                     time: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
@@ -115,8 +215,8 @@ pub fn start_convert(
     bitrate_kbps: u32,
     out_dir: Option<String>,
 ) {
-    spawn_job(app, id, "convert", src.clone(), move || {
-        run_convert_inner(&src, &target, quality, bitrate_kbps, out_dir)
+    spawn_job(app, id, "convert", src.clone(), move |progress| {
+        run_convert_inner(&src, &target, quality, bitrate_kbps, out_dir, progress)
     });
 }
 
@@ -126,6 +226,7 @@ fn run_convert_inner(
     quality: u8,
     bitrate_kbps: u32,
     out_dir: Option<String>,
+    progress: &Progress,
 ) -> Result<(String, String, usize), String> {
     let src_path = PathBuf::from(src);
     if !src_path.exists() {
@@ -144,7 +245,12 @@ fn run_convert_inner(
             if image::same_format(&detect::normalize_ext(&src_path), target) {
                 return Err("源文件已是该格式".into());
             }
-            image::convert(&src_path, target, quality, &out)?;
+            // 图片：解码（5）→ 编码+写盘（85）；100 由 spawn_job 在成功后补发
+            progress.set(5, "解码");
+            let img = image::decode(&src_path)?;
+            progress.set(45, "已解码");
+            image::encode(&img, target, quality, &out)?;
+            progress.set(85, "写入");
         }
         FileKind::Audio => {
             if !audio::is_valid_target(target) {
@@ -153,7 +259,10 @@ fn run_convert_inner(
             if audio::same_format(&detect::normalize_ext(&src_path), target) {
                 return Err("源文件已是该格式".into());
             }
+            // 音频：解码（5）→ 50（已解码）→ 编码写盘（85）
+            progress.set(5, "解码");
             let decoded = audio::decode(&src_path)?;
+            progress.set(50, "已解码");
             match target.to_ascii_lowercase().as_str() {
                 "wav" => audio::encode_wav(&decoded, &out)?,
                 "mp3" => audio::encode_mp3(&decoded, &out, bitrate_kbps)?,
@@ -161,6 +270,7 @@ fn run_convert_inner(
                 "opus" => audio::encode_opus(&decoded, &out, bitrate_kbps)?,
                 other => return Err(format!("不支持的音频目标格式: {}", other)),
             }
+            progress.set(85, "写盘");
         }
         other => return Err(format!("该文件类型不支持转换: {:?}", other)),
     }
@@ -178,9 +288,7 @@ pub fn start_extract(
     password: Option<String>,
     out_dir: Option<String>,
 ) {
-    spawn_job(app, id, "extract", src.clone(), move || {
-        // run_extract 需要 app 发事件——在闭包里重取（AppHandle 可 Clone 传递）
-        // 简化：解压过程不再发过程事件，完成/失败一次性回报（zip 大包条目级进度后续增强）
+    spawn_job(app, id, "extract", src.clone(), move |progress| {
         let src_path = PathBuf::from(&src);
         if !src_path.exists() {
             return Err("源文件不存在".into());
@@ -191,6 +299,7 @@ pub fn start_extract(
             password.as_deref(),
             out_dir.as_deref().map(PathBuf::from).as_deref(),
             &mut noop,
+            progress,
         )?;
         let dir_s = dir.to_string_lossy().into_owned();
         Ok((dir_s.clone(), dir_s, count))
@@ -206,7 +315,7 @@ pub fn start_compress(
     password: Option<String>,
     level: i64,
 ) {    let src_summary = paths.first().cloned().unwrap_or_default();
-    spawn_job(app, id, "compress", src_summary, move || {
+    spawn_job(app, id, "compress", src_summary, move |progress| {
         let first = PathBuf::from(paths.first().ok_or("没有要压缩的文件")?);
         let dir = first.parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
         let base = first
@@ -225,7 +334,7 @@ pub fn start_compress(
             .unwrap_or_else(|| dir.join(format!("{}.{}", base, ext)));
         let out = archive::resolve_conflict(&candidate);
         let mut noop = |_: usize| {};
-        archive::compress(&paths, &flavor, &out, password.as_deref(), level, &mut noop)?;
+        archive::compress(&paths, &flavor, &out, password.as_deref(), level, &mut noop, progress)?;
         let out_dir = out
             .parent()
             .map(|p| p.to_string_lossy().into_owned())
@@ -278,6 +387,49 @@ mod tests {
     }
 
     #[test]
+    fn test_progress_follows_real_entries() {
+        // 进度必须由真实条目驱动：3 个文件压缩 → 每个条目一个上报点（note = i/N 文件名），
+        // 且 pct 单调递增、全部落在条目区间 [5,95] 内（100 由 spawn_job 真正成功后才补发）。
+        let dir = temp_dir("progress");
+        let mut paths: Vec<String> = Vec::new();
+        for i in 1..=3 {
+            let f = dir.join(format!("p{}.txt", i));
+            std::fs::write(&f, format!("payload-{}", i)).unwrap();
+            paths.push(f.to_string_lossy().into());
+        }
+        let zip_path = dir.join("prog.zip");
+        let (prog, log) = Progress::recorder();
+        let mut noop = |_: usize| {};
+        archive::compress(&paths, "zip", &zip_path, None, 6, &mut noop, &prog).unwrap();
+
+        let recs = log.lock().unwrap().clone();
+        assert!(recs.len() >= 3, "每个条目都应有一个上报点，实际 {:?}", recs);
+        assert!(
+            recs.iter().all(|(p, _)| *p >= 5 && *p <= 95),
+            "条目进度必须落在 5~95 区间（100 留给真正成功），实际 {:?}",
+            recs
+        );
+        // 单调不回退（set 内部保证，这里回归确认）
+        assert!(recs.windows(2).all(|w| w[0].0 <= w[1].0), "进度不得回退: {:?}", recs);
+        // note 必须带"第几个/共几个"
+        assert!(
+            recs.iter().any(|(_, n)| n.contains("/3")),
+            "进度说明里应带 i/N，实际 {:?}",
+            recs
+        );
+        assert!(zip_path.exists() && zip_path.metadata().unwrap().len() > 0);
+
+        // 解压同样按真实条目推进
+        let out = dir.join("ex");
+        let (prog2, log2) = Progress::recorder();
+        let (n, _) = archive::extract(&zip_path, None, Some(&out), &mut noop, &prog2).unwrap();
+        assert_eq!(n, 3);
+        let recs2 = log2.lock().unwrap().clone();
+        assert!(recs2.len() >= 3, "解压也应按条目上报，实际 {:?}", recs2);
+        assert!(recs2.windows(2).all(|w| w[0].0 <= w[1].0));
+    }
+
+    #[test]
     fn test_zip_roundtrip_with_password() {
         let dir = temp_dir("zip");
         let f1 = dir.join("a.txt");
@@ -291,17 +443,25 @@ mod tests {
             Some("pw123"),
             6,
             &mut noop,
+            &Progress::noop(),
         )
         .unwrap();
         assert!(zip_path.exists());
         // 正确密码解压
         let out1 = dir.join("ex1");
-        let (n, d) = archive::extract(&zip_path, Some("pw123"), Some(&out1), &mut noop).unwrap();
+        let (n, d) = archive::extract(
+            &zip_path,
+            Some("pw123"),
+            Some(&out1),
+            &mut noop,
+            &Progress::noop(),
+        )
+        .unwrap();
         assert_eq!(n, 1);
         assert_eq!(std::fs::read_to_string(d.join("a.txt")).unwrap(), "hello converter");
         // 错误密码必须失败
         let out2 = dir.join("ex2");
-        assert!(archive::extract(&zip_path, Some("wrong"), Some(&out2), &mut noop).is_err());
+        assert!(archive::extract(&zip_path, Some("wrong"), Some(&out2), &mut noop, &Progress::noop()).is_err());
     }
 
     #[test]
@@ -319,15 +479,16 @@ mod tests {
             None,
             6,
             &mut noop,
+            &Progress::noop(),
         )
         .unwrap();
         assert!(tgz.exists());
         let out = dir.join("unpacked");
-        let (n, d) = archive::extract(&tgz, None, Some(&out), &mut noop).unwrap();
+        let (n, d) = archive::extract(&tgz, None, Some(&out), &mut noop, &Progress::noop()).unwrap();
         assert_eq!(n, 1);
         assert_eq!(std::fs::read_to_string(d.join("folder/b.txt")).unwrap(), "tar content");
         // 再次解压到同一缺省位置 → 自动重命名目录（冲突处理）
-        let (n2, d2) = archive::extract(&tgz, None, None, &mut noop).unwrap();
+        let (n2, d2) = archive::extract(&tgz, None, None, &mut noop, &Progress::noop()).unwrap();
         assert_eq!(n2, 1);
         assert!(d2 != d || d2.ends_with("unpacked"));
     }

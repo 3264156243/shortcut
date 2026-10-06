@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Music, Pause, Play, SkipBack, SkipForward } from 'lucide-react';
 import './island.css';
-import IslandDrop from './IslandDrop';
+import { useIslandDrop, IslandDropView } from './IslandDrop';
 import type { BalanceData, BalanceProvider, CockpitData, IslandDisplayState, MusicState } from './types';
 
 type IslandStyle = 'capsule' | 'glass' | 'paper';
@@ -355,6 +355,8 @@ function IslandApp() {
   useEffect(() => {
     void window.electronAPI?.setBalanceMusicPlaying?.(showMusic && state.balanceProvider !== 'none');
   }, [showMusic, state.balanceProvider]);
+  // 文件拖放：状态机在岛内自己渲染（岛身变形），不是盖在岛上的浮层
+  const drop = useIslandDrop();
   const rootClass = [
     'island-root',
     state.style,
@@ -364,6 +366,10 @@ function IslandApp() {
     showMusic && state.displayState === 'collapsed' && state.orbitGlow && !music.isPlaying ? 'orbit-paused' : '',
     showMusic && !music.isPlaying ? 'music-paused' : '',
     showMusic && state.displayState === 'collapsed' ? 'music-width' : '',
+    drop.phase !== 'idle' ? 'drop-mode' : '',
+    drop.phase === 'hover' ? 'drop-hover' : '',
+    drop.phase === 'recognized' ? 'drop-actions' : '',
+    drop.phase === 'working' ? 'drop-busy' : '',
   ].join(' ');
 
   return (
@@ -371,8 +377,6 @@ function IslandApp() {
       className={rootClass}
       data-position={state.position}
     >
-      {/* Batch 2：拖放层（拖入高亮 / 松手吸附 / 格式菜单），从旁边小球迁移到岛上 */}
-      <IslandDrop />
       {arrival && showMusic && state.displayState === 'collapsed' && state.orbitGlow ? <div className="island-drop-ball" /> : null}
       {showMusic && state.displayState === 'collapsed' && state.orbitGlow ? (
         <div className="island-orbit">
@@ -399,6 +403,7 @@ function IslandApp() {
         </div>
       ) : null}
       <div className="island-shell">
+        {drop.phase !== 'idle' && <IslandDropView drop={drop} />}
         {showMusic ? (
           <div className="island-mini">
             {music.coverUrl ? (

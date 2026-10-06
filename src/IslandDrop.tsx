@@ -1,18 +1,19 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import PillActions, { type PillItem } from './components/PillActions';
 import './islandDrop.css';
 
 /**
  * 岛窗口文件拖拽识别与转换交互（需求文档 docs/island-drop-convert-rework.md）
  *
- * 状态机：idle → hover（松手自动识别）→ recognized（文件名+格式，下方椭圆按钮）
- *        → working（进度条）→ done（转换完成停留 1s → 打开目录并选中 → 按钮关闭 → 复位）→ idle
+ * 关键约定：所有交互样式都**渲染在岛自己的外壳 `.island-shell` 内部**——
+ * 岛身自己变成拖放面（文字/文件名/进度条都是岛的内容，不是盖在岛上面的浮层），
+ * 识别完成后岛身向下"长大"以容纳椭圆按钮；复位后岛恢复原来的余额/歌词/时间内容。
  *
- * 全部交互都在岛窗口内部渲染：悬停/识别/进度/完成只占岛窗口顶部胶囊位置，
- * 按钮在胶囊下方；岛自己的余额/歌词/时间内容不被替换（复位即恢复）。
+ * 状态机：idle → hover（松手自动识别）→ recognized（文件名+格式，下方椭圆按钮）
+ *        → working（真实进度条）→ done（转换完成停留 1s → 打开目录并选中 → 复位）
  */
 
-interface Detected {
+export interface Detected {
   path: string;
   name: string;
   kind: string;
@@ -22,7 +23,7 @@ interface Detected {
   flavor?: string;
 }
 
-type Phase = 'idle' | 'hover' | 'recognized' | 'working' | 'done';
+export type DropPhase = 'idle' | 'hover' | 'recognized' | 'working' | 'done';
 
 const KIND_LABEL: Record<string, string> = {
   image: '图片',
@@ -38,8 +39,6 @@ const KIND_ICON: Record<string, string> = {
   other: '❔',
 };
 
-/** 压缩默认格式候选 */
-const COMPRESS_FORMATS = ['zip', 'tar', 'tar.gz', 'tar.bz2', 'tar.xz', 'tar.zst'];
 /** 图片/音频目标格式兜底（detect 返回实际可用列表时以它为准） */
 const IMAGE_TARGETS = ['png', 'jpg', 'webp', 'bmp', 'gif', 'tiff', 'ico'];
 const AUDIO_TARGETS = ['wav', 'mp3', 'flac', 'opus'];
@@ -48,7 +47,7 @@ const AUDIO_TARGETS = ['wav', 'mp3', 'flac', 'opus'];
  * 「文件名 + 格式」且**过长省略中间**：保留名字首尾 + 完整扩展名
  * 例：很长的文件…格式.zip（需求 §2.2）
  */
-function displayName(f: Detected, budget = 20): string {
+export function displayName(f: Detected, budget = 20): string {
   const name = f.name || f.path.split(/[\\/]/).pop() || f.path;
   const ext = f.ext ? `.${f.ext}` : '';
   const stem = ext && name.toLowerCase().endsWith(ext.toLowerCase())
@@ -59,22 +58,44 @@ function displayName(f: Detected, budget = 20): string {
   return `${stem.slice(0, head)}…${stem.slice(-5)}${ext}`;
 }
 
-export default function IslandDrop() {
-  const [phase, setPhase] = useState<Phase>('idle');
+export interface IslandDropApi {
+  phase: DropPhase;
+  files: Detected[];
+  pct: number;
+  /** 收到过真实进度事件（否则显示不确定态动画，绝不假装百分比） */
+  hasRealProgress: boolean;
+  status: string;
+  note: string;
+  compressFmt: string;
+  imageFmt: string;
+  audioFmt: string;
+  items: PillItem[];
+  reset: () => void;
+}
+
+/**
+ * 岛内拖放交互的状态机 + 行为。由 island.tsx 调用：
+ * 返回的 phase 用于给岛身着类（岛身变形），items 用于渲染椭圆按钮。
+ */
+export function useIslandDrop(): IslandDropApi {
+  const [phase, setPhase] = useState<DropPhase>('idle');
   const [files, setFiles] = useState<Detected[]>([]);
   const [pct, setPct] = useState(0);
+  const [hasRealProgress, setHasRealProgress] = useState(false);
   const [status, setStatus] = useState('');
+  const [note, setNote] = useState('');
   const [compressFmt, setCompressFmt] = useState('zip');
   const [imageFmt, setImageFmt] = useState('png');
   const [audioFmt, setAudioFmt] = useState('wav');
   const [autoReveal, setAutoReveal] = useState(true);
   const jobId = useRef('');
-  const phaseRef = useRef<Phase>('idle');
+  const phaseRef = useRef<DropPhase>('idle');
   phaseRef.current = phase;
   const resetTimer = useRef<number | null>(null);
+  const leaveTimer = useRef<number | null>(null);
 
-  // ── 配置：默认格式 / 转换后自动打开目录（转换面板设置面板可改）──
-  const loadPrefs = () => {
+  // ── 配置：默认格式 / 转换后自动打开目录（转换板块设置面板里改）──
+  const loadPrefs = useCallback(() => {
     void window.electronAPI?.readConfig?.().then((raw) => {
       if (!raw) return;
       try {
@@ -85,49 +106,58 @@ export default function IslandDrop() {
         setAutoReveal(conv.autoReveal !== false);
       } catch {}
     });
-  };
+  }, []);
 
-  /** 复位到 idle：撤掉遮罩与按钮，岛恢复拖放前的内容 */
-  const reset = () => {
+  /** 复位到 idle：撤掉按钮，岛恢复拖放前的内容 */
+  const reset = useCallback(() => {
     if (resetTimer.current) { window.clearTimeout(resetTimer.current); resetTimer.current = null; }
     jobId.current = '';
     setFiles([]);
     setStatus('');
+    setNote('');
     setPct(0);
+    setHasRealProgress(false);
     setPhase('idle');
     void window.electronAPI?.ballShape?.('collapsed');
-  };
-
-  const flashDone = (text: string) => {
-    setStatus(text);
-    setPhase('done');
-    resetTimer.current = window.setTimeout(() => reset(), 1000); // 「转换完成」停留 1 秒（需求 §2.4）
-  };
+  }, []);
 
   useEffect(() => {
     loadPrefs();
 
-    // 拖入：岛内提示「松手自动识别」+ 岛身高亮放大（不再有窗口外蓝色虚线）
+    // 拖入：岛身自己显示出「松手自动识别」
+    // 注意 else 分支必须**防抖**：WebView2 在拖拽过程中会因窗口临时切换 click-through
+    // 抖出一次 DragLeave，若立即复位就会把紧接着的松手丢掉（实测踩到过）。
     const offOver = window.electronAPI?.onBallDragover?.((payload) => {
       const active = !!payload?.active;
       if (active) {
+        if (leaveTimer.current) { window.clearTimeout(leaveTimer.current); leaveTimer.current = null; }
         if (phaseRef.current === 'recognized' || phaseRef.current === 'working') return;
         setFiles([]);
         setStatus('');
+        setNote('');
+        setPct(0);
+        setHasRealProgress(false);
         setPhase('hover');
         void window.electronAPI?.ballShape?.('hint'); // 悬停期间保持可交互，落点一定收得到
       } else if (phaseRef.current === 'hover') {
-        setPhase('idle');
-        void window.electronAPI?.ballShape?.('collapsed');
+        if (leaveTimer.current) window.clearTimeout(leaveTimer.current);
+        leaveTimer.current = window.setTimeout(() => {
+          leaveTimer.current = null;
+          if (phaseRef.current !== 'hover') return;
+          setPhase('idle');
+          void window.electronAPI?.ballShape?.('collapsed');
+        }, 300);
       }
     });
 
-    // 松手：识别 → 展示「文件名 + 格式」→ 下方弹出椭圆按钮
+    // 松手：识别 → 岛内展示「文件名 + 格式」→ 岛身向下长出椭圆按钮
     const offDrop = window.electronAPI?.onBallDrop?.((payload) => {
       const paths = payload?.paths || [];
       if (!paths.length) return;
       setStatus('');
+      setNote('');
       setPct(0);
+      setHasRealProgress(false);
       void (async () => {
         const detected = ((await window.electronAPI?.converterDetect?.(paths)) || []) as Detected[];
         const list: Detected[] = detected.length
@@ -140,27 +170,34 @@ export default function IslandDrop() {
       })();
     });
 
-    // 进度：转换板块未发进度事件时，用下方兜底动画推进
+    // 真实进度（Rust 在解码/编码/逐条目阶段上报）
     const offProgress = window.electronAPI?.onConverterProgress?.((payload) => {
       if (!jobId.current || payload.id !== jobId.current) return;
+      setHasRealProgress(true);
       setPct(Math.max(0, Math.min(100, Number(payload.pct) || 0)));
+      if (payload.note) setNote(String(payload.note));
     });
 
-    // 完成：停留 1 秒 → 自动打开产物所在目录并选中 → 按钮关闭 → 复位
+    // 完成：立刻 100% → 「转换完成」停留 1 秒 → 打开产物所在目录并选中 → 复位
     const offDone = window.electronAPI?.onConverterDone?.((payload) => {
       if (!jobId.current || payload.id !== jobId.current) return;
       setPct(100);
-      flashDone('转换完成');
+      setNote('');
+      setStatus('转换完成');
+      setPhase('done');
       const target = payload.out || payload.out_dir || '';
       if (autoReveal && target) {
         window.setTimeout(() => { void window.electronAPI?.revealInExplorer?.(target); }, 120);
       }
+      resetTimer.current = window.setTimeout(() => reset(), 1000);
     });
 
     const offErr = window.electronAPI?.onConverterError?.((payload) => {
       if (!jobId.current || payload.id !== jobId.current) return;
       jobId.current = '';
       setPct(0);
+      setHasRealProgress(false);
+      setNote('');
       setStatus(`失败：${payload.message || '未知错误'}`);
       setPhase('recognized'); // 回到可重试状态
     });
@@ -172,77 +209,67 @@ export default function IslandDrop() {
       offDone?.();
       offErr?.();
       if (resetTimer.current) window.clearTimeout(resetTimer.current);
+      if (leaveTimer.current) window.clearTimeout(leaveTimer.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoReveal]);
-
-  // 岛身悬停/工作态样式由岛根节点类名驱动
-  useEffect(() => {
-    const root = document.querySelector('.island-root');
-    if (!root) return;
-    root.classList.toggle('drop-hover', phase === 'hover');
-    root.classList.toggle('drop-busy', phase === 'working' || phase === 'done');
-    return () => { root.classList.remove('drop-hover', 'drop-busy'); };
-  }, [phase]);
-
-  // 进度兜底动画：没收到真实进度时缓慢推进到 90%，避免看起来卡住
-  useEffect(() => {
-    if (phase !== 'working') return;
-    const timer = window.setInterval(() => {
-      setPct((p) => (p >= 90 ? p : Math.min(90, p + Math.max(1, Math.round((90 - p) * 0.08)))));
-    }, 250);
-    return () => window.clearInterval(timer);
-  }, [phase]);
+  }, [autoReveal, loadPrefs, reset]);
 
   const first = files[0];
   const kind = first?.kind || 'other';
-  const multi = files.length > 1;
   const busy = phase === 'working';
 
-  const start = async (id: string | undefined) => {
+  const start = (id: string | undefined) => {
     if (!id) { setStatus('任务提交失败'); setPhase('recognized'); return; }
     jobId.current = id;
     setPct(0);
+    setHasRealProgress(false);
+    setNote('');
     setStatus('');
     setPhase('working');
   };
 
+  const beginWork = () => {
+    setPhase('working');
+    setNote('');
+    setPct(0);
+    setHasRealProgress(false);
+  };
+
   const doExtract = () => {
     if (!files.length) return;
+    beginWork();
     void (async () => {
-      setPhase('working');
       let id = '';
       for (const f of files) {
         const res = await window.electronAPI?.converterExtract?.(f.path, null, null);
         id = res?.id || id;
       }
-      await start(id);
+      start(id);
     })();
   };
 
   const doCompress = () => {
     if (!files.length) return;
+    beginWork();
     void (async () => {
-      setPhase('working');
       const res = await window.electronAPI?.converterCompress?.(files.map((f) => f.path), compressFmt, null, null, 6);
-      await start(res?.id);
+      start(res?.id);
     })();
   };
 
   const doConvert = (target: string) => {
     if (!files.length) return;
+    beginWork();
     void (async () => {
-      setPhase('working');
       let id = '';
       for (const f of files) {
         const res = await window.electronAPI?.converterConvert?.(f.path, target, 85, 192, null);
         id = res?.id || id;
       }
-      await start(id);
+      start(id);
     })();
   };
 
-  // ── 按文件类型组装椭圆按钮（需求 §2.3）──
+  // ── 按文件类型组装椭圆按钮（需求 §2.3；数据驱动，类型变多只改这里）──
   const buildItems = (): PillItem[] => {
     const cancel: PillItem = { key: 'cancel', label: '取消', tone: 'ghost', disabled: busy, onClick: reset };
     if (kind === 'archive') {
@@ -253,7 +280,6 @@ export default function IslandDrop() {
       const fmt = isImage ? imageFmt : audioFmt;
       const opts = (first?.targets?.length ? first.targets : (isImage ? IMAGE_TARGETS : AUDIO_TARGETS))
         .map((t) => ({ value: t, label: t.toUpperCase() }));
-      // 默认格式不在候选里（例如源文件本身就是该格式）时补一条，避免下拉错位
       if (!opts.some((o) => o.value === fmt)) opts.unshift({ value: fmt, label: fmt.toUpperCase() });
       return [
         { key: 'compress', label: `压缩 ${compressFmt.toUpperCase()}`, disabled: busy, onClick: doCompress },
@@ -279,14 +305,36 @@ export default function IslandDrop() {
     ];
   };
 
-  if (phase === 'idle') return null;
+  return {
+    phase,
+    files,
+    pct,
+    hasRealProgress,
+    status,
+    note,
+    compressFmt,
+    imageFmt,
+    audioFmt,
+    items: phase === 'recognized' ? buildItems() : [],
+    reset,
+  };
+}
 
+/**
+ * 岛内拖放视图：渲染在 `.island-shell` 内部（不是浮层）。
+ * 第一行 = 岛的内容位（提示 / 文件名 / 进度 / 完成），第二行 = 椭圆按钮。
+ */
+export function IslandDropView({ drop }: { drop: IslandDropApi }) {
+  const { phase, files, pct, hasRealProgress, status, note, items } = drop;
+  if (phase === 'idle') return null;
+  const first = files[0];
+  const kind = first?.kind || 'other';
+  const multi = files.length > 1;
   const busyText = kind === 'archive' ? '解压中' : '转换中';
 
   return (
-    <>
-      {/* 岛窗口顶部（胶囊位置）：悬停提示 / 识别结果 / 进度 / 完成 */}
-      <div className={['island-drop-bar', phase].join(' ')}>
+    <div className="island-drop-view">
+      <div className="island-drop-row">
         {phase === 'hover' && <span className="island-drop-text">松手自动识别</span>}
 
         {(phase === 'recognized' || phase === 'working' || phase === 'done') && first && (
@@ -300,23 +348,24 @@ export default function IslandDrop() {
 
         {phase === 'working' && (
           <span className="island-drop-progress">
-            <span className="island-drop-track">
-              <span className="island-drop-fill" style={{ width: `${pct}%` }} />
+            <span className={['island-drop-track', hasRealProgress ? '' : 'indeterminate'].join(' ')}>
+              <span className="island-drop-fill" style={hasRealProgress ? { width: `${pct}%` } : undefined} />
             </span>
-            <span className="island-drop-pct">{pct}%</span>
+            <span className="island-drop-pct">{hasRealProgress ? `${pct}%` : busyText}</span>
           </span>
         )}
-        {phase === 'working' && <span className="island-drop-hint">{busyText}…</span>}
+
         {phase === 'done' && <span className="island-drop-done">{status || '转换完成'}</span>}
       </div>
 
-      {/* 岛窗口下方：椭圆交互按钮（识别完成后弹出；转换中/完成后自动关闭） */}
-      {phase === 'recognized' && (
-        <div className="island-drop-actions">
-          <PillActions items={buildItems()} />
-          {status && <div className="island-drop-error">{status}</div>}
-        </div>
-      )}
-    </>
+      {phase === 'working' && note && <div className="island-drop-note">{note}</div>}
+      {phase === 'recognized' && status && <div className="island-drop-error">{status}</div>}
+      {phase === 'recognized' && items.length > 0 && <PillActions items={items} />}
+    </div>
   );
+}
+
+export default function IslandDrop() {
+  const drop = useIslandDrop();
+  return <IslandDropView drop={drop} />;
 }

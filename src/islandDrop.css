@@ -1,166 +1,229 @@
 /* ── 岛窗口拖拽识别与转换交互（需求：docs/island-drop-convert-rework.md）
-   全部交互都在岛窗口内部：顶部胶囊位置 = 状态条（悬停/识别/进度/完成），
-   胶囊下方 = 椭圆交互按钮。不再有窗口外描边、不再有穿透标签。 */
+   全部交互都**在岛窗口自己的外壳里**实现：岛身自身变形为拖放面
+   （第一行 = 松手提示 / 文件名+格式 / 真实进度条 / 转换完成），
+   识别完成后岛身向下"长大"以容纳椭圆按钮；复位后岛恢复余额/歌词/时间内容。
+   不再有窗口外描边、不再有穿透标签、不再往岛上叠浮层。 */
 
-/* 岛身反馈：拖入悬停轻微放大高亮；转换中/完成时收一点 */
-.island-drop-bar,
-.island-drop-actions {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+/* 岛身：进入拖放模式后由 46px 胶囊变成可容纳按钮的卡片（宽 336 与胶囊对齐）
+   height:auto + max-height 过渡 = 真的"长大"动画（auto 本身无法过渡） */
+.island-root.drop-mode .island-shell,
+.island-root.drop-hover .island-shell,
+.island-root.mini.drop-mode .island-shell,
+.island-root.expanded.drop-mode .island-shell {
   width: 336px;
-  z-index: 40;
-  pointer-events: none;
+  height: auto;
+  max-height: 46px;
+  min-height: 46px;
+  padding: 0;
+  border-radius: 24px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-color: rgba(120, 150, 255, .55);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, .5);
+  transition:
+    max-height .5s cubic-bezier(.22, 1, .36, 1),
+    border-radius .5s cubic-bezier(.22, 1, .36, 1),
+    border-color .35s,
+    box-shadow .5s cubic-bezier(.22, 1, .36, 1);
+}
+/* 转换中（岛内一行信息 + 阶段说明）/ 识别完成（再多一行按钮）时岛身向下展开 */
+.island-root.drop-busy .island-shell { max-height: 108px; }
+.island-root.drop-actions .island-shell { max-height: 240px; }
+/* 拖放模式下隐藏岛原来的内容（余额/歌词/时间/面板），由岛内拖放视图接管 */
+.island-root.drop-mode .island-shell > *:not(.island-drop-view) { display: none; }
+
+/* 拖入悬停：岛身自己发光脉冲（真的作用在岛身上，不是浮层） */
+.island-root.drop-hover .island-shell {
+  border-color: rgba(120, 150, 255, .9);
+  animation: island-morph-pulse 1.15s ease-in-out infinite;
+}
+@keyframes island-morph-pulse {
+  0%, 100% { box-shadow: 0 16px 44px rgba(0, 0, 0, .5), 0 0 0 0 rgba(120, 150, 255, .45); }
+  50% { box-shadow: 0 16px 44px rgba(0, 0, 0, .5), 0 0 0 6px rgba(120, 150, 255, .16); }
 }
 
-/* 状态条：贴住岛胶囊位置（岛窗口 padding-top:10px，胶囊高 46px） */
-.island-drop-bar {
-  top: 10px;
-  height: 46px;
+/* ── 岛内视图 ── */
+.island-drop-view {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding-bottom: 10px;
+  /* 外壳是 -webkit-app-region: drag，交互元素必须显式 no-drag 才能点 */
+  -webkit-app-region: no-drag;
+  animation: island-drop-in 170ms ease-out;
+}
+.island-root.drop-hover .island-drop-view { padding-bottom: 0; gap: 0; }
+@keyframes island-drop-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 第一行 = 岛的内容位（46px，与常态胶囊同高） */
+.island-drop-row {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 8px;
-  padding: 0 16px;
-  box-sizing: border-box;
-  border-radius: 23px;
-  background: rgba(22, 24, 30, .96);
-  border: 1px solid rgba(120, 150, 255, .5);
-  box-shadow: 0 8px 22px rgba(0, 0, 0, .45);
-  color: #e8eaf0;
-  overflow: hidden;
-  animation: island-drop-in 160ms ease-out;
-}
-.island-drop-bar.hover { border-style: dashed; border-color: rgba(120, 150, 255, .85); }
-.island-drop-bar.working { border-color: rgba(120, 150, 255, .7); }
-.island-drop-bar.done { border-color: rgba(80, 220, 160, .85); }
-@keyframes island-drop-in {
-  from { opacity: 0; transform: translateX(-50%) translateY(-6px) scale(.96); }
-  to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
-}
-
-.island-drop-text { font-size: 13px; font-weight: 600; letter-spacing: .3px; }
-.island-drop-kind {
-  flex: none;
-  font-size: 11px;
-  padding: 2px 7px;
-  border-radius: 8px;
-  background: rgba(109, 140, 255, .18);
-  border: 1px solid rgba(120, 150, 255, .45);
-  color: #b9c6ff;
-}
-/* 文件名：中间省略由 JS 计算，这里再兜一层，保证永不溢出 */
-.island-drop-name {
+  height: 46px;
+  padding: 0 14px;
   min-width: 0;
+  color: #e8eaf0;
+}
+.island-drop-text {
   flex: 1 1 auto;
-  text-align: left;
+  text-align: center;
   font-size: 13px;
-  font-weight: 600;
+  letter-spacing: .3px;
+  color: #dbe4ff;
+}
+.island-drop-kind {
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 18px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(120, 150, 255, .18);
+  color: #c7d2fe;
+  white-space: nowrap;
+}
+.island-drop-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-variant-numeric: tabular-nums;
 }
-.island-drop-done { font-size: 13px; font-weight: 700; color: #7ef0bb; }
-.island-drop-hint { flex: none; font-size: 11px; color: #9aa2b6; }
+.island-drop-name { direction: ltr; }
 
-/* 进度条 */
-.island-drop-progress { flex: 1 1 auto; display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* 真实进度：有事件时显示百分比，没有事件时用不确定态动画（不假报数字） */
+.island-drop-progress {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 .island-drop-track {
+  position: relative;
   flex: 1 1 auto;
   height: 6px;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, .14);
+  min-width: 40px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .16);
   overflow: hidden;
 }
 .island-drop-fill {
   display: block;
   height: 100%;
-  border-radius: 3px;
-  background: linear-gradient(90deg, #6d8cff, #22d3ee);
-  transition: width .25s ease;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #5b86e5, #36d1dc);
+  transition: width .16s linear;
 }
-.island-drop-pct { flex: none; font-size: 11px; color: #b9c6ff; font-variant-numeric: tabular-nums; }
-
-/* 岛窗口下方：椭圆按钮区 */
-.island-drop-actions {
-  top: 64px;
-  pointer-events: auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  animation: island-drop-in 200ms ease-out;
+.island-drop-track.indeterminate .island-drop-fill {
+  width: 36%;
+  transition: none;
+  animation: island-indet 1.05s ease-in-out infinite;
+}
+@keyframes island-indet {
+  0% { margin-left: -36%; }
+  100% { margin-left: 100%; }
+}
+.island-drop-pct {
+  flex: 0 0 auto;
+  font-size: 11px;
+  min-width: 42px;
+  text-align: right;
+  color: #9fb0d8;
+}
+.island-drop-note {
+  padding: 0 14px;
+  font-size: 11px;
+  color: #8b96b4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.island-drop-done {
+  flex: 0 0 auto;
+  font-size: 13px;
+  color: #5ce0a8;
+  animation: island-drop-in 160ms ease-out;
 }
 .island-drop-error {
+  padding: 0 14px 2px;
   font-size: 11.5px;
-  color: #ff9b9b;
-  max-width: 336px;
-  text-align: center;
-  word-break: break-all;
+  color: #ff9a9a;
 }
 
-/* 岛身状态反馈（由 IslandDrop 给 .island-root 加类） */
-.island-root.drop-hover .island-shell {
-  transform: scale(1.05);
-  box-shadow: 0 0 0 3px rgba(109, 140, 255, .35), 0 10px 26px rgba(0, 0, 0, .45);
-}
-.island-root .island-shell { transition: transform .18s ease, box-shadow .18s ease; }
-.island-root.drop-busy .island-shell { transform: scale(.98); }
-
-/* ── 可复用椭圆（胶囊）按钮组：PillActions ── */
+/* ── 可复用椭圆按钮（PillActions）── */
+.island-drop-view .pill-actions { padding: 0 12px; }
 .pill-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  max-width: 336px;
+  gap: 8px;
+  -webkit-app-region: no-drag;
 }
-.pill-actions.wrap { flex-wrap: wrap; }
-
 .pill {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .1);
+  border: 1px solid rgba(255, 255, 255, .16);
+  color: #e8eaf0;
+  overflow: hidden;
+  transition: background .18s, border-color .18s, transform .12s;
+  -webkit-app-region: no-drag;
+}
+.pill:hover:not(.disabled) { background: rgba(255, 255, 255, .16); border-color: rgba(255, 255, 255, .28); }
+.pill:active:not(.disabled) { transform: scale(.97); }
+.pill.primary {
+  background: linear-gradient(135deg, rgba(91, 134, 229, .95), rgba(54, 209, 220, .9));
+  border-color: rgba(150, 190, 255, .5);
+  color: #fff;
+}
+.pill.primary:hover:not(.disabled) { background: linear-gradient(135deg, #6b93f0, #43dbe6); }
+.pill.ghost { background: rgba(255, 255, 255, .04); color: #b9c2da; }
+.pill.disabled { opacity: .45; cursor: default; }
+.pill-main {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   height: 30px;
-  padding: 0 14px;
-  border-radius: 15px;
+  padding: 0 12px;
+  font-size: 12px;
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font-family: inherit;
+}
+.pill-main:disabled { cursor: default; }
+.pill.has-select .pill-main { padding-right: 8px; }
+/* 无下拉的普通胶囊本身就是一个 button */
+button.pill {
+  height: 30px;
+  padding: 0 12px;
   font-size: 12px;
   font-family: inherit;
-  color: #d6dae6;
-  background: #23262e;
-  border: 1px solid rgba(255, 255, 255, .14);
-  cursor: pointer;
-  transition: all 130ms ease;
   white-space: nowrap;
-}
-.pill:hover:not(.disabled) { color: #fff; border-color: rgba(120, 150, 255, .8); transform: translateY(-1px); }
-.pill.primary { color: #eef2ff; background: rgba(109, 140, 255, .2); border-color: rgba(120, 150, 255, .8); }
-.pill.ghost { color: #9aa2b6; background: rgba(255, 255, 255, .05); }
-.pill.disabled { opacity: .45; cursor: default; }
-
-/* 带下拉的胶囊：左半是动作，右半是格式下拉 */
-.pill.has-select { padding: 0; overflow: hidden; }
-.pill.has-select .pill-main {
-  height: 100%;
-  padding: 0 10px 0 14px;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
   cursor: pointer;
 }
-.pill.has-select .pill-select {
-  height: 100%;
-  border: 0;
-  border-left: 1px solid rgba(255, 255, 255, .16);
-  background: rgba(255, 255, 255, .06);
-  color: inherit;
-  font: inherit;
-  font-size: 11.5px;
+button.pill:disabled { cursor: default; }
+.pill-select {
+  height: 22px;
+  margin-right: 6px;
   padding: 0 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .28);
+  background: rgba(0, 0, 0, .28);
+  color: inherit;
+  font-size: 11px;
+  font-family: inherit;
   cursor: pointer;
   outline: none;
 }
-.pill.has-select .pill-main:disabled,
-.pill.has-select .pill-select:disabled { cursor: default; }
-.pill.has-select .pill-select option { background: #23262e; color: #e8eaf0; }
+.pill-select option { background: #1b1f2a; color: #e8eaf0; }

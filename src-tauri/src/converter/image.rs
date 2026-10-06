@@ -14,9 +14,25 @@ pub fn can_decode(path: &Path) -> bool {
     IMAGE_INPUT_EXTS.contains(&ext.as_str())
 }
 
-/// 按目标扩展名保存。quality 仅 jpg 生效。
+/// 解码：图片互转的「解码」阶段（进度上报需要把解码与编码分开计时）
+pub fn decode(src: &Path) -> Result<image::DynamicImage, String> {
+    image::open(src).map_err(|e| format!("图片解码失败: {}", e))
+}
+
+/// 一步完成：解码 + 按目标扩展名编码（未需分阶段进度时的便捷入口）。
+/// quality 仅 jpg 生效。
 pub fn convert(src: &Path, target: &str, quality: u8, out_path: &Path) -> Result<(), String> {
-    let img = image::open(src).map_err(|e| format!("图片解码失败: {}", e))?;
+    let img = decode(src)?;
+    encode(&img, target, quality, out_path)
+}
+
+/// 编码 + 写盘（进度上报的「编码/写入」阶段）。按目标扩展名保存，quality 仅 jpg 生效。
+pub fn encode(
+    img: &image::DynamicImage,
+    target: &str,
+    quality: u8,
+    out_path: &Path,
+) -> Result<(), String> {
     let t = target.to_ascii_lowercase();
     match t.as_str() {
         "jpg" | "jpeg" => {
@@ -46,7 +62,7 @@ pub fn convert(src: &Path, target: &str, quality: u8, out_path: &Path) -> Result
                 .map_err(|e| format!("GIF 编码失败: {}", e))?;
         }
         "ico" => {
-            write_multi_ico(&img, out_path)?;
+            write_multi_ico(img, out_path)?;
         }
         other => return Err(format!("不支持的图片目标格式: {}", other)),
     }

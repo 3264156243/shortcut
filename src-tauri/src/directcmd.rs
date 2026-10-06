@@ -16,7 +16,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::converter::{archive, history};
+use crate::converter::{archive, history, Progress};
 use crate::shellmenu;
 
 /// 追加一行到应用日志（不依赖 tauri 日志插件）
@@ -70,7 +70,8 @@ pub fn run_archive_action(action: &str, paths: &[String], flavor: &str) -> Resul
                 return Err(format!("文件不存在：{}", p));
             }
             let mut noop = |_: usize| {};
-            let (count, dir) = archive::extract(&src, None, None, &mut noop)?;
+            // 右键菜单直执：前端未打开，进度事件无接收方 → 用 noop 上报器
+            let (count, dir) = archive::extract(&src, None, None, &mut noop, &Progress::noop())?;
             total += count;
             last = dir.to_string_lossy().into_owned();
         }
@@ -92,7 +93,7 @@ pub fn run_archive_action(action: &str, paths: &[String], flavor: &str) -> Resul
         };
         let out = archive::resolve_conflict(&dir.join(format!("{}.{}", base, flavor)));
         let mut noop = |_: usize| {};
-        archive::compress(paths, flavor, &out, None, 6, &mut noop)?;
+        archive::compress(paths, flavor, &out, None, 6, &mut noop, &Progress::noop())?;
         let note = format!("已压缩为 {}", flavor.to_uppercase());
         Ok((out.to_string_lossy().into_owned(), note, 0))
     }

@@ -6,6 +6,43 @@ use std::io::{self, BufReader, Read};
 use std::path::{Path, PathBuf};
 
 use super::detect::archive_flavor;
+use super::Progress;
+
+/// 进度区间：条目级进度映射到 [5, 95]；剩最后 5% 留给收尾/事件落地，
+/// 100/完成 由 `converter::spawn_job` 在任务真正成功后补发。
+const ENTRY_FROM: u8 = 5;
+const ENTRY_TO: u8 = 95;
+
+/// 条目总数是否已知：zip 的中心目录能给出总数；tar/gz 等流式格式拿不到
+#[derive(Clone, Copy)]
+pub enum Total {
+    /// 已知总条目数（zip）
+    Known(usize),
+    /// 流式读取，总数未知（tar / gz / xz / zst …）→ 按已处理条目数做封顶估算
+    Unknown,
+}
+
+impl Total {
+    fn get(self) -> usize {
+        match self {
+            Total::Known(n) => n,
+            Total::Unknown => 0,
+        }
+    }
+
+    /// 已处理 `done` 个条目 → pct（未知总数按条数递增并封顶 95）
+    fn pct(self, done: usize) -> u8 {
+        super::scaled_pct(done, self.get(), ENTRY_FROM, ENTRY_TO)
+    }
+
+    /// 进度备注：已知总数用 `i/N 名字`，未知用 `已处理 i 个条目：名字`
+    fn note(self, done: usize, name: &str) -> String {
+        match self {
+            Total::Known(n) if n > 0 => format!("{}/{} {}", done.min(n), n, name),
+            _ => format!("已处理 {} 个条目：{}", done, name),
+        }
+    }
+}
 
 /// 同名冲突自动重命名：file.txt → file(1).txt → file(2).txt ...
 pub fn resolve_conflict(path: &Path) -> PathBuf {
@@ -28,12 +65,14 @@ pub fn resolve_conflict(path: &Path) -> PathBuf {
     path.to_path_buf()
 }
 
-/// 解压。out_dir 缺省=包旁同名文件夹；on_entry 回调已完成条目数（进度用）
+/// 解压。out_dir 缺省=包旁同名文件夹；on_entry 回调已完成条目数，
+/// progress 按归档条目推进 `5..95`（未知总数时按已处理条目数封顶估算）。
 pub fn extract(
     src: &Path,
     password: Option<&str>,
     out_dir: Option<&Path>,
     on_entry: &mut dyn FnMut(usize),
+    progress: &Progress,
 ) -> Result<(usize, PathBuf), String> {
     let flavor = archive_flavor(src).ok_or("不支持的压缩格式")?;
     let stem = src
@@ -61,19 +100,30 @@ pub fn extract(
     };
 
     let count = match flavor {
-        "zip" => extract_zip(src, password, &dir, on_entry)?,
-        "tar" => extract_tar(BufReader::new(File::open(src).map_err(io_err)?), &dir, on_entry)?,
-        "tar.gz" => extract_tar(flate2::read::GzDecoder::new(File::open(src).map_err(io_err)?), &dir, on_entry)?,
+        "zip" => {
+            // 先取中心目录条目数，拿到总数后可按 条目/总数 精确映射
+            let total = zip_entry_total(src)?;
+            extract_zip(src, password, &dir, on_entry, progress, Total::Known(total))?
+        }
+        "tar" => extract_tar(BufReader::new(File::open(src).map_err(io_err)?), &dir, on_entry, progress, Total::Unknown)?,
+        "tar.gz" => extract_tar(flate2::read::GzDecoder::new(File::open(src).map_err(io_err)?), &dir, on_entry, progress, Total::Unknown)?,
         "gz" => single_file(flate2::read::GzDecoder::new(File::open(src).map_err(io_err)?), src, &dir, ".gz")?,
-        "tar.bz2" => extract_tar(bzip2::read::BzDecoder::new(File::open(src).map_err(io_err)?), &dir, on_entry)?,
+        "tar.bz2" => extract_tar(bzip2::read::BzDecoder::new(File::open(src).map_err(io_err)?), &dir, on_entry, progress, Total::Unknown)?,
         "bz2" => single_file(bzip2::read::BzDecoder::new(File::open(src).map_err(io_err)?), src, &dir, ".bz2")?,
-        "tar.xz" => extract_tar(xz2::read::XzDecoder::new(File::open(src).map_err(io_err)?), &dir, on_entry)?,
+        "tar.xz" => extract_tar(xz2::read::XzDecoder::new(File::open(src).map_err(io_err)?), &dir, on_entry, progress, Total::Unknown)?,
         "xz" => single_file(xz2::read::XzDecoder::new(File::open(src).map_err(io_err)?), src, &dir, ".xz")?,
-        "tar.zst" => extract_tar(zstd_decoder(src)?, &dir, on_entry)?,
+        "tar.zst" => extract_tar(zstd_decoder(src)?, &dir, on_entry, progress, Total::Unknown)?,
         "zst" => single_file(zstd_decoder(src)?, src, &dir, ".zst")?,
         other => return Err(format!("不支持的压缩格式: {}", other)),
     };
     Ok((count, dir))
+}
+
+/// zip 中心目录的条目总数（解压前读一次，成本极低）
+fn zip_entry_total(src: &Path) -> Result<usize, String> {
+    let file = File::open(src).map_err(io_err)?;
+    let archive = zip::ZipArchive::new(file).map_err(|e| format!("打开 zip 失败: {}", e))?;
+    Ok(archive.len())
 }
 
 fn io_err(e: io::Error) -> String {
@@ -109,6 +159,8 @@ fn extract_zip(
     password: Option<&str>,
     dir: &Path,
     on_entry: &mut dyn FnMut(usize),
+    progress: &Progress,
+    total: Total,
 ) -> Result<usize, String> {
     let file = File::open(src).map_err(io_err)?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("打开 zip 失败: {}", e))?;
@@ -139,6 +191,7 @@ fn extract_zip(
         }
         count += 1;
         on_entry(count);
+        progress.set(total.pct(count), &total.note(count, &name));
     }
     Ok(count)
 }
@@ -147,6 +200,8 @@ fn extract_tar<R: Read>(
     reader: R,
     dir: &Path,
     on_entry: &mut dyn FnMut(usize),
+    progress: &Progress,
+    total: Total,
 ) -> Result<usize, String> {
     // tar 0.4 默认不保留权限/xattr，直接解包
     let mut archive = tar::Archive::new(reader);
@@ -174,6 +229,7 @@ fn extract_tar<R: Read>(
         }
         count += 1;
         on_entry(count);
+        progress.set(total.pct(count), &total.note(count, &name));
     }
     Ok(count)
 }
@@ -199,6 +255,7 @@ fn single_file<R: Read>(
 }
 
 /// 压缩文件/文件夹（递归）为 zip 或 tar 系。level 仅 zip 生效（1-9）。
+/// progress 按条目推进 `5..95`（note = `i/N 包内相对名`）。
 pub fn compress(
     paths: &[String],
     flavor: &str,
@@ -206,20 +263,29 @@ pub fn compress(
     password: Option<&str>,
     level: i64,
     on_entry: &mut dyn FnMut(usize),
+    progress: &Progress,
 ) -> Result<PathBuf, String> {
     let files = collect_inputs(paths)?;
+    let total = files.len();
     let mut count = 0usize;
-    let mut track = |count: &mut usize| {
-        *count += 1;
-        on_entry(*count);
+    // 每完成一个条目：回调 + 按「已处理/总数」映射进度（note 用当前条目名）
+    let mut track = |index: usize| {
+        count += 1;
+        on_entry(count);
+        let pct = super::scaled_pct(count, total, ENTRY_FROM, ENTRY_TO);
+        if let Some((_, name)) = files.get(index) {
+            progress.set(pct, &format!("{}/{} {}", count, total, name));
+        } else {
+            progress.set(pct, &format!("{}/{}", count, total));
+        }
     };
     match flavor {
-        "zip" => compress_zip(&files, out_path, password, level, &mut count, &mut track),
-        "tar" => compress_tar_plain(&files, out_path, &mut count, &mut track),
-        "tar.gz" => compress_tar_wrap(&files, out_path, "tar.gz", &mut count, &mut track),
-        "tar.bz2" => compress_tar_wrap(&files, out_path, "tar.bz2", &mut count, &mut track),
-        "tar.xz" => compress_tar_wrap(&files, out_path, "tar.xz", &mut count, &mut track),
-        "tar.zst" => compress_tar_wrap(&files, out_path, "tar.zst", &mut count, &mut track),
+        "zip" => compress_zip(&files, out_path, password, level, &mut track),
+        "tar" => compress_tar_plain(&files, out_path, &mut track),
+        "tar.gz" => compress_tar_wrap(&files, out_path, "tar.gz", &mut track),
+        "tar.bz2" => compress_tar_wrap(&files, out_path, "tar.bz2", &mut track),
+        "tar.xz" => compress_tar_wrap(&files, out_path, "tar.xz", &mut track),
+        "tar.zst" => compress_tar_wrap(&files, out_path, "tar.zst", &mut track),
         other => Err(format!("不支持的压缩目标格式: {}", other)),
     }
 }
@@ -271,14 +337,13 @@ fn compress_zip(
     out_path: &Path,
     password: Option<&str>,
     level: i64,
-    count: &mut usize,
-    track: &mut dyn FnMut(&mut usize),
+    track: &mut dyn FnMut(usize),
 ) -> Result<PathBuf, String> {
     let file = File::create(out_path).map_err(|e| format!("创建压缩包失败: {}", e))?;
     let mut zip = zip::ZipWriter::new(file);
-    for (path, rel) in files {
+    for (i, (path, rel)) in files.iter().enumerate() {
         // zip 2.4：with_aes_encryption(AesMode, password) 在 start_file 时生效
-        let mut options = zip::write::FileOptions::<()>::default()
+        let options = zip::write::FileOptions::<()>::default()
             .compression_method(zip::CompressionMethod::Deflated)
             .compression_level(Some(level.clamp(1, 9)))
             .large_file(true);
@@ -290,7 +355,7 @@ fn compress_zip(
         zip.start_file(rel.as_str(), options)
             .map_err(|e| format!("写入条目 {} 失败: {}", rel, e))?;
         io::copy(&mut data.as_slice(), &mut zip).map_err(|e| format!("压缩写入失败: {}", e))?;
-        track(count);
+        track(i);
     }
     zip.finish().map_err(|e| format!("收尾压缩包失败: {}", e))?;
     Ok(out_path.to_path_buf())
@@ -299,16 +364,15 @@ fn compress_zip(
 fn compress_tar_plain(
     files: &[(PathBuf, String)],
     out_path: &Path,
-    count: &mut usize,
-    track: &mut dyn FnMut(&mut usize),
+    track: &mut dyn FnMut(usize),
 ) -> Result<PathBuf, String> {
     let file = File::create(out_path).map_err(|e| format!("创建压缩包失败: {}", e))?;
     let mut builder = tar::Builder::new(file);
-    for (path, rel) in files {
+    for (i, (path, rel)) in files.iter().enumerate() {
         builder
             .append_path_with_name(path, rel)
             .map_err(|e| format!("压缩 {} 失败: {}", rel, e))?;
-        track(count);
+        track(i);
     }
     builder.finish().map_err(|e| format!("收尾 tar 失败: {}", e))?;
     Ok(out_path.to_path_buf())
@@ -318,8 +382,7 @@ fn compress_tar_wrap(
     files: &[(PathBuf, String)],
     out_path: &Path,
     flavor: &str,
-    count: &mut usize,
-    track: &mut dyn FnMut(&mut usize),
+    track: &mut dyn FnMut(usize),
 ) -> Result<PathBuf, String> {
     let file = File::create(out_path).map_err(|e| format!("创建压缩包失败: {}", e))?;
 
@@ -328,11 +391,11 @@ fn compress_tar_wrap(
             {
                 // 独立作用域：builder 先于 finish 释放对编码器的借用
                 let mut builder = tar::Builder::new(&mut $enc);
-                for (path, rel) in files {
+                for (i, (path, rel)) in files.iter().enumerate() {
                     builder
                         .append_path_with_name(path, rel)
                         .map_err(|e| format!("压缩 {} 失败: {}", rel, e))?;
-                    track(count);
+                    track(i);
                 }
                 builder.finish().map_err(|e| format!("收尾 tar 失败: {}", e))?;
             }

@@ -8,10 +8,12 @@ import {
   FolderOpen,
   HelpCircle,
   Loader2,
+  Settings,
   Trash2,
   X,
 } from 'lucide-react';
 import { useStore } from '../store';
+import ConverterSettings from './ConverterSettings';
 
 interface DetectedFile {
   path: string;
@@ -66,6 +68,8 @@ export default function ConverterPanel() {
   const [files, setFiles] = useState<ConvFile[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [outDir, setOutDir] = useState<string>('');
+  // 转换板块内的设置弹窗（资源管理器集成 / SC 球 / 文件转换 已从总设置迁入）
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [zipPwd, setZipPwd] = useState('');
   const [bitrate, setBitrate] = useState(192);
   const [showHistory, setShowHistory] = useState(true);
@@ -236,6 +240,11 @@ export default function ConverterPanel() {
           {!featureOk && <span className="text-[10px]" style={{ color: '#fb923c' }}>未授权</span>}
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setSettingsOpen(true)} title="转换设置"
+            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition-all duration-150 hover:opacity-85"
+            style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
+            <Settings size={13} /> 设置
+          </button>
           <button onClick={pickFiles} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition-all duration-150 hover:opacity-85"
             style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
             <FilePlus2 size={13} /> 选择文件
@@ -255,6 +264,8 @@ export default function ConverterPanel() {
       >
         将文件拖入面板任意位置，或点击"选择文件" · 支持 png/jpg/webp/bmp/gif/tiff/ico 互转 · zip/tar 系解压压缩
       </div>
+
+      {settingsOpen && <ConverterSettings onClose={() => setSettingsOpen(false)} />}
 
       {/* 文件列表 */}
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
