@@ -319,6 +319,17 @@ export interface AppConfig {
     islandProgress?: boolean;
     islandDropSend?: boolean;
   };
+  /** 转换板块默认项（岛按钮 / 转换面板 / 右键菜单共用；见 docs/island-drop-convert-rework.md） */
+  converter?: {
+    /** 压缩默认格式：zip / tar / tar.gz / tar.bz2 / tar.xz / tar.zst */
+    defaultCompress?: string;
+    /** 图片默认目标格式：png / jpg / webp / bmp / gif / tiff / ico */
+    defaultImage?: string;
+    /** 音频默认目标格式：wav / mp3 / flac / opus */
+    defaultAudio?: string;
+    /** 转换完成后自动打开产物所在目录并选中 */
+    autoReveal?: boolean;
+  };
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -343,6 +354,12 @@ export const DEFAULT_CONFIG: AppConfig = {
     },
   ],
   activeTaskBoardId: 'default-task-board',
+  converter: {
+    defaultCompress: 'zip',
+    defaultImage: 'png',
+    defaultAudio: 'wav',
+    autoReveal: true,
+  },
   tabs: [
     {
       id: 'default',

@@ -127,6 +127,35 @@ export default function SettingsPanel() {
     const res = await window.electronAPI?.ballPassthrough?.(on);
     if (res && res.success === false) setBallThrough(!on);
   };
+  // 文件转换默认项（需求 docs/island-drop-convert-rework.md 三）——直接落盘 config.converter.*
+  const [converterCfg, setConverterCfgState] = useState<{ defaultCompress: string; defaultImage: string; defaultAudio: string; autoReveal: boolean }>({
+    defaultCompress: 'zip',
+    defaultImage: 'png',
+    defaultAudio: 'wav',
+    autoReveal: true,
+  });
+  useEffect(() => {
+    void window.electronAPI?.readConfig?.().then((raw) => {
+      if (!raw) return;
+      try {
+        const conv = JSON.parse(raw)?.converter || {};
+        setConverterCfgState((c) => ({
+          defaultCompress: conv.defaultCompress || c.defaultCompress,
+          defaultImage: conv.defaultImage || c.defaultImage,
+          defaultAudio: conv.defaultAudio || c.defaultAudio,
+          autoReveal: conv.autoReveal !== false,
+        }));
+      } catch {}
+    });
+  }, []);
+  const setConverterCfg = (patch: Partial<typeof converterCfg>) => {
+    setConverterCfgState((c) => {
+      const next = { ...c, ...patch };
+      useStore.setState((s) => ({ config: { ...s.config, converter: next } }));
+      useStore.getState().saveConfig();
+      return next;
+    });
+  };
   useEffect(() => {
     void window.electronAPI?.shellMenuState?.().then((s) => s && setShellMenu(s));
   }, []);
@@ -322,6 +351,65 @@ export default function SettingsPanel() {
               </label>
               <p className="mt-2 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
                 当前：{ballThrough ? '已穿透（岛 + 旁边小球都不挡鼠标）' : '未穿透（收起态仍按岛的显示状态：收起穿透、展开可交互）'} · 快捷键 {ballShortcut}
+              </p>
+            </div>
+
+            {/* 文件转换默认项（岛按钮 / 转换面板共用；需求 docs/island-drop-convert-rework.md 三）*/}
+            <div style={sectionStyle}>
+              <h3 className="text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>文件转换</h3>
+              <p className="mb-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                拖文件到 SC 球（岛）上时，椭圆按钮里的默认格式取这里的设置。
+              </p>
+              <label className="flex items-center justify-between gap-3 mb-3">
+                <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>压缩默认格式</span>
+                <select
+                  value={converterCfg.defaultCompress}
+                  onChange={(e) => setConverterCfg({ defaultCompress: e.target.value })}
+                  className="rounded-lg px-2 py-1.5 text-xs"
+                  style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
+                >
+                  {['zip', 'tar', 'tar.gz', 'tar.bz2', 'tar.xz', 'tar.zst'].map((f) => (
+                    <option key={f} value={f}>{f.toUpperCase()}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center justify-between gap-3 mb-3">
+                <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>图片默认格式</span>
+                <select
+                  value={converterCfg.defaultImage}
+                  onChange={(e) => setConverterCfg({ defaultImage: e.target.value })}
+                  className="rounded-lg px-2 py-1.5 text-xs"
+                  style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
+                >
+                  {['png', 'jpg', 'webp', 'bmp', 'gif', 'tiff', 'ico'].map((f) => (
+                    <option key={f} value={f}>{f.toUpperCase()}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center justify-between gap-3 mb-3">
+                <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>音频默认格式</span>
+                <select
+                  value={converterCfg.defaultAudio}
+                  onChange={(e) => setConverterCfg({ defaultAudio: e.target.value })}
+                  className="rounded-lg px-2 py-1.5 text-xs"
+                  style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
+                >
+                  {['wav', 'mp3', 'flac', 'opus'].map((f) => (
+                    <option key={f} value={f}>{f.toUpperCase()}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center justify-between cursor-pointer">
+                <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>转换完成后自动打开目录</span>
+                <input
+                  type="checkbox"
+                  checked={converterCfg.autoReveal}
+                  onChange={(e) => setConverterCfg({ autoReveal: e.target.checked })}
+                  className="w-4 h-4 accent-indigo-500"
+                />
+              </label>
+              <p className="mt-2 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                打开目录时会自动选中刚生成的产物。
               </p>
             </div>
 

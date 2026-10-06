@@ -1,112 +1,166 @@
-/* ── SC球（岛）拖放层：拖入高亮 / 吸附动画 / 格式菜单（Batch 2 从小球迁移到岛上） ──
-   岛窗口是 360×340 的透明窗，本层铺满整窗：默认不拦鼠标，只有菜单自身可点，
-   这样岛的胶囊/展开面板交互不受影响。 */
+/* ── 岛窗口拖拽识别与转换交互（需求：docs/island-drop-convert-rework.md）
+   全部交互都在岛窗口内部：顶部胶囊位置 = 状态条（悬停/识别/进度/完成），
+   胶囊下方 = 椭圆交互按钮。不再有窗口外描边、不再有穿透标签。 */
 
-.island-drop-layer {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 40;
-}
-
-/* 穿透开启：可见提示（快捷键 Ctrl+Alt+B / 设置里切换都能一眼看到） */
-.island-drop-passthru {
-  position: absolute;
-  right: 10px;
-  top: 10px;
-  padding: 3px 8px;
-  border-radius: 8px;
-  font-size: 11px;
-  color: #9fb0ff;
-  background: rgba(22,24,30,.9);
-  border: 1px solid rgba(120,150,255,.5);
-  box-shadow: 0 6px 16px rgba(0,0,0,.35);
-  animation: island-drop-fade 160ms ease-out;
-}
-
-/* 拖入高亮：整窗描边（比原 46px 小球好瞄准得多） */
-.island-drop-outline {
-  position: absolute;
-  inset: 4px;
-  border-radius: 18px;
-  border: 2px dashed rgba(120,150,255,.85);
-  box-shadow: inset 0 0 26px rgba(109,140,255,.22);
-  animation: island-drop-pulse 900ms ease-in-out infinite;
-}
-@keyframes island-drop-pulse {
-  0%, 100% { opacity: .55; }
-  50% { opacity: 1; }
-}
-
-/* 拖入提示气泡 */
-.island-drop-hint {
+/* 岛身反馈：拖入悬停轻微放大高亮；转换中/完成时收一点 */
+.island-drop-bar,
+.island-drop-actions {
   position: absolute;
   left: 50%;
-  top: 62px;
   transform: translateX(-50%);
-  padding: 6px 10px;
-  border-radius: 10px;
-  font-size: 12px;
-  white-space: nowrap;
-  color: #e8eaf0;
-  background: rgba(24,26,32,.94);
-  border: 1px solid rgba(120,150,255,.75);
-  box-shadow: 0 6px 18px rgba(0,0,0,.4);
-  animation: island-drop-fade 160ms ease-out;
-}
-@keyframes island-drop-fade {
-  from { opacity: 0; transform: translateX(-50%) translateY(-6px); }
-  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+  width: 336px;
+  z-index: 40;
+  pointer-events: none;
 }
 
-/* 松手吸附：岛身回弹一下再长出菜单 */
-.island-root.drop-suction .island-shell {
-  animation: island-drop-suction 460ms cubic-bezier(.22,1.2,.36,1);
-}
-@keyframes island-drop-suction {
-  0% { transform: scale(1.06); }
-  35% { transform: scale(.94); }
-  70% { transform: scale(1.03); }
-  100% { transform: scale(1); }
-}
-
-/* 格式菜单：岛窗口内展开（不改窗口尺寸，按 360×340 收边） */
-.island-drop-menu {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  top: 64px;
-  max-height: 262px;
-  overflow-y: auto;
+/* 状态条：贴住岛胶囊位置（岛窗口 padding-top:10px，胶囊高 46px） */
+.island-drop-bar {
+  top: 10px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
   box-sizing: border-box;
-  padding: 10px 12px 12px;
-  border-radius: 14px;
-  background: rgba(22,24,30,.97);
-  border: 1px solid rgba(255,255,255,.14);
-  box-shadow: 0 12px 34px rgba(0,0,0,.5);
-  animation: ball-menu-in 240ms cubic-bezier(.22,1,.36,1);
-  pointer-events: auto;
-  cursor: default;
+  border-radius: 23px;
+  background: rgba(22, 24, 30, .96);
+  border: 1px solid rgba(120, 150, 255, .5);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .45);
+  color: #e8eaf0;
+  overflow: hidden;
+  animation: island-drop-in 160ms ease-out;
 }
-@keyframes ball-menu-in {
-  from { opacity: 0; transform: translateY(-8px) scale(.96); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+.island-drop-bar.hover { border-style: dashed; border-color: rgba(120, 150, 255, .85); }
+.island-drop-bar.working { border-color: rgba(120, 150, 255, .7); }
+.island-drop-bar.done { border-color: rgba(80, 220, 160, .85); }
+@keyframes island-drop-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-6px) scale(.96); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
 }
-.island-drop-menu::-webkit-scrollbar { width: 6px; }
-.island-drop-menu::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 3px; }
 
-.ball-menu-title { font-size: 12px; font-weight: 600; color: #e8eaf0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ball-menu-sub { margin-top: 2px; font-size: 11px; color: #8b90a0; }
-.ball-menu-grid { margin-top: 10px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-.ball-menu-btn {
-  padding: 7px 6px; border-radius: 9px; font-size: 11.5px; text-align: center; cursor: pointer;
-  color: #c8ccd8; background: #23262e; border: 1px solid rgba(255,255,255,.12);
-  font-family: inherit; transition: all 130ms ease;
+.island-drop-text { font-size: 13px; font-weight: 600; letter-spacing: .3px; }
+.island-drop-kind {
+  flex: none;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 8px;
+  background: rgba(109, 140, 255, .18);
+  border: 1px solid rgba(120, 150, 255, .45);
+  color: #b9c6ff;
 }
-.ball-menu-btn:hover:not(:disabled) { color: #fff; border-color: rgba(120,150,255,.8); transform: translateY(-1px); }
-.ball-menu-btn:disabled { opacity: .45; cursor: default; }
-.ball-menu-btn.primary { grid-column: span 3; color: #e8eaf0; border-color: rgba(120,150,255,.8); background: rgba(109,140,255,.16); }
-.ball-menu-status { margin-top: 8px; font-size: 11.5px; color: #c8ccd8; word-break: break-all; }
-.ball-menu-foot { margin-top: 10px; display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #8b90a0; }
-.ball-menu-link { cursor: pointer; color: #7f9cff; }
-.ball-menu-link:hover { text-decoration: underline; }
+/* 文件名：中间省略由 JS 计算，这里再兜一层，保证永不溢出 */
+.island-drop-name {
+  min-width: 0;
+  flex: 1 1 auto;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.island-drop-done { font-size: 13px; font-weight: 700; color: #7ef0bb; }
+.island-drop-hint { flex: none; font-size: 11px; color: #9aa2b6; }
+
+/* 进度条 */
+.island-drop-progress { flex: 1 1 auto; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.island-drop-track {
+  flex: 1 1 auto;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, .14);
+  overflow: hidden;
+}
+.island-drop-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #6d8cff, #22d3ee);
+  transition: width .25s ease;
+}
+.island-drop-pct { flex: none; font-size: 11px; color: #b9c6ff; font-variant-numeric: tabular-nums; }
+
+/* 岛窗口下方：椭圆按钮区 */
+.island-drop-actions {
+  top: 64px;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  animation: island-drop-in 200ms ease-out;
+}
+.island-drop-error {
+  font-size: 11.5px;
+  color: #ff9b9b;
+  max-width: 336px;
+  text-align: center;
+  word-break: break-all;
+}
+
+/* 岛身状态反馈（由 IslandDrop 给 .island-root 加类） */
+.island-root.drop-hover .island-shell {
+  transform: scale(1.05);
+  box-shadow: 0 0 0 3px rgba(109, 140, 255, .35), 0 10px 26px rgba(0, 0, 0, .45);
+}
+.island-root .island-shell { transition: transform .18s ease, box-shadow .18s ease; }
+.island-root.drop-busy .island-shell { transform: scale(.98); }
+
+/* ── 可复用椭圆（胶囊）按钮组：PillActions ── */
+.pill-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  max-width: 336px;
+}
+.pill-actions.wrap { flex-wrap: wrap; }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 15px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #d6dae6;
+  background: #23262e;
+  border: 1px solid rgba(255, 255, 255, .14);
+  cursor: pointer;
+  transition: all 130ms ease;
+  white-space: nowrap;
+}
+.pill:hover:not(.disabled) { color: #fff; border-color: rgba(120, 150, 255, .8); transform: translateY(-1px); }
+.pill.primary { color: #eef2ff; background: rgba(109, 140, 255, .2); border-color: rgba(120, 150, 255, .8); }
+.pill.ghost { color: #9aa2b6; background: rgba(255, 255, 255, .05); }
+.pill.disabled { opacity: .45; cursor: default; }
+
+/* 带下拉的胶囊：左半是动作，右半是格式下拉 */
+.pill.has-select { padding: 0; overflow: hidden; }
+.pill.has-select .pill-main {
+  height: 100%;
+  padding: 0 10px 0 14px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.pill.has-select .pill-select {
+  height: 100%;
+  border: 0;
+  border-left: 1px solid rgba(255, 255, 255, .16);
+  background: rgba(255, 255, 255, .06);
+  color: inherit;
+  font: inherit;
+  font-size: 11.5px;
+  padding: 0 4px;
+  cursor: pointer;
+  outline: none;
+}
+.pill.has-select .pill-main:disabled,
+.pill.has-select .pill-select:disabled { cursor: default; }
+.pill.has-select .pill-select option { background: #23262e; color: #e8eaf0; }

@@ -194,6 +194,8 @@ declare global {
       shellMenuState: () => Promise<{ available: boolean; enabled: boolean; format: string; formats: string[] }>;
       shellMenuSet: (enabled: boolean, format?: string) => Promise<{ success: boolean; enabled: boolean; format?: string; error?: string }>;
       converterTakePending: () => Promise<{ paths: string[]; action?: string } | null>;
+      /** 打开某文件所在目录并选中该文件（目录则直接打开）——转换完成后自动定位产物 */
+      revealInExplorer: (path: string) => Promise<{ success: boolean; error?: string }>;
       onConverterDrop: (callback: (data: { paths: string[]; action?: string; fromShell?: boolean }) => void) => () => void;
       onConverterDragover: (callback: (data: { active: boolean }) => void) => () => void;
       // ── SC 球（Batch 2：拖放转格式 + 穿透开关）──

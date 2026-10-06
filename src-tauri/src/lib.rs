@@ -302,6 +302,45 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             converter::start_compress(app.clone(), id.clone(), paths, flavor, out_path, password, level);
             json!({ "success": true, "id": id })
         }
+        // 转换完成后定位产物：打开所在目录并选中文件（目录则直接打开）
+        // 需求见 docs/island-drop-convert-rework.md §2.4
+        "revealInExplorer" => {
+            let path = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+            if path.is_empty() {
+                json!({ "success": false, "error": "路径为空" })
+            } else {
+                let p = std::path::PathBuf::from(&path);
+                let target = if p.is_dir() {
+                    p.clone()
+                } else {
+                    p.parent().map(|d| d.to_path_buf()).unwrap_or_else(|| p.clone())
+                };
+                let exists = target.exists();
+                if !exists {
+                    log::warn!("[reveal] 目标不存在: {}", target.display());
+                    json!({ "success": false, "error": "路径不存在" })
+                } else if p.is_dir() {
+                    // 目录：直接打开
+                    match std::process::Command::new("explorer.exe").arg(&path).spawn() {
+                        Ok(_) => {
+                            log::info!("[reveal] 打开目录 {}", path);
+                            json!({ "success": true })
+                        }
+                        Err(e) => json!({ "success": false, "error": e.to_string() }),
+                    }
+                } else {
+                    // 文件：打开所在目录并选中（/select, 后不能有空格）
+                    let arg = format!("/select,{}", path);
+                    match std::process::Command::new("explorer.exe").arg(arg).spawn() {
+                        Ok(_) => {
+                            log::info!("[reveal] 打开并选中 {}", path);
+                            json!({ "success": true })
+                        }
+                        Err(e) => json!({ "success": false, "error": e.to_string() }),
+                    }
+                }
+            }
+        }
         "converterPickFiles" => {
             use tauri_plugin_dialog::DialogExt;
             let app2 = app.clone();
