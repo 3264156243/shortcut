@@ -1428,11 +1428,33 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             sidecar::set_balance_key(provider, key)
         }
         "setBalanceMusicPlaying" | "setDeepseekMusicPlaying" => {
-            // 球是**常驻**余额挂件：音乐播放时"并"进岛（前端 merge 动画），不销毁窗口；
-            // 音乐结束再飘回来。销毁只由配置（余额显示关闭/模块关闭）决定。
+            // 恢复最初规则：小球**只在"正在播放音乐 且 显示了余额"时出现**。
+            // 前端 island.tsx 传来的 playing 就是 (showMusic && balanceProvider !== 'none')：
+            // 此时岛身被音乐/歌词占用，余额没地方显示 → 小球飞出来挂在岛旁边；
+            // 音乐一停，岛自己就显示余额了 → 小球收回（折叠动画后销毁，不再常驻）。
             let playing = args.first().and_then(|v| v.as_bool()).unwrap_or(false);
-            let _ = windows::ensure_deepseekball(&app);
-            let _ = app.emit("balance:merge", serde_json::json!({ "merged": playing }));
+            windows::BALL_MUSIC_PLAYING.store(playing, std::sync::atomic::Ordering::Relaxed);
+            if playing {
+                match windows::ensure_deepseekball(&app) {
+                    Ok(_) => log::info!("[deepseekball] 播放中且显示余额 → 小球出现"),
+                    Err(e) => log::error!("[deepseekball] 播放态创建失败: {}", e),
+                }
+                let _ = app.emit("balance:merge", serde_json::json!({ "merged": false }));
+            } else {
+                // 先播放"折叠回岛"动画，再收起窗口；期间若又开始播放就不销毁
+                let _ = app.emit("balance:merge", serde_json::json!({ "merged": true }));
+                let app_bg = app.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(360));
+                    if windows::BALL_MUSIC_PLAYING.load(std::sync::atomic::Ordering::Relaxed) {
+                        return; // 又开始播放了，这次不销毁
+                    }
+                    if app_bg.get_webview_window("deepseekball").is_some() {
+                        windows::destroy_deepseekball(&app_bg);
+                        log::info!("[deepseekball] 未播放音乐 → 收起小球（恢复原出现规则）");
+                    }
+                });
+            }
             json!(true)
         }
         // shim listen 注册诊断（岛/球事件不生效排查）
@@ -2242,8 +2264,7 @@ fn run_music_control(app: &tauri::AppHandle, action: &str) {
 /// provider 关 / island.balance feature 关 / island 模块关 → 销毁；
 /// 球已存在（音乐驱动或此前创建）且配置变了 → 重建以刷新样式与供应商；
 /// 球不存在且音乐未驱动 → 不主动创建（等岛 setBalanceMusicPlaying）。
-fn sync_deepseekball_state(app: &tauri::AppHandle) {
-    let cfg = config::read_config_value().unwrap_or(json!({}));
+fn sync_deepseekball_state(app: &tauri::AppHandle) {    let cfg = config::read_config_value().unwrap_or(json!({}));
     let island = cfg.get("island").cloned().unwrap_or(json!({}));
     let provider_raw = island.get("balanceProvider").and_then(|v| v.as_str()).unwrap_or("");
     let deepseek_on = island.get("deepseekEnabled").and_then(|v| v.as_bool()).unwrap_or(false);
@@ -2260,7 +2281,12 @@ fn sync_deepseekball_state(app: &tauri::AppHandle) {
     let balance_feature_on = cfg.get("license").and_then(|l| l.get("featureAccess")).and_then(|f| f.as_array())
         .and_then(|a| a.iter().find(|f| f.get("id").and_then(|v| v.as_str()) == Some("island.balance")).and_then(|f| f.get("allowed")).and_then(|v| v.as_bool()))
         .unwrap_or(true);
-    let should_show = island_module_on && balance_feature_on && effective != "none";
+    // 恢复最初规则：小球只在「正在播放音乐 且 显示了余额」时出现，不再常驻。
+    // 这里额外要求"当前确实在播放"，所以启动/改配置都不会凭空拉起小球。
+    let should_show = island_module_on
+        && balance_feature_on
+        && effective != "none"
+        && windows::BALL_MUSIC_PLAYING.load(std::sync::atomic::Ordering::Relaxed);
     if !should_show {
         if app.get_webview_window("deepseekball").is_some() {
             windows::destroy_deepseekball(app);

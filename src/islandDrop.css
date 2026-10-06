@@ -227,3 +227,30 @@ button.pill:disabled { cursor: default; }
   outline: none;
 }
 .pill-select option { background: #1b1f2a; color: #e8eaf0; }
+
+/* ── 纸条样式（.island-root.paper）：浅色纸面上不能再用浅色字，否则看不见 ──
+   一律改成纸面用的深棕墨色；主按钮仍保留彩色底 + 白字（在浅色纸上对比足够）。 */
+.island-root.paper .island-drop-row,
+.island-root.paper .island-drop-text { color: #3f3225; }
+.island-root.paper .island-drop-kind {
+  color: #7a6247;
+  background: rgba(151, 124, 88, .18);
+}
+.island-root.paper .island-drop-name { color: #3f3225; }
+.island-root.paper .island-drop-track { background: rgba(120, 96, 66, .18); }
+.island-root.paper .island-drop-pct { color: #5c4a35; }
+.island-root.paper .island-drop-note { color: #7c6647; }
+.island-root.paper .island-drop-done { color: #1f7a4d; }
+.island-root.paper .island-drop-error { color: #b4382f; }
+.island-root.paper .pill {
+  background: rgba(255, 255, 255, .72);
+  border-color: rgba(151, 124, 88, .42);
+  color: #3f3225;
+}
+.island-root.paper .pill:hover:not(.disabled) {
+  background: rgba(255, 255, 255, .95);
+  border-color: rgba(151, 124, 88, .65);
+}
+.island-root.paper .pill.ghost { background: rgba(255, 255, 255, .5); color: #5c4a35; }
+.island-root.paper .pill-select { background: #fffdf9; color: #3f3225; }
+.island-root.paper .pill-select option { background: #fffdf9; color: #3f3225; }

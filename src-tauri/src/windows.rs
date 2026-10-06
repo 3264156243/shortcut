@@ -447,6 +447,10 @@ static BALL_PASSTHROUGH: std::sync::atomic::AtomicBool = std::sync::atomic::Atom
 /// 拖放菜单是否打开（打开期间强制不穿透，保证菜单可点）
 static ISLAND_MENU_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// 「正在播放音乐 且 岛在显示余额」——旁边小球的出现条件（由前端 island.tsx 通过
+/// setBalanceMusicPlaying 上报）。只有它为 true 时小球才存在，其余时间小球不应常驻。
+pub static BALL_MUSIC_PLAYING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// 读取用户设定的穿透开关（SC球=岛；旁边小球跟随）
 pub fn ball_passthrough() -> bool {
     BALL_PASSTHROUGH.load(std::sync::atomic::Ordering::Relaxed)
