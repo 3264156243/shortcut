@@ -754,6 +754,14 @@ pub fn voice_cancel(app: &tauri::AppHandle) -> Value {
     json!({ "success": true })
 }
 
+/// 注销语音热键（游戏模式冻结后台时调用：冻结期间按快捷键不该有反应）
+pub fn disable_shortcut(app: &tauri::AppHandle) {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    if app.global_shortcut().unregister(VOICE_HOTKEY).is_ok() {
+        log::info!("[hotkey] 已注销: {}（游戏模式）", VOICE_HOTKEY);
+    }
+}
+
 /// Alt+H 全局热键注册（voice:getConfig / 启动时调用）
 pub fn register_shortcut(app: &tauri::AppHandle) {
     use tauri_plugin_global_shortcut::GlobalShortcutExt;

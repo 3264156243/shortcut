@@ -51,6 +51,10 @@ pub fn kill_child(child: &Arc<Mutex<Option<tokio::process::Child>>>) {
 // ---------- 音乐桥 ----------
 
 pub fn start_music_bridge(app: tauri::AppHandle, st: Arc<MusicState>) -> Value {
+    // 游戏模式（冻结后台）期间不允许起常驻侧车：解冻时 freeze::unfreeze 会主动重启
+    if crate::freeze::is_frozen() {
+        return json!({ "success": false, "frozen": true });
+    }
     {
         let guard = st.child.lock().unwrap();
         if guard.is_some() || st.starting.swap(true, Ordering::SeqCst) {
@@ -152,6 +156,11 @@ pub fn run_music_command(script: &std::path::Path, extra_args: &[String]) -> Val
 
 /// main_active 或岛配置 cockpitEnabled 任一开启则运行（对齐 syncHardwareMonitor）
 pub fn sync_cockpit(app: tauri::AppHandle, st: Arc<CockpitState>) -> Value {
+    // 游戏模式（冻结后台）期间硬件监控侧车必须保持关闭：配置变更等触发点也不能把它拉起来
+    if crate::freeze::is_frozen() {
+        kill_child(&st.child);
+        return json!({ "success": true, "running": false, "frozen": true });
+    }
     let island_active = crate::config::read_config_island_cockpit_enabled();
     if st.main_active.load(Ordering::SeqCst) || island_active {
         start_cockpit(app, st)

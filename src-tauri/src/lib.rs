@@ -60,7 +60,7 @@ fn queue_drop(app: &tauri::AppHandle, paths: Vec<String>, action: String) {
     }
 }
 use tauri:: {
-    menu::{Menu, MenuItem, PredefinedMenuItem},
+    menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
     Emitter, Manager, WebviewUrl, WebviewWindowBuilder,
 };
@@ -80,6 +80,8 @@ mod shellmenu;
 mod webviewdrop;
 mod usage;
 mod windows;
+/// 游戏模式（冻结后台）：托盘菜单一键开关，无额外热键
+mod freeze;
 
 /// electronAPI shim：渲染层每次访问 window.electronAPI 的任意方法都落到 invoke('electron_api')。
 /// 回调型（onXxx）映射到 tauri 事件 'electron:<name>'。
@@ -1958,6 +1960,23 @@ fn stop_control(app: &tauri::AppHandle) {
 }
 
 /// 托盘菜单事件 → 主窗口显示/退出
+/// 托盘菜单：显示主面板 / 游戏模式（冻结后台）/ 分隔线 / 退出。
+/// 抽成函数是因为游戏模式切换后要重建菜单来更新勾选态。
+fn build_tray_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    let show = MenuItem::with_id(app, "show", "显示主面板", true, None::<&str>)?;
+    let freeze_item = CheckMenuItem::with_id(
+        app,
+        "freeze-toggle",
+        "游戏模式（冻结后台）",
+        true,
+        freeze::is_frozen(),
+        None::<&str>,
+    )?;
+    let sep = PredefinedMenuItem::separator(app)?;
+    let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+    Menu::with_items(app, &[&show, &freeze_item, &sep, &quit])
+}
+
 fn handle_tray_event(app: &tauri::AppHandle, id: &str) {
     match id {
         "show" => {
@@ -1972,6 +1991,20 @@ fn handle_tray_event(app: &tauri::AppHandle, id: &str) {
             }
         }
         "quit" => app.exit(0),
+        // 游戏模式：冻结全部后台（隐藏悬浮窗/停侧车/降功耗/注销热键），再点一次恢复原状。
+        // 这是冻结态唯一的恢复入口，所以托盘图标本身不隐藏。
+        "freeze-toggle" => {
+            let frozen = freeze::toggle(app);
+            // 菜单项勾选态随冻结状态重建（图标/提示也一并更新）
+            if let Some(tray) = app.tray_by_id("main-tray") {
+                if let Ok(menu) = build_tray_menu(app) {
+                    let _ = tray.set_menu(Some(menu));
+                }
+                let tip = if frozen { "ShortCut · 游戏模式（已冻结后台）" } else { "ShortCut" };
+                let _ = tray.set_tooltip(Some(tip));
+            }
+            log::info!("[freeze] 托盘切换 → {}", if frozen { "冻结" } else { "解冻" });
+        }
         _ => {}
     }
 }
@@ -2437,6 +2470,75 @@ fn ball_passthrough_shortcut() -> String {
         .unwrap_or_else(|| "Ctrl+Alt+B".to_string())
 }
 
+/// 当前配置下"应该处于注册状态"的全局快捷键清单（不含任何冻结热键，冻结不靠热键）。
+///
+/// 抽成一份清单的目的：游戏模式（冻结后台）要**全部注销**、退出游戏模式要**按同样条件重新注册**，
+/// 两处必须是同一份判断，否则会出现"解冻后某个快捷键没回来"。
+pub(crate) fn configured_hotkeys() -> Vec<String> {
+    let mut list: Vec<String> = ["alt+space", "alt+i", "alt+u", "alt+s", "alt+d"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    // Ctrl+Alt+B 切换 SC 球鼠标穿透（需求 5.2）
+    list.push(ball_passthrough_shortcut());
+    let cfg = config::read_config_value().unwrap_or(json!({}));
+    let module_on = |id: &str| {
+        cfg.get("modules")
+            .and_then(|m| m.as_array())
+            .map(|a| {
+                a.iter().any(|m| {
+                    m.get("id").and_then(|v| v.as_str()) == Some(id)
+                        && m.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true)
+                })
+            })
+            .unwrap_or(true)
+    };
+    let feature_on = |id: &str| {
+        cfg.get("license")
+            .and_then(|l| l.get("featureAccess"))
+            .and_then(|f| f.as_array())
+            .and_then(|a| {
+                a.iter()
+                    .find(|f| f.get("id").and_then(|v| v.as_str()) == Some(id))
+                    .and_then(|f| f.get("allowed"))
+                    .and_then(|v| v.as_bool())
+            })
+            .unwrap_or(true)
+    };
+    // Alt+E 划词翻译：translate 模块启用（bubble 特性未被禁）才注册，对齐 Electron ensureGlobalShortcut
+    if module_on("translate") && feature_on("translate.bubble") {
+        list.push("alt+e".to_string());
+    }
+    // 音乐控制快捷键：island 模块 + island.music feature（对齐 Electron islandMusicOk）
+    if module_on("island") && feature_on("island.music") {
+        list.extend(["alt+z", "alt+x", "alt+c"].iter().map(|s| s.to_string()));
+    }
+    list
+}
+
+/// 注册全部全局快捷键（启动时、以及退出游戏模式时调用）
+pub(crate) fn register_configured_hotkeys(app: &tauri::AppHandle) {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let gs = app.global_shortcut();
+    for k in configured_hotkeys() {
+        match gs.register(k.as_str()) {
+            Ok(_) => log::info!("[hotkey] 注册成功: {}", k),
+            Err(e) => log::error!("[hotkey] 注册失败: {} ({})", k, e),
+        }
+    }
+}
+
+/// 注销全部全局快捷键（进游戏模式时调用：冻结期间按快捷键不该有任何反应）
+pub(crate) fn unregister_configured_hotkeys(app: &tauri::AppHandle) {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let gs = app.global_shortcut();
+    for k in configured_hotkeys() {
+        if gs.unregister(k.as_str()).is_ok() {
+            log::info!("[hotkey] 已注销: {}（游戏模式）", k);
+        }
+    }
+}
+
 /// 快捷键归一化：注册名与插件回传的 W3C code 名对齐（keyb → b、大写转小写）
 fn normalize_accel(acc: &str) -> String {
     // 插件回传的是 W3C code 名（control+alt+keyb），配置里写的是 Ctrl+Alt+B：
@@ -2615,58 +2717,8 @@ pub fn run() {
             config::restore_from_backup_if_needed();
 
             // 注册全局快捷键（注册失败写日志——Electron 版同名键位如果被占也需要知道）
-            {
-                use tauri_plugin_global_shortcut::GlobalShortcutExt;
-                let gs = app.global_shortcut();
-                for k in ["alt+space", "alt+i", "alt+u", "alt+s", "alt+d"] {
-                    match gs.register(k) {
-                        Ok(_) => log::info!("[hotkey] 注册成功: {}", k),
-                        Err(e) => log::error!("[hotkey] 注册失败: {} ({})", k, e),
-                    }
-                }
-                // Ctrl+Alt+B 切换 SC 球鼠标穿透（需求 5.2）
-                let ball_acc = ball_passthrough_shortcut();
-                match gs.register(ball_acc.as_str()) {
-                    Ok(_) => log::info!("[hotkey] 注册成功: {}（SC球穿透切换）", ball_acc),
-                    Err(e) => log::error!("[hotkey] 注册失败: {} ({})", ball_acc, e),
-                }
-                // Alt+E 划词翻译：translate 模块启用（bubble 特性未被禁）才注册，对齐 Electron ensureGlobalShortcut
-                let (translate_on, bubble_on, music_on) = {
-                    let cfg = config::read_config_value().unwrap_or(json!({}));
-                    let translate_on = cfg.get("modules").and_then(|m| m.as_array())
-                        .map(|a| a.iter().any(|m| m.get("id").and_then(|v| v.as_str()) == Some("translate") && m.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true)))
-                        .unwrap_or(true);
-                    let bubble_on = cfg.get("license").and_then(|l| l.get("featureAccess")).and_then(|f| f.as_array())
-                        .and_then(|a| a.iter().find(|f| f.get("id").and_then(|v| v.as_str()) == Some("translate.bubble")).and_then(|f| f.get("allowed")).and_then(|v| v.as_bool()))
-                        .unwrap_or(true);
-                    // 音乐控制快捷键：island 模块 + island.music feature（对齐 Electron islandMusicOk）
-                    let island_module_on = cfg.get("modules").and_then(|m| m.as_array())
-                        .map(|a| a.iter().any(|m| m.get("id").and_then(|v| v.as_str()) == Some("island") && m.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true)))
-                        .unwrap_or(true);
-                    let music_feature = cfg.get("license").and_then(|l| l.get("featureAccess")).and_then(|f| f.as_array())
-                        .and_then(|a| a.iter().find(|f| f.get("id").and_then(|v| v.as_str()) == Some("island.music")).and_then(|f| f.get("allowed")).and_then(|v| v.as_bool()))
-                        .unwrap_or(true);
-                    (translate_on, bubble_on, island_module_on && music_feature)
-                };
-                if translate_on && bubble_on {
-                    match gs.register("alt+e") {
-                        Ok(_) => log::info!("[hotkey] 注册成功: alt+e（划词翻译）"),
-                        Err(e) => log::error!("[hotkey] 注册失败: alt+e ({})", e),
-                    }
-                } else {
-                    log::info!("[hotkey] 划词翻译模块未启用，跳过 alt+e");
-                }
-                if music_on {
-                    for k in ["alt+z", "alt+x", "alt+c"] {
-                        match gs.register(k) {
-                            Ok(_) => log::info!("[hotkey] 注册成功: {}（音乐控制）", k),
-                            Err(e) => log::error!("[hotkey] 注册失败: {} ({})", k, e),
-                        }
-                    }
-                } else {
-                    log::info!("[hotkey] 岛音乐未启用，跳过 alt+z/x/c");
-                }
-            }
+            // 清单集中在 configured_hotkeys()：游戏模式（冻结后台）会整份注销、退出时整份重注册
+            register_configured_hotkeys(app.handle());
 
             // 主窗口：Rust builder 创建（initialization_script 只能挂在 builder 上；conf 不再定义窗口）
             // 尺寸对齐 Electron 版：900×600 / min 600×400
@@ -2799,11 +2851,8 @@ pub fn run() {
                 None => log::info!("[shell] 冷启动无动作参数（args={:?}）", cli),
             }
 
-            // 托盘：显示主面板 / 退出（对齐 Electron：显示/隐藏 + 分隔线 + 退出）
-            let show = MenuItem::with_id(app, "show", "显示主面板", true, None::<&str>)?;
-            let sep = PredefinedMenuItem::separator(app)?;
-            let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &sep, &quit])?;
+            // 托盘：显示主面板 / 游戏模式（冻结后台）/ 分隔线 / 退出
+            let menu = build_tray_menu(app.handle())?;
             let _tray = TrayIconBuilder::with_id("main-tray")
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
@@ -2832,6 +2881,10 @@ pub fn run() {
         tauri::async_runtime::spawn(async move {
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                // 游戏模式（冻结后台）：连提醒弹窗都不该出现，直接跳过这一轮
+                if freeze::is_frozen() {
+                    continue;
+                }
                 scan_due_reminders(&handle);
             }
         });
