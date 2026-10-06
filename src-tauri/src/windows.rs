@@ -280,6 +280,9 @@ fn attach_island_drop_handler(win: &tauri::WebviewWindow, app: &tauri::AppHandle
                 tauri::DragDropEvent::Enter { paths, .. } => {
                     let list: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
                     log::info!("[island] 拖入 {} 个文件", list.len());
+                    // 记下路径 + 标记"本次还没收到 Drop"：OLE 不投递时的兜底要用
+                    DRAG_DROPPED.store(false, std::sync::atomic::Ordering::Relaxed);
+                    note_drag_paths(list.clone());
                     // 拖拽期间岛必须保持可交互（否则松手时 drop 会落到岛下面的窗口上）
                     mark_drag_active(3000);
                     apply_island_and_ball_passthrough(&app_ev);
@@ -287,6 +290,7 @@ fn attach_island_drop_handler(win: &tauri::WebviewWindow, app: &tauri::AppHandle
                 }
                 tauri::DragDropEvent::Over { .. } => {
                     mark_drag_active(3000); // 拖拽持续中，不断续期
+                    // 注意：这个 Tauri 版本的 Over 事件不带 paths，路径只在 Enter/Drop 里拿
                 }
                 tauri::DragDropEvent::Leave => {
                     // Leave 可能是 Windows 抖出来的（窗口样式/命中测试扰动），
@@ -297,6 +301,8 @@ fn attach_island_drop_handler(win: &tauri::WebviewWindow, app: &tauri::AppHandle
                 tauri::DragDropEvent::Drop { paths, .. } => {
                     let list: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
                     log::info!("[island] 球上松手，文件数={}", list.len());
+                    DRAG_DROPPED.store(true, std::sync::atomic::Ordering::Relaxed);
+                    note_drag_paths(Vec::new());
                     // 松手后交给前端「识别态」维持可交互（menu 形态），这里结束拖拽活跃标记
                     clear_drag_active();
                     let _ = app_ev.emit("ball:dragover", serde_json::json!({ "active": false }));
@@ -523,15 +529,9 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
             let Some(win) = app.get_webview_window("island") else {
                 continue;
             };
-            // 只在"当前确实穿透"时才需要守卫；菜单打开/非穿透时清掉残留
-            if !effective_island_passthrough() {
-                if armed {
-                    armed = false;
-                    release_until = None;
-                    apply_island_and_ball_passthrough(&app);
-                }
-                continue;
-            }
+            // 注意：这里**不能**因为"当前不穿透"就 continue 掉整个循环——
+            // 拖拽活跃期间 passthrough 恒为 false，若提前 continue 就永远走不到"松手兜底"分支。
+            // 穿透下发统一放在循环末尾（带缓存，值没变不会重复扰动窗口样式）。
             let down = unsafe { GetAsyncKeyState(VK_LBUTTON) } < 0;
             let mut pt = Pt { x: 0, y: 0 };
             let ok = unsafe { GetCursorPos(&mut pt) } != 0;
@@ -545,44 +545,64 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
                 }
             }
             let now = std::time::Instant::now();
-            let want = if down && inside {
-                // 左键按住且光标在岛上：这次一定是拖放，岛必须保持可交互。
-                // 顺带续期"拖拽活跃"，这样即使拖放事件中途抖没了，松手那一刻岛也是可交互的。
-                mark_drag_active(1000);
+
+            if down && inside {
+                // 左键按住且光标在岛上：这次多半是拖放，岛必须保持可交互
+                armed = true;
                 release_until = None;
-                true
+                mark_drag_active(1000);
             } else if armed {
-                // 松手（或拖出岛外）：先给宽限期，宽限期过了才真的恢复穿透
-                match release_until {
-                    None => {
-                        release_until = Some(now + std::time::Duration::from_millis(RELEASE_GRACE_MS));
-                        true
-                    }
-                    Some(t) if now < t => true,
-                    Some(_) => {
-                        release_until = None;
-                        false
-                    }
+                // 松手（或拖出岛外）：先给宽限期，让真正的 Drop 有机会投递过来
+                let t = *release_until.get_or_insert(now + std::time::Duration::from_millis(RELEASE_GRACE_MS));
+                if now >= t {
+                    armed = false;
+                    release_until = None;
+                    // 宽限期过了还没有 Drop：说明 OLE 根本没投递（浏览器/聊天窗口拖图常见），
+                    // 用拖入时记下的路径自己补一个 drop，别让用户"松手后毫无反应"
+                    synthesize_drop_if_pending(&app, inside);
                 }
+            }
+
+            // 穿透下发：拖拽活跃 / 菜单打开 → 一定可交互；否则回到用户设定
+            if drag_active() || ISLAND_MENU_OPEN.load(std::sync::atomic::Ordering::Relaxed) {
+                apply_island_and_ball_passthrough_value(&app, false, false);
             } else {
-                false
-            };
-            if want != armed {
-                armed = want;
-                if want {
-                    // 走带缓存的下发路径：值已是 false 时不会再碰窗口样式（关键，别改回 set_ignore_cursor_events）
-                    apply_island_and_ball_passthrough_value(&app, false, false);
-                } else {
-                    apply_island_and_ball_passthrough(&app);
-                }
-                log::info!(
-                    "[island] 拖放守卫：{}穿透（光标在岛上且按住左键={}）",
-                    if want { "临时解除" } else { "恢复" },
-                    down
-                );
+                apply_island_and_ball_passthrough(&app);
             }
         }
     });
+}
+
+/// 一次拖拽的全部路径（Enter/Over 时记下，Drop 后清空）
+static DRAG_PATHS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+/// 本次拖拽是否已经真的收到过 Drop
+static DRAG_DROPPED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+fn note_drag_paths(paths: Vec<String>) {
+    if let Ok(mut v) = DRAG_PATHS.lock() {
+        *v = paths;
+    }
+}
+
+fn take_drag_paths() -> Vec<String> {
+    DRAG_PATHS.lock().map(|mut v| std::mem::take(&mut *v)).unwrap_or_default()
+}
+
+/// OLE 没投递 Drop 时的兜底：用拖入时记下的路径补发一次 `ball:drop`
+fn synthesize_drop_if_pending(app: &tauri::AppHandle, cursor_inside: bool) {
+    use std::sync::atomic::Ordering;
+    if DRAG_DROPPED.load(Ordering::Relaxed) {
+        note_drag_paths(Vec::new());
+        return;
+    }
+    DRAG_DROPPED.store(true, Ordering::Relaxed);
+    let paths = take_drag_paths();
+    if paths.is_empty() || !cursor_inside {
+        return; // 不是"在岛上松手"的一次真拖放，别乱补
+    }
+    log::info!("[island] 松手（OLE 未投递，补发 drop）文件数={}", paths.len());
+    let _ = app.emit("ball:dragover", serde_json::json!({ "active": false }));
+    let _ = app.emit("ball:drop", serde_json::json!({ "paths": paths }));
 }
 
 /// SC球（岛）拖放形态：collapsed（常态）/ hint（拖入提示）/ menu（格式菜单）。

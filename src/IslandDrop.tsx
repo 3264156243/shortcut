@@ -96,6 +96,15 @@ export function useIslandDrop(): IslandDropApi {
   const hoverTimer = useRef<number | null>(null);
   /** 本次拖拽是否已经收到过"松手"：收到后 Leave 一律不再复位 */
   const droppedRef = useRef(false);
+  /** id 未知时先到的转换事件（小任务比 IPC 回包还快），start(id) 时按序补放 */
+  const earlyEvents = useRef<
+    Array<
+      | { kind: 'progress'; id: string; pct?: number; note?: string }
+      | { kind: 'done'; id: string; out?: string; out_dir?: string }
+      | { kind: 'error'; id: string; message?: string }
+    >
+  >([]);
+  const drainEarlyRef = useRef<((id: string) => void) | null>(null);
 
   // ── 配置：默认格式 / 转换后自动打开目录（转换板块设置面板里改）──
   const loadPrefs = useCallback(() => {
@@ -191,17 +200,15 @@ export function useIslandDrop(): IslandDropApi {
       })();
     });
 
-    // 真实进度（Rust 在解码/编码/逐条目阶段上报）
-    const offProgress = window.electronAPI?.onConverterProgress?.((payload) => {
-      if (!jobId.current || payload.id !== jobId.current) return;
+    // 事件可能在 `await converterExtract()` 返回之前就发出（小压缩包解压极快，
+    // 前端还没设好 jobId，事件就被 id 过滤丢掉 → 界面永远卡在「解压中」）。
+    // 所以：id 还不认识的事件先按顺序缓存，start(id) 时再补放一遍。
+    const applyProgress = (payload: { id: string; pct?: number; note?: string }) => {
       setHasRealProgress(true);
       setPct(Math.max(0, Math.min(100, Number(payload.pct) || 0)));
       if (payload.note) setNote(String(payload.note));
-    });
-
-    // 完成：立刻 100% → 「转换完成」停留 1 秒 → 打开产物所在目录并选中 → 复位
-    const offDone = window.electronAPI?.onConverterDone?.((payload) => {
-      if (!jobId.current || payload.id !== jobId.current) return;
+    };
+    const applyDone = (payload: { id: string; out?: string; out_dir?: string }) => {
       setPct(100);
       setNote('');
       setStatus('转换完成');
@@ -211,16 +218,51 @@ export function useIslandDrop(): IslandDropApi {
         window.setTimeout(() => { void window.electronAPI?.revealInExplorer?.(target); }, 120);
       }
       resetTimer.current = window.setTimeout(() => reset(), 1000);
-    });
-
-    const offErr = window.electronAPI?.onConverterError?.((payload) => {
-      if (!jobId.current || payload.id !== jobId.current) return;
+    };
+    const applyErr = (payload: { id: string; message?: string }) => {
       jobId.current = '';
       setPct(0);
       setHasRealProgress(false);
       setNote('');
       setStatus(`失败：${payload.message || '未知错误'}`);
       setPhase('recognized'); // 回到可重试状态
+    };
+    const drainEarly = (id: string) => {
+      const kept: typeof earlyEvents.current = [];
+      for (const ev of earlyEvents.current) {
+        if (ev.id !== id) { kept.push(ev); continue; }
+        if (ev.kind === 'progress') applyProgress(ev);
+        else if (ev.kind === 'done') applyDone(ev);
+        else applyErr(ev);
+      }
+      earlyEvents.current = kept;
+    };
+    drainEarlyRef.current = drainEarly;
+
+    // 真实进度（Rust 在解码/编码/逐条目阶段上报）
+    const offProgress = window.electronAPI?.onConverterProgress?.((payload) => {
+      if (!jobId.current || payload.id !== jobId.current) {
+        if (!jobId.current) earlyEvents.current.push({ kind: 'progress', id: payload.id, pct: payload.pct, note: payload.note });
+        return;
+      }
+      applyProgress(payload);
+    });
+
+    // 完成：立刻 100% → 「转换完成」停留 1 秒 → 打开产物所在目录并选中 → 复位
+    const offDone = window.electronAPI?.onConverterDone?.((payload) => {
+      if (!jobId.current || payload.id !== jobId.current) {
+        if (!jobId.current) earlyEvents.current.push({ kind: 'done', id: payload.id, out: payload.out, out_dir: payload.out_dir });
+        return;
+      }
+      applyDone(payload);
+    });
+
+    const offErr = window.electronAPI?.onConverterError?.((payload) => {
+      if (!jobId.current || payload.id !== jobId.current) {
+        if (!jobId.current) earlyEvents.current.push({ kind: 'error', id: payload.id, message: payload.message });
+        return;
+      }
+      applyErr(payload);
     });
 
     return () => {
@@ -246,6 +288,7 @@ export function useIslandDrop(): IslandDropApi {
     setNote('');
     setStatus('');
     setPhase('working');
+    drainEarlyRef.current?.(id); // 补放这个任务在设好 id 之前就到达的事件
   };
 
   const beginWork = () => {
