@@ -93,6 +93,9 @@ export function useIslandDrop(): IslandDropApi {
   phaseRef.current = phase;
   const resetTimer = useRef<number | null>(null);
   const leaveTimer = useRef<number | null>(null);
+  const hoverTimer = useRef<number | null>(null);
+  /** 本次拖拽是否已经收到过"松手"：收到后 Leave 一律不再复位 */
+  const droppedRef = useRef(false);
 
   // ── 配置：默认格式 / 转换后自动打开目录（转换板块设置面板里改）──
   const loadPrefs = useCallback(() => {
@@ -111,6 +114,9 @@ export function useIslandDrop(): IslandDropApi {
   /** 复位到 idle：撤掉按钮，岛恢复拖放前的内容 */
   const reset = useCallback(() => {
     if (resetTimer.current) { window.clearTimeout(resetTimer.current); resetTimer.current = null; }
+    if (leaveTimer.current) { window.clearTimeout(leaveTimer.current); leaveTimer.current = null; }
+    if (hoverTimer.current) { window.clearTimeout(hoverTimer.current); hoverTimer.current = null; }
+    droppedRef.current = false;
     jobId.current = '';
     setFiles([]);
     setStatus('');
@@ -125,13 +131,13 @@ export function useIslandDrop(): IslandDropApi {
     loadPrefs();
 
     // 拖入：岛身自己显示出「松手自动识别」
-    // 注意 else 分支必须**防抖**：WebView2 在拖拽过程中会因窗口临时切换 click-through
-    // 抖出一次 DragLeave，若立即复位就会把紧接着的松手丢掉（实测踩到过）。
+    // 注意 else 分支必须**防抖**：WebView2 在拖拽过程中（以及松手之后）都会补发一次 DragLeave，
+    // 若立即复位就会把紧接着的松手丢掉、或者把刚识别出来的按钮又清掉（两种都实测踩到）。
     const offOver = window.electronAPI?.onBallDragover?.((payload) => {
       const active = !!payload?.active;
       if (active) {
         if (leaveTimer.current) { window.clearTimeout(leaveTimer.current); leaveTimer.current = null; }
-        if (phaseRef.current === 'recognized' || phaseRef.current === 'working') return;
+        if (phaseRef.current === 'recognized' || phaseRef.current === 'working' || phaseRef.current === 'done') return;
         setFiles([]);
         setStatus('');
         setNote('');
@@ -139,34 +145,49 @@ export function useIslandDrop(): IslandDropApi {
         setHasRealProgress(false);
         setPhase('hover');
         void window.electronAPI?.ballShape?.('hint'); // 悬停期间保持可交互，落点一定收得到
+        // 兜底：万一 Leave/松手都没来（拖到一半取消等），悬停也不能永久挂着
+        if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
+        hoverTimer.current = window.setTimeout(() => {
+          hoverTimer.current = null;
+          if (phaseRef.current === 'hover' && !droppedRef.current) reset();
+        }, 6000);
       } else if (phaseRef.current === 'hover') {
+        // 已经收到过"松手"的这一次拖拽，后续 Leave 不再复位（松手后会补发 Leave）
+        if (droppedRef.current) return;
         if (leaveTimer.current) window.clearTimeout(leaveTimer.current);
         leaveTimer.current = window.setTimeout(() => {
           leaveTimer.current = null;
-          if (phaseRef.current !== 'hover') return;
-          setPhase('idle');
-          void window.electronAPI?.ballShape?.('collapsed');
-        }, 300);
+          if (phaseRef.current !== 'hover' || droppedRef.current) return;
+          reset();
+        }, 700);
       }
     });
 
     // 松手：识别 → 岛内展示「文件名 + 格式」→ 岛身向下长出椭圆按钮
+        // 关键：先**立刻**进识别态（用路径兜底），再异步补详情。
+        // 之前这里是 `await converterDetect(...)` 之后才 setPhase，
+        // 只要 detect 报错或返回晚于复位，界面就什么都不显示（用户实测踩到）。
     const offDrop = window.electronAPI?.onBallDrop?.((payload) => {
       const paths = payload?.paths || [];
       if (!paths.length) return;
+      if (leaveTimer.current) { window.clearTimeout(leaveTimer.current); leaveTimer.current = null; }
+      droppedRef.current = true;
       setStatus('');
       setNote('');
       setPct(0);
       setHasRealProgress(false);
+      setFiles(paths.map((p) => ({ path: p, name: p.split(/[\\/]/).pop() || p, kind: 'other' as const, ext: '', targets: [] })));
+      setPhase('recognized');
+      void window.electronAPI?.ballShape?.('menu'); // 按钮要能点：解除穿透
       void (async () => {
-        const detected = ((await window.electronAPI?.converterDetect?.(paths)) || []) as Detected[];
-        const list: Detected[] = detected.length
-          ? detected
-          : paths.map((p) => ({ path: p, name: p.split(/[\\/]/).pop() || p, kind: 'other', ext: '', targets: [] }));
-        setFiles(list);
-        setPhase('recognized');
-        loadPrefs(); // 设置面板刚改过也能立刻生效
-        await window.electronAPI?.ballShape?.('menu'); // 按钮要能点：解除穿透
+        try {
+          const detected = ((await window.electronAPI?.converterDetect?.(paths)) || []) as Detected[];
+          if (detected.length) setFiles(detected);
+          loadPrefs(); // 设置面板刚改过也能立刻生效
+        } catch (e) {
+          // 识别失败也要让用户看到东西：保留兜底列表 + 明确提示，绝不静默回常态
+          setStatus(`识别失败：${e instanceof Error ? e.message : String(e)}`);
+        }
       })();
     });
 

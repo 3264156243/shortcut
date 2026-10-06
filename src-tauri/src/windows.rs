@@ -447,7 +447,11 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
             fn GetCursorPos(p: *mut Pt) -> i32;
         }
         const VK_LBUTTON: i32 = 0x01;
+        /// 松手后的宽限期：OLE 的 drop 投递可能比"左键抬起"晚几十~几百毫秒，
+        /// 如果一检测到松开就恢复穿透，drop 会被岛下面的窗口抢走（实测导致"松手后没反应"）。
+        const RELEASE_GRACE_MS: u64 = 500;
         let mut armed = false;
+        let mut release_until: Option<std::time::Instant> = None;
         loop {
             std::thread::sleep(std::time::Duration::from_millis(120));
             let Some(win) = app.get_webview_window("island") else {
@@ -457,6 +461,7 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
             if !effective_island_passthrough() {
                 if armed {
                     armed = false;
+                    release_until = None;
                     apply_island_and_ball_passthrough(&app);
                 }
                 continue;
@@ -473,7 +478,26 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
                     inside = pt.x >= x0 && pt.x <= x1 && pt.y >= y0 && pt.y <= y1;
                 }
             }
-            let want = down && inside;
+            let now = std::time::Instant::now();
+            let want = if down && inside {
+                release_until = None;
+                true
+            } else if armed {
+                // 松手（或拖出岛外）：先给宽限期，宽限期过了才真的恢复穿透
+                match release_until {
+                    None => {
+                        release_until = Some(now + std::time::Duration::from_millis(RELEASE_GRACE_MS));
+                        true
+                    }
+                    Some(t) if now < t => true,
+                    Some(_) => {
+                        release_until = None;
+                        false
+                    }
+                }
+            } else {
+                false
+            };
             if want != armed {
                 armed = want;
                 if want {
