@@ -218,7 +218,8 @@ export default function ConverterPanel() {
   return (
     <div
       className="relative flex h-full w-full flex-col overflow-hidden"
-      style={{ background: 'var(--color-bg-panel)' }}
+      // 这里同样别用 var(--color-bg-panel)（index.css 里没这个变量），否则面板底色会变透明
+      style={{ background: 'var(--color-bg)' }}
     >
       {/* 拖放悬停提示：拖文件进入窗口时出现（拖放链路打通的直观反馈） */}
       {dragOver && (

@@ -8,15 +8,18 @@ import { useStore } from '../store';
  * 由 ConverterPanel 的齿轮按钮打开。
  */
 
+// 注意：这里必须用**不透明**的颜色。
+// 之前用了 `var(--color-bg-panel)`，而 index.css 里根本没有这个变量 → 背景解析失败 = 全透明，
+// 弹窗上下两层文字会叠在一起看不清。--color-bg-secondary/tertiary 在两个主题下都是实色。
 const sectionStyle: React.CSSProperties = {
-  background: 'var(--color-bg-card)',
+  background: 'var(--color-bg-tertiary)',
   border: '1px solid var(--color-border)',
   borderRadius: 12,
   padding: '12px 14px',
 };
 
 const selectStyle: React.CSSProperties = {
-  background: 'var(--color-bg-card-hover)',
+  background: 'var(--color-bg-secondary)',
   border: '1px solid var(--color-border)',
   color: 'var(--color-text-secondary)',
 };
@@ -90,7 +93,7 @@ export default function ConverterSettings({ onClose }: { onClose: () => void }) 
     <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: 'rgba(0,0,0,.5)' }}>
       <div
         className="flex max-h-[86%] w-[520px] max-w-[92%] flex-col overflow-hidden rounded-2xl"
-        style={{ background: 'var(--color-bg-panel)', border: '1px solid var(--color-border)', boxShadow: '0 20px 60px rgba(0,0,0,.5)' }}
+        style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', boxShadow: '0 20px 60px rgba(0,0,0,.5)' }}
       >
         <div className="flex shrink-0 items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid var(--color-border)' }}>
           <div className="flex items-center gap-2">
