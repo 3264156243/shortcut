@@ -32,6 +32,125 @@ struct Snap {
 
 static SNAP: Mutex<Option<Snap>> = Mutex::new(None);
 
+/// 冻结前硬件监控侧车的 main_active（解冻要还原，否则起来一秒就退）
+static COCKPIT_WAS_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+/// 冻结时注入页面：暂停所有 CSS 动画/过渡，并让 setTimeout/setInterval/rAF 变成空转。
+/// 只隐藏窗口时渲染进程照样在跑动画 —— 这是"冻结后 CPU/GPU 没降"的主因之一。
+const PAUSE_JS: &str = r#"
+(() => {
+  if (window.__SC_FROZEN__) return;
+  window.__SC_FROZEN__ = true;
+  const d = document;
+  const st = d.getElementById('sc-freeze-style') || d.createElement('style');
+  st.id = 'sc-freeze-style';
+  st.textContent = '*,*::before,*::after{animation-play-state:paused !important;transition:none !important;} video,audio{}.sc';
+  (d.head || d.documentElement).appendChild(st);
+  const isFrozen = () => window.__SC_FROZEN__ === true;
+  const wrapTimer = (name) => {
+    const orig = window[name];
+    if (!orig || orig.__scWrapped) return;
+    const wrapped = function (fn, ...rest) {
+      if (typeof fn === 'function') {
+        const guarded = function (...a) { if (isFrozen()) return; return fn.apply(this, a); };
+        return orig.call(window, guarded, ...rest);
+      }
+      return orig.call(window, fn, ...rest);
+    };
+    wrapped.__scWrapped = true;
+    try { window[name] = wrapped; } catch (e) {}
+  };
+  wrapTimer('setInterval');
+  wrapTimer('setTimeout');
+  if (!window.requestAnimationFrame.__scWrapped) {
+    const origRaf = window.requestAnimationFrame.bind(window);
+    const raf = function (cb) { return origRaf(function (t) { if (isFrozen()) { raf(cb); return; } cb(t); }); };
+    raf.__scWrapped = true;
+    window.requestAnimationFrame = raf;
+  }
+  // 正在播放的媒体也一起停（岛上可能有音频/视频元素）
+  try { d.querySelectorAll('video,audio').forEach(m => { try { m.pause(); } catch (e) {} }); } catch (e) {}
+})();
+"#;
+
+/// 解冻时注入页面：撤掉暂停
+const RESUME_JS: &str = r#"
+(() => {
+  window.__SC_FROZEN__ = false;
+  const st = document.getElementById('sc-freeze-style');
+  if (st && st.parentNode) st.parentNode.removeChild(st);
+})();
+"#;
+
+/// 挂起单个窗口的 WebView2（A：官方 TrySuspendAsync，必须窗口已隐藏）
+fn pause_webview(app: &AppHandle, label: &str) {
+    let Some(win) = app.get_webview_window(label) else {
+        return;
+    };
+    // 先注入页面级暂停（B）——它一定生效，且对 TrySuspend 失败的情况也是兜底
+    if let Err(e) = win.eval(PAUSE_JS) {
+        log::warn!("[freeze] 注入页面暂停失败 {}: {}", label, e);
+    }
+    #[cfg(windows)]
+    {
+        use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_3;
+        use webview2_com::TrySuspendCompletedHandler;
+        use windows_core::Interface;
+        let label2 = label.to_string();
+        let label3 = label.to_string();
+        let res = win.with_webview(move |pw| unsafe {
+            let ctrl = pw.controller();
+            let Ok(core) = ctrl.CoreWebView2() else {
+                log::warn!("[freeze] {} 取 CoreWebView2 失败", label2);
+                return;
+            };
+            let Ok(v3) = core.cast::<ICoreWebView2_3>() else {
+                log::warn!("[freeze] {} 不支持 ICoreWebView2_3（WebView2 版本过旧）", label2);
+                return;
+            };
+            let handler = TrySuspendCompletedHandler::create(Box::new(move |hr, ok| {
+                log::info!("[freeze] WebView2 挂起回调 {}: hr={:?} 成功={}", label3, hr, ok);
+                Ok(())
+            }));
+            match v3.TrySuspend(&handler) {
+                Ok(_) => log::info!("[freeze] 已请求挂起 WebView2: {}", label2),
+                Err(e) => log::warn!("[freeze] 挂起 WebView2 失败 {}: {:?}", label2, e),
+            }
+        });
+        if let Err(e) = res {
+            log::warn!("[freeze] with_webview 调用失败 {}: {}", label, e);
+        }
+    }
+}
+
+/// 恢复单个窗口的 WebView2 渲染
+fn resume_webview(app: &AppHandle, label: &str) {
+    let Some(win) = app.get_webview_window(label) else {
+        return;
+    };
+    #[cfg(windows)]
+    {
+        use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_3;
+        use windows_core::Interface;
+        let label2 = label.to_string();
+        let res = win.with_webview(move |pw| unsafe {
+            let ctrl = pw.controller();
+            let Ok(core) = ctrl.CoreWebView2() else { return };
+            let Ok(v3) = core.cast::<ICoreWebView2_3>() else { return };
+            match v3.Resume() {
+                Ok(_) => log::info!("[freeze] 已恢复 WebView2 渲染: {}", label2),
+                Err(e) => log::warn!("[freeze] 恢复 WebView2 失败 {}: {:?}", label2, e),
+            }
+        });
+        if let Err(e) = res {
+            log::warn!("[freeze] 恢复 with_webview 调用失败 {}: {}", label, e);
+        }
+    }
+    if let Err(e) = win.eval(RESUME_JS) {
+        log::warn!("[freeze] 注入页面恢复失败 {}: {}", label, e);
+    }
+}
+
 pub fn is_frozen() -> bool {
     FROZEN.load(Ordering::Relaxed)
 }
@@ -74,11 +193,20 @@ pub fn freeze(app: &AppHandle) {
     }
     let passthrough = crate::windows::ball_passthrough();
 
-    // 2) 侧车进程结束（真正释放内存）
+    // 2) 停掉页面里的动画与定时器（B）+ 让 WebView2 挂起渲染（A）
+    //    只隐藏窗口是不够的：渲染进程照样跑动画（这就是冻结后 CPU/GPU 几乎没降的原因）
+    for (label, _) in wins.iter() {
+        pause_webview(app, label);
+    }
+
+    // 3) 侧车进程结束（真正释放内存）
     {
         let music = app.state::<crate::MusicHandle>();
         crate::sidecar::stop_music_bridge(&music.0);
         let cockpit = app.state::<crate::CockpitHandle>();
+        // 记下冻结前的 main_active，解冻时要还原，否则硬件监控起不来（实测日志：
+        // 已启动 → 1 秒后退出）
+        COCKPIT_WAS_ACTIVE.store(cockpit.0.main_active.load(Ordering::Relaxed), Ordering::Relaxed);
         crate::sidecar::kill_child(&cockpit.0.child);
         cockpit.0.main_active.store(false, Ordering::Relaxed);
     }
@@ -107,10 +235,26 @@ pub fn unfreeze(app: &AppHandle) {
     // 2) 侧车按配置重启（sync/start 内部会判断模块开关与是否已运行）
     {
         let cockpit = app.state::<crate::CockpitHandle>();
+        // 还原冻结前的 main_active：不还原的话硬件监控会被 sync_cockpit 判定为"不该跑"，
+        // 起来一秒就退（实测踩到）
+        let was_active = COCKPIT_WAS_ACTIVE.swap(false, Ordering::Relaxed);
+        if was_active {
+            cockpit.0.main_active.store(true, Ordering::Relaxed);
+        }
         let st = cockpit.0.clone();
         crate::sidecar::sync_cockpit(app.clone(), st);
         let music = app.state::<crate::MusicHandle>();
         crate::sidecar::start_music_bridge(app.clone(), music.0.clone());
+    }
+
+    // 页面恢复：先让 WebView2 继续渲染（A），再撤掉页面里的暂停（B）
+    {
+        let snap = SNAP.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(s) = snap.as_ref() {
+            for (label, _) in s.wins.iter() {
+                resume_webview(app, label);
+            }
+        }
     }
 
     // 3) 热键重新注册
@@ -146,7 +290,7 @@ pub fn unfreeze(app: &AppHandle) {
                 win.outer_size().ok()
             );
         }
-        crate::windows::set_ball_passthrough(app, snap.passthrough);
+        crate::windows::restore_passthrough_state(app, snap.passthrough);
     }
     log::info!("[freeze] 已恢复");
 }

@@ -1,6 +1,109 @@
 //! M5 sidecar 进程：音乐桥（SMTC PowerShell 脚本）+ 硬件监控（C# exe）
 //! 共用模式：spawn 常驻进程，stdout 按行 JSON → emit 事件 + 缓存 latest（对齐 Electron startMusicBridge/startHardwareMonitor）
 
+/// 侧车进程的生命周期保障：统一挂到一个带 `KILL_ON_JOB_CLOSE` 的 Job Object 上。
+///
+/// 为什么需要它：Windows 不会因为父进程退出就杀掉子进程。原来的做法是在退出事件里
+/// `kill_child()`（异步 `start_kill()`，不等确认）—— 正常退出时可能还没投递完我们就退出了，
+/// 崩溃 / 任务管理器强杀更是完全不走这条路，于是留下孤儿 powershell 常驻吃内存
+/// （实测残留 89MB、91MB 的音乐桥）。挂进 Job 后：**我们无论怎么死，整棵侧车进程树都会被系统收掉**。
+#[cfg(windows)]
+mod job {
+    use std::sync::OnceLock;
+
+    static JOB: OnceLock<isize> = OnceLock::new();
+
+    fn job_handle() -> isize {
+        *JOB.get_or_init(|| unsafe {
+            #[link(name = "kernel32")]
+            unsafe extern "system" {
+                fn CreateJobObjectW(attr: *mut core::ffi::c_void, name: *const u16) -> *mut core::ffi::c_void;
+                fn SetInformationJobObject(job: *mut core::ffi::c_void, class: u32, info: *mut core::ffi::c_void, len: u32) -> i32;
+            }
+            #[repr(C)]
+            struct IoCounters { read_ops: u64, write_ops: u64, other_ops: u64, read_bytes: u64, write_bytes: u64, other_bytes: u64 }
+            #[repr(C)]
+            struct BasicLimitInfo {
+                per_process_user_time: i64,
+                per_job_user_time: i64,
+                limit_flags: u32,
+                minimum_working_set: usize,
+                maximum_working_set: usize,
+                active_process_limit: u32,
+                affinity: usize,
+                priority_class: u32,
+                scheduling_class: u32,
+            }
+            #[repr(C)]
+            struct ExtendedLimitInfo {
+                basic: BasicLimitInfo,
+                io: IoCounters,
+                process_memory_limit: usize,
+                job_memory_limit: usize,
+                peak_process_memory: usize,
+                peak_job_memory: usize,
+            }
+            const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE: u32 = 0x0000_2000;
+            const JOB_OBJECT_EXTENDED_LIMIT_INFORMATION_CLASS: u32 = 9;
+
+            let job = CreateJobObjectW(std::ptr::null_mut(), std::ptr::null());
+            if job.is_null() {
+                log::error!("[sidecar] CreateJobObject 失败，侧车孤儿防护不可用");
+                return 0;
+            }
+            let mut info: ExtendedLimitInfo = std::mem::zeroed();
+            info.basic.limit_flags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            let ok = SetInformationJobObject(
+                job,
+                JOB_OBJECT_EXTENDED_LIMIT_INFORMATION_CLASS,
+                &mut info as *mut _ as *mut core::ffi::c_void,
+                std::mem::size_of::<ExtendedLimitInfo>() as u32,
+            );
+            log::info!("[sidecar] 侧车 Job Object 已建立（KILL_ON_JOB_CLOSE 设置={}）", ok);
+            job as isize
+        })
+    }
+
+    /// 把刚 spawn 出来的子进程挂进 Job。失败只记日志（某些宿主环境禁止嵌套 Job）。
+    pub fn assign(pid: u32) {
+        if pid == 0 {
+            return;
+        }
+        let job = job_handle();
+        if job == 0 {
+            return;
+        }
+        unsafe {
+            #[link(name = "kernel32")]
+            unsafe extern "system" {
+                fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut core::ffi::c_void;
+                fn AssignProcessToJobObject(job: *mut core::ffi::c_void, process: *mut core::ffi::c_void) -> i32;
+                fn CloseHandle(h: *mut core::ffi::c_void) -> i32;
+            }
+            const PROCESS_SET_QUOTA: u32 = 0x0100;
+            const PROCESS_TERMINATE: u32 = 0x0001;
+            let h = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, pid);
+            if h.is_null() {
+                log::warn!("[sidecar] 子进程 {} 打开失败，未加入 Job", pid);
+                return;
+            }
+            let ok = AssignProcessToJobObject(job as *mut core::ffi::c_void, h);
+            CloseHandle(h);
+            if ok == 0 {
+                log::warn!("[sidecar] 子进程 {} 加入 Job 失败（可能处于不可嵌套 Job 中）", pid);
+            } else {
+                log::info!("[sidecar] 子进程 {} 已纳入 Job（随本进程一起回收）", pid);
+            }
+        }
+    }
+}
+
+#[cfg(not(windows))]
+mod job {
+    pub fn assign(_pid: u32) {}
+}
+
+
 use serde_json::{json, Value};
 use std::os::windows::process::CommandExt;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -86,6 +189,11 @@ pub fn start_music_bridge(app: tauri::AppHandle, st: Arc<MusicState>) -> Value {
             .spawn()
         {
             Ok(mut child) => {
+                // 加入 Job Object：我们一退出（含崩溃/被强杀），侧车进程树必然跟着结束，
+                // 不再留下孤儿 powershell（实测残留过 89MB/91MB 的音乐桥）
+                if let Some(pid) = child.id() {
+                    job::assign(pid);
+                }
                 let stdout = child.stdout.take().unwrap();
                 let app2 = app.clone();
                 let latest = st2.latest.clone();
@@ -196,6 +304,10 @@ fn start_cockpit(app: tauri::AppHandle, st: Arc<CockpitState>) -> Value {
             .spawn()
         {
             Ok(mut child) => {
+                // 同样加入 Job Object（见 start_music_bridge 的说明）
+                if let Some(pid) = child.id() {
+                    job::assign(pid);
+                }
                 let stdout = child.stdout.take().unwrap();
                 let app2 = app.clone();
                 let latest = st2.latest.clone();

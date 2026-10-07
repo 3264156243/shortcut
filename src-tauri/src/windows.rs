@@ -465,6 +465,13 @@ pub fn restore_passthrough_from_config() {
     log::info!("[island] 从配置恢复穿透开关 = {}", through);
 }
 
+/// 只还原穿透的**运行期状态**（不写配置、不触发"配置变更 → 重建小球"）。
+/// 游戏模式解冻恢复穿透值时用这个：写配置会连带把小球窗口重建一次（实测有闪烁）。
+pub fn restore_passthrough_state(app: &tauri::AppHandle, on: bool) {
+    BALL_PASSTHROUGH.store(on, std::sync::atomic::Ordering::Relaxed);
+    apply_island_and_ball_passthrough(app);
+}
+
 /// 【SC球（岛）鼠标穿透】on=true 岛不接收鼠标；关闭时回到"收起穿透/展开可交互"。
 /// 旁边小球跟随同一状态（不单独开关）。
 pub fn set_ball_passthrough(app: &tauri::AppHandle, on: bool) {
