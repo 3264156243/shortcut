@@ -2007,6 +2007,10 @@ fn show_main_window(app: &tauri::AppHandle) {
     }
     let _ = w.show();
     let _ = w.unminimize();
+    // 关键：最小化过的窗口 unminimize() 之后经常还是"最小化那套几何"（Windows 把最小化窗口
+    // 放在 -32000,-32000、尺寸只剩标题栏），表现就是面板回来成了细条或仍是最小化。
+    // 所以这里**重新套用保存的窗口几何**（window-state.json），再做屏幕越界检查。
+    restore_window_state(&w);
     let _ = w.set_focus();
     // 屏幕外兜底：窗口位置若因多显示器变化/上次异常退出而跑到屏幕外，这里直接拉回屏幕中间
     freeze::ensure_on_screen(app, &w);
@@ -2346,7 +2350,11 @@ fn run_music_control(app: &tauri::AppHandle, action: &str) {
 /// provider 关 / island.balance feature 关 / island 模块关 → 销毁；
 /// 球已存在（音乐驱动或此前创建）且配置变了 → 重建以刷新样式与供应商；
 /// 球不存在且音乐未驱动 → 不主动创建（等岛 setBalanceMusicPlaying）。
-fn sync_deepseekball_state(app: &tauri::AppHandle) {    let cfg = config::read_config_value().unwrap_or(json!({}));
+fn sync_deepseekball_state(app: &tauri::AppHandle) {
+    // 游戏模式冻结中：小球已随悬浮窗一起销毁（C 方案），这里一律不重建
+    if freeze::is_frozen() {
+        return;
+    }    let cfg = config::read_config_value().unwrap_or(json!({}));
     let island = cfg.get("island").cloned().unwrap_or(json!({}));
     let provider_raw = island.get("balanceProvider").and_then(|v| v.as_str()).unwrap_or("");
     let deepseek_on = island.get("deepseekEnabled").and_then(|v| v.as_bool()).unwrap_or(false);

@@ -24,10 +24,12 @@ pub static FROZEN: AtomicBool = AtomicBool::new(false);
 /// 冻结前的状态快照（解冻时逐步还原）
 #[derive(Clone, Default)]
 struct Snap {
-    /// 所有窗口 label → 冻结前是否可见
-    wins: Vec<(String, bool)>,
+    /// 所有窗口 label → (冻结前是否可见, 冻结前是否最小化)
+    wins: Vec<(String, bool, bool)>,
     /// 冻结前 SC 球（岛）是否穿透
     passthrough: bool,
+    /// 被"销毁"的悬浮窗 label（C 方案，解冻时按需重建）
+    overlays: Vec<String>,
 }
 
 static SNAP: Mutex<Option<Snap>> = Mutex::new(None);
@@ -100,6 +102,12 @@ fn pause_webview(app: &AppHandle, label: &str) {
         let label3 = label.to_string();
         let res = win.with_webview(move |pw| unsafe {
             let ctrl = pw.controller();
+            // 关键：WebView2 要求"自己认为已隐藏"才允许挂起。window.hide() 只是 Win32 层 SW_HIDE，
+            // wry 不会同步给 controller，所以必须显式 SetIsVisible(false)，
+            // 否则 TrySuspend 直接返回 0x8007139F（状态不正确）——实测踩到。
+            if let Err(e) = ctrl.SetIsVisible(false) {
+                log::warn!("[freeze] {} SetIsVisible(false) 失败: {:?}", label2, e);
+            }
             let Ok(core) = ctrl.CoreWebView2() else {
                 log::warn!("[freeze] {} 取 CoreWebView2 失败", label2);
                 return;
@@ -141,6 +149,10 @@ fn resume_webview(app: &AppHandle, label: &str) {
                 Ok(_) => log::info!("[freeze] 已恢复 WebView2 渲染: {}", label2),
                 Err(e) => log::warn!("[freeze] 恢复 WebView2 失败 {}: {:?}", label2, e),
             }
+            // 挂起时把 controller 置为不可见，恢复时补回来
+            if let Err(e) = ctrl.SetIsVisible(true) {
+                log::warn!("[freeze] {} SetIsVisible(true) 失败: {:?}", label2, e);
+            }
         });
         if let Err(e) = res {
             log::warn!("[freeze] 恢复 with_webview 调用失败 {}: {}", label, e);
@@ -174,28 +186,49 @@ pub fn freeze(app: &AppHandle) {
     log::info!("[freeze] 进入游戏模式：隐藏窗口 + 停侧车 + 低功耗 + 注销热键");
 
     // 1) 快照 + 隐藏所有窗口（含主面板；解冻时按快照逐个还原）
-    let mut wins: Vec<(String, bool)> = Vec::new();
+    let mut wins: Vec<(String, bool, bool)> = Vec::new(); // (label, visible, minimized)
     for (label, win) in app.webview_windows() {
         let vis = win.is_visible().unwrap_or(false);
+        let min = win.is_minimized().unwrap_or(false);
         // 冻结前把状态记进日志：出问题时能直接看出是"隐藏/最小化"还是"跑屏幕外了"
         log::info!(
             "[freeze] 快照 {} visible={} minimized={} pos={:?} size={:?}",
             label,
             vis,
-            win.is_minimized().unwrap_or(false),
+            min,
             win.outer_position().ok(),
             win.outer_size().ok()
         );
-        wins.push((label.clone(), vis));
+        wins.push((label.clone(), vis, min));
         if vis {
             let _ = win.hide();
         }
     }
     let passthrough = crate::windows::ball_passthrough();
 
-    // 2) 停掉页面里的动画与定时器（B）+ 让 WebView2 挂起渲染（A）
+    // 1.5) C 方案：把悬浮窗（岛 / 旁边小球 / 任务墙 / 提醒）**整个销毁**，而不是只隐藏。
+    //      只隐藏的话它们的 renderer 还在（每个 60~112MB）；销毁后 WebView2 会回收这些渲染进程。
+    //      主面板保留（它的 renderer 用 A 的挂起 + B 的页面暂停处理，面板状态不丢）。
+    let mut overlays: Vec<String> = Vec::new();
+    // 先把"菜单打开"标志清掉（拖放形态回到 collapsed），否则这个标志会残留成
+    // ISLAND_MENU_OPEN=true，解冻后岛会被强制"不可穿透"，与用户设置不一致
+    let _ = crate::windows::set_ball_shape(app, "collapsed");
+    for (label, _, _) in wins.iter() {
+        if label == "main" {
+            continue;
+        }
+        if let Some(win) = app.get_webview_window(label) {
+            overlays.push(label.clone());
+            win.destroy().ok();
+        }
+    }
+    if !overlays.is_empty() {
+        log::info!("[freeze] 已销毁悬浮窗（C 方案省内存）: {:?}", overlays);
+    }
+
+    // 2) 剩下的窗口（主面板）停掉页面动画/定时器（B）+ 让 WebView2 挂起渲染（A）
     //    只隐藏窗口是不够的：渲染进程照样跑动画（这就是冻结后 CPU/GPU 几乎没降的原因）
-    for (label, _) in wins.iter() {
+    for (label, _, _) in wins.iter() {
         pause_webview(app, label);
     }
 
@@ -218,7 +251,7 @@ pub fn freeze(app: &AppHandle) {
     crate::unregister_configured_hotkeys(app);
     crate::voice::disable_shortcut(app);
 
-    *SNAP.lock().unwrap_or_else(|e| e.into_inner()) = Some(Snap { wins, passthrough });
+    *SNAP.lock().unwrap_or_else(|e| e.into_inner()) = Some(Snap { wins, passthrough, overlays });
     log::info!("[freeze] 已冻结（托盘菜单可恢复）");
 }
 
@@ -251,7 +284,7 @@ pub fn unfreeze(app: &AppHandle) {
     {
         let snap = SNAP.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(s) = snap.as_ref() {
-            for (label, _) in s.wins.iter() {
+            for (label, _, _) in s.wins.iter() {
                 resume_webview(app, label);
             }
         }
@@ -261,35 +294,43 @@ pub fn unfreeze(app: &AppHandle) {
     crate::register_configured_hotkeys(app);
     crate::voice::register_shortcut(app); // 内部按语音配置判断
 
-    // 4) 还原窗口可见性与穿透
+    // 4) 还原窗口与穿透
     let snap = SNAP.lock().unwrap_or_else(|e| e.into_inner()).take();
     if let Some(snap) = snap {
-        for (label, vis) in snap.wins {
-            let Some(win) = app.get_webview_window(&label) else {
-                log::warn!("[freeze] 恢复：窗口 {} 已不存在", label);
-                continue;
-            };
-            if !vis {
-                log::info!("[freeze] 恢复：{} 冻结前就是隐藏的 → 保持隐藏", label);
-                continue;
-            }
-            // 主面板要"露脸"：走统一的显示路径（含 show/unminimize/set_focus + 失焦宽限），
-            // 否则可能刚显示就被 closeOnBlur 藏掉，用户表现就是"呼号出来看不见"
-            if label == "main" {
+        // 4.1 主面板：show + unminimize + **重新套用保存的窗口几何**（否则会保持最小化/细条）
+        if let Some((_, vis, _)) = snap.wins.iter().find(|(l, _, _)| l == "main") {
+            if *vis {
                 crate::show_main_window(app);
             } else {
-                crate::windows::show_inactive(&win);
+                log::info!("[freeze] 恢复：main 冻结前就是隐藏的 → 保持隐藏");
             }
-            ensure_on_screen(app, &win);
-            log::info!(
-                "[freeze] 恢复：{} visible={} minimized={} pos={:?} size={:?}",
-                label,
-                win.is_visible().unwrap_or(false),
-                win.is_minimized().unwrap_or(false),
-                win.outer_position().ok(),
-                win.outer_size().ok()
-            );
         }
+        // 4.2 C 方案重建悬浮窗（按冻结前"存在过"的清单重建）
+        for label in snap.overlays.iter() {
+            match label.as_str() {
+                "island" => match crate::windows::ensure_island(app) {
+                    Ok(_) => log::info!("[freeze] 重建悬浮窗: island"),
+                    Err(e) => log::error!("[freeze] 重建 island 失败: {}", e),
+                },
+                "tasklist" => {
+                    if crate::windows::tasks_enabled() {
+                        match crate::windows::ensure_tasklist(app) {
+                            Ok(_) => log::info!("[freeze] 重建悬浮窗: tasklist"),
+                            Err(e) => log::error!("[freeze] 重建 tasklist 失败: {}", e),
+                        }
+                    } else {
+                        log::info!("[freeze] 任务模块已关闭，不重建 tasklist");
+                    }
+                }
+                "deepseekball" => {
+                    // 小球的出现规则：正在播放音乐且显示余额（sync 内部按配置判断，会自己决定建不建）
+                    crate::sync_deepseekball_state(app);
+                    log::info!("[freeze] 小球按当前规则恢复（播放中且显示余额才出现）");
+                }
+                other => log::info!("[freeze] 悬浮窗 {} 属于临时窗（提醒/气泡），不重建", other),
+            }
+        }
+        // 4.3 穿透还原（岛重建之后再设置，避免落到已销毁的窗口上）
         crate::windows::restore_passthrough_state(app, snap.passthrough);
     }
     log::info!("[freeze] 已恢复");
@@ -302,6 +343,15 @@ pub(crate) fn ensure_on_screen(app: &AppHandle, win: &tauri::WebviewWindow) {
     let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) else {
         return;
     };
+    // 最小化哨兵几何（Windows 用 -32000 表示"最小化中"）不能当成真位置判断，
+    // 否则会对一个"最小化"的窗口做居中，把它的尺寸也一起带偏。
+    if pos.x <= -30000 || pos.y <= -30000 {
+        if win.is_minimized().unwrap_or(false) {
+            log::info!("[freeze] 窗口 {} 仍处于最小化 → 先还原", win.label());
+            let _ = win.unminimize();
+            return;
+        }
+    }
     let on = app
         .available_monitors()
         .unwrap_or_default()

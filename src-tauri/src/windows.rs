@@ -220,7 +220,20 @@ pub fn apply_island_and_ball_passthrough_value(app: &tauri::AppHandle, on: bool,
 }
 
 /// 创建或唤起灵动岛窗口
+/// 任务模块是否启用（游戏模式重建 tasklist 前要判断）
+pub fn tasks_enabled() -> bool {
+    island_prefs()
+        .get("tasksEnabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true)
+}
+
 pub fn ensure_island(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> {
+    // 游戏模式（冻结后台）期间不建悬浮窗：冻结时它们已被销毁（C 方案省内存），
+    // 解冻时由 freeze::unfreeze 统一重建，避免拖放守卫/余额同步等路径把窗口偷偷拉回来。
+    if crate::freeze::is_frozen() {
+        return Err(std::io::Error::other("游戏模式冻结中，不创建悬浮窗").into());
+    }
     if let Some(win) = app.get_webview_window("island") {
         return Ok(win);
     }
@@ -417,6 +430,9 @@ pub fn show_inactive(win: &tauri::WebviewWindow) {
 
 /// 任务墙窗口（340×430，岛右侧；Alt+U 切换创建/销毁）
 pub fn ensure_tasklist(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> {
+    if crate::freeze::is_frozen() {
+        return Err(std::io::Error::other("游戏模式冻结中，不创建悬浮窗").into());
+    }
     if let Some(win) = app.get_webview_window("tasklist") {
         // 已显示则 no-op；未显示用无激活显示（不抢焦点 → 主窗不会失焦隐藏）
         if !win.is_visible().unwrap_or(false) {
@@ -632,6 +648,9 @@ pub fn set_ball_shape(app: &tauri::AppHandle, shape: &str) -> Result<(), String>
 
 /// 旁边小球（46×46，岛右侧偏下；位置随岛、穿透随岛，不接拖放）
 pub fn ensure_deepseekball(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> {
+    if crate::freeze::is_frozen() {
+        return Err(std::io::Error::other("游戏模式冻结中，不创建悬浮窗").into());
+    }
     if let Some(win) = app.get_webview_window("deepseekball") {
         position_deepseekball(app);
         return Ok(win);
@@ -658,6 +677,9 @@ pub fn position_deepseekball(app: &tauri::AppHandle) {
 
 /// M5 提醒窗：340×128 透明窗，岛上方堆叠（对齐 createReminderWindow）
 pub fn ensure_reminder_window(app: &tauri::AppHandle, board_id: &str, task_id: &str, index: usize) -> bool {
+    if crate::freeze::is_frozen() {
+        return false; // 游戏模式期间不弹提醒
+    }
     let label = format!("reminder-{}-{}", board_id, task_id);
     if app.get_webview_window(&label).is_some() {
         return false;
