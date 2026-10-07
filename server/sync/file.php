@@ -21,11 +21,15 @@ function file_input($key, $default = '') {
     if (isset($_GET[$key])) return $_GET[$key];
     return $default;
 }
-function file_authorize($bindId, $side, $token) {
-    if ($bindId === '' || !get_bind($bindId)) file_fail('绑定身份无效', 403);
-    if ($side === 'mobile' && !validate_mobile_token($bindId, $token)) file_fail('移动端绑定已失效，请重新绑定', 403);
-    return $side === 'mobile' ? 'mobile' : 'desktop';
-}
+// 旧版逐端点鉴权已删除：改用 config.php 的统一 resolve_identity()
+// （原来 file.php 自己写了一套"side 自报即通过"的判定，与 api.php 不一致，也无法收敛到一处）
+
+// ===== 请求参数先解析（注意顺序：以前 $action 在本文件第 56 行才赋值，
+// 却在上面的令牌分支里被使用 → 未定义变量在 error_reporting(0) 下求值为 null，
+// 条件恒假，整段"共享文件下载令牌"成了死代码，跨绑定领取必然 403。=====
+$action = trim((string)file_input('action'));
+$bindId = trim((string)file_input('bindId'));
+$fileId = safe_file_id(file_input('fileId'));
 
 // ===== 下载（支持两种方式）=====
 // 1) token 方式：他人通过共享领取的一次性下载令牌，无需绑定身份
@@ -53,10 +57,12 @@ if ($action === 'download' && trim((string)file_input('token')) !== '') {
     exit;
 }
 
-$action = trim((string)file_input('action'));
-$bindId = trim((string)file_input('bindId'));
-$side = file_authorize($bindId, trim((string)file_input('side', 'desktop')), trim((string)file_input('mobileToken')));
-$fileId = safe_file_id(file_input('fileId'));
+// 2) 绑定身份方式：统一身份校验（手机 mobileToken / 桌面端 deskToken；旧绑定兼容期内走 side 自报）
+$identity = resolve_identity($bindId, array_merge($_POST, $_GET));
+if (empty($identity['ok'])) {
+    file_fail($identity['message'] !== '' ? $identity['message'] : '绑定身份无效', 403);
+}
+
 if ($action === 'uploadChunk') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') file_fail('仅支持 POST', 405);
     if (!$fileId) file_fail('文件标识无效');

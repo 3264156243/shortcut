@@ -52,19 +52,36 @@ function limited_text($value, $maxLength) {
     return substr($text, 0, $maxLength);
 }
 
+/**
+ * 统一身份校验入口（所有模块共用）：拒绝时直接返回错误响应，通过时返回 'mobile' / 'desktop'。
+ * 具体判定逻辑在 config.php 的 resolve_identity()（api.php 与 file.php 共用同一套）。
+ */
+function require_identity($bindId, $input) {
+    $r = resolve_identity($bindId, $input);
+    if (empty($r['ok'])) error_msg($r['message'] !== '' ? $r['message'] : '身份校验失败');
+    return $r['side'];
+}
+
+/** 老名字保留（transfer.* 的调用点不必全改），语义等同 require_identity */
 function require_transfer_identity($bindId, $input) {
-    if ($bindId === '' || !get_bind($bindId)) error_msg('绑定身份无效');
-    $side = isset($input['side']) ? trim((string)$input['side']) : 'desktop';
-    if ($side === 'mobile') {
-        $token = isset($input['mobileToken']) ? trim((string)$input['mobileToken']) : '';
-        if (!validate_mobile_token($bindId, $token)) error_msg('移动端绑定已失效，请重新绑定');
+    return require_identity($bindId, $input);
+}
+
+/** 从请求里取桌面凭证（兼容 deskToken / desk_token / token 三种字段名） */
+function input_desk_token($input) {
+    foreach (['deskToken', 'desk_token', 'token'] as $key) {
+        if (isset($input[$key]) && trim((string)$input[$key]) !== '') return trim((string)$input[$key]);
     }
-    return $side === 'mobile' ? 'mobile' : 'desktop';
+    return '';
 }
 
 /** 控制板块：签发云端 WS 中继连接票据（HMAC，短时效） */
 function issue_control_ticket($bindId, $role) {
     global $CONTROL_RELAY_SECRET;
+    if (trim((string)$CONTROL_RELAY_SECRET) === '') {
+        // fail-closed：拿不到中继密钥就拒发，绝不回退到公开常量
+        error_msg('控制中继密钥不可用，请检查服务器 data 目录权限');
+    }
     $payload = base64_encode(json_encode([
         'bindId' => $bindId,
         'role' => $role,
@@ -81,17 +98,47 @@ switch ($action) {
         if (!rate_limit_allow('bind.create:' . client_ip(), 5, 3600)) {
             error_msg('创建绑定过于频繁，请稍后再试');
         }
-        // 客户端申请一个新绑定身份
+        // 客户端申请一个新绑定身份（同时签发桌面端凭证；桌面凭证只在此处明文返回一次）
         $bind = create_bind();
         if (!is_array($bind)) {
+            error_msg('暂时无法创建绑定，请稍后再试');
+        }
+        $deskToken = issue_desk_token($bind['bind_id']);
+        if (!$deskToken) {
             error_msg('暂时无法创建绑定，请稍后再试');
         }
         respond([
             'success' => true,
             'bindId' => $bind['bind_id'],
             'code' => $bind['code'],
+            'deskToken' => $deskToken,
             'bindUrl' => 'https://shortcut.326415.xyz/mobile/?bind=' . urlencode($bind['bind_id']),
         ]);
+        break;
+
+    // 旧绑定的凭证引导：老版本客户端已经存在的绑定没有 deskToken，
+    // 允许客户端用**绑定码**（只有桌面端知道、且不是公开直链里的 bindId）换一次桌面凭证。
+    // 规则：仅当该绑定**尚未签发过** deskToken 时可用 —— 签发过就作废这条通道，
+    // 防止"拿到绑定码就能不停换新凭证"。
+    case 'bind.claimToken':
+        if (!rate_limit_allow('bind.claimToken:' . client_ip(), 5, 3600)) {
+            error_msg('操作过于频繁，请稍后再试');
+        }
+        $code = strtoupper(limited_text(isset($input['code']) ? $input['code'] : '', 8));
+        if ($code === '') error_msg('绑定码为空'); // 必须有码：否则"知道 bindId"就能领凭证，等于没修
+        $target = resolve_code($code);
+        if (!$target) error_msg('绑定码无效');
+        $bindRow = get_bind($target);
+        if (!$bindRow) error_msg('绑定码无效');
+        if (!empty($bindRow['desk']['token_hash'])) {
+            error_msg('该绑定已签发过桌面凭证，如需重置请在桌面端重新绑定');
+        }
+        if (strcasecmp((string)($bindRow['code'] ?? ''), $code) !== 0) {
+            error_msg('绑定码无效');
+        }
+        $deskToken = issue_desk_token($target);
+        if (!$deskToken) error_msg('签发失败，请稍后再试');
+        respond(['success' => true, 'bindId' => $target, 'deskToken' => $deskToken]);
         break;
 
     case 'bind.info':
@@ -105,13 +152,16 @@ switch ($action) {
         if (!$bind) {
             respond(['success' => true, 'valid' => false]);
         }
-        respond([
-            'success' => true,
-            'valid' => true,
-            'bindId' => $bindId,
-            'code' => isset($bind['code']) ? $bind['code'] : '',
-            'bindUrl' => 'https://shortcut.326415.xyz/mobile/?bind=' . urlencode($bindId),
-        ]);
+        // 绑定码只在**带有效桌面凭证**时返回（原来任何人都能查到别人的 6 位码，
+        // 而该码又是控制板块的桌面凭证 → 等于把"远程控制"的钥匙挂在大门上）
+        $deskToken = input_desk_token($input);
+        $deskOk = validate_desk_token($bindId, $deskToken);
+        $payload = ['success' => true, 'valid' => true, 'bindId' => $bindId, 'deskTokenValid' => $deskOk];
+        if ($deskOk) {
+            $payload['code'] = isset($bind['code']) ? $bind['code'] : '';
+            $payload['bindUrl'] = 'https://shortcut.326415.xyz/mobile/?bind=' . urlencode($bindId);
+        }
+        respond($payload);
         break;
 
     case 'bind.query':
@@ -147,7 +197,8 @@ switch ($action) {
             respond([
                 'success' => true,
                 'bindId' => $resolved,
-                'code' => isset($bind['code']) ? $bind['code'] : strtoupper($code),
+                // 只回显调用方自己输入的码（不再回传服务端存的码，避免多余泄漏面）
+                'code' => strtoupper($code),
                 'boards' => isset($bind['boards']) && is_array($bind['boards']) ? $bind['boards'] : [],
             ]);
         } else {
@@ -168,7 +219,9 @@ switch ($action) {
         break;
 
     case 'control.ticket':
-        // 控制板块：手机（mobileToken）或桌面（bindCode）换取 10 分钟 WS 中继连接票据
+        // 控制板块：换 10 分钟 WS 中继票据。
+        // 移动端用 mobileToken；桌面端用 deskToken（旧绑定在兼容期仍可用绑定码，
+        // 但一旦该绑定签发过 deskToken，绑定码通道立即失效）。
         if (!rate_limit_allow('control.ticket:' . client_ip(), 60, 60)) error_msg('请求过于频繁，请稍后再试');
         $role = isset($input['role']) && $input['role'] === 'desktop' ? 'desktop' : 'mobile';
         $targetBind = isset($input['bindId']) ? trim((string)$input['bindId']) : '';
@@ -177,9 +230,14 @@ switch ($action) {
             $token = isset($input['mobileToken']) ? trim((string)$input['mobileToken']) : '';
             if (!validate_mobile_token($targetBind, $token)) error_msg('移动端绑定已失效，请重新绑定');
         } else {
-            $code = strtoupper(limited_text(isset($input['bindCode']) ? $input['bindCode'] : '', 8));
-            $bindRow = get_bind($targetBind);
-            if (!$bindRow || strcasecmp((string)($bindRow['code'] ?? ''), $code) !== 0) error_msg('桌面端凭证无效');
+            $deskToken = input_desk_token($input);
+            if (!validate_desk_token($targetBind, $deskToken)) {
+                $bindRow = get_bind($targetBind);
+                $code = strtoupper(limited_text(isset($input['bindCode']) ? $input['bindCode'] : '', 8));
+                $legacyAllowed = !has_desk_token($targetBind) && !require_desk_token_enabled();
+                $codeOk = $code !== '' && $bindRow && strcasecmp((string)($bindRow['code'] ?? ''), $code) === 0;
+                if (!($legacyAllowed && $codeOk)) error_msg('桌面端凭证无效，请升级 ShortCut 到最新版');
+            }
         }
         respond(['success' => true, 'ticket' => issue_control_ticket($targetBind, $role)]);
         break;
@@ -315,9 +373,7 @@ switch ($action) {
         if (!rate_limit_allow('bind.boards.update:' . client_ip(), 120, 60)) {
             error_msg('任务墙同步过于频繁，请稍后再试');
         }
-        if ($bindId === '' || !get_bind($bindId)) {
-            error_msg('绑定身份无效');
-        }
+        require_identity($bindId, $input);
         $rawBoards = isset($input['boards']) && is_array($input['boards']) ? array_slice($input['boards'], 0, 50) : [];
         $boards = [];
         foreach ($rawBoards as $name) {
@@ -347,10 +403,8 @@ switch ($action) {
         if (!$bind) {
             error_msg('绑定身份无效');
         }
-        if (isset($input['side']) && $input['side'] === 'mobile') {
-            $token = isset($input['mobileToken']) ? trim((string)$input['mobileToken']) : '';
-            if (!validate_mobile_token($bindId, $token)) error_msg('移动端绑定已失效，请重新绑定');
-        }
+        // 统一身份校验：手机用 mobileToken；桌面端新版用 deskToken（旧版在兼容期走 side 自报）
+        require_identity($bindId, $input);
         $text = isset($input['text']) ? limited_text($input['text'], 120) : '';
         if ($text === '') {
             error_msg('任务标题不能为空');
@@ -388,13 +442,7 @@ switch ($action) {
         if ($board !== 'taskwall') {
             error_msg('暂不支持的板块');
         }
-        if ($bindId === '') {
-            error_msg('缺少 bindId');
-        }
-        $bind = get_bind($bindId);
-        if (!$bind) {
-            error_msg('绑定身份无效');
-        }
+        require_identity($bindId, $input);
         $tasks = peek_all($board, $bindId);
         if (!is_array($tasks)) {
             error_msg('暂时无法拉取任务，请稍后再试');
@@ -413,9 +461,7 @@ switch ($action) {
         if ($board !== 'taskwall') {
             error_msg('暂不支持的板块');
         }
-        if ($bindId === '' || !get_bind($bindId)) {
-            error_msg('绑定身份无效');
-        }
+        require_identity($bindId, $input);
         $taskIds = isset($input['taskIds']) && is_array($input['taskIds'])
             ? array_values(array_filter(array_slice($input['taskIds'], 0, 500), function ($id) {
                 return is_string($id) && preg_match('/^rmt_[a-f0-9]{24}$/', $id);
@@ -435,13 +481,8 @@ switch ($action) {
         if ($board !== 'taskwall') {
             error_msg('暂不支持的板块');
         }
-        if ($bindId === '') {
-            error_msg('缺少 bindId');
-        }
+        require_identity($bindId, $input);
         $bind = get_bind($bindId);
-        if (!$bind) {
-            error_msg('绑定身份无效');
-        }
         $boards = isset($bind['boards']) && is_array($bind['boards']) ? $bind['boards'] : [];
         respond(['success' => true, 'boards' => $boards]);
         break;

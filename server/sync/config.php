@@ -9,16 +9,21 @@ $SHARES_FILE = $DATA_DIR . '/shares.json';
 $FILE_DIR = $DATA_DIR . '/files';
 $MAX_QUEUE_ITEMS = 500;
 
-// ===== 控制板块（手机控制电脑）：云端 WS 中继共享密钥（与 relay.js 共用，勿提交到公开仓库版本）=====
-// 若密钥文件存在则优先读取（便于服务器上轮换密钥而不改代码）
+// ===== 控制板块（手机控制电脑）：云端 WS 中继共享密钥（与 relay.js 共用）=====
+// 若密钥文件存在则优先读取（便于服务器上轮换密钥而不改代码）。
+// 注意：**不再回退到硬编码常量** —— 那等于把"给任意 bindId 伪造控制票据"的钥匙公开。
+// 拿不到密钥时置空，签发处会拒发（fail-closed），并在日志/错误信息里提示修 data 目录权限。
 $CONTROL_SECRET_FILE = $DATA_DIR . '/control-relay-secret.txt';
+$CONTROL_RELAY_SECRET = '';
 if (is_readable($CONTROL_SECRET_FILE)) {
     $CONTROL_RELAY_SECRET = trim((string)file_get_contents($CONTROL_SECRET_FILE));
 } else {
-    $CONTROL_RELAY_SECRET = 'sc-relay-9f4c2b7a81d3e650-control';
     // 首次运行自动生成随机密钥落盘，保证每台服务器唯一
     if (is_dir($DATA_DIR) && is_writable($DATA_DIR) && !file_exists($CONTROL_SECRET_FILE)) {
         try { file_put_contents($CONTROL_SECRET_FILE, bin2hex(random_bytes(24)), LOCK_EX); } catch (\Throwable $t) {}
+    }
+    if (is_readable($CONTROL_SECRET_FILE)) {
+        $CONTROL_RELAY_SECRET = trim((string)file_get_contents($CONTROL_SECRET_FILE));
     }
 }
 
@@ -243,6 +248,89 @@ function validate_mobile_token($bindId, $token) {
     $bind = get_bind($bindId);
     $hash = isset($bind['mobile']['token_hash']) ? (string)$bind['mobile']['token_hash'] : '';
     return $hash !== '' && $token !== '' && hash_equals($hash, hash('sha256', $token));
+}
+
+// ===== 桌面端凭证（deskToken）=====
+// 为什么需要：原来桌面侧请求只要自报 side=desktop 就算通过（没有任何凭证），
+// 于是"知道 bindId"就等于"能读写删全部消息与文件"。deskToken 与 mobileToken 同构：
+// 服务端只存 sha256、一个绑定一个有效凭证（重新签发即轮换）、请求时用 hash_equals 比对。
+function issue_desk_token($bindId) {
+    global $BINDS_FILE;
+    $plainToken = bin2hex(random_bytes(24));
+    $updated = json_lock_update($BINDS_FILE, function ($binds) use ($bindId, $plainToken) {
+        if (!isset($binds[$bindId])) return ['data' => $binds, 'result' => false];
+        $binds[$bindId]['desk'] = [
+            'token_hash' => hash('sha256', $plainToken),
+            'issued_at' => date('c'),
+        ];
+        return ['data' => $binds, 'result' => true];
+    });
+    return $updated ? $plainToken : false;
+}
+
+function validate_desk_token($bindId, $token) {
+    if ($bindId === '' || $token === '') return false;
+    $bind = get_bind($bindId);
+    $hash = isset($bind['desk']['token_hash']) ? (string)$bind['desk']['token_hash'] : '';
+    return $hash !== '' && hash_equals($hash, hash('sha256', $token));
+}
+
+function has_desk_token($bindId) {
+    $bind = get_bind($bindId);
+    return isset($bind['desk']['token_hash']) && (string)$bind['desk']['token_hash'] !== '';
+}
+
+// 强制模式开关（settings.json → requireDeskToken）：
+// 关闭时保留"旧版桌面客户端"的兼容通道，打开后桌面侧必须带有效 deskToken。
+function require_desk_token_enabled() {
+    $settings = sync_settings_read();
+    return !empty($settings['requireDeskToken']);
+}
+
+/**
+ * 统一身份校验 —— 移动互联平台唯一入口。
+ *
+ * 凭证优先：mobileToken → 'mobile'；deskToken → 'desktop'。
+ * 兼容期（绑定尚未签发过 deskToken 且未开启强制模式）：允许旧版客户端的 side 自报，
+ * 但只要该绑定签发过 deskToken（或服务端开了强制模式），免凭证路径立即失效 —— 这样
+ * 旧版装机不会立刻断，新版客户端一启动就会拿到 deskToken 并把自己这条绑定升级为"强制"。
+ *
+ * 返回 ['ok' => bool, 'side' => 'mobile'|'desktop', 'message' => string]
+ */
+function resolve_identity($bindId, $input) {
+    if ($bindId === '' || !get_bind($bindId)) {
+        return ['ok' => false, 'side' => '', 'message' => '绑定身份无效'];
+    }
+    $mobileToken = isset($input['mobileToken']) ? trim((string)$input['mobileToken']) : '';
+    $deskToken = '';
+    foreach (['deskToken', 'desk_token', 'token'] as $key) {
+        if (isset($input[$key]) && trim((string)$input[$key]) !== '') {
+            $deskToken = trim((string)$input[$key]);
+            break;
+        }
+    }
+    if ($mobileToken !== '' && validate_mobile_token($bindId, $mobileToken)) {
+        return ['ok' => true, 'side' => 'mobile', 'message' => ''];
+    }
+    if ($deskToken !== '' && validate_desk_token($bindId, $deskToken)) {
+        return ['ok' => true, 'side' => 'desktop', 'message' => ''];
+    }
+    if (has_desk_token($bindId) || require_desk_token_enabled()) {
+        $hasAny = ($mobileToken !== '' || $deskToken !== '');
+        return [
+            'ok' => false,
+            'side' => '',
+            'message' => $hasAny
+                ? '凭证已失效，请重新绑定'
+                : '请升级 ShortCut 到最新版（缺少桌面端凭证）',
+        ];
+    }
+    // 兼容通道：只有"从未签发过 deskToken 的旧绑定"能走到这里
+    $side = isset($input['side']) ? trim((string)$input['side']) : 'desktop';
+    if ($side === 'mobile') {
+        return ['ok' => false, 'side' => '', 'message' => '移动端绑定已失效，请重新绑定'];
+    }
+    return ['ok' => true, 'side' => 'desktop', 'message' => ''];
 }
 
 function message_path($bindId) {
