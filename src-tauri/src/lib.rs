@@ -1977,19 +1977,48 @@ fn build_tray_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     Menu::with_items(app, &[&show, &freeze_item, &sep, &quit])
 }
 
+/// 主面板"刚被程序化显示"的时刻（毫秒时间戳，0 = 无）。
+///
+/// 主窗有"失焦即隐藏"（closeOnBlur 默认开）。程序化 show 之后如果不给它一点宽限，
+/// 一旦外部把焦点抢回去就会立刻触发隐藏 —— 表现就是"呼出后屏幕上没看见"。
+static MAIN_SHOWN_AT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// 显示主面板（托盘「显示主面板」/ Alt+Space / 解冻恢复都走这里，行为保持一致）
+fn show_main_window(app: &tauri::AppHandle) {
+    let Some(w) = app.get_webview_window("main") else {
+        log::error!("[main] 显示失败：主窗不存在（label=main）");
+        return;
+    };
+    let was_visible = w.is_visible().unwrap_or(false);
+    if !was_visible {
+        // 仅从隐藏转显示时通知（已可见时是 no-op，多余通知会让前端重播动画）
+        let _ = app.emit("window:will-show", ());
+    }
+    let _ = w.show();
+    let _ = w.unminimize();
+    let _ = w.set_focus();
+    MAIN_SHOWN_AT.store(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0),
+        std::sync::atomic::Ordering::Relaxed,
+    );
+    // 记录状态：下次"面板看不见"时，日志能直接指出是隐藏/最小化还是跑到屏幕外
+    log::info!(
+        "[main] 显示主面板：was_visible={} now_visible={} minimized={} focused={} pos={:?} size={:?}",
+        was_visible,
+        w.is_visible().unwrap_or(false),
+        w.is_minimized().unwrap_or(false),
+        w.is_focused().unwrap_or(false),
+        w.outer_position().ok(),
+        w.outer_size().ok()
+    );
+}
+
 fn handle_tray_event(app: &tauri::AppHandle, id: &str) {
     match id {
-        "show" => {
-            if let Some(w) = app.get_webview_window("main") {
-                // 仅从隐藏转显示时通知（已可见时是 no-op，多余通知会让前端重播动画）
-                if !w.is_visible().unwrap_or(false) {
-                    let _ = app.emit("window:will-show", ());
-                }
-                let _ = w.show();
-                let _ = w.unminimize();
-                let _ = w.set_focus();
-            }
-        }
+        "show" => show_main_window(app),
         "quit" => app.exit(0),
         // 游戏模式：冻结全部后台（隐藏悬浮窗/停侧车/降功耗/注销热键），再点一次恢复原状。
         // 这是冻结态唯一的恢复入口，所以托盘图标本身不隐藏。
@@ -2011,16 +2040,18 @@ fn handle_tray_event(app: &tauri::AppHandle, id: &str) {
 
 /// 主面板开关（Alt+Space，与 Electron toggleWindow 一致：可见则隐藏，否则唤起）
 fn toggle_main_window(app: &tauri::AppHandle) {
-    if let Some(w) = app.get_webview_window("main") {
-        if w.is_visible().unwrap_or(false) {
-            let _ = w.hide();
-        } else {
-            // 显示前通知前端（对齐 Electron window:will-show）
-            let _ = app.emit("window:will-show", ());
-            let _ = w.show();
-            let _ = w.unminimize();
-            let _ = w.set_focus();
-        }
+    let Some(w) = app.get_webview_window("main") else {
+        log::error!("[main] Alt+Space 唤起失败：主窗不存在");
+        return;
+    };
+    // 注意判定用 "可见且已最小化也算在显示"：最小化时 Win32 仍算 visible，
+    // 那时应当唤起（show+unminimize）而不是再 hide 一次。
+    let visible = w.is_visible().unwrap_or(false);
+    let minimized = w.is_minimized().unwrap_or(false);
+    if visible && !minimized {
+        let _ = w.hide();
+    } else {
+        show_main_window(app); // 与托盘「显示主面板」/解冻恢复共用一套动作（含失焦宽限）
     }
 }
 
@@ -2806,6 +2837,17 @@ pub fn run() {
                             if BLUR_GUARD.load(std::sync::atomic::Ordering::Relaxed) {
                                 return;
                             }
+                            // 刚被程序化显示（托盘/Alt+Space/解冻恢复）的 800ms 内不因失焦隐藏：
+                            // 否则焦点被外部抢走的瞬间就会把面板藏掉，用户看到的是"呼出后没反应"
+                            let shown_at = MAIN_SHOWN_AT.load(std::sync::atomic::Ordering::Relaxed);
+                            let now_ms = std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map(|d| d.as_millis() as u64)
+                                .unwrap_or(0);
+                            if shown_at > 0 && now_ms.saturating_sub(shown_at) < 800 {
+                                log::info!("[main] 失焦但在显示宽限期内，不隐藏");
+                                return;
+                            }
                             // closeOnBlur 配置（缺省开启）：主窗失焦自动隐藏。
                             // 但鼠标仍在窗口矩形内 = 用户在拖动/窗口内操作导致的失焦，不隐藏
                             let cfg = crate::config::read_config_value();
@@ -2825,6 +2867,7 @@ pub fn run() {
                                 })()
                                 .unwrap_or(false);
                                 if !in_window {
+                                    log::info!("[main] 失焦且光标在窗外 → 隐藏主面板");
                                     let _ = win2.hide();
                                 }
                             }

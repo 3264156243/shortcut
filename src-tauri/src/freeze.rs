@@ -58,6 +58,15 @@ pub fn freeze(app: &AppHandle) {
     let mut wins: Vec<(String, bool)> = Vec::new();
     for (label, win) in app.webview_windows() {
         let vis = win.is_visible().unwrap_or(false);
+        // 冻结前把状态记进日志：出问题时能直接看出是"隐藏/最小化"还是"跑屏幕外了"
+        log::info!(
+            "[freeze] 快照 {} visible={} minimized={} pos={:?} size={:?}",
+            label,
+            vis,
+            win.is_minimized().unwrap_or(false),
+            win.outer_position().ok(),
+            win.outer_size().ok()
+        );
         wins.push((label.clone(), vis));
         if vis {
             let _ = win.hide();
@@ -112,23 +121,63 @@ pub fn unfreeze(app: &AppHandle) {
     let snap = SNAP.lock().unwrap_or_else(|e| e.into_inner()).take();
     if let Some(snap) = snap {
         for (label, vis) in snap.wins {
+            let Some(win) = app.get_webview_window(&label) else {
+                log::warn!("[freeze] 恢复：窗口 {} 已不存在", label);
+                continue;
+            };
             if !vis {
-                continue; // 冻结前就是隐藏的，保持隐藏
+                log::info!("[freeze] 恢复：{} 冻结前就是隐藏的 → 保持隐藏", label);
+                continue;
             }
-            if let Some(win) = app.get_webview_window(&label) {
-                // 主面板用 show+focus（用户要看到），悬浮窗用无激活显示（不抢焦点）
-                if label == "main" {
-                    let _ = app.emit("window:will-show", ());
-                    let _ = win.show();
-                    let _ = win.unminimize();
-                } else {
-                    crate::windows::show_inactive(&win);
-                }
+            // 主面板要"露脸"：走统一的显示路径（含 show/unminimize/set_focus + 失焦宽限），
+            // 否则可能刚显示就被 closeOnBlur 藏掉，用户表现就是"呼号出来看不见"
+            if label == "main" {
+                crate::show_main_window(app);
+            } else {
+                crate::windows::show_inactive(&win);
             }
+            ensure_on_screen(app, &win);
+            log::info!(
+                "[freeze] 恢复：{} visible={} minimized={} pos={:?} size={:?}",
+                label,
+                win.is_visible().unwrap_or(false),
+                win.is_minimized().unwrap_or(false),
+                win.outer_position().ok(),
+                win.outer_size().ok()
+            );
         }
         crate::windows::set_ball_passthrough(app, snap.passthrough);
     }
     log::info!("[freeze] 已恢复");
+}
+
+/// 屏幕越界保护：窗口整块落在所有显示器之外时重新居中。
+/// （"面板不见了，可能是缩到看不见的地方"这类问题靠它兜底。）
+fn ensure_on_screen(app: &AppHandle, win: &tauri::WebviewWindow) {
+    let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) else {
+        return;
+    };
+    let on = app
+        .available_monitors()
+        .unwrap_or_default()
+        .iter()
+        .any(|m| {
+            let mp = m.position();
+            let ms = m.size();
+            let (mx0, my0) = (mp.x, mp.y);
+            let (mx1, my1) = (mx0 + ms.width as i32, my0 + ms.height as i32);
+            // 只要有交集就算在屏幕内（允许部分越界）
+            pos.x < mx1 && pos.x + size.width as i32 > mx0 && pos.y < my1 && pos.y + size.height as i32 > my0
+        });
+    if !on {
+        log::warn!(
+            "[freeze] 窗口 {} 整体在屏幕外（pos={:?} size={:?}）→ 重新居中",
+            win.label(),
+            pos,
+            size
+        );
+        let _ = win.center();
+    }
 }
 
 /// 低功耗开关：优先级 + EcoQoS（执行速度节流）+ 工作集
