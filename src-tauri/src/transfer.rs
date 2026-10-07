@@ -18,6 +18,18 @@ fn request(payload: Value) -> Result<Value, String> {
     resp.into_json::<Value>().map_err(|_| "文件快传服务暂时不可用".to_string())
 }
 
+/// 手写 percent-encode（不引入新依赖）：仅保留 RFC 3986 unreserved 字符，其余按 UTF-8 字节转 %XX
+fn percent_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.as_bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => out.push(*b as char),
+            _ => out.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    out
+}
+
 fn with_binding(action: &str, payload: Value) -> Value {
     let bind_id = match sync::get_bind_info() {
         Ok(info) => info.get("bindId").and_then(|v| v.as_str()).unwrap_or("").to_string(),
@@ -31,6 +43,7 @@ fn with_binding(action: &str, payload: Value) -> Value {
         obj.insert("action".into(), json!(action));
         obj.insert("bindId".into(), json!(bind_id));
         obj.insert("side".into(), json!("desktop"));
+        obj.insert("deskToken".into(), json!(sync::desk_token()));
     }
     match request(body) {
         Ok(v) => v,
@@ -39,7 +52,7 @@ fn with_binding(action: &str, payload: Value) -> Value {
 }
 
 /// multipart/form-data 手工构造（ureq 2 无内建 multipart）
-fn upload_chunk(bind_id: &str, file_id: &str, index: usize, chunk_hash: &str, chunk: &[u8], name: &str) -> Result<Value, String> {
+fn upload_chunk(bind_id: &str, desk_token: &str, file_id: &str, index: usize, chunk_hash: &str, chunk: &[u8], name: &str) -> Result<Value, String> {
     let boundary = "----ShortcutBoundaryRust";
     let mut body: Vec<u8> = Vec::new();
     let mut add_field = |name: &str, value: &str| {
@@ -48,6 +61,7 @@ fn upload_chunk(bind_id: &str, file_id: &str, index: usize, chunk_hash: &str, ch
     add_field("action", "uploadChunk");
     add_field("bindId", bind_id);
     add_field("side", "desktop");
+    add_field("deskToken", desk_token);
     add_field("fileId", file_id);
     add_field("chunkIndex", &index.to_string());
     add_field("chunkHash", chunk_hash);
@@ -89,7 +103,12 @@ fn upload_file(file_path: &str) -> Value {
         return json!({ "success": false, "message": "文件初始化失败" });
     };
     let file_id = file_obj.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let chunk_count = file_obj.get("chunkCount").and_then(|v| v.as_i64()).unwrap_or(0) as usize;
+    // chunkCount 取不到或为 0 = 初始化失败，绝不能让"零分片"走到 fileComplete 报成功
+    let chunk_count = match file_obj.get("chunkCount").and_then(|v| v.as_i64()) {
+        Some(n) if n > 0 => n as usize,
+        _ => return json!({ "success": false, "message": "文件初始化失败" }),
+    };
+    let desk_token = sync::desk_token();
 
     let data = match std::fs::read(path) {
         Ok(d) => d,
@@ -105,7 +124,7 @@ fn upload_file(file_path: &str) -> Value {
         let mut hasher = Sha256::new();
         hasher.update(chunk);
         let chunk_hash: String = hasher.finalize().iter().map(|b| format!("{:02x}", b)).collect();
-        let result = match upload_chunk(&bind_id, &file_id, index, &chunk_hash, chunk, &name) {
+        let result = match upload_chunk(&bind_id, &desk_token, &file_id, index, &chunk_hash, chunk, &name) {
             Ok(v) => v,
             Err(e) => return json!({ "success": false, "message": e }),
         };
@@ -124,7 +143,14 @@ fn download_file(file_id: &str, name: &str) -> Value {
     if bind_id.is_empty() {
         return json!({ "success": false, "message": "联动绑定尚未建立" });
     }
-    let url = format!("{}?action=download&bindId={}&side=desktop&fileId={}", FILE_URL, bind_id, file_id);
+    // 查询串参数一律 percent-encode（bindId/fileId/deskToken 都不允许裸拼）
+    let url = format!(
+        "{}?action=download&bindId={}&side=desktop&fileId={}&deskToken={}",
+        FILE_URL,
+        percent_encode(&bind_id),
+        percent_encode(file_id),
+        percent_encode(&sync::desk_token())
+    );
     let resp = match ureq::get(&url).timeout(std::time::Duration::from_millis(60_000)).call() {
         Ok(r) => r,
         Err(e) => return json!({ "success": false, "message": e.to_string() }),

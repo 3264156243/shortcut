@@ -51,6 +51,8 @@ fn fetch_ticket(bind_id: &str, bind_code: &str) -> Result<String, String> {
         "action": "control.ticket",
         "role": "desktop",
         "bindId": bind_id,
+        // 新版桌面端以 deskToken 为准（bindCode 仅服务端兼容期内接受）
+        "deskToken": crate::sync::desk_token(),
         "bindCode": bind_code,
     });
     let resp = ureq::post(SYNC_API_URL)

@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "note": "移动互联模块清单（服务端权威）。新增板块：这里加一条 + 实现它声明的能力端点即可；移动端无需改代码，卡片由 module.list 渲染。",
+  "capabilities": {
+    "queue": {
+      "label": "任务队列",
+      "endpoints": ["push", "pull", "ack", "board.list"]
+    },
+    "blob": {
+      "label": "文件分片",
+      "endpoints": ["transfer.fileInit", "transfer.fileComplete", "file.php?action=uploadChunk", "file.php?action=download"]
+    },
+    "realtime": {
+      "label": "实时通道",
+      "endpoints": ["control.ticket", "wss://shortcut.326415.xyz/relay-ws"]
+    },
+    "rpc": {
+      "label": "一次性调用",
+      "endpoints": []
+    }
+  },
+  "modules": [
+    {
+      "id": "taskwall",
+      "label": "任务墙",
+      "icon": "🗂️",
+      "desc": "把任务从手机钉到桌面任务墙",
+      "entry": "/taskwall/",
+      "capabilities": ["queue"],
+      "minAppVersion": "2.4.5",
+      "defaultEnabled": true
+    },
+    {
+      "id": "fileTransfer",
+      "label": "文件共享",
+      "icon": "📤",
+      "desc": "发送/领取文件与文本，共享给他人",
+      "entry": "/transfer/",
+      "capabilities": ["blob"],
+      "minAppVersion": "2.4.5",
+      "defaultEnabled": true,
+      "policy": {
+        "maxFileMb": 1024,
+        "cloudQuotaMb": 2048,
+        "shareEnabled": true,
+        "maxShareHours": 24,
+        "retentionHours": 24
+      }
+    },
+    {
+      "id": "control",
+      "label": "电脑控制",
+      "icon": "🖥️",
+      "desc": "手机向电脑打字、控制鼠标、粘贴板",
+      "entry": "/control/",
+      "capabilities": ["realtime"],
+      "minAppVersion": "2.4.5",
+      "defaultEnabled": true
+    }
+  ]
+}

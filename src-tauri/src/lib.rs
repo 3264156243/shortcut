@@ -2793,6 +2793,15 @@ pub fn run() {
             // 配置损坏自愈（与 Electron 启动行为一致）
             config::restore_from_backup_if_needed();
 
+            // 桌面端凭证（deskToken）引导：旧装机只有绑定码，升级后自动换一次并落盘。
+            // 网络请求最长 10s，放后台线程，不阻塞启动。失败只记日志（服务端兼容期仍可继续）。
+            std::thread::spawn(|| {
+                std::thread::sleep(std::time::Duration::from_millis(1500));
+                if sync::ensure_desk_token().is_some() {
+                    log::info!("[sync] 桌面端凭证已就绪");
+                }
+            });
+
             // 注册全局快捷键（注册失败写日志——Electron 版同名键位如果被占也需要知道）
             // 清单集中在 configured_hotkeys()：游戏模式（冻结后台）会整份注销、退出时整份重注册
             register_configured_hotkeys(app.handle());

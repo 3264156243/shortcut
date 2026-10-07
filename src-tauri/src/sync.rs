@@ -1,12 +1,33 @@
 //! M5 绑定同步——对齐 electron/sync/{binding,engine,init}.ts
-//! bind.create/bind.info/bind.boards.update + pull/ack 拉取引擎 + 任务便签写入
+//! bind.create/bind.info/bind.claimToken/bind.boards.update + pull/ack 拉取引擎 + 任务便签写入
 
 use rand::Rng;
 use serde_json::{json, Value};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use crate::config;
 
 const SYNC_API_URL: &str = "https://shortcut.326415.xyz/sync/api.php";
+/// get_bind_info 内存缓存 TTL：一次文件上传会连打数次绑定查询，缓存后 60 秒内只发一次
+const BIND_CACHE_TTL: Duration = Duration::from_secs(60);
+
+static BIND_CACHE: OnceLock<Mutex<Option<(Instant, Value)>>> = OnceLock::new();
+/// bind.claimToken 被服务端明确拒绝（如"该绑定已签发过桌面凭证"）→ 不再重复请求
+static CLAIM_REJECTED: AtomicBool = AtomicBool::new(false);
+
+fn bind_cache() -> &'static Mutex<Option<(Instant, Value)>> {
+    BIND_CACHE.get_or_init(|| Mutex::new(None))
+}
+
+/// 清空 get_bind_info 缓存（绑定新建 / 解绑 / deskToken 变更后必须调用）
+pub fn invalidate_bind_cache() {
+    if let Ok(mut guard) = bind_cache().lock() {
+        *guard = None;
+    }
+    CLAIM_REJECTED.store(false, Ordering::Relaxed);
+}
 
 fn request(payload: Value) -> Result<Value, String> {
     let resp = ureq::post(SYNC_API_URL)
@@ -14,6 +35,77 @@ fn request(payload: Value) -> Result<Value, String> {
         .send_json(payload)
         .map_err(|e| e.to_string())?;
     resp.into_json::<Value>().map_err(|e| e.to_string())
+}
+
+fn read_desk_token() -> Option<String> {
+    let raw = config::read_config();
+    let cfg: Value = if raw.is_empty() { json!({}) } else { serde_json::from_str(&raw).unwrap_or(json!({})) };
+    let token = cfg.get("sync")?.get("deskToken").and_then(|v| v.as_str())?.trim().to_string();
+    if token.is_empty() {
+        None
+    } else {
+        Some(token)
+    }
+}
+
+/// 桌面端凭证（deskToken）—— 读配置 sync.deskToken，读不到返回空串
+pub fn desk_token() -> String {
+    read_desk_token().unwrap_or_default()
+}
+
+fn store_desk_token(token: &str) {
+    // parse 失败绝不能把空骨架写回（防数据覆盖）
+    let Some(mut cfg) = config::read_config_value() else {
+        log::warn!("[sync] store_desk_token 跳过：config.json 解析失败");
+        return;
+    };
+    if let Some(obj) = cfg.as_object_mut() {
+        let sync = obj.entry("sync").or_insert_with(|| json!({}));
+        if let Some(sobj) = sync.as_object_mut() {
+            sobj.insert("deskToken".into(), json!(token));
+        }
+    }
+    config::write_config(&serde_json::to_string(&cfg).unwrap_or_default());
+    invalidate_bind_cache();
+}
+
+/// 桌面凭证引导：本地已有 → 直接返回；否则用 bindId + bindCode 调 bind.claimToken 换取并落盘。
+/// 失败只记日志（兼容期内旧绑定仍可用免凭证通道），返回 None。
+pub fn ensure_desk_token() -> Option<String> {
+    if let Some(token) = read_desk_token() {
+        return Some(token);
+    }
+    if CLAIM_REJECTED.load(Ordering::Relaxed) {
+        return None;
+    }
+    let Some((bind_id, code, _)) = stored_binding() else {
+        return None;
+    };
+    if code.is_empty() {
+        return None;
+    }
+    match request(json!({ "action": "bind.claimToken", "bindId": bind_id, "code": code })) {
+        Ok(data) => {
+            let ok = data.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+            let token = data.get("deskToken").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            if ok && !token.is_empty() {
+                store_desk_token(&token);
+                log::info!("[sync] 桌面凭证已签发（bindId={}）", bind_id);
+                return Some(token);
+            }
+            // 服务端明确拒绝（已签发过 / 绑定码无效）——重试无意义，避免每次都打网络
+            CLAIM_REJECTED.store(true, Ordering::Relaxed);
+            log::warn!(
+                "[sync] 桌面凭证签发失败: {}",
+                data.get("message").and_then(|v| v.as_str()).unwrap_or("响应缺少 deskToken")
+            );
+            None
+        }
+        Err(e) => {
+            log::warn!("[sync] 桌面凭证签发请求失败: {}", e);
+            None
+        }
+    }
 }
 
 fn stored_binding() -> Option<(String, String, String)> {
@@ -59,36 +151,77 @@ fn create_binding() -> Result<Value, String> {
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| format!("https://shortcut.326415.xyz/mobile/?bind={}", bind_id));
             store_binding(bind_id, code, &bind_url);
-            return Ok(json!({ "bindId": bind_id, "code": code, "bindUrl": bind_url }));
+            // 桌面凭证只在这一处明文返回一次，必须与绑定信息一同落盘
+            let desk = data.get("deskToken").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            if desk.is_empty() {
+                log::warn!("[sync] bind.create 未返回 deskToken（bindId={}）", bind_id);
+            } else {
+                store_desk_token(&desk);
+            }
+            invalidate_bind_cache();
+            return Ok(json!({ "bindId": bind_id, "code": code, "bindUrl": bind_url, "deskToken": desk }));
         }
     }
     Err("创建绑定失败".to_string())
 }
 
 /// 对齐 getOrCreateBind/getBindInfo：stored → bind.info 校验 → 有效复用 / 无效重建 / 网络失败沿用 stored
+/// 带 60 秒内存缓存（绑定变更时会失效），避免一次文件上传连打多次绑定查询
 pub fn get_bind_info() -> Result<Value, String> {
+    if let Ok(guard) = bind_cache().lock() {
+        if let Some((at, cached)) = guard.as_ref() {
+            if at.elapsed() < BIND_CACHE_TTL {
+                return Ok(cached.clone());
+            }
+        }
+    }
+    let result = get_bind_info_uncached();
+    if let Ok(info) = &result {
+        if let Ok(mut guard) = bind_cache().lock() {
+            *guard = Some((Instant::now(), info.clone()));
+        }
+    }
+    result
+}
+
+fn get_bind_info_uncached() -> Result<Value, String> {
     let Some((bind_id, code, bind_url)) = stored_binding() else {
         return create_binding();
     };
-    match request(json!({ "action": "bind.info", "bindId": bind_id })) {
+    // 旧绑定升级引导：本地还没有桌面凭证时先尝试 claimToken（失败只记日志，兼容期仍可继续）
+    ensure_desk_token();
+    let desk = desk_token();
+    match request(json!({ "action": "bind.info", "bindId": bind_id, "deskToken": desk })) {
         Ok(data) => {
             let success = data.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
             if success {
                 let valid = data.get("valid").and_then(|v| v.as_bool()).unwrap_or(false);
                 if valid {
-                    let new_code = data.get("code").and_then(|v| v.as_str()).unwrap_or(if code.is_empty() { "" } else { &code });
+                    // 没带有效凭证时服务端**不返回** code/bindUrl —— 保留已有值，绝不覆盖成空串
+                    let new_code = data
+                        .get("code")
+                        .and_then(|v| v.as_str())
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or(code.as_str());
                     let new_url = data
                         .get("bindUrl")
                         .and_then(|v| v.as_str())
-                        .unwrap_or(&bind_url);
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or(bind_url.as_str());
                     store_binding(&bind_id, new_code, new_url);
-                    return Ok(json!({ "bindId": bind_id, "code": new_code, "bindUrl": new_url }));
+                    return Ok(json!({
+                        "bindId": bind_id,
+                        "code": new_code,
+                        "bindUrl": new_url,
+                        "deskToken": desk_token(),
+                        "deskTokenValid": data.get("deskTokenValid").and_then(|v| v.as_bool()).unwrap_or(false),
+                    }));
                 }
                 return create_binding();
             }
-            Ok(json!({ "bindId": bind_id, "code": code, "bindUrl": bind_url }))
+            Ok(json!({ "bindId": bind_id, "code": code, "bindUrl": bind_url, "deskToken": desk }))
         }
-        Err(_) => Ok(json!({ "bindId": bind_id, "code": code, "bindUrl": bind_url })),
+        Err(_) => Ok(json!({ "bindId": bind_id, "code": code, "bindUrl": bind_url, "deskToken": desk })),
     }
 }
 
@@ -106,7 +239,7 @@ fn publish_board_names(names: &[String]) -> bool {
         }
     }
     boards.truncate(50);
-    match request(json!({ "action": "bind.boards.update", "bindId": bind_id, "boards": boards })) {
+    match request(json!({ "action": "bind.boards.update", "bindId": bind_id, "deskToken": desk_token(), "boards": boards })) {
         Ok(d) => d.get("success").and_then(|v| v.as_bool()).unwrap_or(false),
         Err(_) => false,
     }
@@ -169,7 +302,7 @@ pub fn pull_taskwall() -> Value {
     let Some(bind_id) = get_stored_bind_id() else {
         return json!({ "board": "taskwall", "count": 0, "error": "尚未建立联动绑定" });
     };
-    let data = match request(json!({ "action": "pull", "board": "taskwall", "bindId": bind_id })) {
+    let data = match request(json!({ "action": "pull", "board": "taskwall", "bindId": bind_id, "deskToken": desk_token() })) {
         Ok(d) => d,
         Err(_) => return json!({ "board": "taskwall", "count": 0, "error": "同步服务暂时不可用" }),
     };
@@ -235,7 +368,7 @@ pub fn pull_taskwall() -> Value {
 
     // ack
     let task_ids: Vec<String> = tasks.iter().filter_map(|t| t.get("id").and_then(|v| v.as_str()).map(|s| s.to_string())).collect();
-    let ack = request(json!({ "action": "ack", "board": "taskwall", "bindId": bind_id, "taskIds": task_ids }));
+    let ack = request(json!({ "action": "ack", "board": "taskwall", "bindId": bind_id, "deskToken": desk_token(), "taskIds": task_ids }));
     match ack {
         Ok(a) if a.get("success").and_then(|v| v.as_bool()).unwrap_or(false) => {}
         _ => {

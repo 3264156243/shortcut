@@ -7,6 +7,8 @@ $RATE_LIMIT_FILE = $DATA_DIR . '/rate-limits.json';
 $MESSAGE_DIR = $DATA_DIR . '/messages';
 $SHARES_FILE = $DATA_DIR . '/shares.json';
 $FILE_DIR = $DATA_DIR . '/files';
+// 模块清单（服务端权威，与代码同目录，便于部署时一起更新）
+$MODULES_FILE = __DIR__ . '/modules.json';
 $MAX_QUEUE_ITEMS = 500;
 
 // ===== 控制板块（手机控制电脑）：云端 WS 中继共享密钥（与 relay.js 共用）=====
@@ -712,6 +714,87 @@ function sync_retention_hours($bindId = '') {
         }
     }
     return $hours > 0 ? $hours : $default;
+}
+
+// ===== 模块契约层（移动互联平台）=====
+// modules.json 是服务端权威清单：新增板块只在这里加一条 + 实现它声明的能力端点。
+// 客户端（桌面/移动）通过 module.list 取清单，不再各自硬编码卡片。
+function sync_modules_catalog() {
+    global $MODULES_FILE;
+    $fallback = [
+        'version' => 1,
+        'capabilities' => [],
+        'modules' => [
+            ['id' => 'taskwall', 'label' => '任务墙', 'icon' => '🗂️', 'desc' => '把任务从手机钉到桌面任务墙', 'entry' => '/taskwall/', 'capabilities' => ['queue'], 'defaultEnabled' => true],
+            ['id' => 'fileTransfer', 'label' => '文件共享', 'icon' => '📤', 'desc' => '发送/领取文件与文本，共享给他人', 'entry' => '/transfer/', 'capabilities' => ['blob'], 'defaultEnabled' => true],
+            ['id' => 'control', 'label' => '电脑控制', 'icon' => '🖥️', 'desc' => '手机向电脑打字、控制鼠标、粘贴板', 'entry' => '/control/', 'capabilities' => ['realtime'], 'defaultEnabled' => true],
+        ],
+    ];
+    if (!file_exists($MODULES_FILE)) return $fallback;
+    $decoded = json_decode((string)@file_get_contents($MODULES_FILE), true);
+    if (!is_array($decoded) || !isset($decoded['modules']) || !is_array($decoded['modules'])) return $fallback;
+    return $decoded;
+}
+
+/**
+ * 模块的平台级策略（用户组策略里对应该模块的字段，取"最宽松"值）。
+ * 说明：激活后台的分组是按机器码授予的，同步服务端目前拿不到 bindId → 分组 的映射，
+ * 因此这里先取平台级结果；按绑定精确下发等后续补 bindId→分组 映射（见架构文档第五节）。
+ */
+function sync_module_policy($moduleId) {
+    global $ACTIVATION_CONFIG_PATH;
+    $policy = [];
+    if (file_exists($ACTIVATION_CONFIG_PATH)) {
+        $decoded = json_decode((string)@file_get_contents($ACTIVATION_CONFIG_PATH), true);
+        $groups = (is_array($decoded) && isset($decoded['groups']) && is_array($decoded['groups'])) ? $decoded['groups'] : [];
+        foreach ($groups as $group) {
+            if (!is_array($group)) continue;
+            $candidate = null;
+            if ($moduleId === 'fileTransfer' && isset($group['fileTransferPolicy']) && is_array($group['fileTransferPolicy'])) {
+                $candidate = $group['fileTransferPolicy'];
+            } elseif (isset($group['modulePolicies'][$moduleId]) && is_array($group['modulePolicies'][$moduleId])) {
+                $candidate = $group['modulePolicies'][$moduleId];
+            }
+            if (!is_array($candidate)) continue;
+            foreach ($candidate as $key => $value) {
+                if (is_bool($value)) {
+                    $policy[$key] = (!isset($policy[$key]) || $policy[$key] === false) ? $value : $policy[$key];
+                } elseif (is_numeric($value)) {
+                    $policy[$key] = isset($policy[$key]) ? max((int)$policy[$key], (int)$value) : (int)$value;
+                }
+            }
+        }
+    }
+    return $policy;
+}
+
+/** 对外下发的模块清单（目录 + 生效策略）。不包含任何凭证或绑定私有信息。 */
+function sync_modules_for_client($bindId = '') {
+    $catalog = sync_modules_catalog();
+    $out = [];
+    foreach ($catalog['modules'] as $module) {
+        if (!is_array($module) || empty($module['id'])) continue;
+        $id = (string)$module['id'];
+        $policy = isset($module['policy']) && is_array($module['policy']) ? $module['policy'] : [];
+        $policy = array_merge($policy, sync_module_policy($id));
+        $item = [
+            'id' => $id,
+            'label' => isset($module['label']) ? (string)$module['label'] : $id,
+            'icon' => isset($module['icon']) ? (string)$module['icon'] : '•',
+            'desc' => isset($module['desc']) ? (string)$module['desc'] : '',
+            'entry' => isset($module['entry']) ? (string)$module['entry'] : '',
+            'capabilities' => isset($module['capabilities']) && is_array($module['capabilities']) ? array_values($module['capabilities']) : [],
+            'minAppVersion' => isset($module['minAppVersion']) ? (string)$module['minAppVersion'] : '',
+            'enabled' => isset($module['defaultEnabled']) ? (bool)$module['defaultEnabled'] : true,
+            'policy' => $policy,
+        ];
+        // 策略里显式关闭分享也给前端一个明确信号（与 shareEnabled 同义，便于移动页灰掉入口）
+        if ($id === 'fileTransfer' && isset($policy['shareEnabled']) && $policy['shareEnabled'] === false) {
+            $item['shareEnabled'] = false;
+        }
+        $out[] = $item;
+    }
+    return ['version' => isset($catalog['version']) ? (int)$catalog['version'] : 1, 'capabilities' => isset($catalog['capabilities']) ? $catalog['capabilities'] : [], 'modules' => $out];
 }
 
 // 读取或初始化 sync 本地设置（lastCleanupAt 等）

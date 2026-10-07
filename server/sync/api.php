@@ -93,6 +93,25 @@ function issue_control_ticket($bindId, $role) {
 
 switch ($action) {
 
+    // ===== 模块契约：下发模块清单（移动端/桌面端据此渲染入口，不再各自硬编码）=====
+    // 无需绑定即可取（清单是公开目录）；带上有效身份时会附带该绑定的生效策略。
+    case 'module.list':
+        if (!rate_limit_allow('module.list:' . client_ip(), 120, 60)) {
+            error_msg('请求过于频繁，请稍后再试');
+        }
+        $catalog = sync_modules_for_client($bindId);
+        $identity = $bindId !== '' ? resolve_identity($bindId, $input) : ['ok' => false, 'side' => '', 'message' => ''];
+        respond([
+            'success' => true,
+            'version' => $catalog['version'],
+            'capabilities' => $catalog['capabilities'],
+            'modules' => $catalog['modules'],
+            'bound' => !empty($identity['ok']),
+            'side' => $identity['ok'] ? $identity['side'] : '',
+            'policySource' => 'platform',
+        ]);
+        break;
+
     // ===== 绑定管理（通用，不分 board）=====
     case 'bind.create':
         if (!rate_limit_allow('bind.create:' . client_ip(), 5, 3600)) {
