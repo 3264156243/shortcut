@@ -117,14 +117,13 @@
     </div>
   </div>
 
+  <!-- 共享 SDK：绑定读写、请求、错误文案统一由它提供 -->
+  <script src="/sync/web/sdk.js"></script>
   <script>
-    const API = '/sync/api.php';
-    const storageKey = 'shortcut-mobile-binding-v1';
+    const sdk = window.ShortCutMobile;
     const el = (id) => document.getElementById(id);
-    let mobileAuth = null;
+    let mobileAuth = sdk.binding();
     let scanStream = null, scanFrame = 0, scanBusy = false, jsQrLoading = null;
-
-    try { mobileAuth = JSON.parse(localStorage.getItem(storageKey) || 'null'); } catch {}
 
     const $ = (id) => el(id);
 
@@ -162,18 +161,24 @@
         const canvas = document.createElement('canvas');
         await window.QRCode.toCanvas(canvas, text, { width: 168, margin: 1 });
         box.appendChild(canvas);
-      } catch { box.innerHTML = '<span style="color:#aaa198;font-size:11px">' + text + '</span>'; }
+      } catch {
+        // 修审计项：原来这里用 innerHTML 拼接 location.search 派生的文本（XSS 注入点），改纯文本
+        const span = document.createElement('span');
+        span.style.cssText = 'color:#aaa198;font-size:11px';
+        span.textContent = text;
+        box.innerHTML = '';
+        box.appendChild(span);
+      }
     }
 
+    /** 绑定相关接口（mobile.bind / bind.query / bind.resolve）都不需要已有身份，走公开请求 */
     async function callApi(payload) {
-      const c = new AbortController(), t = setTimeout(() => c.abort(), 12000);
-      try {
-        const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: c.signal });
-        const d = await r.json().catch(() => null);
-        if (!r.ok || !d) throw new Error('服务暂时不可用');
-        return d;
-      } catch (e) { if (e && e.name === 'AbortError') throw new Error('请求超时'); throw e; }
-      finally { clearTimeout(t); }
+      const body = Object.assign({}, payload || {});
+      const action = body.action;
+      delete body.action;
+      const d = await sdk.requestPublic(action, body);
+      if (!d || (!d.success && !d.valid)) throw new Error((d && d.message) || '服务暂时不可用');
+      return d;
     }
     function msg(id, text, error = false) { const e = $(id); e.textContent = text || ''; e.className = 'message' + (error ? ' error' : ' success'); }
 
@@ -187,7 +192,7 @@
         const d = await callApi({ action: 'mobile.bind', bindId: bindParam, code, deviceName: $('deviceName').value.trim() || '我的手机' });
         if (!d.success) throw new Error(d.message || '绑定失败');
         mobileAuth = { bindId: d.bindId, mobileToken: d.mobileToken, deviceName: d.deviceName, code: d.code };
-        localStorage.setItem(storageKey, JSON.stringify(mobileAuth));
+        sdk.saveBinding(mobileAuth);
         history.replaceState(null, '', location.pathname);
         render();
         msg('bindMessage', '绑定成功，正在返回联动首页…');
@@ -197,7 +202,7 @@
     }
 
     function clearBinding() {
-      localStorage.removeItem(storageKey);
+      sdk.clearBinding();
       mobileAuth = null;
       history.replaceState(null, '', location.pathname);
       render();
@@ -228,8 +233,8 @@
       let bind = '', code = '';
       try { const u = new URL(v, location.origin); bind = u.searchParams.get('bind') || ''; code = u.searchParams.get('code') || ''; } catch {}
       if (!code && /^[A-Z0-9]{6}$/i.test(v)) code = v.toUpperCase();
-      if (bind) { const d = await callApi({ action: 'mobile.bind', bindId: bind, deviceName: $('deviceName').value || '我的手机' }); if (d.success) { mobileAuth = { bindId: d.bindId, mobileToken: d.mobileToken, deviceName: d.deviceName, code: d.code }; localStorage.setItem(storageKey, JSON.stringify(mobileAuth)); return true; } }
-      if (code) { const d = await callApi({ action: 'mobile.bind', code, deviceName: $('deviceName').value || '我的手机' }); if (d.success) { mobileAuth = { bindId: d.bindId, mobileToken: d.mobileToken, deviceName: d.deviceName, code: d.code }; localStorage.setItem(storageKey, JSON.stringify(mobileAuth)); return true; } }
+      if (bind) { const d = await callApi({ action: 'mobile.bind', bindId: bind, deviceName: $('deviceName').value || '我的手机' }); if (d.success) { mobileAuth = { bindId: d.bindId, mobileToken: d.mobileToken, deviceName: d.deviceName, code: d.code }; sdk.saveBinding(mobileAuth); return true; } }
+      if (code) { const d = await callApi({ action: 'mobile.bind', code, deviceName: $('deviceName').value || '我的手机' }); if (d.success) { mobileAuth = { bindId: d.bindId, mobileToken: d.mobileToken, deviceName: d.deviceName, code: d.code }; sdk.saveBinding(mobileAuth); return true; } }
       return false;
     }
     async function scanLoop(detector) {
@@ -326,7 +331,7 @@
         callApi({ action: 'mobile.bind', bindId: directBind, deviceName: '我的手机' }).then((d) => {
           if (d.success) {
             mobileAuth = { bindId: d.bindId, mobileToken: d.mobileToken, deviceName: d.deviceName, code: d.code };
-            localStorage.setItem(storageKey, JSON.stringify(mobileAuth));
+            sdk.saveBinding(mobileAuth);
             history.replaceState(null, '', location.pathname);
             render();
             msg('bindMessage', '绑定成功，正在返回联动首页…');

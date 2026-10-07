@@ -88,14 +88,22 @@
     </section>
   </main>
 
+  <!-- 共享 SDK：绑定读写与带身份的请求统一由它提供 -->
+  <script src="/sync/web/sdk.js"></script>
   <script>
-    const API='/sync/api.php';
-    const storageKey='shortcut-mobile-binding-v1';
+    const sdk=window.ShortCutMobile;
     const el=(id)=>document.getElementById(id);
-    let bindId='', bindCode='', mobileAuth=null;
-    try{mobileAuth=JSON.parse(localStorage.getItem(storageKey)||'null')}catch{}
+    let bindId='', bindCode='', mobileAuth=sdk.binding();
 
-    async function callApi(payload){const c=new AbortController(),t=setTimeout(()=>c.abort(),12000);try{const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:c.signal});const d=await r.json().catch(()=>null);if(!r.ok||!d)throw new Error('服务暂时不可用');return d}catch(e){if(e&&e.name==='AbortError')throw new Error('请求超时');throw e}finally{clearTimeout(t)}}
+    /** 任务墙接口都带移动身份，统一走 sdk.request（失败抛出，沿用本页原语义） */
+    async function callApi(payload){
+      const body=Object.assign({},payload||{});
+      const action=body.action;
+      delete body.action;
+      const d=await sdk.request(action,body);
+      if(!d||!d.success){ if(d&&d.needBind) goBind(); throw new Error((d&&d.message)||'服务暂时不可用') }
+      return d;
+    }
     function setMessage(target,text,type){target.textContent=text||'';target.className='message'+(type?' '+type:'')}
     function goBind(){location.href='/bind/?next='+encodeURIComponent(location.pathname)}
 
@@ -141,7 +149,7 @@
     });
 
     (async()=>{
-      if(mobileAuth?.bindId&&mobileAuth?.mobileToken){ const d=await callApi({action:'bind.info',bindId:mobileAuth.bindId}).catch(()=>null); if(d&&d.success&&d.valid){setConnected();return;} if(d&&d.valid===false){localStorage.removeItem(storageKey);mobileAuth=null;} }
+      if(mobileAuth?.bindId&&mobileAuth?.mobileToken){ const d=await callApi({action:'bind.info',bindId:mobileAuth.bindId}).catch(()=>null); if(d&&d.success&&d.valid){setConnected();return;} if(d&&d.valid===false){sdk.clearBinding();mobileAuth=null;} }
       goBind();
     })();
   </script>
