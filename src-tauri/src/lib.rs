@@ -2743,22 +2743,42 @@ pub fn run() {
                     .build(),
             )?;
 
-            // 清理历史崩溃/强杀遗留的孤儿进程（专属进程名，安全）：
-            // 1) 硬件监控进程；2) 音乐桥 powershell（按命令行精确匹配，不误伤用户其他 powershell）
+            // 清理历史崩溃/强杀遗留的孤儿进程：
+            // 1) 硬件监控进程（专属进程名，安全）
+            // 2) 音乐桥 powershell —— 关键字必须**运行时拼接**再匹配。
+            //    踩过的坑：把关键字字面量写进这条清理命令自己的命令行里，会连"执行清理的 shell"
+            //    一起被匹配到并杀掉（实测外层 shell 直接被 Stop-Process 干掉，退出码 -1，
+            //    孤儿永远清不掉）。所以这里用 ('netmusic' + '-bridge') 拼出来，命令行里不出现字面量。
             {
                 let hk = std::process::Command::new("taskkill")
                     .args(["/F", "/IM", "ShortCut.HardwareMonitor.exe"])
                     .creation_flags(0x08000000)
                     .output();
-                if let Ok(o) = hk {
-                    if o.status.success() { log::info!("[cleanup] 已清理硬件监控孤儿进程"); }
+                match hk {
+                    Ok(o) if o.status.success() => log::info!("[cleanup] 已清理硬件监控孤儿进程"),
+                    Ok(o) => log::warn!("[cleanup] 硬件监控清理返回非零: {}", o.status),
+                    Err(e) => log::warn!("[cleanup] 硬件监控清理执行失败: {}", e),
                 }
+                let sweep = "$pat = ('netmusic' + '-bridge'); $n = 0; \
+                    Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | \
+                    Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -like ('*' + $pat + '*') } | \
+                    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; $n = $n + 1 }; \
+                    Write-Output ('killed=' + $n)";
                 let mk = std::process::Command::new("powershell.exe")
-                    .args(["-NoProfile", "-Command", "Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -match 'netmusic-bridge' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"])
+                    .args(["-NoProfile", "-NonInteractive", "-Command", sweep])
                     .creation_flags(0x08000000)
                     .output();
-                if let Ok(o) = mk {
-                    if o.status.success() { log::info!("[cleanup] 已清理音乐桥孤儿进程"); }
+                match mk {
+                    Ok(o) if o.status.success() => log::info!(
+                        "[cleanup] 音乐桥孤儿清理: {}",
+                        String::from_utf8_lossy(&o.stdout).trim()
+                    ),
+                    Ok(o) => log::warn!(
+                        "[cleanup] 音乐桥清理失败: {} {}",
+                        o.status,
+                        String::from_utf8_lossy(&o.stderr).trim()
+                    ),
+                    Err(e) => log::warn!("[cleanup] 音乐桥清理执行失败: {}", e),
                 }
             }
 
