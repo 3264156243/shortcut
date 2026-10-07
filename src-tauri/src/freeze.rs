@@ -153,7 +153,8 @@ pub fn unfreeze(app: &AppHandle) {
 
 /// 屏幕越界保护：窗口整块落在所有显示器之外时重新居中。
 /// （"面板不见了，可能是缩到看不见的地方"这类问题靠它兜底。）
-fn ensure_on_screen(app: &AppHandle, win: &tauri::WebviewWindow) {
+/// 解冻恢复、托盘/热键唤起、以及启动时恢复上次窗口状态之后都会调用一次。
+pub(crate) fn ensure_on_screen(app: &AppHandle, win: &tauri::WebviewWindow) {
     let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) else {
         return;
     };

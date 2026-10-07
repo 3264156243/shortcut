@@ -1997,6 +1997,8 @@ fn show_main_window(app: &tauri::AppHandle) {
     let _ = w.show();
     let _ = w.unminimize();
     let _ = w.set_focus();
+    // 屏幕外兜底：窗口位置若因多显示器变化/上次异常退出而跑到屏幕外，这里直接拉回屏幕中间
+    freeze::ensure_on_screen(app, &w);
     MAIN_SHOWN_AT.store(
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -2775,6 +2777,8 @@ pub fn run() {
             // 首次启动主窗直接显示（用户期望启动即见；之后关闭=隐藏到托盘）
             {
                 restore_window_state(&win);
+                // 上次保存的位置若已落在屏幕外（换显示器/分辨率变了），恢复后立刻拉回可见区
+                freeze::ensure_on_screen(app.handle(), &win);
                 // 让 WebView2 交还外部拖放（wry 把它关了 → 整窗禁止光标、拖放事件永不触发；
                 // 详见 webviewdrop.rs）。改回 true 后 wry 的 WindowEvent::DragDrop 恢复，
                 // 并且**带真实文件路径**，前端直接进转换列表。
