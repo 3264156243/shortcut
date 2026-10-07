@@ -1983,6 +1983,17 @@ fn build_tray_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 /// 一旦外部把焦点抢回去就会立刻触发隐藏 —— 表现就是"呼出后屏幕上没看见"。
 static MAIN_SHOWN_AT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+/// 主面板"真正获得焦点"的时刻（毫秒时间戳，0 = 从未获得）。
+/// 用来区分"用户点走了"（真实失焦）和"程序化显示时被前台锁抢走焦点"（不应隐藏）。
+static MAIN_FOCUSED_AT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn now_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 /// 显示主面板（托盘「显示主面板」/ Alt+Space / 解冻恢复都走这里，行为保持一致）
 fn show_main_window(app: &tauri::AppHandle) {
     let Some(w) = app.get_webview_window("main") else {
@@ -1999,13 +2010,18 @@ fn show_main_window(app: &tauri::AppHandle) {
     let _ = w.set_focus();
     // 屏幕外兜底：窗口位置若因多显示器变化/上次异常退出而跑到屏幕外，这里直接拉回屏幕中间
     freeze::ensure_on_screen(app, &w);
-    MAIN_SHOWN_AT.store(
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0),
-        std::sync::atomic::Ordering::Relaxed,
-    );
+    MAIN_SHOWN_AT.store(now_millis(), std::sync::atomic::Ordering::Relaxed);
+    // 前台锁兜底：Windows 常把前台焦点还给原来的窗口，导致面板"显示成功但被压在后面/看不见"。
+    // 这里做一次短暂的置顶脉冲，保证用户确实看到面板（600ms 后自动取消置顶）。
+    if !w.is_focused().unwrap_or(false) {
+        let _ = w.set_always_on_top(true);
+        let w2 = w.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(600));
+            let _ = w2.set_always_on_top(false);
+            let _ = w2.set_focus();
+        });
+    }
     // 记录状态：下次"面板看不见"时，日志能直接指出是隐藏/最小化还是跑到屏幕外
     log::info!(
         "[main] 显示主面板：was_visible={} now_visible={} minimized={} focused={} pos={:?} size={:?}",
@@ -2801,6 +2817,10 @@ pub fn run() {
                 static DRAG_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
                 win.on_window_event(move |event| {
                     match event {
+                        // 记录"真正获得焦点"的时刻：只有稳定拿到过焦点之后的失焦，才算用户主动点走
+                        tauri::WindowEvent::Focused(true) => {
+                            MAIN_FOCUSED_AT.store(now_millis(), std::sync::atomic::Ordering::Relaxed);
+                        }
                         tauri::WindowEvent::CloseRequested { api, .. } => {
                             api.prevent_close();
                             save_window_state(&win2);
@@ -2844,12 +2864,16 @@ pub fn run() {
                             // 刚被程序化显示（托盘/Alt+Space/解冻恢复）的 800ms 内不因失焦隐藏：
                             // 否则焦点被外部抢走的瞬间就会把面板藏掉，用户看到的是"呼出后没反应"
                             let shown_at = MAIN_SHOWN_AT.load(std::sync::atomic::Ordering::Relaxed);
-                            let now_ms = std::time::SystemTime::now()
-                                .duration_since(std::time::UNIX_EPOCH)
-                                .map(|d| d.as_millis() as u64)
-                                .unwrap_or(0);
+                            let focused_at = MAIN_FOCUSED_AT.load(std::sync::atomic::Ordering::Relaxed);
+                            let now_ms = now_millis();
                             if shown_at > 0 && now_ms.saturating_sub(shown_at) < 800 {
                                 log::info!("[main] 失焦但在显示宽限期内，不隐藏");
+                                return;
+                            }
+                            // 焦点没稳定拿到过就失焦（Windows 前台锁把焦点抢回去了）：
+                            // 这不是"用户点走了"，藏掉只会让人以为面板坏了 —— 实测一秒内连藏三次。
+                            if focused_at == 0 || now_ms.saturating_sub(focused_at) < 400 {
+                                log::info!("[main] 失焦但未曾稳定获得焦点（前台抢焦点），不隐藏");
                                 return;
                             }
                             // closeOnBlur 配置（缺省开启）：主窗失焦自动隐藏。
