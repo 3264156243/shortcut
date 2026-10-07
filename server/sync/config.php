@@ -317,14 +317,17 @@ function resolve_identity($bindId, $input) {
     if ($deskToken !== '' && validate_desk_token($bindId, $deskToken)) {
         return ['ok' => true, 'side' => 'desktop', 'message' => ''];
     }
+    // 出示了凭证但没通过 → 一律拒绝。
+    // （不能因为"这个绑定还没签发过凭证"就回落到兼容通道：那样凭证轮换/失效会被静默掩盖，
+    //   线上验收就是这么发现"带错误 deskToken 仍然放行"的。）
+    if ($mobileToken !== '' || $deskToken !== '') {
+        return ['ok' => false, 'side' => '', 'message' => '凭证已失效，请重新绑定或升级客户端'];
+    }
     if (has_desk_token($bindId) || require_desk_token_enabled()) {
-        $hasAny = ($mobileToken !== '' || $deskToken !== '');
         return [
             'ok' => false,
             'side' => '',
-            'message' => $hasAny
-                ? '凭证已失效，请重新绑定'
-                : '请升级 ShortCut 到最新版（缺少桌面端凭证）',
+            'message' => '请升级 ShortCut 到最新版（缺少桌面端凭证）',
         ];
     }
     // 兼容通道：只有"从未签发过 deskToken 的旧绑定"能走到这里

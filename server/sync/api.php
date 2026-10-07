@@ -135,24 +135,20 @@ switch ($action) {
         ]);
         break;
 
-    // 旧绑定的凭证引导：老版本客户端已经存在的绑定没有 deskToken，
-    // 允许客户端用**绑定码**（只有桌面端知道、且不是公开直链里的 bindId）换一次桌面凭证。
-    // 规则：仅当该绑定**尚未签发过** deskToken 时可用 —— 签发过就作废这条通道，
-    // 防止"拿到绑定码就能不停换新凭证"。
+    // 桌面凭证的签发/轮换：用**绑定码**（只有桌面端知道，不是公开直链里的 bindId）换取。
+    // 允许重复调用（= 轮换）：客户端可能因为重装/配置被覆盖而丢失本地凭证，
+    // 若只允许签发一次，这类客户端将永久无法再通过校验（实测踩到：前端整份写配置把字段冲掉）。
+    // 强度与既有的 mobile.bind 一致：都只需要绑定码 + IP 限流。
     case 'bind.claimToken':
         if (!rate_limit_allow('bind.claimToken:' . client_ip(), 5, 3600)) {
             error_msg('操作过于频繁，请稍后再试');
         }
         $code = strtoupper(limited_text(isset($input['code']) ? $input['code'] : '', 8));
-        if ($code === '') error_msg('绑定码为空'); // 必须有码：否则"知道 bindId"就能领凭证，等于没修
+        if ($code === '') error_msg('绑定码为空');
         $target = resolve_code($code);
         if (!$target) error_msg('绑定码无效');
         $bindRow = get_bind($target);
-        if (!$bindRow) error_msg('绑定码无效');
-        if (!empty($bindRow['desk']['token_hash'])) {
-            error_msg('该绑定已签发过桌面凭证，如需重置请在桌面端重新绑定');
-        }
-        if (strcasecmp((string)($bindRow['code'] ?? ''), $code) !== 0) {
+        if (!$bindRow || strcasecmp((string)($bindRow['code'] ?? ''), $code) !== 0) {
             error_msg('绑定码无效');
         }
         $deskToken = issue_desk_token($target);

@@ -37,7 +37,28 @@ fn request(payload: Value) -> Result<Value, String> {
     resp.into_json::<Value>().map_err(|e| e.to_string())
 }
 
+/// 桌面凭证的落盘文件：**不能放 config.json**。
+/// 前端的 writeConfig 是整份覆盖，放配置里会被冲掉（实测踩到：签发成功但字段长度 0），
+/// 而服务端此时已认为"该绑定签发过凭证"，客户端反而被拒。独立文件与 window-state.json 同思路。
+fn desk_token_file() -> std::path::PathBuf {
+    let dir = config::config_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    dir.join("desk-token.json")
+}
+
 fn read_desk_token() -> Option<String> {
+    // 1) 独立文件（权威）
+    if let Ok(raw) = std::fs::read_to_string(desk_token_file()) {
+        if let Ok(v) = serde_json::from_str::<Value>(&raw) {
+            if let Some(t) = v.get("deskToken").and_then(|x| x.as_str()) {
+                let t = t.trim();
+                if !t.is_empty() {
+                    return Some(t.to_string());
+                }
+            }
+        }
+    }
+    // 2) 兼容：早期版本曾写进 config.sync.deskToken（可能已被前端覆盖，仅作兜底）
     let raw = config::read_config();
     let cfg: Value = if raw.is_empty() { json!({}) } else { serde_json::from_str(&raw).unwrap_or(json!({})) };
     let token = cfg.get("sync")?.get("deskToken").and_then(|v| v.as_str())?.trim().to_string();
@@ -48,25 +69,23 @@ fn read_desk_token() -> Option<String> {
     }
 }
 
-/// 桌面端凭证（deskToken）—— 读配置 sync.deskToken，读不到返回空串
+/// 桌面端凭证（deskToken）—— 读独立文件，读不到返回空串
 pub fn desk_token() -> String {
     read_desk_token().unwrap_or_default()
 }
 
 fn store_desk_token(token: &str) {
-    // parse 失败绝不能把空骨架写回（防数据覆盖）
-    let Some(mut cfg) = config::read_config_value() else {
-        log::warn!("[sync] store_desk_token 跳过：config.json 解析失败");
+    if token.trim().is_empty() {
         return;
-    };
-    if let Some(obj) = cfg.as_object_mut() {
-        let sync = obj.entry("sync").or_insert_with(|| json!({}));
-        if let Some(sobj) = sync.as_object_mut() {
-            sobj.insert("deskToken".into(), json!(token));
-        }
     }
-    config::write_config(&serde_json::to_string(&cfg).unwrap_or_default());
-    invalidate_bind_cache();
+    let body = json!({ "deskToken": token.trim(), "savedAt": chrono::Local::now().to_rfc3339() });
+    match std::fs::write(desk_token_file(), body.to_string()) {
+        Ok(_) => {
+            log::info!("[sync] 桌面凭证已落盘（desk-token.json）");
+            invalidate_bind_cache();
+        }
+        Err(e) => log::warn!("[sync] 桌面凭证落盘失败: {}", e),
+    }
 }
 
 /// 桌面凭证引导：本地已有 → 直接返回；否则用 bindId + bindCode 调 bind.claimToken 换取并落盘。
