@@ -72,6 +72,8 @@ mod license;
 mod sidecar;
 mod sync;
 mod transfer;
+/// 移动互联统一枢纽：身份 / 请求 / 模块注册表的**唯一入口**（sync/transfer/cloud 共用）
+mod hub;
 mod config;
 mod control;
 mod converter;
@@ -1031,6 +1033,11 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
         // ---- M5：绑定同步（sync:* 对齐 binding/engine/init.ts）----
         "syncGetBinding" => sync::sync_get_binding(),
         "syncPullNow" => sync::sync_pull_now(),
+        // ---- M5：移动互联枢纽状态（身份摘要 + 模块清单；前端 shim 是通用 Proxy，无需改 TS）----
+        "hubStatus" => json!({
+            "identity": hub::identity_summary(),
+            "modules": hub::modules_summary(),
+        }),
 
         // ---- M5：文件快传（fileTransfer:* 对齐 file-transfer.ts）----
         "fileTransferGetState" => transfer::get_state(),
@@ -2793,13 +2800,26 @@ pub fn run() {
             // 配置损坏自愈（与 Electron 启动行为一致）
             config::restore_from_backup_if_needed();
 
+            // 移动互联模块注册表：桌面端本地声明（服务端清单由 hub::server_modules() 拉取，60 秒缓存）
+            hub::register_module("taskwall", "任务墙", &["pull", "publish", "ack"]);
+            hub::register_module("fileTransfer", "文件快传", &["send", "download", "share", "claim"]);
+            hub::register_module("control", "云控制", &["realtime", "inject", "clipboard"]);
+
             // 桌面端凭证（deskToken）引导：旧装机只有绑定码，升级后自动换一次并落盘。
-            // 网络请求最长 10s，放后台线程，不阻塞启动。失败只记日志（服务端兼容期仍可继续）。
+            // 网络请求最长 15s，放后台线程，不阻塞启动。失败只记日志（服务端兼容期仍可继续）。
             std::thread::spawn(|| {
                 std::thread::sleep(std::time::Duration::from_millis(1500));
-                if sync::ensure_desk_token().is_some() {
-                    log::info!("[sync] 桌面端凭证已就绪");
+                if hub::ensure_ready().is_some() {
+                    log::info!("[hub] 桌面端凭证已就绪");
                 }
+                // 启动只打一次模块清单摘要（来源 server=服务端 / local=本地回退）
+                let summary = hub::modules_summary();
+                log::info!(
+                    "[hub] 模块清单：来源={} 条数={}",
+                    summary.get("source").and_then(|v| v.as_str()).unwrap_or("local"),
+                    summary.get("count").and_then(|v| v.as_i64()).unwrap_or(0)
+                );
+                log::info!("[hub] 身份摘要: {}", hub::identity_summary());
             });
 
             // 注册全局快捷键（注册失败写日志——Electron 版同名键位如果被占也需要知道）

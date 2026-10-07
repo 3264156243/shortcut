@@ -12,7 +12,6 @@ use tokio_tungstenite::tungstenite::Message;
 
 use crate::control::{self, ClipItem, Injector};
 
-const SYNC_API_URL: &str = "https://shortcut.326415.xyz/sync/api.php";
 const RELAY_URL: &str = "wss://shortcut.326415.xyz/relay-ws";
 const RECONNECT_BASE_MS: u64 = 3000;
 const RECONNECT_MAX_MS: u64 = 30000;
@@ -46,27 +45,24 @@ pub struct CloudHandle {
     pub state: Arc<CloudState>,
 }
 
-fn fetch_ticket(bind_id: &str, bind_code: &str) -> Result<String, String> {
-    let body = json!({
-        "action": "control.ticket",
-        "role": "desktop",
-        "bindId": bind_id,
-        // 新版桌面端以 deskToken 为准（bindCode 仅服务端兼容期内接受）
-        "deskToken": crate::sync::desk_token(),
-        "bindCode": bind_code,
-    });
-    let resp = ureq::post(SYNC_API_URL)
-        .timeout(Duration::from_millis(10_000))
-        .send_json(body)
-        .map_err(|e| format!("获取云端连接凭证失败: {}", e))?;
-    let data: Value = resp.into_json().map_err(|e| e.to_string())?;
+/// 取云控制票据：身份注入与超时/错误文案统一走 hub（不再自己拼 bindId/deskToken 直接 POST）。
+/// `bind_id` / `bind_code` 仅用于日志定位；桌面端以 deskToken 为准，bindCode 是服务端兼容期参数。
+fn fetch_ticket(bind_id: &str, _bind_code: &str) -> Result<String, String> {
+    let data = match crate::hub::api_post("control.ticket", json!({ "role": "desktop" })) {
+        Ok(v) => v,
+        Err(e) => return Err(format!("获取云端连接凭证失败: {}", e)),
+    };
     match data.get("ticket").and_then(|t| t.as_str()) {
         Some(t) if !t.is_empty() => Ok(t.to_string()),
-        _ => Err(data
-            .get("message")
-            .and_then(|m| m.as_str())
-            .unwrap_or("获取云端连接凭证失败")
-            .to_string()),
+        _ => {
+            let msg = data
+                .get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("获取云端连接凭证失败")
+                .to_string();
+            log_cloud(&format!("ticket 失败 bindId={} : {}", bind_id, msg));
+            Err(msg)
+        }
     }
 }
 

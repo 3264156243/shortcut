@@ -37,6 +37,28 @@ fn request(payload: Value) -> Result<Value, String> {
     resp.into_json::<Value>().map_err(|e| e.to_string())
 }
 
+/// 供 `hub` 复用的 api.php HTTP 客户端（**唯一**的 ureq 出口，避免各模块重复造超时/错误文案）。
+/// 错误文案带真实原因（审计 D8）：`请求超时` / `网络错误: <e>` / `服务暂时不可用: <message>`。
+pub fn api_post(payload: Value) -> Result<Value, String> {
+    let resp = match ureq::post(SYNC_API_URL)
+        .timeout(std::time::Duration::from_millis(15_000))
+        .send_json(payload)
+    {
+        Ok(r) => r,
+        Err(ureq::Error::Status(_, _)) => return Err("服务暂时不可用: 服务端返回非 2xx".to_string()),
+        Err(ureq::Error::Transport(t)) => {
+            let msg = t.to_string();
+            return Err(if msg.to_lowercase().contains("timed out") || msg.to_lowercase().contains("timeout") {
+                "请求超时".to_string()
+            } else {
+                format!("网络错误: {}", msg)
+            });
+        }
+    };
+    resp.into_json::<Value>()
+        .map_err(|e| format!("服务暂时不可用: {}", e))
+}
+
 /// 桌面凭证的落盘文件：**不能放 config.json**。
 /// 前端的 writeConfig 是整份覆盖，放配置里会被冲掉（实测踩到：签发成功但字段长度 0），
 /// 而服务端此时已认为"该绑定签发过凭证"，客户端反而被拒。独立文件与 window-state.json 同思路。
@@ -69,7 +91,8 @@ fn read_desk_token() -> Option<String> {
     }
 }
 
-/// 桌面端凭证（deskToken）—— 读独立文件，读不到返回空串
+/// 桌面端凭证（deskToken）—— 读独立文件，读不到返回空串。
+/// 注意：对外统一经 `hub::desk_token()` 暴露给各业务模块（sync 只保留绑定/凭证实现）。
 pub fn desk_token() -> String {
     read_desk_token().unwrap_or_default()
 }

@@ -4,19 +4,11 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use crate::config;
+use crate::hub;
 use crate::sync;
 
-const API_URL: &str = "https://shortcut.326415.xyz/sync/api.php";
 const FILE_URL: &str = "https://shortcut.326415.xyz/sync/file.php";
 const CHUNK_SIZE: usize = 2 * 1024 * 1024;
-
-fn request(payload: Value) -> Result<Value, String> {
-    let resp = ureq::post(API_URL)
-        .timeout(std::time::Duration::from_millis(15_000))
-        .send_json(payload)
-        .map_err(|e| format!("请求超时，请检查网络"))?;
-    resp.into_json::<Value>().map_err(|_| "文件快传服务暂时不可用".to_string())
-}
 
 /// 手写 percent-encode（不引入新依赖）：仅保留 RFC 3986 unreserved 字符，其余按 UTF-8 字节转 %XX
 fn percent_encode(s: &str) -> String {
@@ -30,24 +22,12 @@ fn percent_encode(s: &str) -> String {
     out
 }
 
+/// 发一个 transfer.* 动作：身份拼装（bindId/deskToken/side）与错误文案全部交给 hub。
+/// 未绑定时 hub 返回 `{success:false, message:"联动绑定尚未建立"}`——与原 with_binding 语义一致。
 fn with_binding(action: &str, payload: Value) -> Value {
-    let bind_id = match sync::get_bind_info() {
-        Ok(info) => info.get("bindId").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        Err(_) => String::new(),
-    };
-    if bind_id.is_empty() {
-        return json!({ "success": false, "message": "联动绑定尚未建立" });
-    }
-    let mut body = payload;
-    if let Some(obj) = body.as_object_mut() {
-        obj.insert("action".into(), json!(action));
-        obj.insert("bindId".into(), json!(bind_id));
-        obj.insert("side".into(), json!("desktop"));
-        obj.insert("deskToken".into(), json!(sync::desk_token()));
-    }
-    match request(body) {
+    match hub::api_post(action, payload) {
         Ok(v) => v,
-        Err(e) => json!({ "success": false, "message": e }),
+        Err(e) => hub::err_result(e),
     }
 }
 
@@ -78,13 +58,10 @@ fn upload_chunk(bind_id: &str, desk_token: &str, file_id: &str, index: usize, ch
 }
 
 fn upload_file(file_path: &str) -> Value {
-    let bind_id = match sync::get_bind_info() {
-        Ok(info) => info.get("bindId").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        Err(_) => String::new(),
-    };
-    if bind_id.is_empty() {
+    // 身份统一从 hub 取（bind_id 内部有 60 秒缓存，不再每次重新解析绑定）
+    let Some(bind_id) = hub::bind_id() else {
         return json!({ "success": false, "message": "联动绑定尚未建立" });
-    }
+    };
     let path = std::path::Path::new(file_path);
     let stat = match std::fs::metadata(path) {
         Ok(m) if m.is_file() => m,
@@ -108,7 +85,7 @@ fn upload_file(file_path: &str) -> Value {
         Some(n) if n > 0 => n as usize,
         _ => return json!({ "success": false, "message": "文件初始化失败" }),
     };
-    let desk_token = sync::desk_token();
+    let desk_token = hub::desk_token();
 
     let data = match std::fs::read(path) {
         Ok(d) => d,
@@ -136,20 +113,17 @@ fn upload_file(file_path: &str) -> Value {
 }
 
 fn download_file(file_id: &str, name: &str) -> Value {
-    let bind_id = match sync::get_bind_info() {
-        Ok(info) => info.get("bindId").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        Err(_) => String::new(),
-    };
-    if bind_id.is_empty() {
+    // file.php 不是 api.php：HTTP 方式（GET + 查询串）保持原样，只把"从哪拿身份"换成 hub
+    let Some(bind_id) = hub::bind_id() else {
         return json!({ "success": false, "message": "联动绑定尚未建立" });
-    }
+    };
     // 查询串参数一律 percent-encode（bindId/fileId/deskToken 都不允许裸拼）
     let url = format!(
         "{}?action=download&bindId={}&side=desktop&fileId={}&deskToken={}",
         FILE_URL,
         percent_encode(&bind_id),
         percent_encode(file_id),
-        percent_encode(&sync::desk_token())
+        percent_encode(&hub::desk_token())
     );
     let resp = match ureq::get(&url).timeout(std::time::Duration::from_millis(60_000)).call() {
         Ok(r) => r,
@@ -254,9 +228,10 @@ pub fn share_delete(id: &str) -> Value {
 }
 
 pub fn claim(code: &str) -> Value {
-    match request(json!({ "action": "transfer.claim", "code": code })) {
+    // 无需身份的动作走 hub 的公开通道（不再自带 request()）
+    match hub::api_post_public("transfer.claim", json!({ "code": code })) {
         Ok(v) => v,
-        Err(e) => json!({ "success": false, "message": e }),
+        Err(e) => hub::err_result(e),
     }
 }
 
