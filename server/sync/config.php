@@ -1,6 +1,14 @@
 <?php
 
-$DATA_DIR = __DIR__ . '/data';
+// ===== 数据目录：必须位于 web 根之外 =====
+// 【2026-10-08 安全修复】此前这里是 __DIR__ . '/data'（即在 web 根下一层），
+// 导致 https://…/sync/data/binds.json（含全部 bindId 与**明文 6 位绑定码**）、shares.json、
+// settings.json、rate-limits.json、control-relay-secret.txt（中继 HMAC 密钥）等可被公网直接下载。
+// 现已迁到站点根的同级目录（不在任何 URL 之下）；可用环境变量 SHORTCUT_SYNC_DATA 覆盖。
+$DATA_DIR = getenv('SHORTCUT_SYNC_DATA');
+if (!is_string($DATA_DIR) || $DATA_DIR === '') {
+    $DATA_DIR = dirname(__DIR__, 2) . '/ShortCut-sync-data';
+}
 $BINDS_FILE = $DATA_DIR . '/binds.json';
 $QUEUE_DIR = $DATA_DIR . '/queues';
 $RATE_LIMIT_FILE = $DATA_DIR . '/rate-limits.json';
