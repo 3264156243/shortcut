@@ -2807,12 +2807,30 @@ pub fn run() {
             hub::register_module("fileTransfer", "文件快传", &["send", "download", "share", "claim"]);
             hub::register_module("control", "云控制", &["realtime", "inject", "clipboard"]);
 
+            // 拉取写入 config.json 后要让界面刷新（新便签/新活动墙），sync 模块需要应用句柄来广播
+            sync::register_app_handle(app.handle().clone());
+
             // 桌面端凭证（deskToken）引导：旧装机只有绑定码，升级后自动换一次并落盘。
             // 网络请求最长 15s，放后台线程，不阻塞启动。失败只记日志（服务端兼容期仍可继续）。
             std::thread::spawn(|| {
                 std::thread::sleep(std::time::Duration::from_millis(1500));
                 if hub::ensure_ready().is_some() {
                     log::info!("[hub] 桌面端凭证已就绪");
+                }
+                // ── 拉取时机 1/3：启动自动拉取一次 ──
+                // 先上报墙名：手机端 board.list 拿到的就是这份列表（不上报则只有"默认任务墙"，
+                // 手机按旧墙名推送 → 桌面按名找不到 → 新建一面墙 → "收到了却看不到"）。
+                sync::publish_board_names_now();
+                match sync::auto_pull_taskwall() {
+                    Some(r) => {
+                        let n = r.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
+                        match r.get("error").and_then(|v| v.as_str()) {
+                            Some(e) => log::warn!("[sync] 启动自动拉取失败: {}", e),
+                            None if n > 0 => log::info!("[sync] 启动自动拉取：收到 {} 条任务，已加入任务墙", n),
+                            None => log::info!("[sync] 启动自动拉取：暂无待接收任务"),
+                        }
+                    }
+                    None => log::info!("[sync] 启动自动拉取已跳过（任务墙已禁用或已有拉取在进行）"),
                 }
                 // 启动只打一次模块清单摘要（来源 server=服务端 / local=本地回退）
                 let summary = hub::modules_summary();

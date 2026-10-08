@@ -288,6 +288,31 @@ async fn connect_once(st: &Arc<CloudState>, bind_id: &str, bind_code: &str) -> R
                                     return Ok(());
                                 }
                             }
+                            // 任务墙实时唤醒：手机 push 入队后，api.php 问中继"桌面在线吗"，
+                            // 在线则由中继转来这条 → 桌面立刻拉取（第三个拉取时机之外的"实时"路径）。
+                            "sync-wake" if authed => {
+                                let board = msg.get("board").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                let count = msg.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
+                                log_cloud(&format!("sync-wake <- board={} count={}", board, count));
+                                if !board.is_empty() && board != "taskwall" {
+                                    log_cloud(&format!("sync-wake 忽略：暂不支持的板块 {}", board));
+                                } else {
+                                    // 拉取是同步 HTTP（ureq）+ 写 config：必须离开 WS 循环。
+                                    // spawn_blocking **不 await**——await 会把这条循环卡住十几秒，
+                                    // 期间心跳与 api 转发全部停摆。并发去重在 sync::auto_pull_taskwall 内部。
+                                    // JoinHandle 丢弃 = 任务继续跑（不 detach 也没关系，返回的句柄只是句柄）
+                                    let _ = tokio::task::spawn_blocking(|| match crate::sync::auto_pull_taskwall() {
+                                        Some(r) => match r.get("error").and_then(|v| v.as_str()) {
+                                            Some(e) => log::warn!("[sync] 收到实时唤醒，拉取失败: {}", e),
+                                            None => log::info!(
+                                                "[sync] 收到实时唤醒，已拉取 {} 条",
+                                                r.get("count").and_then(|v| v.as_i64()).unwrap_or(0)
+                                            ),
+                                        },
+                                        None => log::info!("[sync] 收到实时唤醒，本次已跳过（拉取进行中或任务墙已禁用）"),
+                                    });
+                                }
+                            }
                             _ => {}
                         }
                     }

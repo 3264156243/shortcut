@@ -13,6 +13,11 @@
  *   desktop → mobile : { t:'api-res', id, ok, status, data }
  *   双方             : { t:'ping' } → { t:'pong' }
  *   中继 → mobile    : { t:'desktop-status', online }  桌面上下线通知
+ *   中继 → desktop   : { t:'sync-wake', board, count } 任务墙实时唤醒（桌面收到后立刻拉取）
+ *
+ * 本地 HTTP（仅 127.0.0.1，给 sync/api.php 用）：
+ *   GET  /healthz            → { ok, rooms, at }
+ *   POST /notify {bindId,board,count} → { online, delivered }  桌面在线则转 sync-wake
  *
  * 部署：node relay.js（监听 127.0.0.1:9840，nginx 反代 /relay-ws → 本端口并做 TLS 终结）
  * 依赖：npm i ws（仅此一个）
@@ -111,6 +116,47 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && (req.url === '/healthz' || req.url === '/')) {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, rooms: rooms.size, at: new Date().toISOString() }));
+    return;
+  }
+  // 任务墙推送的实时唤醒（由 sync/api.php 入队成功后调用，仅 127.0.0.1 可达）：
+  // 该 bindId 的桌面在线 → 立刻发 { t:'sync-wake', board, count }（桌面收到就拉取队列）；
+  // 离线 → 原样返回 online:false，任务留在服务端队列等下次拉取。
+  if (req.method === 'POST' && req.url === '/notify') {
+    let raw = '';
+    let tooBig = false;
+    req.on('data', (chunk) => {
+      raw += chunk;
+      if (raw.length > 8 * 1024) { tooBig = true; req.destroy(); }
+    });
+    req.on('end', () => {
+      const out = (code, payload) => {
+        try { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(payload)); } catch { }
+      };
+      if (tooBig) { out(413, { online: false, delivered: 0, error: 'payload too large' }); return; }
+      const msg = safeParse(raw) || {};
+      const bindId = String(msg.bindId || '');
+      const board = String(msg.board || 'taskwall');
+      const count = Number.isFinite(Number(msg.count)) ? Number(msg.count) : 1;
+      if (!/^[A-Za-z0-9_-]{6,64}$/.test(bindId)) {
+        out(400, { online: false, delivered: 0, error: 'bad bindId' });
+        return;
+      }
+      const room = rooms.get(bindId);
+      const desktop = room && room.desktop;
+      if (!desktop) {
+        console.log(`[relay] notify bind=${bindId.slice(0, 8)}… board=${board} desktop=offline（任务留在队列）`);
+        out(200, { online: false, delivered: 0 });
+        return;
+      }
+      let delivered = 0;
+      try {
+        desktop.send(JSON.stringify({ t: 'sync-wake', board, count }));
+        delivered = 1;
+      } catch { delivered = 0; }
+      console.log(`[relay] notify bind=${bindId.slice(0, 8)}… board=${board} count=${count} delivered=${delivered}（已实时唤醒桌面）`);
+      out(200, { online: true, delivered });
+    });
+    req.on('error', () => { try { res.destroy(); } catch { } });
     return;
   }
   res.writeHead(404);

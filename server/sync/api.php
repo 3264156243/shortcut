@@ -20,6 +20,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 require __DIR__ . '/config.php';
 
+// ===== 任务墙推送的"实时唤醒"通道 =====
+// 中继（control-relay/relay.js）只监听 127.0.0.1:9840，这里用本地 HTTP 问它"该绑定的桌面在线吗"，
+// 在线就让它转一条 sync-wake 给桌面（桌面收到后立刻拉取）；离线则什么都不做，任务继续留在队列里。
+// 只改本文件就能部署（常量写在这里，不动 config.php 的部署面）。
+define('RELAY_NOTIFY_URL', 'http://127.0.0.1:9840/notify');
+define('RELAY_NOTIFY_TIMEOUT', 0.8); // 800ms：手机端不能为中继等待太久
+
 $input = json_decode(file_get_contents('php://input'), true);
 if (!is_array($input)) {
     $input = [];
@@ -107,6 +114,47 @@ function issue_control_ticket($bindId, $role) {
     ]));
     $sig = hash_hmac('sha256', $payload, $CONTROL_RELAY_SECRET);
     return $payload . '.' . $sig;
+}
+
+/**
+ * 入队成功后问中继"桌面在线吗"，在线就实时唤醒它立刻拉取。
+ *
+ * **失败绝不入队失败**：中继不可达 / 超时（>800ms）/ 响应不是 JSON，一律当"离线"，
+ * 只 error_log 一行；任务已经在队列里，下次任何一次拉取（启动/手动/下次唤醒）都会取走。
+ *
+ * @return array{online:bool,delivered:int}
+ */
+function notify_relay_wake($bindId, $board, $count = 1) {
+    $offline = ['online' => false, 'delivered' => 0];
+    $body = json_encode(
+        ['bindId' => (string)$bindId, 'board' => (string)$board, 'count' => (int)$count],
+        JSON_UNESCAPED_UNICODE
+    );
+    if ($body === false) return $offline;
+    $ctx = stream_context_create([
+        'http' => [
+            'method' => 'POST',
+            'header' => "Content-Type: application/json\r\nContent-Length: " . strlen($body) . "\r\n",
+            'content' => $body,
+            'timeout' => RELAY_NOTIFY_TIMEOUT,
+            'ignore_errors' => true, // 中继返回 5xx 时也要读到 body 再判断
+        ],
+    ]);
+    // @：中继没起/端口未听时 file_get_contents 会抛 warning，error_reporting(0) 已关但仍加 @ 保险
+    $raw = @file_get_contents(RELAY_NOTIFY_URL, false, $ctx);
+    if ($raw === false || $raw === '') {
+        error_log('[sync] relay notify 不可达或超时（bindId=' . $bindId . '），按离线处理，任务留在队列');
+        return $offline;
+    }
+    $data = json_decode($raw, true);
+    if (!is_array($data)) {
+        error_log('[sync] relay notify 响应异常（bindId=' . $bindId . '）: ' . substr((string)$raw, 0, 200));
+        return $offline;
+    }
+    return [
+        'online' => !empty($data['online']),
+        'delivered' => isset($data['delivered']) ? (int)$data['delivered'] : 0,
+    ];
 }
 
 switch ($action) {
@@ -557,7 +605,15 @@ switch ($action) {
         if (!enqueue_task($board, $bindId, $task)) {
             error_msg('待同步任务已达到上限，请先打开桌面端接收');
         }
-        respond(['success' => true, 'taskId' => $task['id']]);
+        // 入队已成功 —— 现在问中继桌面是否在线：在线则实时唤醒桌面立刻拉取；
+        // 离线 / 中继异常都只当离线（deliveredRealtime=false），任务仍在队列等下次拉取。
+        $wake = notify_relay_wake($bindId, $board, 1);
+        respond([
+            'success' => true,
+            'taskId' => $task['id'],
+            'deliveredRealtime' => $wake['online'] && $wake['delivered'] > 0,
+            'desktopOnline' => $wake['online'],
+        ]);
         break;
 
     case 'pull':

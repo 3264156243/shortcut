@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
-import { Smartphone, Copy, RefreshCw, Download, CheckCircle2 } from 'lucide-react';
+import { Smartphone, Copy, RefreshCw, CheckCircle2 } from 'lucide-react';
 
 interface BindInfo {
   bindId?: string;
@@ -13,7 +13,6 @@ export default function BindCard() {
   const [loading, setLoading] = useState(true);
   const [copiedTarget, setCopiedTarget] = useState<'url' | 'code' | null>(null);
   const [qrCode, setQrCode] = useState('');
-  const [pulling, setPulling] = useState(false);
   const [message, setMessage] = useState('');
 
   const refresh = () => {
@@ -70,22 +69,6 @@ export default function BindCard() {
     setTimeout(() => setCopiedTarget(null), 2000);
   };
 
-  const pullNow = async () => {
-    setPulling(true);
-    setMessage('');
-    try {
-      const result = await window.electronAPI?.syncPullNow?.() as any;
-      if (!result?.success) throw new Error(result?.message || '接收失败，请检查网络');
-      const count = Number(result?.count || 0);
-      setMessage(count > 0 ? ('已接收 ' + count + ' 条任务') : '暂无待接收任务');
-    } catch (error: any) {
-      setMessage(error?.message || '接收失败，请检查网络');
-    } finally {
-      setPulling(false);
-      setTimeout(() => setMessage(''), 3000);
-    }
-  };
-
   const cardStyle: React.CSSProperties = {
     background: 'var(--color-bg-card)',
     border: '1px solid var(--color-border)',
@@ -111,18 +94,9 @@ export default function BindCard() {
         )}
         <button
           type="button"
-          onClick={pullNow}
-          disabled={loading || pulling || !info}
-          className="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] transition-opacity hover:opacity-80 disabled:opacity-40"
-          style={{ background: 'var(--color-accent)', color: 'white' }}
-        >
-          <Download size={11} className={pulling ? 'animate-spin' : ''} /> {pulling ? '接收中' : '立即接收'}
-        </button>
-        <button
-          type="button"
           onClick={refresh}
           disabled={loading}
-          className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] transition-opacity hover:opacity-80 disabled:opacity-40"
+          className="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] transition-opacity hover:opacity-80 disabled:opacity-40"
           style={{ background: 'var(--color-bg-card-hover)', color: 'var(--color-text-secondary)' }}
         >
           <RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> 刷新
@@ -136,11 +110,6 @@ export default function BindCard() {
         <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>获取绑定信息…</div>
       ) : info ? (
         <div className="flex flex-col gap-2.5">
-          {message && (
-            <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--color-accent)' }}>
-              <CheckCircle2 size={12} /> {message}
-            </div>
-          )}
           <div className="grid gap-3 sm:grid-cols-[168px_minmax(0,1fr)]">
             <div style={{ ...subStyle, display: 'grid', placeItems: 'center', minHeight: 168 }}>
               {qrCode ? (

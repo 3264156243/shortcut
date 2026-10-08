@@ -16,6 +16,17 @@ const BIND_CACHE_TTL: Duration = Duration::from_secs(60);
 static BIND_CACHE: OnceLock<Mutex<Option<(Instant, Value)>>> = OnceLock::new();
 /// bind.claimToken 被服务端明确拒绝（如"该绑定已签发过桌面凭证"）→ 不再重复请求
 static CLAIM_REJECTED: AtomicBool = AtomicBool::new(false);
+/// 自动拉取（启动一次 / 实时唤醒）的并发去重：同一时刻只允许一个拉取在跑。
+/// 两个拉取并发跑会各自 read_config_value() 再 write_config() → 后写的那份把先写的便签冲掉。
+static PULL_BUSY: AtomicBool = AtomicBool::new(false);
+
+/// PULL_BUSY 的 RAII 释放（panic 也能释放，否则一次异常会让自动拉取永久失效）
+struct PullBusyGuard;
+impl Drop for PullBusyGuard {
+    fn drop(&mut self) {
+        PULL_BUSY.store(false, Ordering::SeqCst);
+    }
+}
 
 fn bind_cache() -> &'static Mutex<Option<(Instant, Value)>> {
     BIND_CACHE.get_or_init(|| Mutex::new(None))
@@ -287,6 +298,39 @@ fn publish_board_names(names: &[String]) -> bool {
     }
 }
 
+/// 把本地墙名上报给服务端（`bind.boards.update`）——手机端 `board.list` 拿到的就是这个列表。
+/// 桌面**没上报过**时手机端只有"默认任务墙"，推送的 boardName 与桌面真实墙名不一致 → 落到新建墙。
+pub fn publish_board_names_now() -> bool {
+    let ok = publish_board_names(&read_board_names());
+    if ok {
+        log::info!("[sync] 已上报墙名列表: {:?}", read_board_names());
+    } else {
+        log::warn!("[sync] 墙名列表上报失败（未绑定或网络异常）");
+    }
+    ok
+}
+
+/// 应用句柄（lib.rs setup 里注册一次）：拉取写入配置后广播刷新用。未注册时静默跳过。
+static APP_HANDLE: OnceLock<tauri::AppHandle> = OnceLock::new();
+
+/// 注册应用句柄（只生效一次；重复注册忽略）
+pub fn register_app_handle(app: tauri::AppHandle) {
+    let _ = APP_HANDLE.set(app);
+}
+
+/// 拉取写入 config.json 后通知界面刷新。
+/// 写文件本身不会让**已打开**的界面看到新便签（主窗只在 loadConfig 时读盘），
+/// 所以这里广播一次：
+/// - `config:changed` → 主窗 App.tsx 收到后 loadConfig()（新便签 + 新 activeTaskBoardId 才可见）
+/// - `tasklist:data`  → 独立的任务清单窗（src/tasklist.tsx）重渲列表
+fn broadcast_config_refresh() {
+    let Some(app) = APP_HANDLE.get() else { return };
+    use tauri::Emitter;
+    let _ = app.emit("config:changed", ());
+    let cfg = crate::task_cfg(app);
+    let _ = app.emit("tasklist:data", json!(crate::resolve_task_list(&cfg)));
+}
+
 /// taskwall 板块启用检查（config.modules 数组 enabled !== false）
 fn taskwall_enabled() -> bool {
     let raw = config::read_config();
@@ -366,6 +410,11 @@ pub fn pull_taskwall() -> Value {
         return json!({ "board": "taskwall", "count": 0, "error": "本地配置读取失败，云端任务已保留" });
     };
     let mut imported = 0i64;
+    // 本次实际写入的墙（第一条落点的墙 id）与新建墙数量：
+    // - target_board_id 用于写入后把 activeTaskBoardId 切过去（否则"收到了却看不到"）
+    // - new_boards > 0 时才需要重新上报墙名（手机端 board.list 才是真实墙名）
+    let mut target_board_id: Option<String> = None;
+    let mut new_boards = 0i64;
     {
         let obj = cfg.as_object_mut().unwrap();
         let boards = obj.entry("taskBoards").or_insert_with(|| json!([]));
@@ -380,10 +429,12 @@ pub fn pull_taskwall() -> Value {
                         let mut rng = rand::rng();
                         let id = format!("sync_{}", (0..8).map(|_| format!("{:02x}", rng.random_range(0..256))).collect::<String>());
                         arr.push(json!({ "id": id, "name": board_name, "notes": [], "createdAt": now, "updatedAt": now }));
+                        new_boards += 1;
                         arr.len() - 1
                     }
                 };
                 let board = &mut arr[board_idx];
+                let board_id = board.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let notes_empty = board.get("notes").and_then(|n| n.as_array()).map(|n| n.is_empty()).unwrap_or(true);
                 let existing_ids: Vec<String> = board.get("notes").and_then(|n| n.as_array()).map(|n| n.iter().filter_map(|x| x.get("id").and_then(|i| i.as_str()).map(|s| s.to_string())).collect()).unwrap_or_default();
                 let task_id = task.get("id").and_then(|v| v.as_str()).unwrap_or("");
@@ -400,12 +451,33 @@ pub fn pull_taskwall() -> Value {
                     }
                     nobj.insert("updatedAt".into(), json!(chrono::Local::now().to_rfc3339()));
                 }
+                if target_board_id.is_none() && !board_id.is_empty() {
+                    target_board_id = Some(board_id);
+                }
                 imported += 1;
             }
         }
     }
     if imported > 0 {
+        // 写入后可见：把当前活动墙切到本次写入的那面墙（任务墙 UI 只渲染 activeTaskBoardId，
+        // 不切的话新墙里的便签"收到了却看不到"）。与当前不同才改，避免无意义写盘。
+        if let Some(target) = target_board_id.clone() {
+            let current = cfg.get("activeTaskBoardId").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            if current != target {
+                if let Some(obj) = cfg.as_object_mut() {
+                    obj.insert("activeTaskBoardId".into(), json!(target));
+                }
+                log::info!("[sync] 当前任务墙已切到本次写入的墙: {} -> {}", if current.is_empty() { "(空)" } else { &current }, target);
+            }
+        }
         config::write_config(&serde_json::to_string(&cfg).unwrap_or_default());
+        // 写盘不会让已打开的界面自己刷新 → 广播一次（新便签 + 新 activeTaskBoardId 才会显示）
+        broadcast_config_refresh();
+    }
+    // 新建了墙 → 重新上报墙名，手机端 board.list 才会拿到真实墙名列表
+    if new_boards > 0 {
+        log::info!("[sync] 新建了 {} 面墙，重新上报墙名列表", new_boards);
+        publish_board_names_now();
     }
 
     // ack
@@ -429,6 +501,25 @@ pub fn sync_get_binding() -> Value {
         }
         Err(e) => json!({ "success": false, "message": e }),
     }
+}
+
+/// 自动拉取入口（**启动一次** 与 **中继实时唤醒** 共用）：
+/// - 任务墙板块被禁用 → None（不打扰用户）
+/// - 已有拉取在跑 → None（并发去重；队列是 peek 不删，任务不会被丢，下一次拉取照样取到）
+/// - 否则返回 `Some(pull_taskwall() 的结果)`
+///
+/// 手动拉取（`syncPullNow`）走 `sync_pull_now` 不走这里，语义要保留"用户点了必须给答复"。
+pub fn auto_pull_taskwall() -> Option<Value> {
+    if !taskwall_enabled() {
+        log::info!("[sync] 自动拉取跳过：任务墙板块已禁用");
+        return None;
+    }
+    if PULL_BUSY.swap(true, Ordering::SeqCst) {
+        log::info!("[sync] 自动拉取跳过：已有一次拉取在进行（队列任务不会丢）");
+        return None;
+    }
+    let _guard = PullBusyGuard;
+    Some(pull_taskwall())
 }
 
 /// 对齐 sync:pullNow

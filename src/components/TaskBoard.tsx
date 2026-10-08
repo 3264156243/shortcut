@@ -1,12 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, Check, FileText, Plus, Settings, Trash2, X } from 'lucide-react';
+import { Bell, Check, Download, FileText, Plus, Settings, Trash2, X } from 'lucide-react';
 import { useStore } from '../store';
 import { TaskBoardConfig, TaskEditorDraft, TaskNote } from '../types';
 import TaskDateTimePicker, { createDefaultReminderValue } from './TaskDateTimePicker';
 
 const tapePositions = ['left', 'right', 'center'];
 type TaskEditorState = Omit<TaskEditorDraft, 'boardId'>;
+
+/** syncPullNow 返回结构（对齐 electron/sync 与 src-tauri 两侧实现） */
+interface SyncPullBoardResult {
+  board?: string;
+  count?: number;
+  error?: string;
+}
+
+interface SyncPullResult {
+  success?: boolean;
+  count?: number;
+  results?: SyncPullBoardResult[];
+  /** 部分实现把失败原因放在 error，部分放在 message */
+  error?: string | null;
+  message?: string | null;
+}
 
 const toDateTimeLocal = (iso?: string) => {
   if (!iso) return '';
@@ -39,6 +55,7 @@ export default function TaskBoard() {
   const deleteTask = useStore((state) => state.deleteTask);
   const moveTask = useStore((state) => state.moveTask);
   const setTaskEditorDraft = useStore((state) => state.setTaskEditorDraft);
+  const addToast = useStore((state) => state.addToast);
   const wallRef = useRef<HTMLDivElement>(null);
   const taskInputRef = useRef<HTMLInputElement>(null);
   const lastInputSpaceAt = useRef(0);
@@ -78,6 +95,8 @@ export default function TaskBoard() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  // 接收手机任务：手动触发一次云端队列拉取（按钮禁用期间不重复触发）
+  const [receiving, setReceiving] = useState(false);
 
   const taskBoards = config.taskBoards?.length ? config.taskBoards : [];
   const activeBoard = taskBoards.find((board) => board.id === config.activeTaskBoardId) || taskBoards[0];
@@ -218,6 +237,40 @@ export default function TaskBoard() {
 
   const addToList = (task: TaskNote) => {
     void window.electronAPI?.addTaskFromDrag?.(activeBoard.id, task.id);
+  };
+
+  // 接收手机任务：从云端队列手动拉取一次（入口由「联动绑定」卡片迁移到任务墙工具栏）
+  const receivePhoneTasks = async () => {
+    if (receiving) return;
+    setReceiving(true);
+    try {
+      const result = (await window.electronAPI?.syncPullNow?.()) as SyncPullResult | undefined;
+      if (!result) {
+        addToast('接收失败，请检查网络', 'error');
+        return;
+      }
+      const count = Number(result.count || 0);
+      const detail = result.error
+        || result.message
+        || result.results?.find((item) => !!item?.error)?.error;
+      // 失败原因优先展示（例如「尚未建立联动绑定」「同步服务暂时不可用」）
+      const failure = detail || (result.success === false ? '接收失败，请检查网络' : '');
+      if (failure) {
+        addToast(String(failure), 'error');
+      } else if (count > 0) {
+        addToast(`已接收 ${count} 条手机任务`, 'success');
+      } else {
+        addToast('暂无新任务', 'info');
+      }
+      if (count > 0) {
+        // 云端任务已写入本地配置：沿用 store 现有加载方式刷新（不额外轮询）
+        await useStore.getState().loadConfig();
+      }
+    } catch (error: any) {
+      addToast(error?.message || '接收失败，请检查网络', 'error');
+    } finally {
+      setReceiving(false);
+    }
   };
 
   const startDrag = (task: TaskNote, event: React.PointerEvent<HTMLDivElement>) => {
@@ -417,6 +470,25 @@ export default function TaskBoard() {
             </div>
           </div>
         )}
+        {/* 接收手机任务入口（原「联动绑定」卡片里的立即接收按钮迁到此处） */}
+        <div className="flex shrink-0 items-center">
+          <button
+            type="button"
+            onClick={() => void receivePhoneTasks()}
+            disabled={receiving}
+            className="flex h-8 items-center gap-1.5 rounded px-3 text-xs transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-45 hover:opacity-85"
+            style={{
+              background: receiving ? 'rgba(155,35,53,.25)' : 'rgba(245,240,232,.1)',
+              border: '1px solid ' + (receiving ? 'rgba(155,35,53,.45)' : 'rgba(245,240,232,.14)'),
+              color: receiving ? '#eaa2ad' : '#f5f0e8',
+              fontFamily: "'Special Elite', 'Noto Serif SC', 'SimSun', serif",
+            }}
+            title="从云端接收手机提交的任务"
+          >
+            <Download size={14} className={receiving ? 'animate-spin' : ''} />
+            {receiving ? '接收中…' : '接收手机任务'}
+          </button>
+        </div>
         {activeBoard && (
           <div className="flex shrink-0 items-center">
             <button
