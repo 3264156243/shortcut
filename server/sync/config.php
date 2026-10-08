@@ -234,58 +234,362 @@ function update_bind_boards($bindId, $boards) {
     });
 }
 
-function issue_mobile_token($bindId, $deviceName) {
+// ===== 设备与凭证（多设备模型）=====
+// 为什么从"单槽"改成"列表"（2026-10-09 身份层补完）：
+//   原来 `mobile` / `desk` 各只有一个槽位，`issue_mobile_token` 直接覆写整个 mobile 槽 ——
+//   第二台手机一扫码就**静默顶掉**第一台：旧手机没有任何提示，之后所有请求变成
+//   403「移动端绑定已失效」，用户完全不知道为什么；桌面端也看不到"当前绑了哪些设备"，
+//   更没有移除入口（设置里只有二维码和绑定码，没有设备管理）。
+//
+// 存储（binds[bindId]）：
+//   devices: [ { device_id, device_key, device_name, side: 'mobile'|'desktop',
+//                token_hash, bound_at, last_seen_at } ]
+//
+// 旧 `mobile` / `desk` 单槽继续**可读**（由 bind_devices 投影成列表），并在下一次写入
+// （注册 / 改名 / 移除 / 心跳）时并成 devices[] 且删掉旧槽 —— 因此既不需要停机迁移脚本，
+// 也不会丢任何已签发凭证，老客户端不受影响。
+
+/** 手机设备数上限：settings.json → maxMobileDevices（缺省 5，钳制 1..20） */
+function max_mobile_devices() {
+    $settings = sync_settings_read();
+    if (!is_array($settings)) {
+        $settings = [];
+    }
+    $limit = isset($settings['maxMobileDevices']) ? (int)$settings['maxMobileDevices'] : 5;
+    if ($limit < 1) {
+        $limit = 1;
+    }
+    if ($limit > 20) {
+        $limit = 20;
+    }
+    return $limit;
+}
+
+/** 设备名限长（config.php 不依赖 api.php 的 limited_text，便于 file.php 单独引用本文件） */
+function limited_device_name($value, $side) {
+    $text = trim((string)$value);
+    if ($text === '') {
+        return $side === 'mobile' ? '我的手机' : '本机电脑';
+    }
+    if (function_exists('mb_substr')) {
+        return mb_substr($text, 0, 30, 'UTF-8');
+    }
+    return substr($text, 0, 30);
+}
+
+/**
+ * 把绑定的设备统一成列表（兼容旧 mobile/desk 单槽）。**只读投影，不写盘。**
+ * 旧槽没有 device_id，用旧槽名 + token_hash 前缀合成稳定 id（legacy-mobile-ab12cd34），
+ * 这样"移除旧设备"也能精确定位到它。
+ */
+function bind_devices($bind) {
+    $devices = [];
+    if (is_array($bind) && isset($bind['devices']) && is_array($bind['devices'])) {
+        foreach ($bind['devices'] as $device) {
+            if (is_array($device) && isset($device['device_id']) && isset($device['token_hash'])) {
+                $devices[] = $device;
+            }
+        }
+    }
+    foreach (['mobile' => 'mobile', 'desk' => 'desktop'] as $slotKey => $side) {
+        if (!is_array($bind) || !isset($bind[$slotKey]) || !is_array($bind[$slotKey])) {
+            continue;
+        }
+        $slot = $bind[$slotKey];
+        $hash = isset($slot['token_hash']) ? (string)$slot['token_hash'] : '';
+        if ($hash === '') {
+            continue;
+        }
+        $duplicate = false;
+        foreach ($devices as $device) {
+            if (hash_equals((string)$device['token_hash'], $hash)) {
+                $duplicate = true;
+                break;
+            }
+        }
+        if ($duplicate) {
+            continue;
+        }
+        $devices[] = [
+            'device_id' => 'legacy-' . $slotKey . '-' . substr($hash, 0, 12),
+            'device_key' => '',
+            'device_name' => (isset($slot['device_name']) && $slot['device_name'] !== '')
+                ? (string)$slot['device_name']
+                : ($side === 'mobile' ? '我的手机' : '本机电脑'),
+            'side' => $side,
+            'token_hash' => $hash,
+            'bound_at' => isset($slot['bound_at'])
+                ? (string)$slot['bound_at']
+                : (isset($slot['issued_at']) ? (string)$slot['issued_at'] : ''),
+            'last_seen_at' => isset($slot['last_seen_at']) ? (string)$slot['last_seen_at'] : '',
+        ];
+    }
+    return $devices;
+}
+
+/** 取出持有该凭证的设备；未命中返回 null。$side 为空表示不限端。 */
+function match_device($bind, $token, $side = '') {
+    $token = (string)$token;
+    if ($token === '' || !is_array($bind)) {
+        return null;
+    }
+    $hash = hash('sha256', $token);
+    foreach (bind_devices($bind) as $device) {
+        if ($side !== '' && (string)$device['side'] !== $side) {
+            continue;
+        }
+        if (hash_equals((string)$device['token_hash'], $hash)) {
+            return $device;
+        }
+    }
+    return null;
+}
+
+/** 规范写入：把设备列表落成 devices[] 并删掉旧单槽（写路径上顺带完成迁移） */
+function store_devices(&$binds, $bindId, array $devices) {
+    $binds[$bindId]['devices'] = array_values($devices);
+    unset($binds[$bindId]['mobile'], $binds[$bindId]['desk']);
+}
+
+/** 设备列表的对外投影（**绝不带 token_hash**），供 API / 桌面端设置面板使用 */
+function list_devices($bindId) {
+    $bind = get_bind($bindId);
+    if (!$bind) {
+        return [];
+    }
+    $out = [];
+    foreach (bind_devices($bind) as $device) {
+        $out[] = [
+            'deviceId' => (string)$device['device_id'],
+            'deviceName' => (string)$device['device_name'],
+            'side' => (string)$device['side'],
+            'boundAt' => (string)$device['bound_at'],
+            'lastSeenAt' => (string)$device['last_seen_at'],
+        ];
+    }
+    return $out;
+}
+
+/**
+ * 注册 / 轮换一台设备的凭证。
+ *
+ * 手机：`device_key` 是手机浏览器自己生成的稳定标识（存在 localStorage）。同一台手机重新绑定
+ * 时**原地轮换**而不是新增一条 —— 否则反复重绑会把设备上限占满，列表里堆一堆同名僵尸设备。
+ * 电脑：`desk` 保持单台语义（一个绑定一份桌面凭证），再次签到时替换原来那条。
+ *
+ * 返回 ['token','deviceId','deviceName'] 或 ['error' => 'limit'|'notfound']。
+ */
+function register_device($bindId, $side, $deviceName, $deviceKey = '') {
     global $BINDS_FILE;
     $plainToken = bin2hex(random_bytes(24));
-    $deviceId = bin2hex(random_bytes(12));
-    $updated = json_lock_update($BINDS_FILE, function ($binds) use ($bindId, $deviceName, $plainToken, $deviceId) {
-        if (!isset($binds[$bindId])) return ['data' => $binds, 'result' => false];
-        $binds[$bindId]['mobile'] = [
-            'device_id' => $deviceId,
-            'device_name' => $deviceName !== '' ? $deviceName : '我的手机',
+    $newDeviceId = bin2hex(random_bytes(12));
+    $name = limited_device_name($deviceName, $side);
+    $key = trim((string)$deviceKey);
+    if (strlen($key) > 64) {
+        $key = substr($key, 0, 64);
+    }
+    $limit = max_mobile_devices();
+    $failure = null;
+    $effectiveId = $newDeviceId;
+    $updated = json_lock_update($BINDS_FILE, function ($binds) use ($bindId, $side, $name, $key, $plainToken, $newDeviceId, $limit, &$failure, &$effectiveId) {
+        if (!isset($binds[$bindId])) {
+            $failure = 'notfound';
+            return ['data' => $binds, 'result' => false];
+        }
+        $devices = bind_devices($binds[$bindId]);
+        $now = date('c');
+        $index = -1;
+        foreach ($devices as $i => $device) {
+            $deviceSide = (string)$device['side'];
+            if ($side === 'desktop') {
+                // 桌面单台语义：替换原有的电脑条目（含旧 legacy 槽）
+                if ($deviceSide === 'desktop') {
+                    $index = $i;
+                    break;
+                }
+                continue;
+            }
+            if ($deviceSide !== 'mobile') {
+                continue;
+            }
+            // 同一台手机（稳定 deviceKey）重新绑定 → 原地轮换，不占新名额
+            if ($key !== '' && isset($device['device_key']) && (string)$device['device_key'] === $key) {
+                $index = $i;
+                break;
+            }
+        }
+        if ($index < 0 && $side === 'mobile') {
+            $mobileCount = 0;
+            foreach ($devices as $device) {
+                if ((string)$device['side'] === 'mobile') {
+                    $mobileCount++;
+                }
+            }
+            if ($mobileCount >= $limit) {
+                $failure = 'limit';
+                return ['data' => $binds, 'result' => false];
+            }
+        }
+        $effectiveId = $index >= 0 ? (string)$devices[$index]['device_id'] : $newDeviceId;
+        $entry = [
+            'device_id' => $effectiveId,
+            'device_key' => $key,
+            'device_name' => $name,
+            'side' => $side,
             'token_hash' => hash('sha256', $plainToken),
-            'bound_at' => date('c'),
-            'last_seen_at' => date('c'),
+            'bound_at' => ($index >= 0 && !empty($devices[$index]['bound_at']))
+                ? (string)$devices[$index]['bound_at']
+                : $now,
+            'last_seen_at' => $now,
         ];
+        if ($index >= 0) {
+            $devices[$index] = $entry;
+        } else {
+            $devices[] = $entry;
+        }
+        store_devices($binds, $bindId, $devices);
         return ['data' => $binds, 'result' => true];
     });
-    return $updated ? ['token' => $plainToken, 'deviceId' => $deviceId, 'deviceName' => $deviceName !== '' ? $deviceName : '我的手机'] : false;
+    if ($updated) {
+        return ['token' => $plainToken, 'deviceId' => $effectiveId, 'deviceName' => $name];
+    }
+    return ['error' => $failure === null ? 'notfound' : $failure];
+}
+
+/**
+ * 更新"最后活跃"时间。**节流 60 秒**：同一个设备 60 秒内不重复写盘，
+ * 避免每个带身份的请求都加一次文件锁 + 落盘（原来这个字段只在绑定时写一次，是假数据）。
+ */
+function touch_device_last_seen($bindId, $deviceId) {
+    if ($bindId === '' || $deviceId === '') {
+        return false;
+    }
+    $bind = get_bind($bindId);
+    if (!$bind) {
+        return false;
+    }
+    $devices = bind_devices($bind);
+    $index = -1;
+    foreach ($devices as $i => $device) {
+        if ((string)$device['device_id'] === $deviceId) {
+            $index = $i;
+            break;
+        }
+    }
+    if ($index < 0) {
+        return false;
+    }
+    $last = isset($devices[$index]['last_seen_at']) ? strtotime((string)$devices[$index]['last_seen_at']) : 0;
+    if ($last > 0 && (time() - $last) < 60) {
+        return true;
+    }
+    $devices[$index]['last_seen_at'] = date('c');
+    global $BINDS_FILE;
+    return (bool) json_lock_update($BINDS_FILE, function ($binds) use ($bindId, $devices) {
+        if (!isset($binds[$bindId])) {
+            return ['data' => $binds, 'result' => false];
+        }
+        // 乐观校验：设备集合数量变了说明并发里有注册/移除，本次心跳放弃（下次请求会再写）
+        if (count(bind_devices($binds[$bindId])) !== count($devices)) {
+            return ['data' => $binds, 'result' => false];
+        }
+        store_devices($binds, $bindId, $devices);
+        return ['data' => $binds, 'result' => true];
+    });
+}
+
+/**
+ * 移除一台设备：**只撤销凭证**（该设备下次请求返回「失效」并自动跳回绑定页），
+ * 不清理它产生的任务/消息/文件 —— 那些数据按"绑定"归属而不是按"设备"归属。
+ */
+function remove_device($bindId, $deviceId) {
+    global $BINDS_FILE;
+    $deviceId = trim((string)$deviceId);
+    if ($bindId === '' || $deviceId === '') {
+        return false;
+    }
+    return (bool) json_lock_update($BINDS_FILE, function ($binds) use ($bindId, $deviceId) {
+        if (!isset($binds[$bindId])) {
+            return ['data' => $binds, 'result' => false];
+        }
+        $next = [];
+        $removed = false;
+        foreach (bind_devices($binds[$bindId]) as $device) {
+            if ((string)$device['device_id'] === $deviceId) {
+                $removed = true;
+                continue;
+            }
+            $next[] = $device;
+        }
+        if (!$removed) {
+            return ['data' => $binds, 'result' => false];
+        }
+        store_devices($binds, $bindId, $next);
+        return ['data' => $binds, 'result' => true];
+    });
+}
+
+/** 给一台设备改名（30 字以内）。返回改后的名字，失败返回 null。 */
+function rename_device($bindId, $deviceId, $deviceName) {
+    global $BINDS_FILE;
+    $deviceId = trim((string)$deviceId);
+    if ($bindId === '' || $deviceId === '') {
+        return null;
+    }
+    $name = null;
+    $ok = json_lock_update($BINDS_FILE, function ($binds) use ($bindId, $deviceId, $deviceName, &$name) {
+        if (!isset($binds[$bindId])) {
+            return ['data' => $binds, 'result' => false];
+        }
+        $devices = bind_devices($binds[$bindId]);
+        $index = -1;
+        foreach ($devices as $i => $device) {
+            if ((string)$device['device_id'] === $deviceId) {
+                $index = $i;
+                break;
+            }
+        }
+        if ($index < 0) {
+            return ['data' => $binds, 'result' => false];
+        }
+        $name = limited_device_name($deviceName, (string)$devices[$index]['side']);
+        $devices[$index]['device_name'] = $name;
+        store_devices($binds, $bindId, $devices);
+        return ['data' => $binds, 'result' => true];
+    });
+    return $ok ? $name : null;
+}
+
+function issue_mobile_token($bindId, $deviceName, $deviceKey = '') {
+    return register_device($bindId, 'mobile', $deviceName, $deviceKey);
 }
 
 function validate_mobile_token($bindId, $token) {
-    $bind = get_bind($bindId);
-    $hash = isset($bind['mobile']['token_hash']) ? (string)$bind['mobile']['token_hash'] : '';
-    return $hash !== '' && $token !== '' && hash_equals($hash, hash('sha256', $token));
+    return match_device(get_bind($bindId), $token, 'mobile') !== null;
 }
 
 // ===== 桌面端凭证（deskToken）=====
 // 为什么需要：原来桌面侧请求只要自报 side=desktop 就算通过（没有任何凭证），
 // 于是"知道 bindId"就等于"能读写删全部消息与文件"。deskToken 与 mobileToken 同构：
-// 服务端只存 sha256、一个绑定一个有效凭证（重新签发即轮换）、请求时用 hash_equals 比对。
-function issue_desk_token($bindId) {
-    global $BINDS_FILE;
-    $plainToken = bin2hex(random_bytes(24));
-    $updated = json_lock_update($BINDS_FILE, function ($binds) use ($bindId, $plainToken) {
-        if (!isset($binds[$bindId])) return ['data' => $binds, 'result' => false];
-        $binds[$bindId]['desk'] = [
-            'token_hash' => hash('sha256', $plainToken),
-            'issued_at' => date('c'),
-        ];
-        return ['data' => $binds, 'result' => true];
-    });
-    return $updated ? $plainToken : false;
+// 服务端只存 sha256、重新签发即轮换、请求时用 hash_equals 比对。
+// 多设备改造后它与手机共用 devices[]，靠 side='desktop' 区分（仍是单台语义）。
+function issue_desk_token($bindId, $deviceName = '') {
+    $result = register_device($bindId, 'desktop', $deviceName);
+    return isset($result['token']) ? $result['token'] : false;
 }
 
 function validate_desk_token($bindId, $token) {
     if ($bindId === '' || $token === '') return false;
-    $bind = get_bind($bindId);
-    $hash = isset($bind['desk']['token_hash']) ? (string)$bind['desk']['token_hash'] : '';
-    return $hash !== '' && hash_equals($hash, hash('sha256', $token));
+    return match_device(get_bind($bindId), $token, 'desktop') !== null;
 }
 
 function has_desk_token($bindId) {
-    $bind = get_bind($bindId);
-    return isset($bind['desk']['token_hash']) && (string)$bind['desk']['token_hash'] !== '';
+    foreach (bind_devices(get_bind($bindId)) as $device) {
+        if ((string)$device['side'] === 'desktop') {
+            return true;
+        }
+    }
+    return false;
 }
 
 // 强制模式开关（settings.json → requireDeskToken）：
@@ -303,11 +607,15 @@ function require_desk_token_enabled() {
  * 但只要该绑定签发过 deskToken（或服务端开了强制模式），免凭证路径立即失效 —— 这样
  * 旧版装机不会立刻断，新版客户端一启动就会拿到 deskToken 并把自己这条绑定升级为"强制"。
  *
- * 返回 ['ok' => bool, 'side' => 'mobile'|'desktop', 'message' => string]
+ * 多设备后额外返回 `deviceId`（命中哪台设备的凭证）——调用方据此更新该设备的"最后活跃"时间，
+ * 也让"移除设备"能精确到具体一台而不是"整个绑定失效"。
+ *
+ * 返回 ['ok' => bool, 'side' => 'mobile'|'desktop', 'deviceId' => string, 'message' => string]
  */
 function resolve_identity($bindId, $input) {
-    if ($bindId === '' || !get_bind($bindId)) {
-        return ['ok' => false, 'side' => '', 'message' => '绑定身份无效'];
+    $bind = ($bindId === '') ? null : get_bind($bindId);
+    if (!$bind) {
+        return ['ok' => false, 'side' => '', 'deviceId' => '', 'message' => '绑定身份无效'];
     }
     $mobileToken = isset($input['mobileToken']) ? trim((string)$input['mobileToken']) : '';
     $deskToken = '';
@@ -317,31 +625,45 @@ function resolve_identity($bindId, $input) {
             break;
         }
     }
-    if ($mobileToken !== '' && validate_mobile_token($bindId, $mobileToken)) {
-        return ['ok' => true, 'side' => 'mobile', 'message' => ''];
+    if ($mobileToken !== '') {
+        $device = match_device($bind, $mobileToken, 'mobile');
+        if ($device) {
+            return ['ok' => true, 'side' => 'mobile', 'deviceId' => (string)$device['device_id'], 'message' => ''];
+        }
     }
-    if ($deskToken !== '' && validate_desk_token($bindId, $deskToken)) {
-        return ['ok' => true, 'side' => 'desktop', 'message' => ''];
+    if ($deskToken !== '') {
+        $device = match_device($bind, $deskToken, 'desktop');
+        if ($device) {
+            return ['ok' => true, 'side' => 'desktop', 'deviceId' => (string)$device['device_id'], 'message' => ''];
+        }
     }
     // 出示了凭证但没通过 → 一律拒绝。
     // （不能因为"这个绑定还没签发过凭证"就回落到兼容通道：那样凭证轮换/失效会被静默掩盖，
     //   线上验收就是这么发现"带错误 deskToken 仍然放行"的。）
-    if ($mobileToken !== '' || $deskToken !== '') {
-        return ['ok' => false, 'side' => '', 'message' => '凭证已失效，请重新绑定或升级客户端'];
+    //
+    // 文案按端区分：手机侧必须命中 SDK 里的「移动端绑定已失效」—— sdk.js 靠这个字符串
+    // 清掉本地身份并置 needBind → 页面自动跳回绑定页。「移除设备」正是依赖这条路径：
+    // 被移除的手机下次请求就该被引导去重新绑定，而不是卡在一句看不懂的报错上。
+    if ($mobileToken !== '') {
+        return ['ok' => false, 'side' => '', 'deviceId' => '', 'message' => '移动端绑定已失效，请重新绑定'];
+    }
+    if ($deskToken !== '') {
+        return ['ok' => false, 'side' => '', 'deviceId' => '', 'message' => '凭证已失效，请重新绑定或升级客户端'];
     }
     if (has_desk_token($bindId) || require_desk_token_enabled()) {
         return [
             'ok' => false,
             'side' => '',
+            'deviceId' => '',
             'message' => '请升级 ShortCut 到最新版（缺少桌面端凭证）',
         ];
     }
     // 兼容通道：只有"从未签发过 deskToken 的旧绑定"能走到这里
     $side = isset($input['side']) ? trim((string)$input['side']) : 'desktop';
     if ($side === 'mobile') {
-        return ['ok' => false, 'side' => '', 'message' => '移动端绑定已失效，请重新绑定'];
+        return ['ok' => false, 'side' => '', 'deviceId' => '', 'message' => '移动端绑定已失效，请重新绑定'];
     }
-    return ['ok' => true, 'side' => 'desktop', 'message' => ''];
+    return ['ok' => true, 'side' => 'desktop', 'deviceId' => '', 'message' => ''];
 }
 
 function message_path($bindId) {

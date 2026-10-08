@@ -163,6 +163,9 @@ declare global {
       voiceCancel: () => Promise<unknown>;
       syncGetBinding: () => Promise<unknown>;
       syncPullNow: () => Promise<unknown>;
+      syncListDevices: () => Promise<unknown>;
+      syncRemoveDevice: (deviceId: string) => Promise<unknown>;
+      syncRenameDevice: (deviceId: string, deviceName: string) => Promise<unknown>;
       onVoiceSession: (callback: (text: string) => void) => () => void;
       onVoicePolish: (callback: (text: string) => void) => () => void;
       onVoicePolishError: (callback: (text: string) => void) => () => void;

@@ -665,3 +665,77 @@ pub fn sync_pull_now() -> Value {
         "message": error.map(|s| json!(s)).unwrap_or(Value::Null),
     })
 }
+
+// ──────────────────────── 设备管理（身份层）────────────────────────
+// 为什么在桌面端：设备归属"绑定"，而绑定是这一台电脑建立的 —— 手机端看不到别的设备，
+// 只有桌面端能充当管理入口（服务端三个动作都要求出示有效凭证）。
+
+/// 设备管理动作的共同出口：统一走 `hub::api_post`（自动注入 bindId + deskToken + side）。
+///
+/// **凭证自愈**：服务端说"凭证已失效"时，说明本地 deskToken 被轮换过（例如另一端
+/// `bind.claimToken`）。这里强制重领一次再重试，避免用户看到"设备列表加载失败"却不知道为什么
+/// —— 与 `get_bind_info_uncached` 的自愈是同一套思路（那次线上就是这么被迫补的）。
+fn device_api(action: &str, payload: Value) -> Result<Value, String> {
+    let first = crate::hub::api_post(action, payload.clone())?;
+    let stale = first.get("success").and_then(|v| v.as_bool()) != Some(true)
+        && first
+            .get("message")
+            .and_then(|v| v.as_str())
+            .map(|m| m.contains("凭证已失效"))
+            .unwrap_or(false);
+    if !stale {
+        return Ok(first);
+    }
+    log::warn!("[sync] {} 返回凭证失效 → 触发自愈重领后重试", action);
+    if reclaim_desk_token().is_none() {
+        return Ok(first);
+    }
+    crate::hub::api_post(action, payload)
+}
+
+fn device_result(data: Value) -> Value {
+    if data.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
+        data
+    } else {
+        json!({
+            "success": false,
+            "message": data.get("message").and_then(|v| v.as_str()).unwrap_or("操作失败，请稍后再试"),
+        })
+    }
+}
+
+/// 对齐 sync:listDevices —— 已绑定设备列表（含 deviceId/名称/端类型/绑定时间/最后活跃/是否本机）
+pub fn sync_list_devices() -> Value {
+    match device_api("bind.devices", json!({})) {
+        Ok(data) => device_result(data),
+        Err(e) => json!({ "success": false, "message": e }),
+    }
+}
+
+/// 对齐 sync:removeDevice —— 移除一台设备（只撤销该设备凭证，不清理数据）
+pub fn sync_remove_device(device_id: &str) -> Value {
+    if device_id.trim().is_empty() {
+        return json!({ "success": false, "message": "缺少设备标识" });
+    }
+    match device_api("bind.device.remove", json!({ "deviceId": device_id.trim() })) {
+        Ok(data) => device_result(data),
+        Err(e) => json!({ "success": false, "message": e }),
+    }
+}
+
+/// 对齐 sync:renameDevice —— 给一台设备改名
+pub fn sync_rename_device(device_id: &str, device_name: &str) -> Value {
+    if device_id.trim().is_empty() {
+        return json!({ "success": false, "message": "缺少设备标识" });
+    }
+    if device_name.trim().is_empty() {
+        return json!({ "success": false, "message": "设备名称不能为空" });
+    }
+    match device_api("bind.device.rename", json!({
+        "deviceId": device_id.trim(),
+        "deviceName": device_name.trim(),
+    })) {
+        Ok(data) => device_result(data),
+        Err(e) => json!({ "success": false, "message": e }),
+    }
+}

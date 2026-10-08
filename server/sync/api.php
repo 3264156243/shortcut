@@ -84,6 +84,11 @@ function limited_text($value, $maxLength) {
 function require_identity($bindId, $input) {
     $r = resolve_identity($bindId, $input);
     if (empty($r['ok'])) error_msg($r['message'] !== '' ? $r['message'] : '身份校验失败');
+    // 命中哪台设备就刷新它的"最后活跃"（touch_device_last_seen 内部 60 秒节流），
+    // 这样桌面端设置里的设备列表显示的是真实活跃时间，而不是只在绑定那一刻写过一次的假数据。
+    if (!empty($r['deviceId'])) {
+        touch_device_last_seen($bindId, $r['deviceId']);
+    }
     return $r['side'];
 }
 
@@ -190,7 +195,7 @@ switch ($action) {
         if (!is_array($bind)) {
             error_msg('暂时无法创建绑定，请稍后再试');
         }
-        $deskToken = issue_desk_token($bind['bind_id']);
+        $deskToken = issue_desk_token($bind['bind_id'], isset($input['deviceName']) ? $input['deviceName'] : '');
         if (!$deskToken) {
             error_msg('暂时无法创建绑定，请稍后再试');
         }
@@ -219,7 +224,7 @@ switch ($action) {
         if (!$bindRow || strcasecmp((string)($bindRow['code'] ?? ''), $code) !== 0) {
             error_msg('绑定码无效');
         }
-        $deskToken = issue_desk_token($target);
+        $deskToken = issue_desk_token($target, isset($input['deviceName']) ? $input['deviceName'] : '');
         if (!$deskToken) error_msg('签发失败，请稍后再试');
         respond(['success' => true, 'bindId' => $target, 'deskToken' => $deskToken]);
         break;
@@ -295,10 +300,76 @@ switch ($action) {
         $resolved = $bindId !== '' && get_bind($bindId) ? $bindId : resolve_code($code);
         if (!$resolved) error_msg('绑定码无效');
         $deviceName = isset($input['deviceName']) ? limited_text($input['deviceName'], 30) : '我的手机';
-        $mobile = issue_mobile_token($resolved, $deviceName);
+        // deviceKey 由手机浏览器生成并长期保存：同一台手机重新绑定时原地轮换凭证，
+        // 不会在设备列表里堆出第二条同名设备、也不会白占一个设备名额。
+        $deviceKey = isset($input['deviceKey']) ? limited_text($input['deviceKey'], 64) : '';
+        $mobile = issue_mobile_token($resolved, $deviceName, $deviceKey);
+        if (is_array($mobile) && isset($mobile['error'])) {
+            if ($mobile['error'] === 'limit') {
+                error_msg('本绑定已绑定 ' . max_mobile_devices() . ' 台手机（已达上限），请先在电脑端「设置 → 移动互联 → 已绑定设备」里移除不用的设备后再试');
+            }
+            error_msg('移动端绑定失败，请稍后再试');
+        }
         if (!$mobile) error_msg('移动端绑定失败');
         $bind = get_bind($resolved);
         respond(['success' => true, 'bindId' => $resolved, 'code' => $bind['code'] ?? '', 'mobileToken' => $mobile['token'], 'deviceId' => $mobile['deviceId'], 'deviceName' => $mobile['deviceName']]);
+        break;
+
+    // ===== 设备管理（桌面端「设置 → 移动互联 → 已绑定设备」）=====
+    // 为什么需要：设备从"单槽"改成列表之后，桌面端必须能看到"到底绑了哪些设备"并能单独移除，
+    // 否则第二台手机只能靠"重新绑定"把第一台顶掉，用户既不知道发生了什么、也没法收拾。
+    // 身份：必须出示有效凭证（桌面 deskToken 或手机 mobileToken）——设备清单属于敏感信息。
+    case 'bind.devices':
+        if (!rate_limit_allow('bind.devices:' . client_ip(), 120, 60)) error_msg('请求过于频繁，请稍后再试');
+        if ($bindId === '' || !get_bind($bindId)) error_msg('绑定身份无效');
+        $identity = resolve_identity($bindId, $input);
+        if (empty($identity['ok'])) error_msg($identity['message'] !== '' ? $identity['message'] : '身份校验失败');
+        if (!empty($identity['deviceId'])) touch_device_last_seen($bindId, $identity['deviceId']);
+        $devices = list_devices($bindId);
+        $mobileCount = 0;
+        foreach ($devices as $i => $device) {
+            $devices[$i]['current'] = ($identity['deviceId'] !== '' && $device['deviceId'] === $identity['deviceId']);
+            if ($device['side'] === 'mobile') $mobileCount++;
+        }
+        respond([
+            'success' => true,
+            'devices' => $devices,
+            'mobileCount' => $mobileCount,
+            'mobileLimit' => max_mobile_devices(),
+            'selfDeviceId' => $identity['deviceId'],
+        ]);
+        break;
+
+    case 'bind.device.rename':
+        if (!rate_limit_allow('bind.device.rename:' . client_ip(), 60, 60)) error_msg('操作过于频繁，请稍后再试');
+        if ($bindId === '' || !get_bind($bindId)) error_msg('绑定身份无效');
+        $identity = resolve_identity($bindId, $input);
+        if (empty($identity['ok'])) error_msg($identity['message'] !== '' ? $identity['message'] : '身份校验失败');
+        $deviceId = isset($input['deviceId']) ? trim((string)$input['deviceId']) : '';
+        if ($deviceId === '') error_msg('缺少 deviceId');
+        $name = rename_device($bindId, $deviceId, isset($input['deviceName']) ? $input['deviceName'] : '');
+        if ($name === null) error_msg('设备不存在或改名失败');
+        respond(['success' => true, 'deviceId' => $deviceId, 'deviceName' => $name]);
+        break;
+
+    case 'bind.device.remove':
+        if (!rate_limit_allow('bind.device.remove:' . client_ip(), 60, 60)) error_msg('操作过于频繁，请稍后再试');
+        if ($bindId === '' || !get_bind($bindId)) error_msg('绑定身份无效');
+        $identity = resolve_identity($bindId, $input);
+        if (empty($identity['ok'])) error_msg($identity['message'] !== '' ? $identity['message'] : '身份校验失败');
+        $deviceId = isset($input['deviceId']) ? trim((string)$input['deviceId']) : '';
+        if ($deviceId === '') error_msg('缺少 deviceId');
+        // 不允许移除"当前正在操作的这台设备"：桌面把自己移除 = 立刻失去设备管理能力，
+        // 而且客户端下次启动会自愈重领凭证，等于白移除一次还让用户以为坏了。
+        if ($identity['deviceId'] !== '' && $deviceId === $identity['deviceId']) {
+            error_msg('不能移除当前正在使用的设备（本机），请在另一台设备上操作');
+        }
+        if (!remove_device($bindId, $deviceId)) error_msg('设备不存在或已被移除');
+        respond([
+            'success' => true,
+            'deviceId' => $deviceId,
+            'devices' => list_devices($bindId),
+        ]);
         break;
 
     case 'control.ticket':

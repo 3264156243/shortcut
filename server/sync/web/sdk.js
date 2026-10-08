@@ -26,9 +26,40 @@
   'use strict';
 
   var STORAGE_KEY = 'shortcut-mobile-binding-v1';
+  var DEVICE_KEY_STORAGE = 'shortcut-device-key-v1';
   var API_URL = '/sync/api.php';
   var PROTOCOL_VERSION = 1;
   var DEFAULT_TIMEOUT = 15000;
+
+  /**
+   * 本机（本浏览器）稳定设备标识，长期保存。
+   *
+   * 为什么需要：服务端从"单槽"改成设备列表后，如果不区分设备，同一台手机每次重新绑定都会
+   * 在列表里新增一条（反复重绑会堆出一串同名僵尸设备，还会白占设备名额）。带上这个标识后，
+   * 同一台手机重绑 = 原地轮换凭证，列表里始终只有一条。
+   */
+  function deviceKey() {
+    var existing = '';
+    try {
+      existing = localStorage.getItem(DEVICE_KEY_STORAGE) || '';
+    } catch (e) {
+      existing = '';
+    }
+    if (existing) return existing;
+    var bytes = new Uint8Array(12);
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+      crypto.getRandomValues(bytes);
+    } else {
+      for (var i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+    }
+    var key = Array.prototype.map.call(bytes, function (b) {
+      return ('0' + b.toString(16)).slice(-2);
+    }).join('');
+    try {
+      localStorage.setItem(DEVICE_KEY_STORAGE, key);
+    } catch (e) { /* 隐私模式下写不了：退化为本次会话内有效 */ }
+    return key;
+  }
 
   function binding() {
     try {
@@ -66,6 +97,8 @@
 
     // ── 身份 ──
     binding: binding,
+    /** 本机稳定设备标识（绑定 mobile.bind 时带上，避免重绑堆出重复设备） */
+    deviceKey: deviceKey,
     isBound: function () {
       var b = binding();
       return !!(b && b.bindId && b.mobileToken);
@@ -92,6 +125,9 @@
     requestPublic: function (action, payload) {
       var body = { action: action, protocolVersion: PROTOCOL_VERSION };
       if (payload) for (var k in payload) if (Object.prototype.hasOwnProperty.call(payload, k)) body[k] = payload[k];
+      // 统一补设备标识：绑定动作必须带上它，服务端才能认出"还是同一台手机"并原地轮换凭证，
+      // 而不是每次重绑都新增一条设备（放在这里是为了让所有绑定入口都不会漏）。
+      if (action === 'mobile.bind' && !body.deviceKey) body.deviceKey = deviceKey();
       return fetchJson(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

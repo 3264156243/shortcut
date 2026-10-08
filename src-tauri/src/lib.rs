@@ -1064,6 +1064,26 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
         // ---- M5：绑定同步（sync:* 对齐 binding/engine/init.ts）----
         "syncGetBinding" => sync::sync_get_binding(),
         "syncPullNow" => sync::sync_pull_now(),
+        // 设备管理（身份层）：设置面板里查看已绑定设备 / 改名 / 移除
+        // 走 spawn_blocking：这三条都要发网络请求（ureq 是阻塞的），不能在 async 运行时线程上直接跑
+        "syncListDevices" => {
+            tokio::task::spawn_blocking(sync::sync_list_devices)
+                .await
+                .unwrap_or_else(|e| json!({ "success": false, "message": e.to_string() }))
+        }
+        "syncRemoveDevice" => {
+            let device_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+            tokio::task::spawn_blocking(move || sync::sync_remove_device(&device_id))
+                .await
+                .unwrap_or_else(|e| json!({ "success": false, "message": e.to_string() }))
+        }
+        "syncRenameDevice" => {
+            let device_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let device_name = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            tokio::task::spawn_blocking(move || sync::sync_rename_device(&device_id, &device_name))
+                .await
+                .unwrap_or_else(|e| json!({ "success": false, "message": e.to_string() }))
+        }
         // 墙名重新上报：桌面建/删/改名任务墙后由前端调用，保证手机端 board.list == 桌面真实墙名
         "publishBoardNames" => sync::publish_board_names_cmd(),
         // ---- M5：移动互联枢纽状态（身份摘要 + 模块清单；前端 shim 是通用 Proxy，无需改 TS）----

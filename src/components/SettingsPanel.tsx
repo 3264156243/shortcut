@@ -6,6 +6,7 @@ import { X, Moon, Sun, Monitor, Download, Upload, Power, ChevronUp, ChevronDown,
 import { CORE_MODULE_IDS, MODULE_REGISTRY, getModuleGroup, type ModuleMeta } from '../moduleRegistry';
 import type { ModuleConfigItem } from '../types';
 import BindCard from './BindCard';
+import DeviceCard from './DeviceCard';
 
 interface ModuleRowProps {
   meta: ModuleMeta;
@@ -292,6 +293,9 @@ export default function SettingsPanel() {
 
             {/* 联动绑定 */}
             <BindCard />
+
+            {/* 已绑定设备（身份层管理：查看 / 改名 / 移除） */}
+            <DeviceCard />
           </div>
         </motion.div>
       </motion.div>
