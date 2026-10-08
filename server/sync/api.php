@@ -122,6 +122,8 @@ switch ($action) {
         respond([
             'success' => true,
             'version' => $catalog['version'],
+            'protocolVersion' => $SYNC_PROTOCOL_VERSION,               // 服务端协议版本
+            'clientProtocol' => (int)(isset($input['protocolVersion']) ? $input['protocolVersion'] : 0),
             'capabilities' => $catalog['capabilities'],
             'modules' => $catalog['modules'],
             'bound' => !empty($identity['ok']),

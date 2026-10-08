@@ -122,8 +122,16 @@
 
     // ── 模块清单（服务端权威：modules.json）──
     modules: function () {
-      if (sdk.isBound()) return sdk.request('module.list');
-      return sdk.requestPublic('module.list');
+      var p = sdk.isBound() ? sdk.request('module.list') : sdk.requestPublic('module.list');
+      return p.then(function (r) {
+        if (r && r.protocolVersion) {
+          sdk.serverProtocol = Number(r.protocolVersion) || 0;
+          if (sdk.serverProtocol && sdk.serverProtocol !== PROTOCOL_VERSION) {
+            console.warn('[ShortCutMobile] 协议版本不一致：客户端 ' + PROTOCOL_VERSION + ' / 服务端 ' + sdk.serverProtocol);
+          }
+        }
+        return r;
+      });
     },
     /** 渲染模块卡片到某个容器（数据驱动，新增板块不用改页面） */
     renderModules: function (container, modules) {
