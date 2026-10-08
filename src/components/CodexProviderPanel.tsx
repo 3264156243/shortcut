@@ -231,7 +231,7 @@ export default function CodexProviderPanel() {
       ) : null}
 
       {deletingPreset ? (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ background: 'var(--color-overlay)' }} onClick={() => setDeletingPreset(null)}>
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4" style={{ background: 'var(--color-overlay)' }} onClick={() => setDeletingPreset(null)}>
           <motion.section
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
 import { Shortcut, ShortcutType } from '../types';
@@ -301,7 +301,7 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
       {showMenu && menuPosition && createPortal(
         <>
           <button
-            className="fixed inset-0 z-[170] cursor-default"
+            className="fixed inset-0 z-[1100] cursor-default"
             style={{ background: 'transparent' }}
             onClick={(e) => {
               e.stopPropagation();
@@ -310,7 +310,7 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
             aria-label={t('shortcut.deleteCancel')}
           />
           <div
-            className="fixed z-[180] py-1 rounded-lg shadow-lg"
+            className="fixed z-[1110] py-1 rounded-lg shadow-lg"
             style={{
               left: menuPosition.left,
               top: menuPosition.top,
@@ -363,7 +363,7 @@ export default function ShortcutCard({ shortcut, groupId, tabId, isDraggable = t
       {/* Delete confirmation dialog */}
       {showDeleteConfirm && (
         <div
-          className="fixed inset-0 z-[200] flex items-center justify-center"
+          className="fixed inset-0 z-[1100] flex items-center justify-center"
           style={{ background: 'var(--color-overlay)' }}
           onClick={handleCancelDelete}
         >

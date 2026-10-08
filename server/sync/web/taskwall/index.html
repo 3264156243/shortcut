@@ -42,6 +42,7 @@
     .hidden { display: none !important; }
     #submitButton { width: 100%; min-height: 52px; border: 0; border-radius: 8px; color: #fff; background: #9f493a; font-size: 16px; font-weight: 700; box-shadow: 0 5px 14px rgba(99,44,33,.22); }
     .message { min-height: 18px; margin-top: 12px; text-align: center; font-size: 12px; color: #7e6f5e; }
+.board-hint { margin: 7px 0 0; font-size: 11px; line-height: 1.5; color: #a23932; }
     .message.error { color: #a23932; } .message.success { color: #337552; }
     @media (max-width: 420px) { .type-switches { grid-template-columns: 1fr; } }
   </style>
@@ -81,6 +82,7 @@
         <div class="field">
           <label for="boardName">目标任务墙</label>
           <select id="boardName"><option value="">正在读取桌面任务墙…</option></select>
+          <p id="boardHint" class="board-hint" hidden></p>
         </div>
         <button id="submitButton" type="submit">钉到桌面任务墙</button>
         <div id="taskMessage" class="message"></div>
@@ -107,9 +109,41 @@
     function setMessage(target,text,type){target.textContent=text||'';target.className='message'+(type?' '+type:'')}
     function goBind(){location.href='/bind/?next='+encodeURIComponent(location.pathname)}
 
+    /**
+     * 读取桌面真实任务墙列表填充下拉框。
+     *
+     * 修复"手机端又只剩默认任务墙"的**可诊断性**问题：
+     * 原来「请求失败」和「桌面确实一份墙名都没上报」两种完全不同的情况，都渲染成同一个
+     * <option>默认任务墙</option>，界面上分不出来，只能靠猜。
+     * 现在三种状态各自可辨认：
+     *   1) 拿到非空列表          → 逐个渲染（墙名 == 桌面真实墙名）
+     *   2) 请求成功但列表为空    → 默认任务墙 + 明确提示「桌面端尚未上报墙名」
+     *   3) 请求失败/身份失效     → 默认任务墙 + 错误原因 + 可重试（不是静默兜底）
+     * 另加 console.log 输出原始响应，便于真机排查时对照服务端日志。
+     */
+    function fillBoards(names,note){
+      const select=el('boardName');select.innerHTML='';
+      names.forEach(name=>{const o=document.createElement('option');o.value=name;o.textContent=name;select.appendChild(o)});
+      const hint=el('boardHint');
+      if(hint){hint.textContent=note||'';hint.hidden=!note}
+    }
     async function loadBoards(){
-      const select=el('boardName');select.disabled=true;
-      try{const d=await callApi({action:'board.list',board:'taskwall',bindId});select.innerHTML='';const boards=d.success&&Array.isArray(d.boards)?d.boards.filter(Boolean):[];if(!boards.length){const o=document.createElement('option');o.value='默认任务墙';o.textContent='默认任务墙';select.appendChild(o)}else boards.forEach(name=>{const o=document.createElement('option');o.value=name;o.textContent=name;select.appendChild(o)})}catch{select.innerHTML='<option value="默认任务墙">默认任务墙</option>'}finally{select.disabled=false}
+      const select=el('boardName'),hint=el('boardHint');select.disabled=true;
+      if(hint){hint.textContent='正在读取桌面任务墙…';hint.hidden=false}
+      try{
+        const d=await callApi({action:'board.list',board:'taskwall',bindId});
+        const boards=Array.isArray(d.boards)?d.boards.filter(name=>typeof name==='string'&&name.trim()):[];
+        console.log('[taskwall] board.list 响应',d,'解析出墙名',boards);
+        if(!boards.length){
+          fillBoards(['默认任务墙'],'桌面端尚未上报任务墙列表，已回退到「默认任务墙」。请在电脑上打开任务墙页面后点「刷新任务墙」重试。');
+        }else{
+          fillBoards(boards,'');
+        }
+      }catch(error){
+        // 不静默兜底：把真实原因显示出来，用户/排查者才知道要不要重新绑定桌面端
+        console.warn('[taskwall] board.list 失败',error);
+        fillBoards(['默认任务墙'],(error&&error.message?error.message:'读取失败')+'（已回退到「默认任务墙」，请点上方「刷新任务墙」重试）');
+      }finally{select.disabled=false}
     }
 
     function setConnected(){

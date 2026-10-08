@@ -1,4 +1,4 @@
-﻿import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, CheckCircle2, Download, RefreshCw, X } from 'lucide-react';
 import { UpdateState } from '../types';
 import { useTranslation } from '../hooks/useTranslation';
@@ -42,7 +42,7 @@ export default function UpdateModal({ state, onDownload, onInstall, onDismiss }:
       {visible && (
         <motion.div
           data-update-modal
-          className="fixed inset-0 z-[280] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[1000] flex items-center justify-center p-4"
           style={{ background: 'rgba(8, 10, 14, .72)', backdropFilter: 'blur(4px)' }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

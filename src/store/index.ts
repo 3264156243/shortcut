@@ -182,6 +182,8 @@ declare global {
       onTaskListData: (callback: (data: unknown) => void) => () => void;
       onConfigChanged: (callback: () => void) => () => void;
       onTaskLocate: (callback: (data: unknown) => void) => () => void;
+      /** 把本地任务墙名列表重新上报到云端（手机端 board.list 依赖它）；建/删/改名墙后必须调用 */
+      publishBoardNames: () => Promise<unknown>;
       // ── 转换板块 ──
       converterDetect: (paths: string[]) => Promise<Array<{ path: string; name: string; kind: string; ext: string; size: number; targets: string[]; flavor?: string }>>;
       converterConvert: (path: string, target: string, quality?: number, bitrateKbps?: number, outDir?: string | null) => Promise<{ success: boolean; id: string }>;
@@ -348,7 +350,45 @@ const normalizeTaskBoards = (config: Partial<AppConfig>): Pick<AppConfig, 'taskB
 
 const getActiveBoardId = (config: AppConfig) => config.activeTaskBoardId || config.taskBoards[0]?.id || DEFAULT_CONFIG.taskBoards[0].id;
 
-const nextTaskZIndex = (notes: TaskNote[]) => notes.reduce((max, note) => Math.max(max, note.zIndex || 0), 0) + 1;
+/**
+ * 任务便签 z 值上限（**全局弹层的层序基线**）。
+ *
+ * 为什么必须有上界：语义要求"新便签 / 刚拖过的便签在最上层"，所以每次 addTask/moveTask
+ * 都要取"当前最大 + 1"。但那是**无上界递增**——用户每拖一次就 +1，真实配置里已经涨到
+ * 66/67…，于是固定层级的全局弹层（设置面板等）会被便签压住。
+ *
+ * 约定（改动前请先看清 TaskBoard.tsx 顶部注释）：
+ *   便签 1..999  <  全局弹层 1000（设置/导入/快捷键）  <  确认类弹层 1100
+ *               <  撕碎 12000 < 撕纸机 13000 < 任务墙自身弹层 14000+
+ * 任何新增的全局弹层都必须 ≥ 1000。
+ */
+const TASK_Z_CEILING = 999;
+
+/**
+ * 归一化便签 z 值：按当前层序（zIndex 升序）重排为 1..n，保留相对上下关系。
+ * 顺便把非法值（NaN/负数/非数字）修正为有效序号，避免 `max` 被污染。
+ */
+const normalizeNoteZIndexes = (notes: TaskNote[]): TaskNote[] =>
+  notes
+    .slice()
+    .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0))
+    .reduce<TaskNote[]>((acc, note) => {
+      acc.push({ ...note, zIndex: acc.length + 1 });
+      return acc;
+    }, []);
+
+/**
+ * 取"下一个最上层"的 z 值；达到上限时先把该墙所有便签归一化为 1..n 再 +1。
+ * 返回归一化后的便签数组（无需归一化时原样返回）与要赋给目标便签的 z。
+ */
+const nextTaskZIndex = (notes: TaskNote[]): { notes: TaskNote[]; zIndex: number } => {
+  const max = notes.reduce((m, note) => Math.max(m, Number.isFinite(note.zIndex) ? (note.zIndex as number) : 0), 0);
+  if (max >= TASK_Z_CEILING) {
+    const renumbered = normalizeNoteZIndexes(notes);
+    return { notes: renumbered, zIndex: renumbered.length + 1 };
+  }
+  return { notes, zIndex: Math.max(max + 1, 1) };
+};
 
 const updateActiveTaskBoard = (config: AppConfig, update: (board: TaskBoardConfig) => TaskBoardConfig): AppConfig => {
   const activeBoardId = getActiveBoardId(config);
@@ -759,6 +799,8 @@ export const useStore = create<AppState>((set, get) => ({
     const tapes = ['#c0392b', '#e67e22', '#f39c12', '#27ae60', '#2980b9', '#8e44ad', '#e84393'];
     set((state) => ({
       config: updateActiveTaskBoard(state.config, (board) => {
+        // 新便签恒在最上层；z 触顶时先归一化整墙（见 nextTaskZIndex）
+        const { notes: normalized, zIndex } = nextTaskZIndex(board.notes);
         const task: TaskNote = {
           id: taskId,
           text: trimmed,
@@ -770,11 +812,11 @@ export const useStore = create<AppState>((set, get) => ({
           y: 5 + Math.random() * 52,
           rotation: Math.random() * 3.4 - 1.7,
           tape: tapes[Math.floor(Math.random() * tapes.length)],
-          zIndex: nextTaskZIndex(board.notes),
+          zIndex,
           createdAt: now,
           updatedAt: now,
         };
-        return { ...board, notes: [task, ...board.notes], updatedAt: now };
+        return { ...board, notes: [task, ...normalized], updatedAt: now };
       }),
     }));
     get().saveConfig();
@@ -839,10 +881,11 @@ export const useStore = create<AppState>((set, get) => ({
     const now = new Date().toISOString();
     set((state) => ({
       config: updateActiveTaskBoard(state.config, (board) => {
-        const zIndex = nextTaskZIndex(board.notes);
+        // 刚拖过的便签置顶；z 触顶时先归一化整墙，保证"新/刚拖动在上层"语义不变而上限有界
+        const { notes: normalized, zIndex } = nextTaskZIndex(board.notes);
         return {
           ...board,
-          notes: board.notes.map((task) => task.id === taskId ? { ...task, x, y, zIndex, updatedAt: now } : task),
+          notes: normalized.map((task) => task.id === taskId ? { ...task, x, y, zIndex, updatedAt: now } : task),
           updatedAt: now,
         };
       }),

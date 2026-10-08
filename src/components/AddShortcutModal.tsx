@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { AppWindow, File, Folder, Globe, ImagePlus, Layers3, Plus, ShieldCheck, SquareTerminal, Trash2, X } from 'lucide-react';
 import { useStore } from '../store';
@@ -84,7 +84,7 @@ export default function AddShortcutModal() {
   const inputClass = 'w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]';
   const inputStyle = { background: 'var(--color-bg-card)', borderColor: 'var(--color-border)', color: 'var(--color-text)' };
 
-  return <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ background: 'var(--color-overlay)' }} onClick={close}>
+  return <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4" style={{ background: 'var(--color-overlay)' }} onClick={close}>
     <motion.section initial={{ opacity: 0, scale: .96 }} animate={{ opacity: 1, scale: 1 }} className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', boxShadow: '0 24px 70px var(--color-shadow)' }} onClick={(event) => event.stopPropagation()}>
       <header className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: 'var(--color-border)' }}><h2 className="text-base font-semibold" style={{ color: 'var(--color-text)' }}>{editing ? '编辑快捷方式' : '新增快捷方式'}</h2><button onClick={close} className="flex h-8 w-8 items-center justify-center rounded-md"><X size={18} /></button></header>
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">

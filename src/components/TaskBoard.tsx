@@ -44,14 +44,25 @@ const formatReminder = (iso: string) => {
 };
 
 /**
- * 任务板弹层层级约定（z-index 全部走 Tailwind 原子类，写在下面各弹层节点上）：
- * - 便签 .task-note：inline z-index 有业务含义（新便签/拖动过的便签在上层），
- *   store 里按「当前最大值 + 1」递增（见 store/index.ts nextTaskZIndex），
- *   拖动中临时抬到 10000，撕碎动画期间为 12000 —— 因此便签的实际最高值没有固定上界；
- * - 撕纸机特效：z-[13000]（deletingId 期间的一次性动画）；
- * - 任务板弹层：任务清单设置 z-[14000] < 重命名任务墙 z-[14100] < 任务编辑 z-[14200]
- *   （全部高于便签可能达到的任何值，且都带 position: fixed + z-index，各自创建独立堆叠上下文）。
- * 注意：修「便签压住弹层」时只提升弹层，不要下调便签 z 值。
+ * 全局层级约定（z-index 全部走 Tailwind 原子类 / inline style）：
+ *
+ *   1 .. 999      任务便签 .task-note —— inline z-index 有业务含义（新便签 / 刚拖过的在上层）。
+ *                 store 里按「当前最大值 + 1」递增，但**有上界**：nextTaskZIndex()
+ *                 （store/index.ts）在触到 TASK_Z_CEILING=999 时先把该墙便签归一化为 1..n 再 +1，
+ *                 所以便签永远 ≤ 999。拖动中临时抬到 10000、撕碎动画 12000（都是瞬时值，见下）。
+ *   1000          全局弹层：设置面板 / 导入软件 / 添加/编辑快捷方式 / 快捷键 / 更新 /
+ *                 Codex 相关 / 转换设置、以及它们的遮罩。
+ *   1100/1110     快捷方式右键菜单（遮罩 1100、菜单 1110）与删除确认。
+ *   1200          Toast。
+ *   10000         任务便签「拖动中」的临时值（TaskBoard.tsx 拖拽层）。
+ *   12000         撕碎动画（一次性，920ms）。
+ *   13000         撕纸机特效（deletingId 期间的一次性动画）。
+ *   14000+        任务板自身弹层：任务清单设置 z-[14000] < 重命名任务墙 z-[14100] < 任务编辑 z-[14200]。
+ *
+ * 注意：
+ * - 便签上限 999 是这条链的地基。改大 TASK_Z_CEILING 之前，必须同步确认上面所有
+ *   ≥1000 的弹层仍然高于它（历史上就是因为便签无上界递增到 66/67，压住了 z-50 的设置面板）。
+ * - 修「便签压住弹层」时只提升弹层或收紧便签上界，不要下调便签语义（新便签必须在上层）。
  */
 export default function TaskBoard() {
   const config = useStore((state) => state.config);
@@ -223,18 +234,46 @@ export default function TaskBoard() {
     setRenamingBoardId(board.id);
   };
 
+  /**
+   * 把当前墙名列表重新上报到云端。
+   *
+   * 手机端「目标任务墙」下拉框读的就是服务端存的这份列表（board.list → bind.boards），
+   * 桌面**建墙 / 删墙 / 改名**后不上报，手机端就会停留在旧墙名上推送 →
+   * 桌面按名找不到 → 新建一面墙（现象就是"手机端看到的墙列表 ≠ 桌面真实墙名，又只剩默认任务墙"）。
+   *
+   * 失败**必须可见**：以前 Rust 侧 publish_board_names() 把错误吞掉只回 false，
+   * 静默失败导致这个问题反复出现且查不到原因。现在失败会在日志和界面上同时暴露。
+   */
+  const republishBoardNames = async (trigger: string) => {
+    try {
+      const r = (await window.electronAPI?.publishBoardNames?.()) as { success?: boolean; message?: string; skipped?: boolean } | undefined;
+      if (r?.success === false) {
+        addToast(`任务墙列表同步失败：${r.message || '未知错误'}（手机端可能看不到最新任务墙）`, 'error');
+      } else if (r?.skipped) {
+        console.info(`[taskboard] ${trigger}：尚未绑定桌面端，跳过墙名上报`);
+      } else if (r) {
+        console.info(`[taskboard] ${trigger}：墙名列表已重新上报`);
+      }
+    } catch (error) {
+      // electronAPI 缺失（Web 预览）或 IPC 异常都不该打断建墙/改名操作本身
+      console.warn(`[taskboard] ${trigger}：墙名上报调用失败`, error);
+    }
+  };
+
   const commitBoardName = () => {
     if (!renamingBoardId) return;
     const nextName = nameDraft.trim();
     if (!nextName) return;
     if (nextName !== renamingBoard?.name) {
       renameTaskBoard(renamingBoardId, nextName);
+      void republishBoardNames('改名任务墙');
     }
     setRenamingBoardId(null);
   };
 
   const createBoard = () => {
     addTaskBoard(`任务墙 ${taskBoards.length + 1}`);
+    void republishBoardNames('新建任务墙');
   };
 
   const removeBoard = () => {
@@ -242,6 +281,7 @@ export default function TaskBoard() {
     const ok = window.confirm(`确定删除“${activeBoard.name}”及其中所有任务吗？`);
     if (ok) {
       deleteTaskBoard(activeBoard.id);
+      void republishBoardNames('删除任务墙');
     }
   };
 
@@ -275,6 +315,8 @@ export default function TaskBoard() {
       if (count > 0) {
         // 云端任务已写入本地配置：沿用 store 现有加载方式刷新（不额外轮询）
         await useStore.getState().loadConfig();
+        // 拉取过程中同步引擎可能新建了墙（手机推了本地不存在的墙名）→ 重新上报，手机端列表跟上
+        void republishBoardNames('接收手机任务后');
       }
     } catch (error: any) {
       addToast(error?.message || '接收失败，请检查网络', 'error');

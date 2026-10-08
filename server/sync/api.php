@@ -662,9 +662,19 @@ switch ($action) {
         if ($board !== 'taskwall') {
             error_msg('暂不支持的板块');
         }
-        require_identity($bindId, $input);
+        $identitySide = require_identity($bindId, $input);
         $bind = get_bind($bindId);
         $boards = isset($bind['boards']) && is_array($bind['boards']) ? $bind['boards'] : [];
+        // 诊断：手机端"又只剩默认任务墙"时，服务端这边到底回了什么必须留痕。
+        // 如果这里打印的是空数组，问题在桌面端未上报（bind.boards.update）；如果是多项而手机上
+        // 只有一个默认墙，问题在客户端渲染/凭证。没有这行就只能靠猜。
+        error_log(sprintf(
+            '[sync] board.list bindId=%s side=%s count=%d boards=%s',
+            $bindId,
+            $identitySide,
+            count($boards),
+            json_encode($boards, JSON_UNESCAPED_UNICODE)
+        ));
         respond(['success' => true, 'boards' => $boards]);
         break;
 

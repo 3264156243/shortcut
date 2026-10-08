@@ -282,8 +282,32 @@ pub fn get_stored_bind_id() -> Option<String> {
     stored_binding().map(|(id, _, _)| id)
 }
 
-fn publish_board_names(names: &[String]) -> bool {
-    let Some(bind_id) = get_stored_bind_id() else { return false };
+/// 上报墙名列表的失败原因（原来只返回 bool，失败原因被丢弃 → 静默失败，真机排查困难）
+#[derive(Debug, Clone)]
+pub enum BoardPublishError {
+    /// 还没绑定（没拿到 bindId）
+    NotBound,
+    /// 请求发不出去（网络/DNS/超时）
+    Transport(String),
+    /// 服务端明确返回 success != true
+    Rejected(String),
+    /// 服务端返回成功但没有 success 字段（契约异常）
+    Malformed,
+}
+
+impl std::fmt::Display for BoardPublishError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BoardPublishError::NotBound => write!(f, "尚未绑定桌面端（缺少 bindId）"),
+            BoardPublishError::Transport(e) => write!(f, "请求失败: {}", e),
+            BoardPublishError::Rejected(m) => write!(f, "服务端拒绝: {}", m),
+            BoardPublishError::Malformed => write!(f, "服务端响应缺少 success 字段"),
+        }
+    }
+}
+
+/// 归一化墙名（去空白、去空、去重），与 publish 时上报的顺序一致。
+fn normalized_board_names(names: &[String]) -> Vec<String> {
     let mut boards: Vec<String> = Vec::new();
     for n in names {
         let t = n.trim().to_string();
@@ -292,22 +316,55 @@ fn publish_board_names(names: &[String]) -> bool {
         }
     }
     boards.truncate(50);
-    match request(json!({ "action": "bind.boards.update", "bindId": bind_id, "deskToken": desk_token(), "boards": boards })) {
-        Ok(d) => d.get("success").and_then(|v| v.as_bool()).unwrap_or(false),
-        Err(_) => false,
+    boards
+}
+
+/// 把墙名列表上报给服务端（`bind.boards.update`）。
+///
+/// **失败绝不静默**：网络异常、服务端拒绝、响应缺 `success` 都会返回具体错误并打日志，
+/// 调用方（publish_board_names_now）负责把错误暴露到 UI/日志。
+fn publish_board_names(names: &[String]) -> Result<Vec<String>, BoardPublishError> {
+    let Some(bind_id) = get_stored_bind_id() else {
+        return Err(BoardPublishError::NotBound);
+    };
+    let boards = normalized_board_names(names);
+    // 上报的墙名必须与本地真实配置一致：空列表也要发（让手机端回到"默认任务墙"，
+    // 而不是停留在上一次的陈旧墙名上推送 → 桌面按名找不到 → 新建一面墙）。
+    let resp = request(json!({
+        "action": "bind.boards.update",
+        "bindId": bind_id,
+        "deskToken": desk_token(),
+        "boards": boards
+    }));
+    match resp {
+        Err(e) => Err(BoardPublishError::Transport(e)),
+        Ok(d) => match d.get("success").and_then(|v| v.as_bool()) {
+            Some(true) => Ok(boards),
+            Some(false) => Err(BoardPublishError::Rejected(
+                d.get("message").and_then(|v| v.as_str()).unwrap_or("服务端未给出原因").to_string(),
+            )),
+            None => Err(BoardPublishError::Malformed),
+        },
     }
 }
 
 /// 把本地墙名上报给服务端（`bind.boards.update`）——手机端 `board.list` 拿到的就是这个列表。
 /// 桌面**没上报过**时手机端只有"默认任务墙"，推送的 boardName 与桌面真实墙名不一致 → 落到新建墙。
+///
+/// 成功/失败都打日志（失败是 warn + 具体原因），返回值仍为 bool 以便复用既有调用点。
 pub fn publish_board_names_now() -> bool {
-    let ok = publish_board_names(&read_board_names());
-    if ok {
-        log::info!("[sync] 已上报墙名列表: {:?}", read_board_names());
-    } else {
-        log::warn!("[sync] 墙名列表上报失败（未绑定或网络异常）");
+    match publish_board_names(&read_board_names()) {
+        Ok(boards) => {
+            log::info!("[sync] 已上报墙名列表（{} 项）: {:?}", boards.len(), boards);
+            true
+        }
+        Err(e) => {
+            // 这里是"手机上又只剩默认任务墙"的关键排查点：以前失败只写一句笼统 warn，
+            // 看不出到底是没绑定、网络挂了还是服务端拒绝了。
+            log::warn!("[sync] 墙名列表上报失败: {}（本地墙名: {:?}）", e, read_board_names());
+            false
+        }
     }
-    ok
 }
 
 /// 应用句柄（lib.rs setup 里注册一次）：拉取写入配置后广播刷新用。未注册时静默跳过。
@@ -329,6 +386,29 @@ fn broadcast_config_refresh() {
     let _ = app.emit("config:changed", ());
     let cfg = crate::task_cfg(app);
     let _ = app.emit("tasklist:data", json!(crate::resolve_task_list(&cfg)));
+}
+
+/// 墙名重新上报的命令入口（`publishBoardNames` IPC）。
+///
+/// 桌面**建墙 / 删墙 / 改名**之后必须重新上报，否则手机端下拉框会一直停留在旧墙名上，
+/// 用户按旧墙名推送 → 桌面按名找不到 → 新建一面墙（"手机端看到的墙列表 ≠ 桌面真实墙名"）。
+/// 返回结构化结果，失败原因直接可读（不再静默）。未绑定时不算错误，返回 skipped。
+pub fn publish_board_names_cmd() -> Value {
+    let local = read_board_names();
+    match publish_board_names(&local) {
+        Ok(boards) => {
+            log::info!("[sync] 墙名列表已上报（{} 项）: {:?}", boards.len(), boards);
+            json!({ "success": true, "boards": boards })
+        }
+        Err(BoardPublishError::NotBound) => {
+            log::info!("[sync] 未绑定，跳过墙名上报");
+            json!({ "success": true, "skipped": true, "reason": "not-bound" })
+        }
+        Err(e) => {
+            log::warn!("[sync] 墙名列表上报失败: {}（本地墙名: {:?}）", e, local);
+            json!({ "success": false, "message": e.to_string(), "boards": local })
+        }
+    }
 }
 
 /// taskwall 板块启用检查（config.modules 数组 enabled !== false）
@@ -496,7 +576,8 @@ pub fn pull_taskwall() -> Value {
 pub fn sync_get_binding() -> Value {
     match get_bind_info() {
         Ok(info) => {
-            publish_board_names(&read_board_names());
+            // 拿绑定信息时顺带上报一次墙名；用 _now 版本以便失败有明确日志（不再静默）
+            publish_board_names_now();
             json!({ "success": true, "bindId": info["bindId"], "code": info["code"], "bindUrl": info["bindUrl"] })
         }
         Err(e) => json!({ "success": false, "message": e }),

@@ -90,7 +90,7 @@ export default function ConverterSettings({ onClose }: { onClose: () => void }) 
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: 'rgba(0,0,0,.5)' }}>
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center" style={{ background: 'rgba(0,0,0,.5)' }}>
       <div
         className="flex max-h-[86%] w-[520px] max-w-[92%] flex-col overflow-hidden rounded-2xl"
         style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', boxShadow: '0 20px 60px rgba(0,0,0,.5)' }}

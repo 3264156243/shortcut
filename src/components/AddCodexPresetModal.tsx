@@ -46,7 +46,7 @@ export default function AddCodexPresetModal({
   const inputStyle = { background: 'var(--color-bg-card)', borderColor: 'var(--color-border)', color: 'var(--color-text)' };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ background: 'var(--color-overlay)' }} onClick={onClose}>
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4" style={{ background: 'var(--color-overlay)' }} onClick={onClose}>
       <motion.section
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}

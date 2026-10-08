@@ -19,7 +19,7 @@ export default function ToastContainer() {
   const removeToast = useStore((s) => s.removeToast);
 
   return (
-    <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
+    <div className="fixed bottom-4 right-4 z-[1200] flex flex-col gap-2 pointer-events-none">
       <AnimatePresence>
         {toasts.map((toast) => {
           const Icon = ICONS[toast.type];

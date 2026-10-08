@@ -72,7 +72,7 @@ export default function KeyboardShortcutsModal({ onClose }: { onClose: () => voi
     : section);
 
   return (
-    <div className="fixed inset-0 z-[210] flex items-center justify-center p-5" style={{ background: 'var(--color-overlay)' }} onClick={onClose} data-keyboard-shortcuts-modal>
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-5" style={{ background: 'var(--color-overlay)' }} onClick={onClose} data-keyboard-shortcuts-modal>
       <section className="flex max-h-[84vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', boxShadow: '0 24px 70px var(--color-shadow)' }} onClick={(event) => event.stopPropagation()}>
         <header className="flex items-center gap-3 border-b px-5 py-4" style={{ borderColor: 'var(--color-border)' }}>
           <div className="flex h-9 w-9 items-center justify-center rounded-md" style={{ background: 'var(--color-accent-soft)', color: 'var(--color-accent)' }}><Keyboard size={18} /></div>

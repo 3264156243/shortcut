@@ -823,8 +823,27 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
         }
 
         // ---- M3：任务墙窗 / SC球壳（数据管道 M5 接入）----
-        "startTaskList" | "refreshTaskList" => {
+        // startTaskList：显式"开启任务清单窗"（设置开关 / Alt+U），只有它能**创建**浮窗。
+        "startTaskList" => {
             let _ = windows::ensure_tasklist(&app);
+            Value::Null
+        }
+        // refreshTaskList：只把最新数据**广播给已经存在的**任务清单窗。
+        //
+        // 修复（用户报"勾选某条任务完成时，SC 任务清单浮窗会莫名其妙弹出来"）：
+        // 这里原来与 startTaskList 共用分支、调用 windows::ensure_tasklist()，
+        // 而 ensure_tasklist 在窗口不存在时会**创建并显示** tasklist 浮窗（windows.rs:432-449）。
+        // 于是任务墙里任何一处 refreshTaskList 都会把浮窗拉起来——即便用户从未开启该功能：
+        //   勾选完成   src/components/TaskBoard.tsx:563（用户报的那条路径）
+        //   编辑保存   src/components/TaskBoard.tsx:214
+        //   删除便签   src/components/TaskBoard.tsx:342
+        // 现在只广播，窗口不存在就什么都不做（连窗口都不碰，更不会创建）。
+        "refreshTaskList" => {
+            if app.get_webview_window("tasklist").is_some() {
+                emit_tasklist_data(&app);
+            } else {
+                log::debug!("[tasklist] refreshTaskList：任务清单窗未打开，只刷新数据、不创建浮窗");
+            }
             Value::Null
         }
         "stopTaskList" => {
@@ -964,7 +983,7 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
                     if !dup {
                         list.push(json!({ "boardId": board_id, "taskId": task_id, "addedAt": chrono::Local::now().timestamp_millis() }));
                         config::write_config(&serde_json::to_string(&cfg).unwrap_or_default());
-                        let _ = app.emit("tasklist:data", json!(resolve_task_list(&task_cfg(&app))));
+                        emit_tasklist_data(&app);
                     }
                 }
             }
@@ -975,7 +994,7 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             let task_id = args.get(1).and_then(|v| v.as_str()).unwrap_or("");
             let ok = patch_task_flag(&app, board_id, task_id, true);
             if ok {
-                let _ = app.emit("tasklist:data", json!(resolve_task_list(&task_cfg(&app))));
+                emit_tasklist_data(&app);
             }
             json!({ "ok": ok })
         }
@@ -993,7 +1012,7 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             }
             if changed {
                 config::write_config(&serde_json::to_string(&cfg).unwrap_or_default());
-                let _ = app.emit("tasklist:data", json!(resolve_task_list(&task_cfg(&app))));
+                emit_tasklist_data(&app);
             }
             json!({ "ok": changed })
         }
@@ -1045,6 +1064,8 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
         // ---- M5：绑定同步（sync:* 对齐 binding/engine/init.ts）----
         "syncGetBinding" => sync::sync_get_binding(),
         "syncPullNow" => sync::sync_pull_now(),
+        // 墙名重新上报：桌面建/删/改名任务墙后由前端调用，保证手机端 board.list == 桌面真实墙名
+        "publishBoardNames" => sync::publish_board_names_cmd(),
         // ---- M5：移动互联枢纽状态（身份摘要 + 模块清单；前端 shim 是通用 Proxy，无需改 TS）----
         "hubStatus" => json!({
             "identity": hub::identity_summary(),
@@ -1704,6 +1725,21 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
 fn task_cfg(_app: &tauri::AppHandle) -> Value {
     let raw = config::read_config();
     if raw.is_empty() { json!({}) } else { serde_json::from_str(&raw).unwrap_or(json!({})) }
+}
+
+/// 把最新任务清单数据广播给**已经存在**的任务清单窗。
+///
+/// 故意不做 ensure/create：调用方（refreshTaskList 等）只负责"让已打开的窗看到新数据"，
+/// 绝不能凭数据刷新把浮窗拉起来。真正的创建入口只有 startTaskList / 设置开关 / Alt+U /
+/// 拖拽到岛（overlapTaskDrag|dropTaskOnList）/ 授权 gate。
+fn emit_tasklist_data(app: &tauri::AppHandle) {
+    if app.get_webview_window("tasklist").is_none() {
+        return;
+    }
+    let cfg = task_cfg(app);
+    if let Err(e) = app.emit("tasklist:data", json!(resolve_task_list(&cfg))) {
+        log::warn!("[tasklist] 广播 tasklist:data 失败: {}", e);
+    }
 }
 
 /// M5 任务墙：scTaskList → 渲染条目（剔除失效引用，对齐 resolveTaskList）

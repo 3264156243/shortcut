@@ -39,7 +39,7 @@ export default function ActivationGate({ checking, machineCode, initialCode, mes
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center"
+      className="fixed inset-0 z-[1000] flex items-center justify-center"
       style={{ background: 'var(--color-overlay)', backdropFilter: 'blur(6px)' }}
     >
       <div
