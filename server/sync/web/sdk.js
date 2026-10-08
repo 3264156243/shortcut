@@ -6,10 +6,16 @@
  * 也无法给后续 Capacitor 安卓壳做兼容。所有移动页面统一引用这一份。
  *
  * 用法：
- *   <script src="/sync/web/sdk.js"></script>
+ *   <script src="/sync/sdk.php"></script>
  *   const sdk = window.ShortCutMobile;
  *   if (!sdk.isBound()) location.href = '/bind/';
  *   const r = await sdk.request('transfer.messages');
+ *
+ * 为什么用 /sync/sdk.php 而不是直接引这份 .js：
+ *   本站 nginx 对 .js 给 12 小时缓存头，前面 Cloudflare 又按静态资源缓存 4 小时
+ *   （cf-cache-status: HIT）。直连静态文件会导致改完 sdk.js 后手机最长 4 小时
+ *   仍跑旧副本。sdk.php 由 PHP 透传本文件并显式发 no-store，保证「云端一改，
+ *   手机刷新即生效」。本文件仍是唯一真源，sdk.php 只做读取转发。
  *
  * 约定：
  *   - 身份统一存 localStorage['shortcut-mobile-binding-v1'] = { bindId, mobileToken, deviceName, code }
