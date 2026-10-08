@@ -122,6 +122,46 @@ fn store_desk_token(token: &str) {
     }
 }
 
+/// **强制重领**桌面凭证（自愈入口）。
+///
+/// 为什么需要：服务端 `bind.claimToken` 每次调用都会**轮换**凭证（旧的立即失效）。
+/// 只要发生一次轮换（例如别的进程/脚本为同一绑定领过、或本地凭证文件被清理过），
+/// 客户端就会永久 403「凭证已失效」——因为原来的 `ensure_desk_token()` 只在"本地没有凭证"
+/// 时才去领。所以当服务端回 `deskTokenValid:false` 时必须能强制重领。
+///
+/// 速率：服务端 `bind.claimToken` 限流 5 次/小时/IP，因此这里由调用方（凭证失效时）触发，
+/// 不在正常路径上反复调用。
+pub fn reclaim_desk_token() -> Option<String> {
+    let Some((bind_id, code, _)) = stored_binding() else {
+        return None;
+    };
+    if code.is_empty() {
+        log::warn!("[sync] 凭证自愈失败：本地没有绑定码（老装机请重新绑定一次）");
+        return None;
+    }
+    CLAIM_REJECTED.store(false, Ordering::Relaxed);
+    match request(json!({ "action": "bind.claimToken", "bindId": bind_id, "code": code })) {
+        Ok(data) => {
+            let ok = data.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+            let token = data.get("deskToken").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            if ok && !token.is_empty() {
+                store_desk_token(&token);
+                log::info!("[sync] 桌面凭证已重新签发（自愈，bindId={}）", bind_id);
+                return Some(token);
+            }
+            log::warn!(
+                "[sync] 凭证自愈被服务端拒绝: {}",
+                data.get("message").and_then(|v| v.as_str()).unwrap_or("响应缺少 deskToken")
+            );
+            None
+        }
+        Err(e) => {
+            log::warn!("[sync] 凭证自愈请求失败: {}", e);
+            None
+        }
+    }
+}
+
 /// 桌面凭证引导：本地已有 → 直接返回；否则用 bindId + bindCode 调 bind.claimToken 换取并落盘。
 /// 失败只记日志（兼容期内旧绑定仍可用免凭证通道），返回 None。
 pub fn ensure_desk_token() -> Option<String> {
@@ -250,6 +290,13 @@ fn get_bind_info_uncached() -> Result<Value, String> {
             if success {
                 let valid = data.get("valid").and_then(|v| v.as_bool()).unwrap_or(false);
                 if valid {
+                    // 凭证自愈：服务端说凭证无效（通常是被人重新签发轮换过）→ 强制重领一次，
+                    // 否则后续所有带身份的请求都会 403「凭证已失效」，且原逻辑只在"本地无凭证"时才会重领。
+                    let desk_valid = data.get("deskTokenValid").and_then(|v| v.as_bool()).unwrap_or(false);
+                    if !desk_valid && !desk.is_empty() {
+                        log::warn!("[sync] 服务端报告桌面凭证已失效 → 触发自愈重领");
+                        let _ = reclaim_desk_token();
+                    }
                     // 没带有效凭证时服务端**不返回** code/bindUrl —— 保留已有值，绝不覆盖成空串
                     let new_code = data
                         .get("code")
