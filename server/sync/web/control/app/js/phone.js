@@ -5,8 +5,7 @@
   const $ = (id) => document.getElementById(id);
   const RELAY_URL = 'wss://shortcut.326415.xyz/relay-ws';
   const API_BASE = 'https://shortcut.326415.xyz/sync/api.php';
-  const BIND_KEY = 'shortcut-mobile-binding-v1';
-  const BIND_URL = '/bind/';
+  // 绑定身份统一走共享 SDK（sdk.js）：不再各自声明存储键\r\n  const BIND_URL = '/bind/';
   const API_TIMEOUT = 8000;
   const RECONNECT_MS = 3000;
 
@@ -30,13 +29,7 @@
   let mods = { ctrl: false, shift: false, alt: false, win: false };
   let activeSheet = null; // 'pad' | 'vk' | 'clip' | null
 
-  function loadBinding() {
-    try {
-      const raw = JSON.parse(localStorage.getItem(BIND_KEY) || 'null');
-      if (raw && raw.bindId && raw.mobileToken) return raw;
-    } catch (_) {}
-    return null;
-  }
+  function loadBinding() {\r\n    var s = window.ShortCutMobile;\r\n    return s && s.isBound() ? s.binding() : null;\r\n  }
 
   /* ---------- 云中继连接 ---------- */
   function wsSend(obj) {

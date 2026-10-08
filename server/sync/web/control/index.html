@@ -87,18 +87,16 @@
     <a class="back" href="/mobile/">← 返回移动联动</a>
   </div>
 
+  <!-- 共享 SDK：绑定身份读取统一由它提供（本页只需要 isBound()） -->
+  <script src="/sync/web/sdk.js"></script>
   <script>
     const HOST_KEY = 'shortcut-control-host-v1';
-    const BIND_KEY = 'shortcut-mobile-binding-v1';
     const input = document.getElementById('hostInput');
     const errEl = document.getElementById('err');
     try { input.value = localStorage.getItem(HOST_KEY) || ''; } catch {}
 
-    let bound = false;
-    try {
-      const raw = JSON.parse(localStorage.getItem(BIND_KEY) || 'null');
-      bound = !!(raw && raw.bindId && raw.mobileToken);
-    } catch {}
+    // 绑定状态统一走 SDK（存储键与令牌校验都在 sdk.js 里）
+    const bound = window.ShortCutMobile.isBound();
 
     document.getElementById(bound ? 'boundWrap' : 'unboundCard').classList.remove('hidden');
 

@@ -74,6 +74,8 @@ mod sync;
 mod transfer;
 /// 移动互联统一枢纽：身份 / 请求 / 模块注册表的**唯一入口**（sync/transfer/cloud 共用）
 mod hub;
+/// rpc 能力（手机一次性指令 → 桌面执行 → 回执）
+mod rpc;
 mod config;
 mod control;
 mod converter;
@@ -2821,6 +2823,25 @@ pub fn run() {
                 );
                 log::info!("[hub] 身份摘要: {}", hub::identity_summary());
             });
+
+            // rpc 能力：每 8 秒拉取一次手机投递的"一次性指令"（board=rpc）并执行、回执。
+            // 未绑定/游戏模式冻结时 pull_and_run_rpc 内部会直接跳过，失败只记 warn。
+            {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_secs(8)).await;
+                        let h = handle.clone();
+                        let _ = tokio::task::spawn_blocking(move || {
+                            let r = rpc::pull_and_run_rpc(h);
+                            if r.get("handled").and_then(|v| v.as_i64()).unwrap_or(0) > 0 {
+                                log::info!("[rpc] 本轮处理 {}", r);
+                            }
+                        })
+                        .await;
+                    }
+                });
+            }
 
             // 注册全局快捷键（注册失败写日志——Electron 版同名键位如果被占也需要知道）
             // 清单集中在 configured_hotkeys()：游戏模式（冻结后台）会整份注销、退出时整份重注册

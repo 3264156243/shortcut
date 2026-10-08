@@ -7,6 +7,10 @@
 //!
 //! 绑定实现本身仍留在 `sync.rs`（bind.create / bind.info / bind.claimToken / 凭证落盘），
 //! hub 只做"对外唯一门面"，不重复造 HTTP 客户端、不重复落盘。
+//!
+//! 桌面端对 `api.php` 只有**两个**出口（审计 D8 收敛完成）：
+//! - [`api_post`]：带身份（bindId + deskToken + side=desktop）；未绑定直接返回失败；
+//! - [`api_post_raw`]：**不带身份**、不解析身份，调用方自己组织完整 body（bind.* 等自证动作走它）。
 
 use serde_json::{json, Value};
 use std::sync::Mutex;
@@ -16,6 +20,7 @@ use std::time::{Duration, Instant};
 use crate::sync;
 
 /// api.php 请求超时由 `sync::api_post` 统一设定（15 秒，与原 transfer.rs 一致）。
+/// 该函数是**唯一**的 ureq 出口，`hub::api_post` / `hub::api_post_raw` 都经它发请求。
 /// 服务端模块清单缓存 TTL：启动会打一次，之后 60 秒内不重复
 const MODULE_CACHE_TTL: Duration = Duration::from_secs(60);
 /// 本地声明的模块（lib.rs 启动时 register_module 注册）
@@ -25,10 +30,11 @@ static SERVER_MODULES: OnceLock<Mutex<Option<(Instant, Value)>>> = OnceLock::new
 
 /// 声明式默认清单（版本对齐演示）：注册表为空时作为兜底，避免任何入口都答"空模块表"。
 /// lib.rs 启动注册的是同一批 id，因此正常运行时这里不会被用到。
-const DEFAULT_MODULES: [(&str, &str, &[&str]); 3] = [
+const DEFAULT_MODULES: [(&str, &str, &[&str]); 4] = [
     ("taskwall", "任务墙", &["pull", "publish", "ack"]),
     ("fileTransfer", "文件快传", &["send", "download", "share", "claim"]),
     ("control", "云控制", &["realtime", "inject", "clipboard"]),
+    ("desktop", "桌面指令", &["rpc"]),
 ];
 
 /// 取得本地模块存储（**只做一次初始化**，不在锁内回调任何可能再次取锁的函数）；
@@ -161,20 +167,20 @@ pub fn api_post_public(action: &str, payload: Value) -> Result<Value, String> {
     api_post_with_bind(action, payload, &bind_id, false)
 }
 
-/// 真正发请求：统一注入 action / bindId / side / deskToken，统一超时与错误文案。
-/// `with_auth=true` 时 bindId 必非空——由 api_post 前置检查保证。
-fn api_post_with_bind(action: &str, payload: Value, bind_id: &str, with_auth: bool) -> Result<Value, String> {
+/// 第二个（也是最后一个）api.php 出口：**不解析身份、不注入 bindId/deskToken**，
+/// 只负责"发一个 JSON 到 api.php 并解析响应"——超时与错误文案与 [`api_post`] 完全一致
+/// （两者共用 `sync::api_post` 这一层 HTTP 实现，因此不存在第二份 ureq 客户端）。
+///
+/// 适用：`bind.create` / `bind.info` / `bind.claimToken` / `bind.boards.update` 这类
+/// **自证身份**的动作（身份就在 body 里），以及需要自己拼板的 `pull` / `ack`。
+/// 注意：本函数**不得**调用 `bind_id()` / `get_bind_info()`，否则会与绑定解析形成递归。
+pub fn api_post_raw(action: &str, payload: Value) -> Result<Value, String> {
     let mut body = payload;
     if !body.is_object() {
         body = json!({});
     }
     if let Some(obj) = body.as_object_mut() {
         obj.insert("action".into(), json!(action));
-        if with_auth {
-            obj.insert("bindId".into(), json!(bind_id));
-            obj.insert("side".into(), json!("desktop"));
-            obj.insert("deskToken".into(), json!(desk_token()));
-        }
     }
     match sync::api_post(body) {
         Ok(v) => Ok(v),
@@ -183,6 +189,23 @@ fn api_post_with_bind(action: &str, payload: Value, bind_id: &str, with_auth: bo
             Err(e)
         }
     }
+}
+
+/// 真正发请求：统一注入 action / bindId / side / deskToken，统一超时与错误文案。
+/// `with_auth=true` 时 bindId 必非空——由 api_post 前置检查保证。
+fn api_post_with_bind(action: &str, payload: Value, bind_id: &str, with_auth: bool) -> Result<Value, String> {
+    let mut body = payload;
+    if !body.is_object() {
+        body = json!({});
+    }
+    if with_auth {
+        if let Some(obj) = body.as_object_mut() {
+            obj.insert("bindId".into(), json!(bind_id));
+            obj.insert("side".into(), json!("desktop"));
+            obj.insert("deskToken".into(), json!(desk_token()));
+        }
+    }
+    api_post_raw(action, body)
 }
 
 /// 把 hub 错误转成 transfer.rs 风格的结果对象（调用方需要 `{success,message}` 时用）
