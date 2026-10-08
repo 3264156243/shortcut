@@ -1,5 +1,14 @@
 //! M4 云控制 WS 客户端——对齐 electron/control-cloud.ts
 //! 桌面 ⇄(wss relay)⇄ 手机；bindId+ticket 认证；心跳 25s；api 转发注入器；指数退避重连。
+//!
+//! **连接与控制模式解耦（2026-10-09 修）**：这条 WS 不再只属于"控制板块云端模式"。
+//! 中继每个 bindId **只保留一个桌面连接**（`server/control-relay/relay.js` 里新的桌面连接会顶掉旧的），
+//! 所以"任务墙实时唤醒（sync-wake）"与"云控制指令转发"必须共用同一条连接：
+//! - 连接：本地已绑定（有 bindId）即维持，不依赖面板是否点过"云端连接"；
+//! - 控制通道：`control_enabled` 开关（面板"云端连接"/"停止"）只决定**注入器是否运行、api 指令是否执行**。
+//!
+//! 修之前的症状：用户没开云控制 → 桌面根本没有这条 WS → 中继 `/notify` 判"桌面离线"
+//! → 手机 push 只进队列，桌面要等启动拉取/手动"同步云端"才看得到。
 
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
@@ -21,28 +30,92 @@ const API_TIMEOUT_MS: u64 = 8000;
 pub struct CloudState {
     pub ws_state: Mutex<String>, // idle | connecting | authed
     pub last_error: Mutex<String>,
-    pub injector_ready: AtomicBool,
     pub clip_history: Mutex<Vec<ClipItem>>,
     pub clip_busy: AtomicBool,
-    pub injector: Injector,
+    /// 输入注入器：**惰性启动**——只有控制通道打开（面板"云端连接"）时才创建；
+    /// 关掉控制通道即置回 None（注入器 stdin EOF → inject.ps1 自行退出），不常驻多余进程。
+    pub injector: Mutex<Option<Injector>>,
+    /// 控制通道开关（面板"云端连接" / "停止"）：只影响注入器与 api 指令执行，
+    /// **不影响 WS 连接本身**（连接在已绑定时常驻，任务墙实时唤醒靠它）
+    pub control_enabled: AtomicBool,
+    /// inject.ps1 所在静态目录（惰性启动注入器时用）
+    pub static_root: PathBuf,
 }
 
 impl CloudState {
     pub fn status_json(&self) -> Value {
         let ws_state = self.ws_state.lock().unwrap().clone();
+        let control = self.control_enabled.load(Ordering::SeqCst);
+        let linked = ws_state == "authed";
         json!({
-            "active": ws_state != "idle",
-            "connected": ws_state == "authed",
+            // active 仍是"控制板块云端模式是否在跑"（ControlPanel 据此在"云模式/局域网/未运行"之间切换）。
+            // 连接现在常驻，不能再用 ws_state 单独判定，否则没开云控制时面板也会显示"云端连接 · 运行中"。
+            "active": control && ws_state != "idle",
+            "connected": linked,
             "connecting": ws_state == "connecting",
-            "injector": self.injector_ready.load(Ordering::SeqCst),
+            "injector": control && self.injector_ready(),
+            // 附加诊断字段（前端未使用）：实时唤醒链路状态，"桌面到底在线吗"一眼可查
+            "link": ws_state,
+            "controlEnabled": control,
+            "syncLink": linked,
             "lastError": self.last_error.lock().unwrap().clone(),
         })
+    }
+
+    /// 注入器是否已 READY（未启动 = false）
+    fn injector_ready(&self) -> bool {
+        match self.injector.lock() {
+            Ok(g) => g.as_ref().map(|i| i.is_ready()).unwrap_or(false),
+            Err(_) => false,
+        }
+    }
+
+    /// 控制通道是否可用（开关打开 + 注入器 READY）
+    pub fn control_ready(&self) -> bool {
+        self.control_enabled.load(Ordering::SeqCst) && self.injector_ready()
+    }
+
+    /// 往注入器送一条指令（未启动 = false）
+    fn inject(&self, cmd: &str) -> bool {
+        match self.injector.lock() {
+            Ok(g) => g.as_ref().map(|i| i.inject(cmd)).unwrap_or(false),
+            Err(_) => false,
+        }
+    }
+
+    /// 打开控制通道（面板"云端连接"）：启动注入器 + 允许 api 指令执行。幂等。
+    pub fn enable_control(&self) {
+        let need_start = match self.injector.lock() {
+            Ok(g) => g.is_none(),
+            Err(_) => false,
+        };
+        if need_start {
+            let inj = Injector::start(self.static_root.join("inject.ps1"));
+            if let Ok(mut g) = self.injector.lock() {
+                *g = Some(inj);
+            }
+        }
+        self.control_enabled.store(true, Ordering::SeqCst);
+        log_cloud("control channel enabled (injector starting)");
+    }
+
+    /// 关闭控制通道（面板"停止"）：注入器退出（stdin EOF → inject.ps1 退出），注入类指令一律 503。
+    /// **不关 WS**：任务墙实时唤醒仍要走这条连接（中继每个 bindId 只保留一条桌面连接）。
+    pub fn disable_control(&self) {
+        self.control_enabled.store(false, Ordering::SeqCst);
+        if let Ok(mut g) = self.injector.lock() {
+            *g = None;
+        }
+        log_cloud("control channel disabled (sync-wake link kept)");
     }
 }
 
 pub struct CloudHandle {
     pub shutdown: watch::Sender<bool>,
     pub state: Arc<CloudState>,
+    /// 建连时使用的 bindId：绑定身份变了（服务端判定旧绑定失效 → 本地重建绑定）要重建连接，
+    /// 否则这条 WS 会一直挂在旧 bindId 上，中继按新 bindId 的 `/notify` 永远找不到桌面。
+    pub bind_id: String,
 }
 
 /// 取云控制票据：身份注入与超时/错误文案统一走 hub（不再自己拼 bindId/deskToken 直接 POST）。
@@ -68,8 +141,15 @@ fn fetch_ticket(bind_id: &str, _bind_code: &str) -> Result<String, String> {
 
 /// 云模式 API 转发（对齐 control-cloud.ts handleApi；注入器进程内直调，不走 HTTP）
 async fn handle_api(st: &Arc<CloudState>, path: &str, body: &Value) -> (bool, u16, Value) {
-    let ready = st.injector_ready.load(Ordering::SeqCst);
+    let ready = st.control_ready();
     let wrap = |ok: bool, status: u16, data: Value| (ok, status, data);
+    // 控制通道没打开（面板没点过"云端连接"）：只答 ping（回报能力状态），其余一律 503。
+    // 连接常驻后手机端可能"看到桌面在线"，这里必须显式拒绝注入/剪贴板类指令——
+    // 与修之前"桌面离线 → 中继直接回 503 desktop offline"的可达性保持一致。
+    if path != "/api/ping" && !st.control_enabled.load(Ordering::SeqCst) {
+        log_cloud(&format!("api <- {} 拒绝：控制通道未启用", path));
+        return wrap(false, 503, json!({ "error": "control channel disabled" }));
+    }
     let s = body.as_object().cloned().unwrap_or_default();
     match path {
         "/api/ping" => wrap(true, 200, json!({ "ok": true, "injector": ready })),
@@ -81,7 +161,7 @@ async fn handle_api(st: &Arc<CloudState>, path: &str, body: &Value) -> (bool, u1
             if !ready {
                 return wrap(false, 503, json!({ "ok": false }));
             }
-            let ok = st.injector.inject(&format!("TYPE {}", control::base64_encode(text.as_bytes())));
+            let ok = st.inject(&format!("TYPE {}", control::base64_encode(text.as_bytes())));
             wrap(ok, if ok { 200 } else { 503 }, json!({ "ok": ok }))
         }
         "/api/key" => {
@@ -90,7 +170,7 @@ async fn handle_api(st: &Arc<CloudState>, path: &str, body: &Value) -> (bool, u1
             }
             let vk = control::resolve_vk(s.get("key").unwrap_or(&Value::Null));
             let ok = match vk {
-                Some(v) => st.injector.inject(&format!("KEY {}", v)),
+                Some(v) => st.inject(&format!("KEY {}", v)),
                 None => false,
             };
             wrap(ok, if ok { 200 } else { 400 }, json!({ "ok": ok }))
@@ -120,7 +200,7 @@ async fn handle_api(st: &Arc<CloudState>, path: &str, body: &Value) -> (bool, u1
                 return wrap(false, 400, json!({ "ok": false }));
             }
             let joined = vks.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(",");
-            let ok = st.injector.inject(&format!("COMBO {}", joined));
+            let ok = st.inject(&format!("COMBO {}", joined));
             wrap(ok, if ok { 200 } else { 400 }, json!({ "ok": ok }))
         }
         "/api/mouse" => {
@@ -134,7 +214,7 @@ async fn handle_api(st: &Arc<CloudState>, path: &str, body: &Value) -> (bool, u1
             let ok = if dx == 0 && dy == 0 {
                 true
             } else {
-                st.injector.inject(&format!("MOUSE {} {}", dx, dy))
+                st.inject(&format!("MOUSE {} {}", dx, dy))
             };
             wrap(ok, if ok { 200 } else { 400 }, json!({ "ok": ok }))
         }
@@ -144,7 +224,7 @@ async fn handle_api(st: &Arc<CloudState>, path: &str, body: &Value) -> (bool, u1
             }
             let b = s.get("button").and_then(|v| v.as_str()).unwrap_or("left").to_lowercase();
             let ok = if ["left", "right", "middle"].contains(&b.as_str()) {
-                st.injector.inject(&format!("CLICK {}", b))
+                st.inject(&format!("CLICK {}", b))
             } else {
                 false
             };
@@ -155,7 +235,7 @@ async fn handle_api(st: &Arc<CloudState>, path: &str, body: &Value) -> (bool, u1
                 return wrap(false, 503, json!({ "ok": false }));
             }
             let d = s.get("delta").and_then(|v| v.as_f64()).unwrap_or(0.0).round() as i64;
-            let ok = if d == 0 { true } else { st.injector.inject(&format!("WHEEL {}", d)) };
+            let ok = if d == 0 { true } else { st.inject(&format!("WHEEL {}", d)) };
             wrap(ok, if ok { 200 } else { 400 }, json!({ "ok": ok }))
         }
         "/api/clipboard/refresh" => {
@@ -200,7 +280,7 @@ async fn handle_api(st: &Arc<CloudState>, path: &str, body: &Value) -> (bool, u1
             let mut ok = true;
             for chunk in text.chars().collect::<Vec<_>>().chunks(500) {
                 let piece: String = chunk.iter().collect();
-                if !st.injector.inject(&format!("TYPE {}", control::base64_encode(piece.as_bytes()))) {
+                if !st.inject(&format!("TYPE {}", control::base64_encode(piece.as_bytes()))) {
                     ok = false;
                     break;
                 }
@@ -271,7 +351,7 @@ async fn connect_once(st: &Arc<CloudState>, bind_id: &str, bind_code: &str) -> R
                                 let api_path = msg.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
                                 let body = msg.get("body").cloned().unwrap_or(json!({}));
                                 let is_high_freq = api_path == "/api/mouse" || api_path == "/api/wheel" || api_path == "/api/click";
-                                log_cloud(&format!("api <- {} id={} injector={}", api_path, id, if st.injector_ready.load(Ordering::SeqCst) { "ready" } else { "NOT-READY" }));
+                                log_cloud(&format!("api <- {} id={} control={} injector={}", api_path, id, if st.control_enabled.load(Ordering::SeqCst) { "on" } else { "OFF" }, if st.injector_ready() { "ready" } else { "NOT-READY" }));
                                 let result = tokio::time::timeout(
                                     Duration::from_millis(API_TIMEOUT_MS),
                                     handle_api(st, &api_path, &body),
@@ -344,7 +424,6 @@ async fn connect_loop(mut shutdown_rx: watch::Receiver<bool>, st: Arc<CloudState
         if st.ws_state.lock().unwrap().clone() != "idle" {
             *st.ws_state.lock().unwrap() = "idle".into();
         }
-        st.injector_ready.store(st.injector.is_ready(), Ordering::SeqCst);
         let wait = RECONNECT_BASE_MS
             .saturating_mul(1.6_f64.powi(attempts.min(8) as i32).round() as u64)
             .min(RECONNECT_MAX_MS);
@@ -359,7 +438,11 @@ async fn connect_loop(mut shutdown_rx: watch::Receiver<bool>, st: Arc<CloudState
     }
 }
 
-/// 启动云控制（读取 config.sync 绑定身份；返回错误 = 未绑定等启动失败）
+/// 建立桌面 ⇄ 中继的 WS 长连接（读取 config.sync 绑定身份；返回错误 = 未绑定等启动失败）。
+///
+/// **注意**：这里只建连接，**不启动注入器**——注入器由 [`CloudState::enable_control`] 在
+/// 用户点"云端连接"时惰性启动。连接常驻是为了让中继 `/notify` 找得到桌面（任务墙实时唤醒），
+/// 与控制板块的模式无关；云控制的指令通道复用同一条连接（中继每个 bindId 只保留一条桌面连接）。
 pub fn start_cloud(static_root: PathBuf) -> Result<CloudHandle, String> {
     // 绑定身份：config.sync { bindId, bindCode }
     let raw = crate::config::read_config();
@@ -371,31 +454,24 @@ pub fn start_cloud(static_root: PathBuf) -> Result<CloudHandle, String> {
         return Err("尚未建立联动绑定，请先在「联动绑定」板块完成绑定".to_string());
     }
 
-    let injector = Injector::start(static_root.join("inject.ps1"));
     let st = Arc::new(CloudState {
         ws_state: Mutex::new("idle".to_string()),
         last_error: Mutex::new(String::new()),
-        injector_ready: AtomicBool::new(false),
         clip_history: Mutex::new(Vec::new()),
         clip_busy: AtomicBool::new(false),
-        injector,
+        injector: Mutex::new(None),
+        control_enabled: AtomicBool::new(false),
+        static_root,
     });
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
     let st2 = st.clone();
+    let handle_bind = bind_id.clone();
     // 可能从同步命令路径调用（主线程无 reactor）——tauri::async_runtime::spawn 内部自带运行时
     tauri::async_runtime::spawn(async move {
-        // 等注入器就绪（最多 8 秒），未就绪也继续——指令会 503
-        for _ in 0..40 {
-            if st2.injector.is_ready() {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(200)).await;
-        }
-        st2.injector_ready.store(st2.injector.is_ready(), Ordering::SeqCst);
         connect_loop(shutdown_rx, st2, bind_id, bind_code).await;
     });
-    Ok(CloudHandle { shutdown: shutdown_tx, state: st })
+    Ok(CloudHandle { shutdown: shutdown_tx, state: st, bind_id: handle_bind })
 }
 
 #[cfg(test)]
@@ -407,10 +483,12 @@ mod tests {
         Arc::new(CloudState {
             ws_state: Mutex::new("authed".to_string()),
             last_error: Mutex::new(String::new()),
-            injector_ready: AtomicBool::new(true),
             clip_history: Mutex::new(Vec::new()),
             clip_busy: AtomicBool::new(false),
-            injector: Injector::start(root.join("inject.ps1")),
+            // 控制通道打开的常态（真实启动路径由 enable_control 惰性起注入器，这里直接构造等价状态）
+            injector: Mutex::new(Some(Injector::start(root.join("inject.ps1")))),
+            control_enabled: AtomicBool::new(true),
+            static_root: root,
         })
     }
 
@@ -442,5 +520,25 @@ mod tests {
         // clipboard/clear → 200
         let (ok, code, _) = handle_api(&st, "/api/clipboard/clear", &json!({})).await;
         assert!(ok && code == 200);
+    }
+
+    /// 控制通道没打开（面板没点"云端连接"）时：仍答 ping，但注入/剪贴板类指令一律 503。
+    /// 连接现在常驻（任务墙实时唤醒），所以这条门禁是"云控制必须用户显式开启"的唯一保证。
+    #[tokio::test(flavor = "multi_thread")]
+    async fn control_channel_off_blocks_injection() {
+        let st = test_cloud();
+        st.disable_control();
+        assert!(!st.control_enabled.load(Ordering::SeqCst));
+        assert!(st.injector.lock().unwrap().is_none(), "关闭控制通道应让注入器退出");
+        let (ok, code, data) = handle_api(&st, "/api/ping", &json!({})).await;
+        assert!(ok && code == 200 && data["injector"] == false);
+        for path in ["/api/type", "/api/key", "/api/combo", "/api/mouse", "/api/click", "/api/wheel", "/api/clipboard/paste", "/api/clipboard/refresh"] {
+            let (ok, code, _) = handle_api(&st, path, &json!({ "text": "x" })).await;
+            assert!(!ok && code == 503, "{} 在控制通道关闭时必须 503", path);
+        }
+        // 重新打开：注入器重新创建（READY 与否都算可用路径，不该 503 control-disabled）
+        st.enable_control();
+        assert!(st.control_enabled.load(Ordering::SeqCst));
+        assert!(st.injector.lock().unwrap().is_some());
     }
 }

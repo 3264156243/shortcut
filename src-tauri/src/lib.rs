@@ -911,19 +911,29 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             }
         }
 
-        // ---- M4 云控制（wss relay；与局域网模式互斥）----
-        "startCloudControl" => match cloud::start_cloud(sj_static_root(&app)) {
-            Ok(_handle) => {
-                app.state::<CloudHandleState>().0.lock().unwrap().replace(_handle);
-                let state = app.state::<CloudHandleState>().0.lock().unwrap().as_ref().map(|h| h.state.status_json()).unwrap_or(json!({}));
-                json!({ "success": true, "status": state })
+        // ---- M4 云控制（wss relay）----
+        // 连接本身由 ensure_cloud_link 在"已绑定"时长期维持（任务墙 sync-wake 与云控制共用同一条，
+        // 见 cloud.rs 顶部说明）——这里只负责把**控制通道**打开（启动注入器 + 允许 api 指令执行）。
+        "startCloudControl" => match ensure_cloud_link(&app) {
+            Ok(()) => {
+                let state = app.state::<CloudHandleState>();
+                let guard = state.0.lock().unwrap();
+                match guard.as_ref() {
+                    Some(h) => {
+                        h.state.enable_control();
+                        json!({ "success": true, "status": h.state.status_json() })
+                    }
+                    None => json!({ "success": false, "error": "实时通道未就绪" }),
+                }
             }
             Err(e) => json!({ "success": false, "error": e }),
         },
         "stopCloudControl" => {
+            // 只关控制通道（注入器退出、注入类指令 503）；**不断开 WS**——
+            // 任务墙实时唤醒要靠这条连接（断掉中继就会判"桌面离线"）。
             let state = app.state::<CloudHandleState>();
-            if let Some(h) = state.0.lock().unwrap().take() {
-                let _ = h.shutdown.send(true);
+            if let Some(h) = state.0.lock().unwrap().as_ref() {
+                h.state.disable_control();
             }
             json!({ "ok": true })
         }
@@ -1905,6 +1915,56 @@ pub struct CockpitHandle(pub Arc<sidecar::CockpitState>);
 /// M4 云控制句柄
 pub struct CloudHandleState(pub Mutex<Option<cloud::CloudHandle>>);
 
+/// 确保"桌面 ⇄ 中继"的 WS 长连接存在（**任务墙实时唤醒 + 云控制指令共用同一条**）。
+///
+/// 为什么必须常驻：中继 `/notify`（sync/api.php 入队后调用）只在**该 bindId 有桌面 WS** 时
+/// 才认为桌面在线并下发 `sync-wake`；而中继每个 bindId 只保留一条桌面连接
+/// （`server/control-relay/relay.js` 新的桌面连接会顶掉旧的），所以这条连接不能由
+/// "控制板块是否开了云控制"决定——否则用户平时（没点云控制）桌面永远"离线"，
+/// 手机 push 只能等启动自动拉取/手动"同步云端"。
+///
+/// 幂等：已连（含用户手动开的云控制）直接返回；未绑定 / 游戏模式冻结 → 跳过并返回原因。
+/// 绑定身份变更（服务端判定旧绑定失效 → 本地重建）或连接循环已退出时会重建这条连接。
+fn ensure_cloud_link(app: &tauri::AppHandle) -> Result<(), String> {
+    // 只认**本地已写下的绑定**（get_bind_info 会在未绑定时顺手创建绑定，这里绝不能触发）
+    let Some(bind_id) = sync::get_stored_bind_id() else {
+        return Err("尚未建立联动绑定".to_string());
+    };
+    let state = app.state::<CloudHandleState>();
+    let mut guard = state.0.lock().unwrap();
+    // 已连（绑定没变且连接循环还活着）→ 直接返回：已连的连接在游戏模式里也照旧用，
+    // 冻结只拦"新建"（下面那一步），不改变控制板块"点了就能用"的既有语义。
+    if let Some(h) = guard.as_ref() {
+        if !h.shutdown.is_closed() && h.bind_id == bind_id {
+            return Ok(());
+        }
+    }
+    if freeze::is_frozen() {
+        return Err("游戏模式冻结中，暂不建立实时通道".to_string());
+    }
+    if let Some(h) = guard.as_ref() {
+        // shutdown.is_closed() = 连接循环已退出（不可恢复）；bind_id 变了 = 这条连接挂在旧绑定上
+        let short = |s: &str| s.chars().take(8).collect::<String>();
+        if h.bind_id != bind_id {
+            log::warn!("[cloud] 绑定已变更（{}… → {}…），重建实时通道", short(&h.bind_id), short(&bind_id));
+        } else {
+            log::warn!("[cloud] 实时通道连接循环已退出，重建");
+        }
+        let _ = h.shutdown.send(true);
+    }
+    match cloud::start_cloud(sj_static_root(app)) {
+        Ok(h) => {
+            log::info!("[cloud] 实时唤醒通道已启动（已绑定即维持，与云控制模式解耦）");
+            *guard = Some(h);
+            Ok(())
+        }
+        Err(e) => {
+            log::warn!("[cloud] 实时唤醒通道启动失败: {}", e);
+            Err(e)
+        }
+    }
+}
+
 /// sj 静态资源目录：生产=resource_dir/resources/sj，开发=CARGO_MANIFEST_DIR/../resources/sj
 fn sj_static_root(app: &tauri::AppHandle) -> PathBuf {
     if let Ok(rd) = app.path().resource_dir() {
@@ -2812,10 +2872,17 @@ pub fn run() {
 
             // 桌面端凭证（deskToken）引导：旧装机只有绑定码，升级后自动换一次并落盘。
             // 网络请求最长 15s，放后台线程，不阻塞启动。失败只记日志（服务端兼容期仍可继续）。
-            std::thread::spawn(|| {
+            let boot_handle = app.handle().clone();
+            std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_millis(1500));
                 if hub::ensure_ready().is_some() {
                     log::info!("[hub] 桌面端凭证已就绪");
+                }
+                // ── 任务墙实时唤醒通道（手机 push → 中继 sync-wake → 桌面立刻拉取）──
+                // 已绑定就维持一条 relay WS：手机 push 后 api.php 问中继"桌面在线吗"，
+                // 中继只有看到这条连接才会即时下发 sync-wake。凭证刚引导完，这里拿到的 ticket 才有效。
+                if let Err(e) = ensure_cloud_link(&boot_handle) {
+                    log::info!("[cloud] 实时唤醒通道未启动: {}", e);
                 }
                 // ── 拉取时机 1/3：启动自动拉取一次 ──
                 // 先上报墙名：手机端 board.list 拿到的就是这份列表（不上报则只有"默认任务墙"，
@@ -2857,6 +2924,20 @@ pub fn run() {
                             }
                         })
                         .await;
+                    }
+                });
+            }
+
+            // 实时唤醒通道看护：绑定可能在启动之后才建立（首次绑定）、启动时正处于游戏模式冻结，
+            // 这两种情况启动那次都没连成 → 每 60 秒补一次（ensure_cloud_link 幂等，已连直接返回）。
+            {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                        if let Err(e) = ensure_cloud_link(&handle) {
+                            log::debug!("[cloud] 实时通道看护跳过: {}", e);
+                        }
                     }
                 });
             }
