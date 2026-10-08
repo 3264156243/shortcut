@@ -38,6 +38,8 @@ $ACTION_ALIASES = [
     'module.ack' => 'ack',                 // queue：确认消费
     'module.boards' => 'board.list',       // queue：板列表
     'module.boards.update' => 'bind.boards.update',
+    'blob.init' => 'transfer.fileInit',     // blob：建立上传会话（元数据）
+    'blob.complete' => 'transfer.fileComplete', // blob：校验分片齐全 → 完整哈希 → 生成文件消息
     'realtime.ticket' => 'control.ticket', // realtime：短时票据
 ];
 if (isset($ACTION_ALIASES[$action])) {
