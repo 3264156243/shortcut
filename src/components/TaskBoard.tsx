@@ -43,6 +43,16 @@ const formatReminder = (iso: string) => {
   });
 };
 
+/**
+ * 任务板弹层层级约定（z-index 全部走 Tailwind 原子类，写在下面各弹层节点上）：
+ * - 便签 .task-note：inline z-index 有业务含义（新便签/拖动过的便签在上层），
+ *   store 里按「当前最大值 + 1」递增（见 store/index.ts nextTaskZIndex），
+ *   拖动中临时抬到 10000，撕碎动画期间为 12000 —— 因此便签的实际最高值没有固定上界；
+ * - 撕纸机特效：z-[13000]（deletingId 期间的一次性动画）；
+ * - 任务板弹层：任务清单设置 z-[14000] < 重命名任务墙 z-[14100] < 任务编辑 z-[14200]
+ *   （全部高于便签可能达到的任何值，且都带 position: fixed + z-index，各自创建独立堆叠上下文）。
+ * 注意：修「便签压住弹层」时只提升弹层，不要下调便签 z 值。
+ */
 export default function TaskBoard() {
   const config = useStore((state) => state.config);
   const addTaskBoard = useStore((state) => state.addTaskBoard);
@@ -95,7 +105,7 @@ export default function TaskBoard() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  // 接收手机任务：手动触发一次云端队列拉取（按钮禁用期间不重复触发）
+  // 同步云端：手动触发一次云端队列拉取（按钮禁用期间不重复触发）
   const [receiving, setReceiving] = useState(false);
 
   const taskBoards = config.taskBoards?.length ? config.taskBoards : [];
@@ -239,7 +249,7 @@ export default function TaskBoard() {
     void window.electronAPI?.addTaskFromDrag?.(activeBoard.id, task.id);
   };
 
-  // 接收手机任务：从云端队列手动拉取一次（入口由「联动绑定」卡片迁移到任务墙工具栏）
+  // 同步云端：从云端队列手动拉取一次（入口由「联动绑定」卡片迁移到任务墙工具栏）
   const receivePhoneTasks = async () => {
     if (receiving) return;
     setReceiving(true);
@@ -434,7 +444,7 @@ export default function TaskBoard() {
         </div>
         {showTasksSettings && (
           <div
-            className="fixed inset-0 z-[80] flex items-center justify-center"
+            className="fixed inset-0 z-[14000] flex items-center justify-center"
             style={{ background: 'rgba(8,6,5,.55)' }}
             onClick={() => setShowTasksSettings(false)}
           >
@@ -470,7 +480,7 @@ export default function TaskBoard() {
             </div>
           </div>
         )}
-        {/* 接收手机任务入口（原「联动绑定」卡片里的立即接收按钮迁到此处） */}
+        {/* 同步云端入口（原「联动绑定」卡片里的立即接收按钮迁到此处） */}
         <div className="flex shrink-0 items-center">
           <button
             type="button"
@@ -483,10 +493,10 @@ export default function TaskBoard() {
               color: receiving ? '#eaa2ad' : '#f5f0e8',
               fontFamily: "'Special Elite', 'Noto Serif SC', 'SimSun', serif",
             }}
-            title="从云端接收手机提交的任务"
+            title="从云端同步手机提交的任务"
           >
             <Download size={14} className={receiving ? 'animate-spin' : ''} />
-            {receiving ? '接收中…' : '接收手机任务'}
+            {receiving ? '同步中…' : '同步云端'}
           </button>
         </div>
         {activeBoard && (
@@ -708,7 +718,7 @@ export default function TaskBoard() {
         {renamingBoard && (
           <motion.div
             data-task-modal
-            className="fixed inset-0 z-[220] flex items-center justify-center p-5"
+            className="fixed inset-0 z-[14100] flex items-center justify-center p-5"
             style={{ background: 'rgba(12, 9, 8, .72)' }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -767,7 +777,7 @@ export default function TaskBoard() {
         {editor && (
           <motion.div
             data-task-modal
-            className="fixed inset-0 z-[230] flex items-center justify-center p-3 sm:p-6"
+            className="fixed inset-0 z-[14200] flex items-center justify-center p-3 sm:p-6"
             style={{ background: 'rgba(12, 9, 8, .82)', backdropFilter: 'blur(5px)' }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
