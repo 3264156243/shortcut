@@ -300,6 +300,73 @@ switch ($action) {
         ]);
         break;
 
+    // ===== 能力泛化：rpc（一次性调用）=====
+    // 手机下指令 → 入队 board=rpc → 桌面 hub 拉取执行 → 结果回执（board=rpc-result）。
+    // 服务端只做"可靠投递 + 结果暂存"，不解释指令语义（执行能力完全在桌面端）。
+    case 'module.invoke':
+        if (!rate_limit_allow('module.invoke:' . client_ip(), 60, 60)) error_msg('请求过于频繁，请稍后再试');
+        require_identity($bindId, $input);
+        $target = limited_text(isset($input['module']) ? $input['module'] : 'desktop', 32);
+        $method = limited_text(isset($input['method']) ? $input['method'] : '', 32);
+        if ($method === '') error_msg('缺少 method');
+        $allowed = ['open', 'ping']; // 白名单：桌面端只执行这些语义
+        if (!in_array($method, $allowed, true)) error_msg('不支持的指令: ' . $method);
+        $params = isset($input['params']) && is_array($input['params']) ? $input['params'] : [];
+        // 只允许标量参数，且限制长度（避免塞入任意结构/超大内容）
+        $safeParams = [];
+        foreach ($params as $k => $v) {
+            if (!is_string($k) || strlen($k) > 32) continue;
+            if (is_string($v)) $safeParams[$k] = limited_text($v, 512);
+            elseif (is_bool($v) || is_int($v) || is_float($v)) $safeParams[$k] = $v;
+        }
+        $invokeId = 'inv_' . bin2hex(random_bytes(12));
+        $task = [
+            'id' => $invokeId,
+            'module' => $target,
+            'method' => $method,
+            'params' => $safeParams,
+            'createdAt' => date('c'),
+        ];
+        if (enqueue_task('rpc', $bindId, $task) === false) error_msg('指令投递失败');
+        respond(['success' => true, 'invokeId' => $invokeId]);
+        break;
+
+    case 'module.invoke.result':
+        require_identity($bindId, $input);
+        $invokeId = limited_text(isset($input['invokeId']) ? $input['invokeId'] : '', 40);
+        if ($invokeId === '') error_msg('缺少 invokeId');
+        $result = [
+            'id' => 'res_' . bin2hex(random_bytes(8)),
+            'invokeId' => $invokeId,
+            'ok' => !empty($input['ok']),
+            'message' => limited_text(isset($input['message']) ? $input['message'] : '', 512),
+            'finishedAt' => date('c'),
+        ];
+        if (enqueue_task('rpc-result', $bindId, $result) === false) error_msg('结果暂存失败');
+        respond(['success' => true]);
+        break;
+
+    case 'module.invoke.status':
+        require_identity($bindId, $input);
+        $invokeId = limited_text(isset($input['invokeId']) ? $input['invokeId'] : '', 40);
+        if ($invokeId === '') error_msg('缺少 invokeId');
+        $results = peek_all('rpc-result', $bindId);
+        $hit = null;
+        foreach ((array)$results as $item) {
+            if (isset($item['invokeId']) && $item['invokeId'] === $invokeId) { $hit = $item; break; }
+        }
+        if ($hit) {
+            // 读一次即可消费（避免结果长期堆积）
+            acknowledge_tasks('rpc-result', $bindId, [(string)$hit['id']]);
+            respond(['success' => true, 'done' => true, 'ok' => !empty($hit['ok']), 'message' => isset($hit['message']) ? (string)$hit['message'] : '']);
+        }
+        $pending = false;
+        foreach ((array)peek_all('rpc', $bindId) as $item) {
+            if (isset($item['id']) && $item['id'] === $invokeId) { $pending = true; break; }
+        }
+        respond(['success' => true, 'done' => false, 'pending' => $pending]);
+        break;
+
     case 'transfer.messages':
         $side = require_transfer_identity($bindId, $input);
         $messages = list_messages($bindId);
