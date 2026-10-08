@@ -1,7 +1,7 @@
 <?php
 
 $ADMIN_PASSWORD = '791214';
-$DATA_DIR = getenv('SHORTCUT_ACTIVATION_DATA') ?: dirname(__DIR__, 2) . '/ShortCut-activation-data';
+$DATA_DIR = __DIR__ . '/data';
 $DATA_FILE = $DATA_DIR . '/codes.json';
 $CONFIG_FILE = $DATA_DIR . '/activation_config.json';
 $LOG_FILE = $DATA_DIR . '/checks.json';
