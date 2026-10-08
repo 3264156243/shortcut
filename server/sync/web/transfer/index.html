@@ -1,6 +1,9 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
+  <!-- anti-cache: mobile page updates must take effect immediately -->
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#24221f" />
@@ -136,24 +139,27 @@
   </div>
 </div>
 
+<script src="/sync/web/sdk.js"></script>
 <script>
 (function () {
-  const API = '/sync/api.php';
-  const storageKey = 'shortcut-mobile-binding-v1';
+  // 绑定/请求统一走共享 SDK（协议版本、超时、错误文案、令牌失效处理都在 sdk.js 里）
+  const sdk = window.ShortCutMobile;
   const $ = (id) => document.getElementById(id);
-  let auth = null;
+  let auth = sdk.binding();
   let pollTimer = 0;
-  try { auth = JSON.parse(localStorage.getItem(storageKey) || 'null'); } catch (e) {}
 
+  /** 兼容旧调用点：payload 里带 action，其余字段透传；失败时抛出（沿用本页原有语义） */
   function api(payload) {
-    const c = new AbortController();
-    const t = setTimeout(() => c.abort(), 15000);
-    return fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: c.signal })
-      .then((r) => r.json().then((d) => {
-        if (!r.ok || !d) throw new Error(d && d.message || '服务暂时不可用');
-        return d;
-      }))
-      .finally(() => clearTimeout(t));
+    const body = Object.assign({}, payload || {});
+    const action = body.action;
+    delete body.action;
+    return sdk.request(action, body).then((d) => {
+      if (!d.success) {
+        if (d.needBind) { auth = null; goBind(); }
+        throw new Error(d.message || '服务暂时不可用');
+      }
+      return d;
+    });
   }
   function toast(elId, text, ok) {
     const e = $(elId);
@@ -208,7 +214,7 @@
     if (!ensured()) return Promise.resolve();
     return api({ action: 'transfer.messages', bindId: auth.bindId, side: 'mobile', mobileToken: auth.mobileToken })
       .then((d) => {
-        if (!d.success) { if (/失效/.test(d.message || '')) { localStorage.removeItem(storageKey); auth = null; goBind(); } throw new Error(d.message || '读取失败'); }
+        if (!d.success) { if (/失效/.test(d.message || '')) { sdk.clearBinding(); auth = null; goBind(); } throw new Error(d.message || '读取失败'); }
         renderMessages(d.messages);
       })
       .catch(() => {});
