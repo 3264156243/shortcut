@@ -399,6 +399,7 @@ function register_device($bindId, $side, $deviceName, $deviceKey = '') {
         $devices = bind_devices($binds[$bindId]);
         $now = date('c');
         $index = -1;
+        $keylessMobile = -1;
         foreach ($devices as $i => $device) {
             $deviceSide = (string)$device['side'];
             if ($side === 'desktop') {
@@ -417,6 +418,18 @@ function register_device($bindId, $side, $deviceName, $deviceKey = '') {
                 $index = $i;
                 break;
             }
+            // 迁移期兜底：从旧单槽投影出来的手机行没有 device_key。那台手机重绑时（最典型的是
+            // 清了浏览器数据 / 换了浏览器 → deviceKey 变了）如果另起一行，用户就会在设备列表里
+            // 看到两台"我的手机"，还得手动删一台。这里让它**就地接管**那一行（凭证换新、
+            // 补上 deviceKey、沿用原 bound_at）。只在"恰好一行无 key 手机"时生效 ——
+            // 旧单槽最多只能投影出一行，所以不会误接管别人的设备。
+            if ($key !== '' && $keylessMobile < 0
+                && (!isset($device['device_key']) || (string)$device['device_key'] === '')) {
+                $keylessMobile = $i;
+            }
+        }
+        if ($index < 0 && $side === 'mobile' && $keylessMobile >= 0) {
+            $index = $keylessMobile;
         }
         if ($index < 0 && $side === 'mobile') {
             $mobileCount = 0;
