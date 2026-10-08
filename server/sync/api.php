@@ -28,6 +28,22 @@ $action = isset($input['action']) ? trim($input['action']) : '';
 $board = isset($input['board']) ? trim($input['board']) : 'system';
 $bindId = isset($input['bindId']) ? trim($input['bindId']) : '';
 
+// ===== 能力泛化（模块契约层）=====
+// modules.json 里声明的四类能力对应统一端点族；这里把统一名映射到既有实现，
+// 旧 action 名继续可用（线上老客户端不受影响）。于是"新增板块"只需在 modules.json 加一条
+// + 复用某一类能力，不必再发明一套 action 名。
+$ACTION_ALIASES = [
+    'module.push' => 'push',               // queue：入队
+    'module.pull' => 'pull',               // queue：拉取
+    'module.ack' => 'ack',                 // queue：确认消费
+    'module.boards' => 'board.list',       // queue：板列表
+    'module.boards.update' => 'bind.boards.update',
+    'realtime.ticket' => 'control.ticket', // realtime：短时票据
+];
+if (isset($ACTION_ALIASES[$action])) {
+    $action = $ACTION_ALIASES[$action];
+}
+
 // 阶段 A：过期清理（节流：约每 15 分钟触发一次，随任意请求顺带执行）
 run_cleanup_if_due($bindId);
 
@@ -255,6 +271,29 @@ switch ($action) {
             }
         }
         respond(['success' => true, 'ticket' => issue_control_ticket($targetBind, $role)]);
+        break;
+
+    // ===== 能力泛化：blob（文件分片）状态查询 =====
+    // 断点续传的地基：客户端上传前先查已确认分片，只补缺片（文档 §5.7 / 验收 §12.4）。
+    // 与 file.php 是同一份元数据，但走 JSON API、走统一身份校验。
+    case 'blob.status':
+        if (!rate_limit_allow('blob.status:' . client_ip(), 120, 60)) error_msg('请求过于频繁，请稍后再试');
+        require_identity($bindId, $input);
+        $fileId = safe_file_id(isset($input['fileId']) ? $input['fileId'] : '');
+        if ($fileId === '') error_msg('文件标识无效');
+        $meta = load_file_meta($bindId, $fileId);
+        if (!$meta) error_msg('上传会话不存在');
+        respond([
+            'success' => true,
+            'fileId' => $fileId,
+            'name' => isset($meta['name']) ? (string)$meta['name'] : '',
+            'size' => isset($meta['size']) ? (int)$meta['size'] : 0,
+            'chunkSize' => isset($meta['chunkSize']) ? (int)$meta['chunkSize'] : 0,
+            'chunkCount' => isset($meta['chunkCount']) ? (int)$meta['chunkCount'] : 0,
+            'uploaded' => array_map('intval', (array)(isset($meta['uploaded']) ? $meta['uploaded'] : [])),
+            'complete' => !empty($meta['complete']),
+            'sha256' => isset($meta['sha256']) ? (string)$meta['sha256'] : '',
+        ]);
         break;
 
     case 'transfer.messages':
