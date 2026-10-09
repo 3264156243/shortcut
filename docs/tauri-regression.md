@@ -161,3 +161,38 @@ WebView2 里的 React 节点（连标签页切换都无反应），UIA 只能**�
 自动化坐标换算注意：本机物理屏 1920×1080 / 逻辑屏 1280×720（缩放 1.5），
 而 PowerShell 进程默认 DPI-unaware → `SetCursorPos` 要传**逻辑**坐标（UIA 给的是物理坐标，需 ÷1.5）。
 
+### 15.2 启动 App 的正确姿势（拖放相关，2026-10-09 复发一次）
+
+**铁律：绝不要从提权（管理员）shell 里 `Start-Process` 起 App —— 拖放会整体失效。**
+
+Windows 的 UIPI 禁止 Medium 完整性进程（资源管理器）把 OLE 拖放投递给 High 完整性窗口。
+症状与 §13.1 当年那个 wry 的 bug **一模一样**（"禁止光标 + 无任何事件"），极易误判成又坏了：
+
+| 观测点 | 提权（High）实例 | 非提权（Medium）实例 |
+|---|---|---|
+| 光标拖到岛上 | 禁止光标（⊘） | 正常吸附/高亮 |
+| `[island] 拖入 N 个文件` | **永不出现** | 出现 |
+| `[island] 球上松手，文件数=N` | **永不出现** | 出现 |
+| `[drop] 已 emit converter:drop` | **永不出现** | 出现 |
+| `[island] 穿透生效 = false（… 拖拽活跃=true …）` | **照样出现**（守卫是 `GetAsyncKeyState` 轮询，与 OLE 无关） | 出现 |
+
+最后一行是判断的关键：**守卫说"你在拖"，但 `[island] 拖入` 一条都没有 ⇒ 拖放根本没投递到进程**，
+不要去查窗口样式/穿透，先查完整性级别。
+
+正确启动（从管理员会话降权）：
+
+```powershell
+Get-Process shortcut-tauri -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Process explorer.exe -ArgumentList '"D:\wenjian\js\ShortCut\src-tauri\target\release\shortcut-tauri.exe"'
+# 必须校验：父进程=explorer.exe 且 TokenElevation=0
+```
+
+验证用 `OpenProcessToken` + `GetTokenInformation(TokenElevation)`（PowerShell 里可 P/Invoke），
+或直接看父进程是不是 `explorer.exe`。
+
+**同源影响**：转换面板的拖放走的是同一条 OLE 通道（`lib.rs` 的 `WindowEvent::DragDrop`），
+所以提权运行时"岛 + 转换面板"会**一起**失效 —— 两个同时坏，先怀疑权限，不是两处代码问题。
+
+**日志时间戳是 UTC，比本机（UTC+8）慢 8 小时**，对齐时间时记得 +8。
+
+
