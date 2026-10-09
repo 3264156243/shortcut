@@ -123,3 +123,41 @@ Windows 命中测试会整体跳过 `WS_EX_TRANSPARENT` 窗口，所以穿透态
 `spawn_island_drop_guard` 用 120ms 轮询：**左键按住 + 光标在岛窗口矩形内** → 临时解除穿透，松手/移开 → 按
 `effective_island_passthrough()` 恢复。落点判定按**整窗矩形**（物理像素 `outer_position/outer_size`），
 比原来 46px 小球宽容得多。
+
+## 十五、构建顺序：前端必须先于 Rust（2026-10-09 实测踩坑）
+
+`tauri.conf.json` 是 `"frontendDist": "../dist"`，release 构建会**把 `dist/` 编译进 exe**
+（`--features custom-protocol` 走内嵌资源，运行时不再读磁盘 `dist/`）。因此：
+
+```
+npm run build            # 1) 先把前端产物更新到 dist/
+cd src-tauri && cargo build --release --features custom-protocol   # 2) 再编译，让它嵌入"新"前端
+```
+
+顺序反了会得到一个**编译成功、启动正常、但界面是上一版**的 exe —— 没有报错、没有任何日志，
+现象就是"新做的界面功能完全看不见"。本次实测：cargo 03:25:17 完成、npm build 03:25:42 完成，
+差了 25 秒，exe 里嵌的仍是上一版包名。
+
+**自查方法**（改完前端后、启动前跑一次）：
+
+```powershell
+# dist 里的主包名
+Get-ChildItem dist\assets\main-*.js | Select-Object Name
+# exe 里嵌的包名（两者必须一致），并顺带确认新文案在不在
+$t = [System.Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes('src-tauri\target\release\shortcut-tauri.exe'))
+[regex]::Matches($t,'main-[A-Za-z0-9_\-]{8}\.js') | ForEach-Object Value | Sort-Object -Unique
+$t.Contains('<新界面里的某个中文串>')   # ASCII 解码足够判断"在不在"（UTF-8 字节按 ASCII 解出来不会是原文，故用 Select-String 直查文件更稳）
+```
+
+更稳的判据：直接 `Select-String -Path <exe> -Pattern '<新文案>'`（二进制里按 UTF-8 字节匹配，
+未启用压缩时可直接命中）。
+
+### 15.1 附带教训：这个环境里不要指望合成点击驱动主面板
+主面板是"不激活 + 失焦且光标在窗外则隐藏"的设计，而本机前台常被其它窗口占着
+（`SetForegroundWindow` 实测返回 `False`）。此时 `mouse_event`/UIA `InvokePattern` 都到不了
+WebView2 里的 React 节点（连标签页切换都无反应），UIA 只能**读**树、不能**驱动**。
+需要驱动时改用 `--remote-debugging-port`（需在代码里传 `additional_browser_args`，
+`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` 会被 wry 覆盖而失效），或直接请人点。
+自动化坐标换算注意：本机物理屏 1920×1080 / 逻辑屏 1280×720（缩放 1.5），
+而 PowerShell 进程默认 DPI-unaware → `SetCursorPos` 要传**逻辑**坐标（UIA 给的是物理坐标，需 ÷1.5）。
+
