@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
+using System.IO.Pipes;
 using System.Linq;
 using System.Management;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Web.Script.Serialization;
@@ -46,6 +49,57 @@ internal sealed class Snapshot
 
 internal static class Program
 {
+    // 提权模式（--pipe）下用命名管道代替 stdout，并把控制台窗口摘掉。
+    // 背景：ShellExecuteEx(Verb=runas) 无法重定向 stdout，而本程序被计划任务以
+    // Highest 权限拉起时必须能把数据送回普通权限的主进程 → 只能走命名管道
+    // （UIPI 只拦窗口消息，不拦命名管道）。
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool FreeConsole();
+
+    /// <summary>把 `\\.\pipe\name` 或裸名字统一成 NamedPipeClientStream 需要的名字。</summary>
+    private static string PipeLeafName(string raw)
+    {
+        int mark = raw.LastIndexOf("\\pipe\\", StringComparison.OrdinalIgnoreCase);
+        return mark >= 0 ? raw.Substring(mark + 6) : raw;
+    }
+
+    /// <summary>带重试地连主进程（主进程先建 server 再拉起本进程，正常第一次就连上）。</summary>
+    private static NamedPipeClientStream ConnectPipe(string name, int timeoutMs)
+    {
+        Stopwatch watch = Stopwatch.StartNew();
+        while (watch.ElapsedMilliseconds < timeoutMs)
+        {
+            NamedPipeClientStream client = new NamedPipeClientStream(".", name, PipeDirection.Out);
+            try
+            {
+                client.Connect(500);
+                return client;
+            }
+            catch
+            {
+                client.Dispose();
+                Thread.Sleep(200);
+            }
+        }
+        return null;
+    }
+
+    /// <summary>写一行。返回 false = 通道已断（主进程没了）→ 侧车自退，等价于原来的 Job Object 回收。</summary>
+    private static bool Emit(TextWriter sink, string line)
+    {
+        try
+        {
+            sink.Write(line);
+            sink.Write('\n');
+            sink.Flush();
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static double? MaxSensor(IHardware hardware, SensorType type, params string[] preferred)
     {
         IEnumerable<ISensor> sensors = hardware.Sensors.Where(sensor => sensor.SensorType == type && sensor.Value.HasValue);
@@ -156,9 +210,39 @@ internal static class Program
         return result;
     }
 
-    public static void Main()
+    public static void Main(string[] args)
     {
-        Console.OutputEncoding = new UTF8Encoding(false);
+        // 解析 --pipe <管道名>：有 → 管道模式（提权态用），无 → stdout 模式（主进程直接 spawn，兼容原行为）
+        string pipePath = null;
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (string.Equals(args[i], "--pipe", StringComparison.OrdinalIgnoreCase))
+            {
+                pipePath = args[i + 1];
+            }
+        }
+
+        TextWriter sink;
+        IDisposable owned = null;
+        if (pipePath != null)
+        {
+            try { FreeConsole(); } catch { }   // 计划任务拉起时不留黑窗
+            NamedPipeClientStream client = ConnectPipe(PipeLeafName(pipePath), 5000);
+            if (client == null)
+            {
+                return;   // 主进程没在等这个管道 → 直接退出（主进程会走 stdout 兜底）
+            }
+            StreamWriter writer = new StreamWriter(client, new UTF8Encoding(false), 1024);
+            writer.AutoFlush = false;
+            sink = writer;
+            owned = writer;
+        }
+        else
+        {
+            Console.OutputEncoding = new UTF8Encoding(false);
+            sink = Console.Out;
+        }
+
         Computer computer = new Computer
         {
             IsCpuEnabled = true,
@@ -189,18 +273,24 @@ internal static class Program
                     memory = ReadMemory(all),
                     battery = ReadBattery(all)
                 };
-                Console.WriteLine(serializer.Serialize(snapshot));
-                Console.Out.Flush();
+                if (!Emit(sink, serializer.Serialize(snapshot)))
+                {
+                    break;   // 管道断开 = 主进程已退出
+                }
                 Thread.Sleep(1000);
             }
         }
         catch (Exception error)
         {
-            Console.WriteLine(serializer.Serialize(new { error = error.Message }));
+            Emit(sink, serializer.Serialize(new { error = error.Message }));
         }
         finally
         {
             computer.Close();
+            if (owned != null)
+            {
+                try { owned.Dispose(); } catch { }
+            }
         }
     }
 }

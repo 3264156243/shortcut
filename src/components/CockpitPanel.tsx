@@ -1,8 +1,21 @@
-import { useEffect, useId, useState } from 'react';
-import { Battery, BatteryCharging, CircleGauge, ShieldAlert } from 'lucide-react';
+import { useCallback, useEffect, useId, useState } from 'react';
+import { Battery, BatteryCharging, CircleGauge, Loader2, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { CockpitData } from '../types';
 
 const missing = '未获取到数据';
+
+/** 驾驶舱提权状态（对应 Rust 侧 cockpitElevationStatus） */
+interface ElevationStatus {
+  success: boolean;
+  selfElevated?: boolean;
+  taskName?: string;
+  taskExists?: boolean;
+  taskExeMatches?: boolean;
+  taskExe?: string;
+  sidecarPath?: string;
+  mode?: string;
+  tempsAvailable?: boolean;
+}
 const format = (value: number | null | undefined, unit: string) => typeof value === 'number' ? `${value.toFixed(1)}${unit}` : missing;
 const point = (radius: number, degree: number) => {
   const angle = (degree - 90) * Math.PI / 180;
@@ -50,6 +63,10 @@ const BatteryValue = ({ label, value }: { label: string; value: string }) =>
 export default function CockpitPanel() {
   const [data, setData] = useState<CockpitData | null>(null);
   const [error, setError] = useState('');
+  const [status, setStatus] = useState<ElevationStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [setupMsg, setSetupMsg] = useState('');
+
   useEffect(() => {
     const api = window.electronAPI;
     if (!api?.startCockpit || !api.onCockpitData) { setError('硬件监控组件不可用'); return; }
@@ -60,24 +77,70 @@ export default function CockpitPanel() {
     api.startCockpit().then((result) => { if (!result.success) setError(result.error || '硬件监控启动失败'); });
     return () => { off(); void api.stopCockpit?.(); };
   }, []);
+
+  const refreshStatus = useCallback(async () => {
+    const result = await window.electronAPI?.cockpitElevationStatus?.();
+    if (result?.success) setStatus(result as ElevationStatus);
+  }, []);
+
+  // 温度要等侧车连上管道后才有值，所以状态轮询要跟着数据一起刷新
+  useEffect(() => { void refreshStatus(); }, [refreshStatus, data?.timestamp]);
+
+  const setup = useCallback(async () => {
+    setBusy(true);
+    setSetupMsg('');
+    try {
+      const result = await window.electronAPI?.cockpitSetupElevation?.();
+      setSetupMsg(result?.success ? '已授权，正在切换到温度通道…' : (result?.error || '授权失败'));
+      // 切换需要 1~2 秒（建管道 → 拉任务 → 首帧数据）
+      setTimeout(() => { void refreshStatus(); }, 2500);
+    } finally {
+      setBusy(false);
+    }
+  }, [refreshStatus]);
+
   const battery = data?.battery;
   const level = typeof battery?.level === 'number' ? Math.max(0, Math.min(100, battery.level)) : 0;
   const updated = data?.timestamp ? new Date(data.timestamp).toLocaleTimeString('zh-CN', { hour12: false }) : '--:--:--';
-  const hasMissing = !data || ['cpu', 'gpu', 'memory'].some((key) => {
-    const item = (data as any)?.[key];
-    return item?.usage == null || item?.temperature == null;
-  });
+  const metricMissing = !data || ['cpu', 'gpu', 'memory'].some((key) => (data as any)?.[key]?.usage == null);
+  const tempMissing = !data || ['cpu', 'gpu', 'memory'].some((key) => (data as any)?.[key]?.temperature == null);
+  const authorized = status?.taskExists === true && status?.taskExeMatches === true;
+  const selfElevated = status?.selfElevated === true;
   return <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[#0b0e12] px-5 pb-5 pt-3 text-zinc-100">
     <header className="flex shrink-0 items-center justify-between border-b border-white/10 pb-3">
       <div className="flex items-center gap-3"><CircleGauge size={20} className="text-orange-400" /><div><h1 className="text-sm font-semibold">电脑驾驶舱</h1><p className="mt-0.5 text-[11px] text-zinc-500">实时硬件状态</p></div></div>
       <div className="flex items-center gap-2 text-xs text-zinc-500"><span className={`h-2 w-2 rounded-full ${error ? 'bg-red-500' : data ? 'bg-emerald-400' : 'bg-amber-400'}`} />{error || (data ? `更新于 ${updated}` : '正在连接传感器')}</div>
     </header>
-    {hasMissing ? (
-      <div className="mt-3 flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-xs" style={{ borderColor: 'rgba(245,158,11,.35)', background: 'rgba(245,158,11,.12)', color: '#fbbf24' }}>
+    {metricMissing ? (
+      <div className="mt-3 flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-xs" style={{ borderColor: 'rgba(239,68,68,.35)', background: 'rgba(239,68,68,.12)', color: '#fca5a5' }}>
         <ShieldAlert size={14} />
-        <span>未获取到数据，请以管理员方式运行 ShortCut</span>
+        <span>未获取到数据，硬件监控组件可能未启动</span>
       </div>
     ) : null}
+    {selfElevated ? (
+      <div className="mt-3 flex shrink-0 flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs" style={{ borderColor: 'rgba(239,68,68,.35)', background: 'rgba(239,68,68,.12)', color: '#fca5a5' }}>
+        <ShieldAlert size={14} />
+        <span>当前以管理员权限运行：Windows 限制下，从资源管理器拖入的文件（SC 球 / 转换面板）会失效。建议改用普通权限启动 —— 温度改为「一次授权」即可拿到，不必整体提权。</span>
+      </div>
+    ) : null}
+    {tempMissing && !selfElevated ? (
+      <div className="mt-3 flex shrink-0 flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs" style={{ borderColor: 'rgba(245,158,11,.35)', background: 'rgba(245,158,11,.12)', color: '#fbbf24' }}>
+        {authorized ? <ShieldCheck size={14} /> : <ShieldAlert size={14} />}
+        <span className="flex-1">
+          {authorized
+            ? '已授权，正在等待温度数据…'
+            : 'CPU 温度 / 内存温度需要读取 ring0 传感器（需管理员）。授权只影响这一个读取温度的独立进程：主程序仍以普通权限运行，文件拖放等功能完全不受影响。'}
+        </span>
+        {authorized ? null : (
+          <button type="button" onClick={() => void setup()} disabled={busy}
+            className="inline-flex items-center gap-1 rounded-md border border-amber-400/40 bg-amber-400/15 px-2 py-1 font-medium text-amber-200 transition hover:bg-amber-400/25 disabled:opacity-60">
+            {busy ? <Loader2 size={12} className="animate-spin" /> : <ShieldCheck size={12} />}
+            {busy ? '等待系统授权…' : '一次授权并启用温度'}
+          </button>
+        )}
+      </div>
+    ) : null}
+    {setupMsg ? <p className="mt-2 shrink-0 text-[11px] text-zinc-400">{setupMsg}</p> : null}
     <div className="grid min-h-[310px] flex-1 grid-cols-2 items-center justify-items-center gap-3 py-2 md:grid-cols-[minmax(180px,1fr)_minmax(120px,170px)_minmax(180px,1fr)]">
       <Dial label="CPU" name={data?.cpu?.name} temperature={data?.cpu?.temperature} usage={data?.cpu?.usage} color="#29b6f6" />
       <div className="col-span-2 row-start-1 max-w-[150px] self-start pt-3 md:col-span-1 md:col-start-2 md:max-w-none"><Dial small label="内存" name={data?.memory?.name} temperature={data?.memory?.temperature} usage={data?.memory?.usage} color="#ffb74d" /></div>

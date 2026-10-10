@@ -195,7 +195,12 @@ Start-Process explorer.exe -ArgumentList '"D:\wenjian\js\ShortCut\src-tauri\targ
 
 **日志时间戳是 UTC，比本机（UTC+8）慢 8 小时**，对齐时间时记得 +8。
 
-### 15.3 驾驶舱提权 与 拖放 的冲突边界（2026-10-09 实测）
+### 15.3 驾驶舱提权 与 拖放 的冲突边界（2026-10-09 实测，同日已修复）
+
+> **已修复**：主进程改为**永久保持普通权限**，温度由"以 `Highest` 运行的计划任务侧车 +
+> 命名管道"读取（首次点一次授权，之后零 UAC）。界面上"请以管理员方式运行 ShortCut"的
+> 错误引导已删除，改成「一次授权并启用温度」。完整方案 / 验收 / 回滚见
+> `docs/驾驶舱温度与拖放冲突-解决方案.md`。下面保留实测边界数据作为依据。
 
 **冲突**：驾驶舱靠 `resources/hardware-monitor/ShortCut.HardwareMonitor.exe` 读传感器，
 其中 CPU/内存温度走 LibreHardwareMonitorLib 的 ring0 驱动 → 需要管理员；

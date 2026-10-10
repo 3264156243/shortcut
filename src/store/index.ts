@@ -235,6 +235,20 @@ declare global {
       translateText: (text: string, from: string, to: string) => Promise<{ success: boolean; translatedText?: string; from?: string; to?: string; error?: string }>;
       startCockpit: () => Promise<{ success: boolean; error?: string }>;
       stopCockpit: () => Promise<boolean>;
+      // 驾驶舱提权：主进程保持普通权限（拖放不受影响），只把读传感器的子进程放进
+      // Highest 计划任务，两边用命名管道通信 → 这样 CPU/内存温度也能拿到。
+      cockpitElevationStatus: () => Promise<{
+        success: boolean;
+        selfElevated?: boolean;
+        taskName?: string;
+        taskExists?: boolean;
+        taskExeMatches?: boolean;
+        taskExe?: string;
+        sidecarPath?: string;
+        mode?: 'off' | 'task' | 'stdout' | string;
+        tempsAvailable?: boolean;
+      }>;
+      cockpitSetupElevation: () => Promise<{ success: boolean; error?: string }>;
       startControl: () => Promise<{ success: boolean; port?: number; error?: string }>;
       stopControl: () => Promise<boolean>;
       restartControl: () => Promise<{ success: boolean; port?: number; error?: string }>;

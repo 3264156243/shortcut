@@ -760,6 +760,12 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
                 }
                 // SC 球对齐配置（Electron applyConfig 语义：provider 关/feature 关 → 销毁；球在 → 重建刷新样式）
                 sync_deepseekball_state(&app);
+                // 驾驶舱数据开关：以前只有打开主面板「驾驶舱」页才会拉起硬件监控，导致
+                // 岛上单独打开"驾驶舱数据"时永远没有数据。配置一变就同步侧车状态。
+                if let Some(ch) = app.try_state::<CockpitHandle>() {
+                    let result = sidecar::sync_cockpit(app.clone(), ch.0.clone());
+                    log::info!("[island] 驾驶舱侧车同步: {}", result);
+                }
                 // 对齐 Electron return { success, island }：发起方（主窗/任务墙）凭返回值
                 // 同步本地 store，避免后续全量回写用旧值覆盖他处刚改的开关
                 return json!({ "success": true, "island": full });
@@ -1483,6 +1489,22 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             let st = app.state::<CockpitHandle>();
             let latest = st.0.latest.lock().unwrap().clone();
             if latest.is_null() { json!({}) } else { latest }
+        }
+        // 驾驶舱提权：主进程保持普通权限（拖放不受影响），只把读传感器的子进程放到计划任务里以
+        // Highest 运行，两边用命名管道通信。status 供前端决定是否提示"一次授权"。
+        "cockpitElevationStatus" => {
+            let st = app.state::<CockpitHandle>();
+            sidecar::cockpit_elevation_status(&st.0)
+        }
+        "cockpitSetupElevation" => {
+            let st = app.state::<CockpitHandle>();
+            tokio::task::spawn_blocking({
+                let app2 = app.clone();
+                let st2 = st.0.clone();
+                move || sidecar::cockpit_setup_elevation(app2, st2)
+            })
+            .await
+            .unwrap_or_else(|e| json!({ "success": false, "error": format!("授权任务异常: {}", e) }))
         }
         "setBalanceKey" | "setDeepseekKey" | "setOpenCodeKey" => {
             let key = args.get(1).and_then(|v| v.as_str()).or_else(|| args.first().and_then(|v| v.as_str())).unwrap_or("");
@@ -2793,7 +2815,7 @@ pub fn run() {
         .manage(ControlHandle(std::sync::Mutex::new(None)))
         .manage(CloudHandleState(std::sync::Mutex::new(None)))
         .manage(MusicHandle(Arc::new(sidecar::MusicState { child: std::sync::Arc::new(std::sync::Mutex::new(None)), latest: std::sync::Arc::new(std::sync::Mutex::new(Value::Null)), starting: std::sync::atomic::AtomicBool::new(false) })))
-        .manage(CockpitHandle(Arc::new(sidecar::CockpitState { child: std::sync::Arc::new(std::sync::Mutex::new(None)), latest: std::sync::Arc::new(std::sync::Mutex::new(Value::Null)), main_active: std::sync::atomic::AtomicBool::new(false), starting: std::sync::atomic::AtomicBool::new(false) })))
+        .manage(CockpitHandle(Arc::new(sidecar::CockpitState { child: std::sync::Arc::new(std::sync::Mutex::new(None)), latest: std::sync::Arc::new(std::sync::Mutex::new(Value::Null)), main_active: std::sync::atomic::AtomicBool::new(false), starting: std::sync::atomic::AtomicBool::new(false), mode: std::sync::Arc::new(std::sync::Mutex::new("off".to_string())), epoch: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)) })))
         .plugin(
             // 全局快捷键（键位与 Electron 版一致）：Alt+Space 壳内消化；
             // Alt+I/Alt+U/Alt+S/Alt+D 以事件转发前端（灵动岛/任务墙/截图在 M3/M5 接线）
@@ -2864,6 +2886,20 @@ pub fn run() {
                     .blocking_show();
                 app.handle().exit(1);
                 return Ok(());
+            }
+
+            // 提权自检：以管理员运行时，"资源管理器拖进来的拖放"会被 Windows UIPI 整体掐掉
+            // （症状是禁止光标 + 没有任何事件）。这里先留一条日志，避免再被当成"拖放又坏了"排查。
+            sidecar::log_elevation_warning();
+
+            // 岛上"驾驶舱数据"开着 → 开机就把侧车拉起来（以前只有打开主面板「驾驶舱」页才会拉，
+            // 导致重启后岛上的驾驶舱数据一直空着）
+            if crate::config::read_config_island_cockpit_enabled() {
+                use tauri::Manager;
+                if let Some(ch) = app.try_state::<CockpitHandle>() {
+                    let result = sidecar::sync_cockpit(app.handle().clone(), ch.0.clone());
+                    log::info!("[cockpit] 开机同步（岛上驾驶舱数据已启用）: {}", result);
+                }
             }
 
             // 文件日志最先初始化（%LOCALAPPDATA%\com.wanan.shortcut\logs\tauri.log）
@@ -3253,7 +3289,8 @@ pub fn run() {
                     sidecar::kill_child(&mh.0.child);
                 }
                 if let Some(ch) = app.try_state::<CockpitHandle>() {
-                    sidecar::kill_child(&ch.0.child);
+                    // 提权侧车拿不到进程句柄（UIPI），必须连计划任务一起结束
+                    sidecar::stop_cockpit_sidecar(&ch.0);
                 }
             }
         });
