@@ -195,4 +195,47 @@ Start-Process explorer.exe -ArgumentList '"D:\wenjian\js\ShortCut\src-tauri\targ
 
 **日志时间戳是 UTC，比本机（UTC+8）慢 8 小时**，对齐时间时记得 +8。
 
+### 15.3 驾驶舱提权 与 拖放 的冲突边界（2026-10-09 实测）
+
+**冲突**：驾驶舱靠 `resources/hardware-monitor/ShortCut.HardwareMonitor.exe` 读传感器，
+其中 CPU/内存温度走 LibreHardwareMonitorLib 的 ring0 驱动 → 需要管理员；
+但 §15.2 说明主进程一提权，拖放就整体失效。
+
+**实测边界**（同一台机器，只改完整性级别，其余不变）：
+
+| 字段 | 提权 High | 非提权 Medium |
+|---|---|---|
+| `cpu.name` / `cpu.usage` | i7-13650HX / 9.9 | 同 / 12 |
+| `cpu.temperature` | **76** | **null** ← 需 MSR(ring0) |
+| `gpu.name` / `gpu.usage` | RTX 5060 Laptop / 0 | 同 / 4 |
+| `gpu.temperature` | 47.4 | **47.5**（NVAPI 不需 ring0，照样能读） |
+| `memory.usage` | 78.1 | 78.5 |
+| `memory.temperature` | **52.8** | **null** ← 需 SMBus |
+| `battery.*` | 99.6 / 充电中 / 16.8V / 85% | 完全相同（走 WMI，不需提权） |
+
+**结论：非提权只丢两项 —— `cpu.temperature` 与 `memory.temperature`**，其余全部可用。
+所以「必须管理员才能看电脑信息」实际是「必须管理员才能看 CPU 温度 / 内存温度」。
+
+**复现命令**（High 直接跑；Medium 用计划任务 `/rl LIMITED` 包一层，因为从提权 shell
+无法普通权限启动带输出重定向的进程）：
+
+```powershell
+# High
+Start-Process resources\hardware-monitor\ShortCut.HardwareMonitor.exe -WorkingDirectory resources\hardware-monitor `
+  -RedirectStandardOutput "$env:TEMP\hw-high.json" -WindowStyle Hidden -PassThru | % { Start-Sleep 5; Stop-Process $_ -Force }
+# Medium：.cmd 里 `exe > %TEMP%\hw-medium.json`，再 schtasks /create /rl LIMITED 执行它
+```
+
+**处理原则（尚未实施，待选型）**：
+
+1. **主进程永不提权**（保住拖放/自启/更新），需要温度时**只让监控子进程提权**。
+   实现约束：`ShellExecuteEx(Verb=runas)` **无法重定向 stdout**，而当前侧车 IPC 正是
+   stdout 行 JSON → 提权侧车必须改走**命名管道**（UIPI 不拦命名管道）。
+   连带影响：提权子进程**无法**被加入 Job Object（Medium 拿不到 High 进程句柄），
+   所以「随主进程回收」要改成**管道断开即自退**（顺带当存活探测）。
+2. 若接受丢这两项 → **零改动**降级模式，界面把这两项标成「需管理员权限」。
+3. 想零弹窗：一次性授权做成**计划任务 `/rl HIGHEST`**（首次安装弹一次 UAC，之后不再弹）；
+   更彻底是装 **Windows 服务**（LocalSystem 读传感器，app 连命名管道）。
+
+
 
