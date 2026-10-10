@@ -249,9 +249,12 @@ wss.on('connection', (ws, req) => {
         return;
       }
       // 只转发受支持的路径，防止任意转发滥用
+      // /api/lan-entry：手机问桌面端"你在局域网里的地址 + 一键直连令牌"（桌面端只回只读信息，
+      // 不注入任何指令）。没有它，局域网直连就只能让用户手输地址再输绑定码。
       const ALLOWED = new Set([
         '/api/type', '/api/key', '/api/combo', '/api/mouse', '/api/click', '/api/wheel',
         '/api/clipboard/refresh', '/api/clipboard/paste', '/api/clipboard/clear', '/api/ping',
+        '/api/lan-entry',
       ]);
       const path = String(msg.path || '');
       if (!ALLOWED.has(path)) {

@@ -917,6 +917,8 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
                         "clients": clients,
                         "injector": st.injector.is_ready(),
                         "urls": control::lan_urls_pub(st.port),
+                        // 局域网一键直连入口（前端用它生成二维码：扫码即连，不用输地址与绑定码）
+                        "lanEntry": control::lan_entry(),
                     })
                 }
                 None => json!({ "running": false }),
@@ -2085,6 +2087,27 @@ async fn start_control(app: &tauri::AppHandle, port: u16, auth_mode: &str) -> Re
         static_root: root,
         running: std::sync::atomic::AtomicBool::new(false),
     });
+    // 局域网"一键直连"入口令牌：预授权会话（手机经云端中继拿到它 → 直接带 ?token= 打开局域网页，
+    // 不需要手输地址、也不需要输绑定码）。随服务停止一起失效。
+    let entry_token = control::new_token();
+    st.sessions
+        .lock()
+        .unwrap()
+        .insert(entry_token.clone(), ("lan-entry".to_string(), control::now_ms()));
+    let urls = control::lan_urls_pub(port);
+    let primary = urls
+        .first()
+        .cloned()
+        .unwrap_or_else(|| format!("http://127.0.0.1:{}", port));
+    control::set_lan_entry(json!({
+        "running": true,
+        "port": port,
+        "urls": urls,
+        "url": primary,
+        "token": entry_token,
+        "pairCode": code,
+        "authMode": auth_mode,
+    }));
     let server = control::spawn_server(st.clone()).await?;
     *app.state::<ControlHandle>().0.lock().unwrap() = Some((st.clone(), server));
     Ok(json!({
@@ -2095,10 +2118,12 @@ async fn start_control(app: &tauri::AppHandle, port: u16, auth_mode: &str) -> Re
         "pairCode": code,
         "injector": st.injector.is_ready(),
         "urls": control::lan_urls_pub(port),
+        "entryToken": entry_token,
     }))
 }
 
 fn stop_control(app: &tauri::AppHandle) {
+    control::set_lan_entry(json!({ "running": false }));
     if let Some((st, server)) = app.state::<ControlHandle>().0.lock().unwrap().take() {
         let _ = server.shutdown.send(true);
         st.running.store(false, std::sync::atomic::Ordering::SeqCst);

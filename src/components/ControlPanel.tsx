@@ -11,6 +11,8 @@ interface LanStatus {
   pairCode?: string | null;
   clients?: number;
   urls: string[];
+  /** 局域网一键直连入口：{ running, url, token, urls } —— url 已带预授权令牌，扫码即连 */
+  lanEntry?: { running?: boolean; url?: string; token?: string; urls?: string[] };
 }
 
 interface CloudStatus {
@@ -52,9 +54,14 @@ export default function ControlPanel() {
   const cloudActive = !!cloud?.active;
   const mode: Mode = cloudActive ? 'cloud' : lanRunning ? 'lan' : 'none';
 
-  // 局域网模式：生成首个地址二维码；云模式：生成云控制页二维码（手机扫码直达）
+  // 局域网模式：二维码指向"带预授权令牌"的入口（扫码即连，不用输地址与绑定码）；
+  // 云模式：生成云控制页二维码（手机扫码直达）
   useEffect(() => {
-    const primary = mode === 'cloud' ? 'https://shortcut.326415.xyz/control/app/' : lan?.urls?.[0];
+    const entry = lan?.lanEntry;
+    const lanUrl = entry?.running && entry.url && entry.token
+      ? `${entry.url}/?token=${encodeURIComponent(entry.token)}`
+      : lan?.urls?.[0];
+    const primary = mode === 'cloud' ? 'https://shortcut.326415.xyz/control/app/' : lanUrl;
     if (!primary) {
       setQrDataUrl('');
       return;
@@ -62,7 +69,7 @@ export default function ControlPanel() {
     QRCode.toDataURL(primary, { width: 220, margin: 1, color: { dark: '#1c1917', light: '#ffffff' } })
       .then((url: string) => setQrDataUrl(url))
       .catch(() => setQrDataUrl(''));
-  }, [mode, lan?.urls]);
+  }, [mode, lan?.urls, lan?.lanEntry]);
 
   const startCloud = async () => {
     setBusy('cloud');
@@ -146,7 +153,7 @@ export default function ControlPanel() {
                 style={cardStyle}
               >
                 <div className="flex items-center gap-2 text-sm font-semibold"><Wifi size={16} style={{ color: 'var(--color-accent)' }} />局域网直连</div>
-                <div className="mt-2 text-xs leading-5" style={mutedStyle}>手机与电脑连接<b>同一网络</b>时使用，延迟最低。手机扫码或输入地址 + 6 位绑定码连接。</div>
+                <div className="mt-2 text-xs leading-5" style={mutedStyle}>手机与电脑连<b>同一网络</b>时使用，延迟最低。手机端点「局域网控制」一下即连，<b>不用输地址、不用输绑定码</b>；扫码也是直接进。</div>
                 <div className="mt-2 text-[11px]" style={mutedStyle}>延迟约 5~15ms · 最快响应</div>
               </button>
             </section>
@@ -219,10 +226,16 @@ export default function ControlPanel() {
 
               {lan.pairCode && (
                 <section className="rounded-xl p-4" style={cardStyle}>
-                  <div className="mb-2 text-xs font-semibold">绑定码</div>
+                  <div className="mb-2 flex items-center gap-2 text-xs font-semibold">
+                    备用连接码
+                    <span className="text-[10px] font-normal" style={mutedStyle}>一键直连 / 扫码都不用输它</span>
+                  </div>
                   <div className="flex items-center gap-3">
                     <div className="flex-1 text-center text-3xl font-bold tracking-[0.35em]" style={{ fontFamily: 'ui-monospace, Consolas, monospace', color: 'var(--color-accent)' }}>{lan.pairCode}</div>
                     <button type="button" onClick={() => void copy(lan.pairCode || '', '绑定码已复制')} title="复制绑定码" className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: 'var(--color-bg-card-hover)' }}><Copy size={14} /></button>
+                  </div>
+                  <div className="mt-2 text-[11px] leading-5" style={mutedStyle}>
+                    仅在手机没有网络、拿不到一键入口时使用：手输地址打开控制页后填这个码。
                   </div>
                 </section>
               )}
@@ -245,13 +258,14 @@ export default function ControlPanel() {
                     ))}
                     {!lan.urls?.length && <div className="py-2 text-xs" style={mutedStyle}>未检测到局域网地址</div>}
                     <div className="text-[11px] leading-5" style={mutedStyle}>
-                      手机浏览器打开上方地址（或扫码）→ 输入绑定码 → 即可用手机控制电脑。
+                      手机端打开 <b>shortcut.326415.xyz</b> → 「电脑控制」→ 点「局域网控制」即直接连上，<b>不需要地址也不需要绑定码</b>。<br />
+                      扫码同样是即连（二维码已带一次性令牌）。
                     </div>
                   </div>
                   {qrDataUrl && (
                     <div className="shrink-0 rounded-lg p-2" style={{ background: '#ffffff' }}>
                       <img src={qrDataUrl} alt="手机扫码接入" width={150} height={150} />
-                      <div className="mt-1 text-center text-[10px]" style={{ color: '#57534e' }}>扫码打开控制页</div>
+                      <div className="mt-1 text-center text-[10px]" style={{ color: '#57534e' }}>扫码直接进入控制页</div>
                     </div>
                   )}
                 </div>

@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
@@ -205,6 +205,41 @@ fn new_pair_code() -> String {
     rand::rng().random_range(100000..1000000).to_string()
 }
 
+/// 48 位 hex 令牌（与 /api/pair 会话令牌同构）
+pub fn new_token() -> String {
+    (0..48).map(|_| format!("{:x}", rand::rng().random_range(0..16))).collect()
+}
+
+// ---------- 局域网入口（手机"一键直连"用）----------
+
+/// 局域网入口信息（进程内单例）：{ running, port, urls, url, token, pairCode, authMode }
+///
+/// 为什么放全局而不是只放 ControlState：手机要"点一下就连"，第一步必须知道**桌面端在局域网里的
+/// 地址**和**一个已授权的令牌**，而这份答复要经云端中继回到手机——中继那侧的分发在
+/// `cloud.rs::handle_api`，它拿不到 `ControlHandle`。这块信息很小、只读、随启停整体替换。
+///
+/// 安全边界：`token` 是一个**预授权的会话令牌**，等价于"扫码即连"的二维码内容
+/// （48 hex，比原来的 6 位绑定码强得多；随停止服务即失效）。它只在**经过移动端票据鉴权的
+/// 中继通道**上被读走；局域网 HTTP 服务本身**不**暴露这个接口，避免同网段任何人白拿令牌。
+static LAN_ENTRY: OnceLock<Mutex<Value>> = OnceLock::new();
+
+fn lan_entry_slot() -> &'static Mutex<Value> {
+    LAN_ENTRY.get_or_init(|| Mutex::new(json!({ "running": false })))
+}
+
+pub fn set_lan_entry(v: Value) {
+    if let Ok(mut g) = lan_entry_slot().lock() {
+        *g = v;
+    }
+}
+
+pub fn lan_entry() -> Value {
+    lan_entry_slot()
+        .lock()
+        .map(|g| g.clone())
+        .unwrap_or_else(|_| json!({ "running": false }))
+}
+
 /// lib.rs 复用
 pub fn new_pair_code_pub() -> String {
     new_pair_code()
@@ -342,7 +377,7 @@ async fn api_pair(
     if code != *st.pair_code.lock().unwrap() {
         return err_json(StatusCode::UNAUTHORIZED, json!({ "error": "绑定码错误" }));
     }
-    let token: String = (0..48).map(|_| format!("{:x}", rand::rng().random_range(0..16))).collect();
+    let token: String = new_token();
     st.sessions
         .lock()
         .unwrap()
@@ -890,5 +925,43 @@ mod tests {
         // 静态文件：/index.html
         let r = http(9831, "GET /index.html HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n");
         assert!(r.contains("200") && (r.contains("<!DOCTYPE") || r.contains("<!doctype") || r.contains("<html")), "index 应可访问");
+    }
+
+    /// 局域网"一键直连"的令牌链路：预授权会话令牌必须能直接通过鉴权，
+    /// 且 `?token=` 注入的正是它（手机端 resources/sj/js/phone.js 的 boot() 就是这么认的）。
+    #[tokio::test]
+    async fn lan_entry_token_authorizes_without_pair() {
+        let st = test_state(9832);
+        st.sessions
+            .lock()
+            .unwrap()
+            .insert("lan-entry-token".to_string(), ("lan-entry".to_string(), now_ms()));
+        let server = spawn_server(st.clone()).await.expect("服务应能启动");
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        // 未带令牌 → 401（确认不是"谁也放行"）
+        let body = r#"{"text":"hi"}"#;
+        let r = http(9832, &format!("POST /api/type HTTP/1.1\r\nHost: x\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body));
+        assert!(r.contains("401"), "无令牌应 401：{}", &r[..120.min(r.len())]);
+
+        // 带上预授权令牌 → 直接放行（无需先 /api/pair 输绑定码）
+        let body = r#"{"text":"one-click"}"#;
+        let r = http(
+            9832,
+            &format!(
+                "POST /api/type HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer lan-entry-token\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            ),
+        );
+        assert!(!r.contains("401"), "预授权令牌应直接通过：{}", &r[..200.min(r.len())]);
+
+        // 停止服务后入口信息必须变成未运行（否则手机拿到过期入口 → 白屏）
+        crate::control::set_lan_entry(json!({ "running": true, "url": "http://192.168.1.9:9832", "token": "lan-entry-token" }));
+        assert_eq!(crate::control::lan_entry()["running"], json!(true));
+        crate::control::set_lan_entry(json!({ "running": false }));
+        assert_eq!(crate::control::lan_entry()["running"], json!(false));
+
+        let _ = server.shutdown.send(true);
     }
 }

@@ -62,26 +62,37 @@
 
     <!-- 已绑定：双入口 -->
     <div id="boundWrap" class="hidden">
-      <a class="entry reco" href="/control/app/" style="margin-top:16px">
+      <button id="lanBtn" class="entry reco" type="button" style="margin-top:16px">
+        <span class="ico">📶</span>
+        <span class="txt">
+          <b>局域网控制 <span class="badge" style="color:#63b582;border-color:rgba(99,181,130,.4)">更快</span></b>
+          <span id="lanBtnSub">手机与电脑连同一 Wi-Fi 时点一下直连，不用输地址、不用输绑定码</span>
+        </span>
+        <span class="arrow" id="lanBtnArrow">›</span>
+      </button>
+      <div id="lanErr" class="err"></div>
+      <p class="tip" style="margin-top:6px">原理：桌面端 ShortCut「控制」板块点一下「局域网直连」后，这里点一下就自动拿到它的局域网地址并连上。<b>要求两边在同一网络</b>；若打不开，说明手机与电脑不在同一 Wi-Fi，请回上一步改用云端连接。</p>
+
+      <a class="entry" href="/control/app/" style="margin-top:14px">
         <span class="ico">☁️</span>
         <span class="txt">
-          <b>云端连接 <span class="badge">推荐</span></b>
-          <span>任何网络可用（4G / 别处 Wi-Fi 均可），自动配对无需输码</span>
+          <b>云端连接</b>
+          <span>任何网络可用（4G / 别处 Wi-Fi 均可），经云端中继自动配对</span>
         </span>
         <span class="arrow">›</span>
       </a>
-      <p class="tip" style="margin-top:8px">前提：电脑端 ShortCut「控制」板块已启动「云端连接」。桌面端该板块显示有二维码，扫码可直达本控制页。</p>
+      <p class="tip" style="margin-top:8px">前提：电脑端 ShortCut「控制」板块已启动「云端连接」。</p>
 
       <div class="card" style="margin-top:14px">
-        <h2 style="cursor:pointer" id="lanToggle">📶 局域网直连 <span class="badge" style="color:#63b582;border-color:rgba(99,181,130,.4)">更快</span><span style="margin-left:auto;color:#948b82;font-size:18px" id="lanChev">›</span></h2>
+        <h2 style="cursor:pointer" id="lanToggle">🔧 备用：手动填地址 <span style="margin-left:auto;color:#948b82;font-size:18px" id="lanChev">›</span></h2>
         <div id="lanBody" class="hidden" style="margin-top:10px">
-          <p>手机与电脑连接<b>同一网络</b>时使用，延迟最低。电脑端「局域网直连」状态卡会显示形如 <b>192.168.x.x:9823</b> 的地址：</p>
+          <p>无网络或手机 ShortCut 页面拿不到入口时用。电脑端「局域网直连」状态卡会显示形如 <b>192.168.x.x:9823</b> 的地址，扫码或手填后还需输入 6 位绑定码：</p>
           <div class="row">
             <input id="hostInput" inputmode="url" autocomplete="off" placeholder="192.168.1.5:9823" />
             <button id="goBtn" type="button">打开控制页</button>
           </div>
           <div id="err" class="err"></div>
-          <div class="tip">更方便：直接用手机相机扫描桌面端「局域网直连」状态卡的二维码。</div>
+          <div class="tip">更方便：直接用手机相机扫描桌面端「局域网直连」状态卡的二维码（扫码即连，不用输码）。</div>
         </div>
       </div>
     </div>
@@ -103,7 +114,49 @@
 
     document.getElementById(bound ? 'boundWrap' : 'unboundCard').classList.remove('hidden');
 
-    // 局域网折叠区
+    // 局域网一键直连：问桌面端要"它在局域网里的地址 + 预授权令牌"，拿到就直接跳过去。
+    // 桌面端的云端 WS 连接是常驻的（与"云端连接"开关无关），所以这一步随时能问。
+    let lanBusy = false;
+    function lanHint(msg) { document.getElementById('lanErr').textContent = msg || ''; }
+
+    async function lanConnect() {
+      if (lanBusy) return;
+      const btn = document.getElementById('lanBtn');
+      const sub = document.getElementById('lanBtnSub');
+      const arrow = document.getElementById('lanBtnArrow');
+      const original = sub.textContent;
+      lanBusy = true;
+      lanHint('');
+      btn.style.opacity = '.7';
+      sub.textContent = '正在问电脑端要局域网入口…';
+      arrow.textContent = '…';
+      const r = await window.ShortCutMobile.requestDesktop('/api/lan-entry');
+      if (!r || !r.success) {
+        lanBusy = false;
+        btn.style.opacity = '';
+        sub.textContent = original;
+        arrow.textContent = '›';
+        lanHint((r && r.message) || '拿不到局域网入口');
+        return;
+      }
+      const d = r.data || {};
+      if (!d.running || !d.url || !d.token) {
+        lanBusy = false;
+        btn.style.opacity = '';
+        sub.textContent = original;
+        arrow.textContent = '›';
+        lanHint('电脑端还没开启「局域网直连」：请在桌面 ShortCut「控制」板块点一下「局域网直连」，再回到这里点一次。');
+        return;
+      }
+      sub.textContent = '正在跳转到 ' + d.url + ' …';
+      // 预授权令牌随 URL 带过去，局域网控制页会直接进入控制界面（不再要求输绑定码）
+      location.href = d.url + '/?token=' + encodeURIComponent(d.token);
+    }
+
+    const lanBtn = document.getElementById('lanBtn');
+    if (lanBtn) lanBtn.addEventListener('click', () => void lanConnect());
+
+    // 局域网折叠区（备用手动填地址）
     document.getElementById('lanToggle').addEventListener('click', () => {
       const body = document.getElementById('lanBody');
       const chev = document.getElementById('lanChev');

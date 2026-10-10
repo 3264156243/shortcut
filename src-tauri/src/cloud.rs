@@ -143,6 +143,18 @@ fn fetch_ticket(bind_id: &str, _bind_code: &str) -> Result<String, String> {
 async fn handle_api(st: &Arc<CloudState>, path: &str, body: &Value) -> (bool, u16, Value) {
     let ready = st.control_ready();
     let wrap = |ok: bool, status: u16, data: Value| (ok, status, data);
+    // 局域网入口查询：**必须在"控制通道未启用"闸门之前**。桌面端面板停在"局域网直连"时
+    // control_enabled=false，而手机正是要靠这次询问才能拿到局域网地址与令牌——被 503 挡掉
+    // 就等于"一键直连"永远拿不到入口。它不注入任何指令，只回一块只读信息；
+    // 通道本身已由中继的移动端票据鉴权保护。
+    if path == "/api/lan-entry" {
+        let entry = crate::control::lan_entry();
+        log_cloud(&format!(
+            "api <- /api/lan-entry 局域网入口 running={}",
+            entry.get("running").and_then(|v| v.as_bool()).unwrap_or(false)
+        ));
+        return wrap(true, 200, entry);
+    }
     // 控制通道没打开（面板没点过"云端连接"）：只答 ping（回报能力状态），其余一律 503。
     // 连接常驻后手机端可能"看到桌面在线"，这里必须显式拒绝注入/剪贴板类指令——
     // 与修之前"桌面离线 → 中继直接回 503 desktop offline"的可达性保持一致。

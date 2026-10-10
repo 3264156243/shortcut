@@ -162,6 +162,90 @@
       });
     },
 
+    // ── 向桌面端直接要一次答复（经云端中继）──
+    /**
+     * 有些信息只有桌面端自己知道（最典型：它在局域网里的地址 + 一键直连令牌）。
+     * 云端 WS 中继的桌面连接是**常驻**的（与桌面端"云端连接"开关解耦），所以随时可以问。
+     *
+     * 一次连接用完即关（不做持久化、不参与心跳），失败一律返回 { success:false, message }。
+     * 返回 data = 桌面端 /api/* 的响应体。
+     */
+    requestDesktop: function (path, body, timeoutMs) {
+      var b = binding();
+      if (!b || !b.bindId || !b.mobileToken) {
+        return Promise.resolve({ success: false, message: '尚未绑定桌面端', needBind: true });
+      }
+      if (typeof WebSocket === 'undefined') {
+        return Promise.resolve({ success: false, message: '当前环境不支持实时通道' });
+      }
+      var limit = timeoutMs || 9000;
+      var relay = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/relay-ws';
+      return fetchJson(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'control.ticket', protocolVersion: PROTOCOL_VERSION,
+          bindId: b.bindId, mobileToken: b.mobileToken, side: 'mobile', role: 'mobile',
+        }),
+      }).then(function (r) {
+        if (!r || !r.success || !r.ticket) {
+          return { success: false, message: (r && r.message) || '获取连接凭证失败' };
+        }
+        return new Promise(function (resolve) {
+          var ws = null;
+          var done = false;
+          var id = 'r' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
+          var finish = function (result) {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            try { if (ws) ws.close(); } catch (e) { /* 忽略 */ }
+            resolve(result);
+          };
+          var timer = setTimeout(function () {
+            finish({ success: false, message: '桌面端没有响应（超时）' });
+          }, limit);
+          try {
+            ws = new WebSocket(relay);
+          } catch (e) {
+            return finish({ success: false, message: '无法连接实时通道' });
+          }
+          ws.onopen = function () {
+            try {
+              ws.send(JSON.stringify({ auth: { role: 'mobile', bindId: b.bindId, ticket: r.ticket } }));
+            } catch (e) {
+              finish({ success: false, message: '发送鉴权失败' });
+            }
+          };
+          ws.onmessage = function (ev) {
+            var msg = null;
+            try { msg = JSON.parse(ev.data); } catch (e) { return; }
+            if (!msg || !msg.t) return;
+            if (msg.t === 'auth-fail') {
+              return finish({ success: false, message: msg.error === 'ticket invalid or expired' ? '连接凭证已失效，请重试' : ('实时通道拒绝：' + (msg.error || '未知')) });
+            }
+            if (msg.t === 'auth-ok') {
+              // 桌面端不在线就没必要再等（中继明确给了在线状态）
+              if (msg.desktopOnline === false) {
+                return finish({ success: false, desktopOffline: true, message: '电脑端不在线（请确认桌面 ShortCut 正在运行）' });
+              }
+              try {
+                ws.send(JSON.stringify({ t: 'api', id: id, path: path, body: body || {} }));
+              } catch (e) {
+                finish({ success: false, message: '发送请求失败' });
+              }
+              return;
+            }
+            if (msg.t === 'api-res' && String(msg.id) === id) {
+              return finish({ success: !!msg.ok, status: msg.status || 200, data: msg.data || {} });
+            }
+          };
+          ws.onerror = function () { finish({ success: false, message: '实时通道连接失败' }); };
+          ws.onclose = function () { finish({ success: false, message: '实时通道已断开' }); };
+        });
+      });
+    },
+
     // ── 模块清单（服务端权威：modules.json）──
     modules: function () {
       var p = sdk.isBound() ? sdk.request('module.list') : sdk.requestPublic('module.list');
