@@ -5,7 +5,8 @@
   const $ = (id) => document.getElementById(id);
   const RELAY_URL = 'wss://shortcut.326415.xyz/relay-ws';
   const API_BASE = 'https://shortcut.326415.xyz/sync/api.php';
-  // 绑定身份统一走共享 SDK（sdk.js）：不再各自声明存储键\r\n  const BIND_URL = '/bind/';
+  // 绑定身份统一走共享 SDK（sdk.js）：不再各自声明存储键
+  const BIND_URL = '/bind/';
   const API_TIMEOUT = 8000;
   const RECONNECT_MS = 3000;
 
@@ -29,7 +30,10 @@
   let mods = { ctrl: false, shift: false, alt: false, win: false };
   let activeSheet = null; // 'pad' | 'vk' | 'clip' | null
 
-  function loadBinding() {\r\n    var s = window.ShortCutMobile;\r\n    return s && s.isBound() ? s.binding() : null;\r\n  }
+  function loadBinding() {
+    var s = window.ShortCutMobile;
+    return s && s.isBound() ? s.binding() : null;
+  }
 
   /* ---------- 云中继连接 ---------- */
   function wsSend(obj) {
@@ -206,20 +210,10 @@
     return queue;
   }
 
-  async function api(path, body) {
-    const res = await fetch(path, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer ' + token,
-      },
-      body: JSON.stringify(body || {}),
-    });
-    const data = await res.json().catch(() => ({}));
-    return { ok: res.ok, status: res.status, data };
-  }
-
-  function authFail() { return false; /* 云模式：鉴权在中继层，预留兼容 */ }
+  // 说明：这里曾残留一份"局域网版"复制的 api()（fetch + Authorization: Bearer <token>）与 authFail() 桩。
+  // 同作用域内函数声明会互相覆盖，导致真正生效的是那份 fetch 版，而它引用的 token 全文件从未声明
+  // → 所有指令调用时抛 ReferenceError，又被 enqueue 的 catch 吞掉，表现为"点了没反应"。
+  // 云模式的指令一律走上面的 api() → rawApi()（中继 WS），不要再往这里加 HTTP 实现。
 
   function sendText(text) {
     if (!text) return;

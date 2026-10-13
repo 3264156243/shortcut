@@ -52,3 +52,29 @@ rebuild-codexplusplus-dream-skin.js
 builder-debug.yml
 builder-effective-config.yaml
 tauri-setup.log
+
+# ===== 安卓端（android/，原生 Kotlin，2026-10-10 起）=====
+# 构建产物与缓存
+android/.gradle/
+android/build/
+android/**/build/
+android/.cxx/
+android/captures/
+android/local.properties
+android/.idea/
+*.hprof
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# 🔴 签名材料：绝不入库（keystore 泄露 = 签名密钥泄露，别人可签发假冒更新包）
+*.keystore
+*.jks
+keystore.properties
+signing.properties
+
+# Gradle wrapper 必须入库（换机器/CI 靠它对齐 Gradle 版本），所以显式放行
+!android/gradle/wrapper/gradle-wrapper.jar
+!android/gradle/wrapper/gradle-wrapper.properties
+
