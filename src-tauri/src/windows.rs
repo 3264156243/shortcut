@@ -192,6 +192,53 @@ fn island_hit_rect() -> (f64, f64, f64, f64) {
     }
 }
 
+/// 命中框是否落在窗口内（带一点余量）。
+/// 为什么需要：上报来自岛前端，理论上一定是窗口内坐标；但实测出现过"窗口被撑成整桌面"
+/// （可见内容矩形 x=742 而窗口逻辑宽只有 360）这种异常状态。异常值会让"光标是否在球上"
+/// 永远判否 → 球永远穿透 → 用户看到"穿透开关怎么切都没用"。这里做一次合理性过滤，
+/// 异常时退回整窗（宁可整窗可交互，也不要"看起来开关坏了"）。
+fn hit_rect_is_sane(rect: (f64, f64, f64, f64), win_logical_w: f64, win_logical_h: f64) -> bool {
+    let (x, y, w, h) = rect;
+    w > 0.0 && h > 0.0 && x >= -8.0 && y >= -8.0 && x + w <= win_logical_w + 8.0 && y + h <= win_logical_h + 8.0
+}
+
+/// 岛窗口的逻辑尺寸（物理 ÷ 缩放）。用 `scale_factor()` 而不是"宽/常量"——
+/// 后者在窗口尺寸被外部改过时会算出荒唐的缩放比（实测 1721/360 = 4.78，而真实缩放是 1.5）。
+fn island_logical_size(win: &tauri::WebviewWindow) -> Option<(f64, f64)> {
+    let size = win.inner_size().ok()?;
+    let scale = win.scale_factor().ok().filter(|s| *s > 0.0).unwrap_or(1.0);
+    Some((size.width as f64 / scale, size.height as f64 / scale))
+}
+
+/// 岛窗口尺寸不变式：岛是 `resizable(false)` 的 360×340 透明窗，尺寸只应由
+/// [`island_bounds`] 决定。实测出现过它被撑成整个桌面（1721×1081）的异常状态——
+/// 那会让"光标在哪/命中框在哪"整体错位（穿透判定失效、拖放守卫几乎处处命中）。
+/// 这里做自愈：发现不一致就纠正回 `island_bounds`，并**大声留痕**，
+/// 便于下次拿到时间点去定位是谁改的（当前代码里没有任何地方给 island 调 set_size）。
+pub fn enforce_island_size(app: &tauri::AppHandle) {
+    let Some(win) = app.get_webview_window("island") else {
+        return;
+    };
+    let prefs = island_prefs();
+    let (_, _, want_w, want_h) = island_bounds(app, &prefs);
+    let Some((got_w, got_h)) = island_logical_size(&win) else {
+        return;
+    };
+    if (got_w - want_w).abs() > 4.0 || (got_h - want_h).abs() > 4.0 {
+        log::warn!(
+            "[island] 窗口尺寸异常 {}×{}（应为 {}×{}），已纠正。请把这条日志交给开发者定位来源",
+            got_w.round(),
+            got_h.round(),
+            want_w,
+            want_h
+        );
+        let _ = win.set_size(tauri::LogicalSize::new(want_w, want_h));
+        // 尺寸变了，命中框与穿透都要重算
+        reset_passthrough_cache();
+        apply_island_and_ball_passthrough(app);
+    }
+}
+
 /// 光标是否落在岛的**可见内容**上（物理↔逻辑像素按窗口缩放比换算）
 #[cfg(windows)]
 fn cursor_over_island_content(app: &tauri::AppHandle) -> bool {
@@ -217,11 +264,15 @@ fn cursor_over_island_content(app: &tauri::AppHandle) -> bool {
     if size.width == 0 || size.height == 0 {
         return false;
     }
-    // outer_* 是物理像素；缩放比用"实际宽 / 逻辑宽"直接求，比 scale_factor 更贴合真实窗口
-    let scale = size.width as f64 / ISLAND_WIDTH;
+    let scale = win.scale_factor().ok().filter(|s| *s > 0.0).unwrap_or(1.0);
     let lx = (pt.x - pos.x) as f64 / scale;
     let ly = (pt.y - pos.y) as f64 / scale;
-    let (rx, ry, rw, rh) = island_hit_rect();
+    let (win_w, win_h) = island_logical_size(&win).unwrap_or((ISLAND_WIDTH, ISLAND_HEIGHT));
+    let mut rect = island_hit_rect();
+    if !hit_rect_is_sane(rect, win_w, win_h) {
+        rect = (0.0, 0.0, win_w, win_h); // 异常上报：退回整窗
+    }
+    let (rx, ry, rw, rh) = rect;
     lx >= rx && lx <= rx + rw && ly >= ry && ly <= ry + rh
 }
 
@@ -627,6 +678,7 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
         const RELEASE_GRACE_MS: u64 = 500;
         let mut armed = false;
         let mut release_until: Option<std::time::Instant> = None;
+        let mut size_check_tick: u32 = 0;
         loop {
             // 轮询间隔自适应：只有在"穿透值会随光标变化"时才需要快轮询
             // （启用穿透=恒定穿透、展开态=整窗可交互，两者都与光标无关）。
@@ -634,6 +686,11 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
             let needs_cursor = !BALL_PASSTHROUGH.load(Ordering::Relaxed)
                 && island_prefs().get("displayState").and_then(|v| v.as_str()) != Some("expanded");
             std::thread::sleep(std::time::Duration::from_millis(if needs_cursor { 40 } else { 120 }));
+            // 每 ~2 秒体检一次岛窗口尺寸（自愈 + 留痕），别每轮都查
+            size_check_tick += 1;
+            if size_check_tick % 50 == 0 {
+                enforce_island_size(&app);
+            }
             let Some(win) = app.get_webview_window("island") else {
                 continue;
             };

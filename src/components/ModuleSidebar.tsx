@@ -157,7 +157,12 @@ export default function ModuleSidebar({ updateState, onUpdateClick, onShowKeyboa
           />
           {moreOpen && (
             <div
-              className="absolute bottom-0 left-full z-50 ml-2 flex w-40 flex-col gap-1 overflow-hidden rounded-xl p-1.5"
+              /* 层级：必须高于任务便签与"正在拖动的便签"。
+                 约定见 TaskBoard.tsx 顶部：便签 1..999（拖动时临时 10000）、弹层 1000+、
+                 拖拽幽灵 13000、任务板自己的弹窗 14000+。这里取 11000：
+                 压得住便签（含拖动中的 10000），又不至于盖住任务板的弹窗。
+                 历史 bug：这里原本是 z-50，便签一旦递增过 50 就把"更多"菜单盖住了。 */
+              className="absolute bottom-0 left-full z-[11000] ml-2 flex w-40 flex-col gap-1 overflow-hidden rounded-xl p-1.5"
               style={{
                 background: 'var(--color-bg-secondary)',
                 border: '1px solid var(--color-border)',
