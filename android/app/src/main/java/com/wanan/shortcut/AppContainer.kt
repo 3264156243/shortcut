@@ -48,4 +48,17 @@ class AppContainer(context: Context) {
 
     // ---- feature ViewModels ----
     fun bindViewModel(): BindViewModel = BindViewModel(apiClient, identityProvider, errorMapper)
+
+    /**
+     * 板块的 ViewModel 也在这里构造，保证依赖（apiClient/errorMapper）只有一处来源。
+     *
+     * 这是"加板块只改一个文件"的**唯一例外**：注册表要加一行，这里要加一个构造方法。
+     * 之所以接受：ViewModel 需要依赖注入，而 Kotlin 没有零成本的自动装配；
+     * 两处改动都是"加一行"，且都在框架层可见，不会漏。
+     */
+    fun taskwallViewModel(): com.wanan.shortcut.feature.taskwall.TaskwallViewModel =
+        com.wanan.shortcut.feature.taskwall.TaskwallViewModel(
+            repository = com.wanan.shortcut.feature.taskwall.TaskwallRepository(apiClient),
+            errorMapper = errorMapper,
+        )
 }

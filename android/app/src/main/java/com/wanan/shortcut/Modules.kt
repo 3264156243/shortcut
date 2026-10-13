@@ -1,6 +1,7 @@
 package com.wanan.shortcut
 
 import com.wanan.shortcut.feature.demo.DemoModule
+import com.wanan.shortcut.feature.taskwall.TaskwallModule
 import com.wanan.shortcut.framework.ShortcutModule
 
 /**
@@ -21,8 +22,8 @@ object Modules {
         // —— 框架自证：假板块。它存在的唯一目的是证明"加一行就能多一个入口"。
         DemoModule(),
 
-        // —— P1：任务墙（queue 能力）
-        // TaskwallModule(),
+        // —— P1：任务墙（queue 能力）★ 加入这一行就完成了整个板块的接入
+        TaskwallModule(),
 
         // —— P2：电脑控制（realtime 能力 + 前台服务）
         // ControlModule(),

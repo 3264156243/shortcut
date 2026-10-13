@@ -122,3 +122,27 @@ interface ModuleNavigator {
     /** 切换到另一个板块（按 id） */
     fun switchModule(moduleId: String)
 }
+
+/**
+ * 当前板块的子路由（框架维护，板块只读）。
+ *
+ * 用法：板块在 [ShortcutModule.Screen] 里读它来决定渲染哪个子页：
+ * ```kotlin
+ * when (LocalModuleSubRoute.current) {
+ *     null -> ListPage(onCompose = { navigator.to("compose") })
+ *     "compose" -> ComposePage(onBack = navigator::back)
+ *     else -> ListPage(...)
+ * }
+ * ```
+ *
+ * 为什么用 CompositionLocal 而不是让板块自己存 `remember` 状态：
+ * 子路由要能响应系统返回键、并在进程重建后恢复，这属于宿主职责。
+ * 板块只声明"有哪些子页"，不承担导航框架的复杂度。
+ */
+val LocalModuleSubRoute = androidx.compose.runtime.compositionLocalOf<String?> { null }
+
+/** 由框架调用，把子路由注入给板块。 */
+@Composable
+fun ProvideModuleSubRoute(route: String?, content: @Composable () -> Unit) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalModuleSubRoute provides route, content)
+}
