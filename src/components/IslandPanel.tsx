@@ -153,7 +153,7 @@ export default function IslandPanel() {
               </div>
             </div>
             <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-              <Film size={14} /> 按住SC球拖动移动位置，Alt+I 显示或隐藏
+              <Film size={14} /> 关闭穿透时按住SC球可拖动移动位置；Alt+I 显示或隐藏
             </div>
           </div>
         </div>
@@ -165,10 +165,10 @@ export default function IslandPanel() {
             {toggleRow('启用穿透（点不到球，直接操作下面的窗口）', ballThrough, (v) => void toggleBallThrough(v))}
             <p className="text-[11px] leading-5" style={{ color: 'var(--color-text-muted)' }}>
               {ballThrough
-                ? '已开启：整个 SC 球都不接收鼠标，点击直接落到桌面/下层窗口。'
-                : '已关闭：鼠标移到球上就能点（可拖动、可展开/菜单），移开后球周围不挡桌面点击。'}
+                ? '已开启：整个 SC 球都不接收鼠标，点击直接落到桌面/下层窗口（此时也不能按住球拖动）。'
+                : '已关闭：鼠标移到球上就能点（可按住拖动移动位置、可展开/菜单），移开后球周围不挡桌面点击。'}
               <br />
-              展开状态下球始终可交互；拖文件到球上时会自动临时解除穿透。快捷键 {ballShortcut}（可切换）。
+              展开状态下球始终可交互；拖文件到球上时会自动临时解除穿透（仅用于接收文件，不会让球变成可拖动）。快捷键 {ballShortcut}（可切换）。
             </p>
           </div>
         </div>

@@ -136,6 +136,8 @@ function IslandApp() {
   const [balance, setBalance] = useState<BalanceData | null>(null);
   const [seekPreview, setSeekPreview] = useState<number | null>(null);
   const [arrival, setArrival] = useState(false);
+  /** 鼠标穿透开关（用户设置）。true 时球不接收鼠标 → 也不允许按住拖动移动位置。 */
+  const [ballThrough, setBallThrough] = useState(false);
   const positionAnchorRef = useRef<{ positionMs: number; at: number } | null>(null);
   const lastDisplayIndexRef = useRef(-1);
   const songKeyRef = useRef('');
@@ -144,6 +146,18 @@ function IslandApp() {
   useEffect(() => {
     const timer = window.setInterval(() => setTime(nowText()), 250);
     return () => window.clearInterval(timer);
+  }, []);
+
+  /**
+   * 跟随穿透开关（设置页切换 / Ctrl+Alt+B 都会广播 ball:passthrough）。
+   *
+   * 用途：决定外壳是否作为"拖窗区域"（.grabbable）。
+   * 规则（用户要求）：**拖拽移动球只在不可穿透时支持**。
+   * 穿透开启时球连鼠标都不接收，自然也不该能被拖走。
+   */
+  useEffect(() => {
+    void window.electronAPI?.ballState?.().then((s) => setBallThrough(!!s?.passthrough));
+    return window.electronAPI?.onBallPassthrough?.((d) => setBallThrough(!!d?.on));
   }, []);
 
   useEffect(() => {
@@ -443,7 +457,7 @@ function IslandApp() {
           </svg>
         </div>
       ) : null}
-      <div className="island-shell">
+      <div className={ballThrough ? 'island-shell' : 'island-shell grabbable'}>
         {drop.phase !== 'idle' && <IslandDropView drop={drop} />}
         {showMusic ? (
           <div className="island-mini">

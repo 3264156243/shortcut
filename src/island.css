@@ -5,7 +5,11 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
 .island-root { position: absolute; inset: 0; display: flex; align-items: flex-start; justify-content: center; pointer-events: auto; padding-top: 10px; }
 .island-shell {
   position: relative;
-  -webkit-app-region: drag;
+  /* 注意：这里**不再**直接写 -webkit-app-region: drag。
+     拖动移动球要求"当前不可穿透"，而 app-region 是 OS 级行为、JS 拦不住，
+     所以它收敛到下面的 `.island-shell.grabbable`（由前端按穿透开关动态加类）。
+     背景：穿透开着时，拖放守卫会为了接收文件拖放而临时把窗口变可交互，
+     那一刻若外壳仍是 drag 区域，用户按住球就能把它拖走——与"穿透=不接收鼠标"矛盾。 */
   width: fit-content;
   min-width: 120px;
   max-width: 380px;
@@ -26,6 +30,9 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
     box-shadow .5s cubic-bezier(.22,1,.36,1);
   will-change: height, padding, border-radius;
 }
+/* 只有"当前不可穿透"时外壳才是拖窗区域（按住球移动位置）。
+   穿透开启 → 球不接收鼠标，自然也不能被拖走；由 island.tsx 按开关状态加/去这个类。 */
+.island-shell.grabbable { -webkit-app-region: drag; }
 .island-root.expanded .island-shell {
   height: 312px;
   padding: 14px 16px;

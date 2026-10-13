@@ -50,7 +50,8 @@
   gap: 6px;
   width: 100%;
   padding-bottom: 10px;
-  /* 外壳是 -webkit-app-region: drag，交互元素必须显式 no-drag 才能点 */
+  /* 外壳在"未穿透"时是 -webkit-app-region: drag（.island-shell.grabbable），
+     交互元素必须显式 no-drag 才能点；穿透时外壳不是 drag 区域，这里保持 no-drag 也无副作用 */
   -webkit-app-region: no-drag;
   animation: island-drop-in 170ms ease-out;
 }
