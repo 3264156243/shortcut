@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 所有用户可见文案集中在此，不散落在代码里（为将来多语言留路） -->
+<resources>
+    <string name="app_name">ShortCut</string>
+
+    <!-- 通用 -->
+    <string name="common_retry">重试</string>
+    <string name="common_cancel">取消</string>
+    <string name="common_confirm">确定</string>
+    <string name="common_loading">加载中…</string>
+    <string name="common_empty">暂无内容</string>
+    <string name="common_copied">已复制</string>
+
+    <!-- 绑定 -->
+    <string name="bind_title">连接电脑</string>
+    <string name="bind_subtitle">在电脑端 ShortCut 打开「移动互联」，输入下方 6 位绑定码</string>
+    <string name="bind_code_hint">6 位绑定码</string>
+    <string name="bind_device_name_hint">设备名称（可选）</string>
+    <string name="bind_action">绑定</string>
+    <string name="bind_code_invalid">绑定码无效，请检查后重试</string>
+    <string name="bind_code_empty">请输入绑定码</string>
+
+    <!-- 首页 -->
+    <string name="home_title">ShortCut</string>
+    <string name="home_bound_to">已连接</string>
+    <string name="home_not_bound">未连接电脑</string>
+    <string name="home_go_bind">去连接</string>
+    <string name="home_module_disabled">该功能暂未开放</string>
+    <string name="home_need_upgrade">客户端版本过低，请升级后使用</string>
+
+    <!-- 设置 -->
+    <string name="settings_title">设置</string>
+    <string name="settings_binding">连接与设备</string>
+    <string name="settings_device_name">本机名称</string>
+    <string name="settings_unbind">断开连接</string>
+    <string name="settings_unbind_confirm">断开后需要重新输入绑定码才能连接，确定吗？</string>
+    <string name="settings_about">关于</string>
+    <string name="settings_version">版本</string>
+    <string name="settings_protocol">协议版本</string>
+
+    <!-- 错误（与服务端 message 对齐，见 core/error/ErrorMapper.kt） -->
+    <string name="err_bind_expired">连接已失效，请重新绑定</string>
+    <string name="err_rate_limited">操作太快了，请稍后再试</string>
+    <string name="err_network">网络不可用，请检查网络连接</string>
+</resources>

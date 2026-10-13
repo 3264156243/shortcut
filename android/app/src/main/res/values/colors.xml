@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="sc_background">#FF0E1116</color>
+    <color name="sc_surface">#FF161B22</color>
+    <color name="sc_primary">#FF4C8DFF</color>
+    <color name="sc_on_background">#FFE6EDF3</color>
+</resources>

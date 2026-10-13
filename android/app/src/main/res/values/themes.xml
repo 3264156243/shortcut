@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 深色底 + 亮色强调，与桌面端 SC 球观感一致；Compose 侧见 ui/theme/Theme.kt -->
+    <style name="Theme.ShortCut" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/sc_background</item>
+        <item name="android:statusBarColor">@color/sc_background</item>
+        <item name="android:navigationBarColor">@color/sc_background</item>
+    </style>
+</resources>

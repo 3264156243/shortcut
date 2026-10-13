@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  局域网一键直连要访问 http://192.168.x.x:9823，Android 9+ 默认禁止明文 HTTP。
+  契约 §8.5 / 规范 §8.7：不配这个 = 局域网控制静默失败。
+
+  ⚠️ 实测结论（2026-10-13，查证后确定，勿改回"看起来更严谨"的写法）：
+  network-security-config 的 <domain> 对 IP 地址只做【精确匹配】，且【不支持 CIDR / 通配符】。
+  下面这些写法全部无效，会导致功能静默失败：
+      <domain>192.168.0.0</domain>          → 只匹配字面量 192.168.0.0，匹配不到 192.168.1.5
+      <domain>192.168.*.*</domain>          → 不支持
+      <domain>192.168.0.1/16</domain>       → 不支持
+  而局域网 IP 由桌面端在运行时决定、每次「一键直连」都可能变（契约 §8.5-2 明确要求不要缓存 IP），
+  因此【无法在构建期枚举】。唯一可靠做法是 base-config 放行明文。
+
+  安全权衡（有意为之，不是疏忽）：
+  - 本 App 所有云端请求都由 core/net/Endpoints.kt 硬编码为 https://，明文放行不等于降级；
+  - 明文只可能发生在"局域网设备直连"这一条链路上，且其 token 来自已鉴权的云端通道（契约 §8.2）；
+  - 若将来要求更严，可改为"白名单 + 运行时校验 IP 是否属私网段"的应用层策略（框架已预留 Endpoints 集中管理）。
+-->
+<network-security-config>
+    <!-- 放行明文（含局域网 HTTP）；云端仍按 https:// 走 TLS，不受影响 -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
