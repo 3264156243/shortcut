@@ -24,6 +24,24 @@ export default function IslandPanel() {
   const [deepseekKey, setDeepseekKey] = useState('');
   const [opencodeKey, setOpencodeKey] = useState('');
 
+  // ── SC 球鼠标穿透（从转换板块迁来）──
+  const [ballThrough, setBallThrough] = useState(false);
+  const [ballShortcut, setBallShortcut] = useState('Ctrl+Alt+B');
+  useEffect(() => {
+    void window.electronAPI?.ballState?.().then((s) => {
+      if (!s) return;
+      setBallThrough(!!s.passthrough);
+      if (s.shortcut) setBallShortcut(s.shortcut);
+    });
+    // 快捷键（Ctrl+Alt+B）切换时主进程会广播状态，这里跟着走
+    return window.electronAPI?.onBallPassthrough?.((d) => setBallThrough(!!d?.on));
+  }, []);
+  const toggleBallThrough = async (on: boolean) => {
+    setBallThrough(on);
+    const res = await window.electronAPI?.ballPassthrough?.(on);
+    if (res && res.success === false) setBallThrough(!on);
+  };
+
   useEffect(() => {
     setDeepseekKey(island.deepseekApiKey || '');
   }, [island.deepseekApiKey]);
@@ -137,6 +155,21 @@ export default function IslandPanel() {
             <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs" style={{ background: 'var(--color-bg-card-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
               <Film size={14} /> 按住SC球拖动移动位置，Alt+I 显示或隐藏
             </div>
+          </div>
+        </div>
+
+        {/* 鼠标穿透（原在「转换板块 → 齿轮设置」里，2026-10-13 迁到此处：它是球的属性，不属于转换） */}
+        <div style={sectionStyle}>
+          <div style={titleStyle}>鼠标穿透</div>
+          <div className="flex flex-col gap-3">
+            {toggleRow('启用穿透（点不到球，直接操作下面的窗口）', ballThrough, (v) => void toggleBallThrough(v))}
+            <p className="text-[11px] leading-5" style={{ color: 'var(--color-text-muted)' }}>
+              {ballThrough
+                ? '已开启：整个 SC 球都不接收鼠标，点击直接落到桌面/下层窗口。'
+                : '已关闭：鼠标移到球上就能点（可拖动、可展开/菜单），移开后球周围不挡桌面点击。'}
+              <br />
+              展开状态下球始终可交互；拖文件到球上时会自动临时解除穿透。快捷键 {ballShortcut}（可切换）。
+            </p>
           </div>
         </div>
 

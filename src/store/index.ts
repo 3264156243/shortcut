@@ -210,6 +210,12 @@ declare global {
       ballShape: (shape: 'collapsed' | 'hint' | 'menu') => Promise<{ success: boolean; shape?: string; error?: string }>;
       ballPassthrough: (on: boolean) => Promise<{ success: boolean; on: boolean }>;
       ballState: () => Promise<{ passthrough: boolean; shortcut: string }>;
+      /**
+       * 岛前端上报"可见内容矩形"（逻辑像素，窗口坐标）。
+       * 主进程据此判断"不穿透时哪些区域才接收鼠标"——岛窗口是 360×340 的透明窗，
+       * 整窗接收鼠标会吞掉球周围那一圈桌面点击。
+       */
+      islandHitRect: (x: number, y: number, w: number, h: number) => Promise<{ success: boolean }>;
       ballOpenInPanel: (paths: string[]) => Promise<{ success: boolean }>;
       setBlurGuard: (on: boolean) => Promise<{ success: boolean; guard: boolean }>;
       debugLog: (msg: string) => Promise<unknown>;

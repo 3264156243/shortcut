@@ -108,8 +108,8 @@ export default function SettingsPanel() {
   const setModuleGroup = useStore((s) => s.setModuleGroup);
   const licenseModuleAccess = useStore((s) => s.licenseModuleAccess);
   const { t } = useTranslation();
-  // 资源管理器集成 / SC 球穿透 / 文件转换默认项 —— 已迁到「转换板块 → 齿轮设置」，
-  // 见 src/components/ConverterSettings.tsx（总设置里不再保留这三段）。
+  // 资源管理器集成 / 文件转换默认项 —— 已迁到「转换板块 → 齿轮设置」（ConverterSettings.tsx）。
+  // SC 球穿透 单独在「SC 球」板块（IslandPanel.tsx「鼠标穿透」小节），2026-10-13 从转换设置迁回。
   const themes: { value: 'dark' | 'light' | 'system'; labelKey: string; icon: typeof Moon }[] = [
     { value: 'dark', labelKey: 'settings.theme.dark', icon: Moon },
     { value: 'light', labelKey: 'settings.theme.light', icon: Sun },

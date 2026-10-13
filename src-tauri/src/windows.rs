@@ -160,16 +160,88 @@ fn drag_active() -> bool {
     until > 0 && now_ms() < until
 }
 
-/// 应用鼠标穿透（SC球=岛）：开关打开→恒定穿透；关闭→沿用原岛规则（收起态穿透、展开态可交互）；
-/// 拖放菜单打开期间强制不穿透（否则点不到菜单）。
-pub fn apply_passthrough(win: &tauri::WebviewWindow) {
-    let _ = win.set_ignore_cursor_events(effective_island_passthrough());
+/// 岛"可见内容"在窗口内的矩形（**逻辑/CSS 像素**，相对窗口左上角）。
+///
+/// 为什么需要：岛窗口是固定 360×340 的透明窗（远大于收起态那颗球），
+/// 如果整窗接收鼠标，球周围那一大圈透明区就会吞掉桌面点击。
+/// 所以"不穿透"时也不该整窗可交互，而应只在**可见内容上**可交互——
+/// 这个矩形由岛前端（`.island-root` 的 getBoundingClientRect）上报，随布局变化更新。
+/// 默认值取整窗：前端没上报时退化为"整窗可交互"，与改动前的展开态行为一致（安全兜底）。
+static ISLAND_HIT_RECT: std::sync::Mutex<(f64, f64, f64, f64)> =
+    std::sync::Mutex::new((0.0, 0.0, ISLAND_WIDTH, ISLAND_HEIGHT));
+
+/// 岛前端上报可见内容矩形（逻辑像素，窗口坐标系）
+pub fn set_island_hit_rect(x: f64, y: f64, w: f64, h: f64) {
+    let mut r = match ISLAND_HIT_RECT.lock() {
+        Ok(g) => g,
+        Err(e) => e.into_inner(),
+    };
+    let next = (x, y, w.max(0.0), h.max(0.0));
+    let same = (*r).0 == next.0 && (*r).1 == next.1 && (*r).2 == next.2 && (*r).3 == next.3;
+    if same {
+        return; // 没变化不刷日志
+    }
+    *r = next;
+    log::info!("[island] 可见内容矩形 = ({:.0},{:.0},{:.0}×{:.0})", x, y, w, h);
+}
+
+fn island_hit_rect() -> (f64, f64, f64, f64) {
+    match ISLAND_HIT_RECT.lock() {
+        Ok(g) => *g,
+        Err(e) => *e.into_inner(),
+    }
+}
+
+/// 光标是否落在岛的**可见内容**上（物理↔逻辑像素按窗口缩放比换算）
+#[cfg(windows)]
+fn cursor_over_island_content(app: &tauri::AppHandle) -> bool {
+    #[repr(C)]
+    struct Pt {
+        x: i32,
+        y: i32,
+    }
+    #[link(name = "user32")]
+    unsafe extern "system" {
+        fn GetCursorPos(p: *mut Pt) -> i32;
+    }
+    let Some(win) = app.get_webview_window("island") else {
+        return false;
+    };
+    let mut pt = Pt { x: 0, y: 0 };
+    if unsafe { GetCursorPos(&mut pt) } == 0 {
+        return false;
+    }
+    let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) else {
+        return false;
+    };
+    if size.width == 0 || size.height == 0 {
+        return false;
+    }
+    // outer_* 是物理像素；缩放比用"实际宽 / 逻辑宽"直接求，比 scale_factor 更贴合真实窗口
+    let scale = size.width as f64 / ISLAND_WIDTH;
+    let lx = (pt.x - pos.x) as f64 / scale;
+    let ly = (pt.y - pos.y) as f64 / scale;
+    let (rx, ry, rw, rh) = island_hit_rect();
+    lx >= rx && lx <= rx + rw && ly >= ry && ly <= ry + rh
+}
+
+#[cfg(not(windows))]
+fn cursor_over_island_content(_app: &tauri::AppHandle) -> bool {
+    true
 }
 
 /// SC球（岛）当前是否穿透——唯一判定入口：快捷键 / 设置开关 / 拖放守卫 / 状态变化都走这里。
-/// 优先级：拖拽进行中（不穿透）> 拖放菜单打开（不穿透）> 用户开关（穿透）> 岛自身显示状态。
-/// 用"菜单打开"而不是硬编码 false，避免用户开关被别处覆盖。
-pub fn effective_island_passthrough() -> bool {
+///
+/// 优先级与语义（2026-10-13 修正，见 docs/球穿透开关修复说明.md）：
+///   1. 拖拽进行中 / 拖放菜单打开 → **不穿透**（否则收不到拖放、点不到菜单）
+///   2. 用户开关打开（启用穿透）→ **恒定穿透**（连可见的球一起穿透，交给下层窗口）
+///   3. 展开态 → **不穿透**（整窗可交互，就是原来的行为）
+///   4. 收起 / 迷你态 → **跟随可见内容**：光标在球的矩形内则不穿透，移开即穿透
+///
+/// 第 4 条是本次修复的核心：改之前"非展开态"一律穿透，导致"启用穿透"开关在收起态
+/// 怎么切都没差别（`PASSTHROUGH_APPLIED` 缓存发现值没变，连窗口样式都不下发），
+/// 用户看到的就是"状态变了，但实际还是能穿透"。
+pub fn effective_island_passthrough(app: &tauri::AppHandle) -> bool {
     use std::sync::atomic::Ordering;
     if drag_active() {
         return false;
@@ -181,12 +253,16 @@ pub fn effective_island_passthrough() -> bool {
         return true;
     }
     let prefs = island_prefs();
-    prefs.get("displayState").and_then(|v| v.as_str()) != Some("expanded")
+    if prefs.get("displayState").and_then(|v| v.as_str()) == Some("expanded") {
+        return false;
+    }
+    !cursor_over_island_content(app)
 }
 
 /// 把穿透状态同时落到岛和旁边小球（小球跟随岛，不单独开关）
 pub fn apply_island_and_ball_passthrough(app: &tauri::AppHandle) {
-    apply_island_and_ball_passthrough_value(app, effective_island_passthrough(), false);
+    let on = effective_island_passthrough(app);
+    apply_island_and_ball_passthrough_value(app, on, false);
 }
 
 /// 让缓存失效：窗口刚创建/重建、或外部改过样式之后必须调用一次
@@ -552,7 +628,12 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
         let mut armed = false;
         let mut release_until: Option<std::time::Instant> = None;
         loop {
-            std::thread::sleep(std::time::Duration::from_millis(120));
+            // 轮询间隔自适应：只有在"穿透值会随光标变化"时才需要快轮询
+            // （启用穿透=恒定穿透、展开态=整窗可交互，两者都与光标无关）。
+            // 收起/迷你态快轮询是给"球可点、周围不挡"用的：慢了会出现"快速点一下没反应"。
+            let needs_cursor = !BALL_PASSTHROUGH.load(Ordering::Relaxed)
+                && island_prefs().get("displayState").and_then(|v| v.as_str()) != Some("expanded");
+            std::thread::sleep(std::time::Duration::from_millis(if needs_cursor { 40 } else { 120 }));
             let Some(win) = app.get_webview_window("island") else {
                 continue;
             };

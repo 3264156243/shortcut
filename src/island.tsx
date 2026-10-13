@@ -215,6 +215,47 @@ function IslandApp() {
     };
   }, []);
 
+  /**
+   * 上报"可见内容矩形"给主进程。
+   *
+   * 为什么需要：岛窗口是固定 360×340 的透明窗，收起态那颗球只占其中一小块。
+   * 主进程的穿透判定要用它来决定"不穿透时哪些区域真的接收鼠标"——
+   * 否则整窗可交互会把球周围一圈的桌面点击全部吞掉（改之前为避免这个问题，
+   * 干脆让"非展开态一律穿透"，副作用是穿透开关在收起态完全失效）。
+   *
+   * 量的必须是 **.island-shell**（真正的可见/可拖拽内容），不是 .island-root：
+   * 后者是 `position:absolute; inset:0` 铺满整窗的容器，量它等于没量。
+   */
+  useEffect(() => {
+    let raf = 0;
+    let last = '';
+    const report = () => {
+      const el = (document.querySelector('.island-shell') || document.querySelector('.island-root')) as HTMLElement | null;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const payload = { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) };
+      const key = `${payload.x},${payload.y},${payload.w},${payload.h}`;
+      if (key === last) return; // 没变不重复 IPC
+      last = key;
+      void window.electronAPI?.islandHitRect?.(payload.x, payload.y, payload.w, payload.h);
+    };
+    const schedule = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(report);
+    };
+    schedule();
+    // 内容宽度自适应（歌词/柱条/余额）会改 shell 尺寸，用 ResizeObserver 兜住
+    const el = document.querySelector('.island-shell');
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(schedule) : null;
+    if (ro && el) ro.observe(el);
+    const timer = window.setInterval(schedule, 1000); // 兜底：未观察到的情况（如 class 切换重建节点）
+    return () => {
+      cancelAnimationFrame(raf);
+      ro?.disconnect();
+      window.clearInterval(timer);
+    };
+  }, [state.displayState, state.style, state.musicEnabled, state.cockpitEnabled, state.balanceProvider, state.barsEnabled]);
+
   useEffect(() => {
     const applyMusic = (data: MusicState) => {
       setMusic(data);

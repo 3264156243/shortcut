@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, FolderTree, CircleDot, FileCog } from 'lucide-react';
+import { X, FolderTree, FileCog } from 'lucide-react';
 import { useStore } from '../store';
 
 /**
@@ -43,23 +43,6 @@ export default function ConverterSettings({ onClose }: { onClose: () => void }) 
     const s = await window.electronAPI?.shellMenuState?.();
     if (s) setShellMenu(s);
     setShellMenuBusy(false);
-  };
-
-  // ── SC 球（岛）穿透 ──
-  const [ballThrough, setBallThrough] = useState(false);
-  const [ballShortcut, setBallShortcut] = useState('Ctrl+Alt+B');
-  useEffect(() => {
-    void window.electronAPI?.ballState?.().then((s) => {
-      if (!s) return;
-      setBallThrough(!!s.passthrough);
-      if (s.shortcut) setBallShortcut(s.shortcut);
-    });
-    return window.electronAPI?.onBallPassthrough?.((d) => setBallThrough(!!d?.on));
-  }, []);
-  const toggleBallThrough = async (on: boolean) => {
-    setBallThrough(on);
-    const res = await window.electronAPI?.ballPassthrough?.(on);
-    if (res && res.success === false) setBallThrough(!on);
   };
 
   // ── 文件转换默认项（岛按钮与转换面板共用同一份 config.converter.*）──
@@ -155,26 +138,9 @@ export default function ConverterSettings({ onClose }: { onClose: () => void }) 
             <p className="mt-2 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>打开目录时会自动选中刚生成的产物。</p>
           </div>
 
-          {/* SC 球（岛） */}
-          <div style={sectionStyle}>
-            <div className="mb-1 flex items-center gap-2">
-              <CircleDot size={14} style={{ color: 'var(--color-text-muted)' }} />
-              <h3 className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>SC 球</h3>
-            </div>
-            <p className="mb-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-              SC 球 = 屏幕上显示余额/歌词/时间的岛。拖文件到岛上可直接转换（松手后岛内出现按钮）。
-              「启用穿透」= 点击落在岛下面的窗口上（不挡桌面操作）；旁边小球跟随同一状态。
-              不管是否开启穿透，拖文件到岛上都会自动临时解除穿透接收文件。
-            </p>
-            <label className="flex cursor-pointer items-center justify-between">
-              <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>启用穿透</span>
-              <input type="checkbox" checked={ballThrough} onChange={(e) => void toggleBallThrough(e.target.checked)}
-                className="h-4 w-4 accent-indigo-500" />
-            </label>
-            <p className="mt-2 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
-              当前：{ballThrough ? '已穿透（岛 + 旁边小球都不挡鼠标）' : '未穿透（收起态仍按岛的显示状态：收起穿透、展开可交互）'} · 快捷键 {ballShortcut}
-            </p>
-          </div>
+          {/* 注：「启用穿透」原先挂在这里，已迁到「SC 球」板块（它是球的属性，不属于转换）。
+              见 src/components/IslandPanel.tsx 的「鼠标穿透」小节。 */}
+
 
           {/* 资源管理器集成（仅 Windows） */}
           {shellMenu.available && (

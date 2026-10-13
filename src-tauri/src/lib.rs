@@ -253,6 +253,13 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             "passthrough": windows::ball_passthrough(),
             "shortcut": ball_passthrough_shortcut(),
         }),
+        // 岛前端上报"可见内容矩形"（逻辑像素，窗口坐标）：不穿透时只在它上面可交互，
+        // 周围透明区继续穿透，避免 360×340 的透明窗吞掉桌面点击。
+        "islandHitRect" => {
+            let n = |i: usize| args.get(i).and_then(|v| v.as_f64()).unwrap_or(0.0);
+            windows::set_island_hit_rect(n(0), n(1), n(2), n(3));
+            json!({ "success": true })
+        }
         // 球菜单里的"打开转换面板"：把文件交给主面板（复用既有 pending 通道，会自动切模块）
         "ballOpenInPanel" => {
             let paths: Vec<String> = args
