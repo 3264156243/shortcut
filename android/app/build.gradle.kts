@@ -52,6 +52,18 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+
+        // 把 -Dsc.live.* 透传给测试进程。
+        //
+        // 为什么需要：Gradle 的 -D 只作用于 Gradle 守护进程，
+        // **不会**进到 fork 出来的测试 JVM，于是 System.getProperty 拿到 null
+        // （表现为 LiveServerSmokeTest 一直被跳过，看起来"跑了其实没跑"）。
+        unitTests.all {
+            listOf("sc.live.bindId", "sc.live.mobileToken").forEach { key ->
+                (System.getProperty(key) ?: System.getenv(key.replace('.', '_').uppercase()))
+                    ?.let { value -> it.systemProperty(key, value) }
+            }
+        }
     }
 }
 

@@ -2,7 +2,7 @@ package com.wanan.shortcut.core.net
 
 import com.google.gson.JsonObject
 import com.wanan.shortcut.core.error.ErrorMapper
-import com.wanan.shortcut.core.identity.IdentityProvider
+import com.wanan.shortcut.core.identity.IdentitySource
 import com.wanan.shortcut.core.result.ApiResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -17,11 +17,19 @@ import java.net.SocketTimeoutException
  * 本类的三件职责（都不该由板块承担）：
  *   1. **自动注入身份**：`bindId` + `mobileToken`，板块只管业务字段；
  *   2. **修正成败判断**：只看 `success` 字段，绝不用 HTTP 状态码（契约 §10.2 陷阱 #3）；
- *   3. **识别身份失效**：命中 `移动端绑定已失效，请重新绑定` 时通知 [IdentityProvider]。
+ *   3. **识别身份失效**：命中 `移动端绑定已失效，请重新绑定` 时通知 [IdentitySource]。
+ *
+ * ## 关于依赖 [IdentitySource] 而不是具体实现
+ *
+ * `IdentityProvider` 依赖 Android `Context`，会让本类**无法在 JVM 测试里构造** ——
+ * 那样"真正发请求的这段代码"就永远没被执行过（曾因此把"没跑通"误当成"应该能跑通"）。
+ * 依赖接口后，测试可以塞内存身份，从而真实跑通 请求 → 服务端 → 解析 整条链路。
  */
 class ApiClient(
-    private val identityProvider: IdentityProvider,
+    private val identityProvider: IdentitySource,
     private val errorMapper: ErrorMapper,
+    private val baseUrl: String = Endpoints.API,
+    private val client: okhttp3.OkHttpClient = HttpEngine.api,
 ) : ApiGateway {
 
     /**
@@ -54,12 +62,12 @@ class ApiClient(
         }
 
         val request = Request.Builder()
-            .url(Endpoints.API)
+            .url(baseUrl)
             .post(body.toString().toRequestBody(Json.JSON_UTF8))  // 显式 UTF-8
             .build()
 
         try {
-            HttpEngine.api.newCall(request).execute().use { response ->
+            client.newCall(request).execute().use { response ->
                 val raw = response.body?.string().orEmpty()
                 val obj = Json.parseObject(raw)
 

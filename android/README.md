@@ -2,39 +2,41 @@
 
 > **归属：安卓侧开发者。** 桌面侧（`src/`、`src-tauri/`、`server/`、`resources/`、`tools/`、`docs/*.md`）不会碰这个目录，
 > 也请安卓侧不要改上述目录。分工与提交规则见 [`docs/协同开发规范.md`](../docs/协同开发规范.md)。
+>
+> 本文已随实际实现更新（2026-10-14）。
 
 ---
 
 ## 1. 目录现状
 
-**本目录目前只有这份说明，还没有工程骨架**——这是刻意的：
-
-Gradle / AGP / Kotlin / JDK 三者版本必须与你本机 Android Studio 的工具链匹配，
-由**你用 Android Studio「New Project」在 `android/` 下生成**，比手写一套更容易跑通。
-
-建议：
+工程已可编译、可出 APK，框架与两个板块完成。**不是空壳。**
 
 ```
-android/                     ← 本目录即工程根（.gitignore 已按此布局配置）
-├── settings.gradle.kts
-├── build.gradle.kts
-├── gradle/wrapper/…         ← wrapper 必须入库（.gitignore 已放行 jar/properties）
-├── app/
-│   ├── build.gradle.kts
-│   └── src/main/AndroidManifest.xml
-└── README.md                ← 本文件
+android/                     ← 本目录即工程根
+├── settings.gradle.kts      仓库源（阿里云镜像优先）
+├── build.gradle.kts         AGP 8.7.3 + Kotlin 2.0.21
+├── gradle.properties        内存与 AndroidX 开关
+├── gradle/wrapper/          已入库（契约红线要求）
+├── local.properties         ★ 不入库（sdk.dir）
+└── app/
+    └── src/
+        ├── main/java/com/wanan/shortcut/
+        │   ├── core/        result / net / identity / error / prefs / util / realtime
+        │   ├── framework/   ModuleSpec / ShortcutModule / ModuleRegistry / HomeLayout
+        │   ├── feature/     bind / home / settings / local(notes,demo) / linked(taskwall)
+        │   └── ui/          theme / components / nav
+        └── test/java/…      87 个 JVM 单测
 ```
 
-建议配置（可自行调整）：
-
-| 项 | 建议值 | 理由 |
-|---|---|---|
-| `applicationId` | `com.wanan.shortcut`（或 `.mobile` 后缀） | 桌面端 app id 是 `com.wanan.shortcut`，保持品牌一致 |
-| `minSdk` | 24+ | 覆盖足够广；低于 24 会缺很多现代 API |
-| 语言 | Kotlin（Compose 或 View 均可） | 与项目其它部分无关，选你熟的 |
-| 网络 | OkHttp（自带 WebSocket）或 Ktor | WS 是核心通道 |
-| 序列化 | kotlinx.serialization 或 Moshi | 协议全是 JSON |
-| 本地存储 | DataStore / EncryptedSharedPreferences | 存 `bindId`/`mobileToken`/`deviceKey` |
+| 项 | 实际值 |
+|---|---|
+| `applicationId` | `com.wanan.shortcut` |
+| `minSdk` / `targetSdk` / `compileSdk` | 24 / 35 / 35 |
+| JDK | **21**（`C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot`） |
+| Gradle | 8.11.1（wrapper 指向腾讯云镜像，`services.gradle.org` 本机不可达） |
+| 界面 | Jetpack Compose + Material 3 |
+| 网络 | OkHttp 4.12（HTTP + WebSocket） |
+| 序列化 | Gson |
 
 ---
 
@@ -42,43 +44,92 @@ android/                     ← 本目录即工程根（.gitignore 已按此布
 
 1. **[`docs/移动互联-协议契约.md`](../docs/移动互联-协议契约.md)** —— 接口唯一真源。
    按 §0 → §1 → §2.6 → §3 的顺序读，就能跑通第一个闭环：**绑定 → 拿到 mobileToken → 记住 deviceKey**。
-2. 契约 §7 是**实时通道**（电脑控制）的逐字协议；§8 是局域网直连；§10 是**已知陷阱清单**（开工前通读）。
-3. [`docs/协同开发规范.md`](../docs/协同开发规范.md) §3 是目录归属、§7 是怎么在没有 Windows 桌面端的情况下联调。
+2. 契约 §7 是**实时通道**（电脑控制）的逐字协议；§8 是局域网直连；§10 是**已知陷阱清单**。
+3. **[`docs/android/安卓端框架设计.md`](../docs/android/安卓端框架设计.md)** —— 板块分「本机/联动」两类的设计。
+4. **[`docs/android/安卓端界面与交互设计规范.md`](../docs/android/安卓端界面与交互设计规范.md)** ——
+   设计令牌、导航架构、验收清单（含已踩过的坑）。
+5. [`docs/协同开发规范.md`](../docs/协同开发规范.md) §3 是目录归属、§7 是怎么在没有 Windows 桌面端的情况下联调。
 
 ---
 
 ## 3. 一上手就要做对的三件事
 
-1. **持久化 `deviceKey`**（随机 24 位 hex，首次生成后长期保存；等价 Web 端的 `shortcut-device-key-v1`）。
+1. **持久化 `deviceKey`**（随机 24 位 hex，首次生成后长期保存）。
    `mobile.bind` 每次都带上它。**不做这件事**：用户每次重装/清数据后重绑都会在设备列表里新增一台"我的手机"，
-   很快占满上限（默认 5），而且用户删都删不干净。详见契约 §3.4。
-2. **局域网直连要放行明文 HTTP**：`http://192.168.x.x:9823` 在 Android 9+ 默认被系统拦掉，
-   需要 `res/xml/network_security_config.xml` + `AndroidManifest` 引用（`cleartextTrafficPermitted` 放行私网段）。
-   **不配 = 局域网控制静默失败**。详见契约 §8.5。
+   很快占满上限（默认 5）。详见契约 §3.4。
+   > 已实现于 `core/identity/DeviceKey.kt` + `IdentityStore`；且**解绑时刻意保留 deviceKey**。
+2. **明文 HTTP 放行**：`http://192.168.x.x:9823` 在 Android 9+ 默认被拦。
+   > ⚠️ **不要**照常规写法逐段列 IP：`network-security-config` 的 `<domain>` 对 IP **只做精确匹配、
+   > 不支持 CIDR/通配符**，`<domain>192.168.0.0</domain>` **匹配不到** `192.168.1.5`（会静默失败）。
+   > 而局域网 IP 运行时才定、每次可能变，构建期无法枚举 → 本工程用 `base-config` 放行，
+   > 理由与安全权衡写在 `res/xml/network_security_config.xml` 内。
 3. **判断成败的姿势**：`api.php` 的业务失败**也是 HTTP 200**（必须读 `success` 字段）；
-   而 `file.php` 反过来用真实 HTTP 状态码。详见契约 §1.2。
+   而 `file.php` 反过来用真实 HTTP 状态码。已在 `core/result/ApiResult` 归一，板块不用管。
 
 ---
 
 ## 4. 联调（**不需要 Windows 桌面端**）
 
-1. 自己建一个测试绑定，别拿别人的真实绑定做实验（`mobile.bind` 会**轮换**该设备的凭证）：
-   ```bash
-   curl -s -X POST https://shortcut.326415.xyz/sync/api.php \
-     -H 'Content-Type: application/json' \
-     -d '{"action":"bind.create","deviceName":"android-dev"}'
-   ```
-   返回 `{bindId, code, deskToken}`：用 `code` 走 `mobile.bind` 拿手机凭证，用 `deskToken` 当"假桌面"的身份。
-2. 实时控制链路需要一个 desktop 角色的对端 → 用 [`tools/mock-desktop/`](../tools/mock-desktop/README.md)（假桌面桩）。
-3. 观测点：契约 §7.2 那一节列了日志/健康检查位置。
+### 4.1 常规单测（离线、确定性，进套件）
+
+```powershell
+.\gradlew.bat testDebugUnitTest      # 87 个用例
+```
+
+其中 `TaskwallMockServerTest` 用 MockWebServer 覆盖**真实网络代码路径**
+（请求体形状、失败语义、令牌失效），不需要网络。
+
+### 4.2 打真实线上服务端（可选，默认跳过）
+
+自建测试绑定（**不要用真实绑定做实验**：`mobile.bind` 会轮换该设备凭证，会把真机顶下线）：
+
+```bash
+# 1) 建绑定
+curl -s -X POST https://shortcut.326415.xyz/sync/api.php -H 'Content-Type: application/json' -d '{"action":"bind.create","deviceName":"android-dev"}'
+# 2) 用返回的 code 换手机凭证（带 deviceKey）
+curl -s -X POST https://shortcut.326415.xyz/sync/api.php -H 'Content-Type: application/json' -d '{"action":"mobile.bind","code":"<code>","deviceKey":"<24hex>"}'
+# 3) 跑线上冒烟（会在服务端建任务并自行消费，不留残留）
+.\gradlew.bat testDebugUnitTest --tests "*LiveServerSmokeTest*" -Dsc.live.bindId=<bindId> -Dsc.live.mobileToken=<mobileToken>
+```
+
+> ⚠️ **坑**：Gradle 的 `-D` 只作用于守护进程，**不进 fork 的测试 JVM**。
+> 已在 `app/build.gradle.kts` 的 `testOptions.unitTests.all` 里显式透传；
+> 否则测试会被静默跳过（输出报告里的 `skipped` 计数能看出来）。
+
+### 4.3 实时控制链路
+
+需要一个 desktop 角色的对端 → 用 [`tools/mock-desktop/`](../tools/mock-desktop/README.md)（假桌面桩）。
 
 ---
 
-## 5. 提交红线
+## 5. 构建与安装
+
+```powershell
+$env:JAVA_HOME = "C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot"   # 必须 21，不能用 25
+$env:GRADLE_USER_HOME = "D:\dev\gradle-home"
+
+.\gradlew.bat assembleDebug      # → app/build/outputs/apk/debug/app-debug.apk
+.\gradlew.bat installDebug       # 手机连上后直接装
+adb devices ; adb logcat         # 真机调试
+```
+
+---
+
+## 6. 提交红线
 
 - **绝不提交**：`local.properties`、`*.keystore`、`*.jks`、`*.apk`、`*.aab`、`android/.gradle/`、`android/**/build/`
   （`.gitignore` 已配好，请勿用 `git add -f` 绕过）。
-- **必须提交**：`gradle/wrapper/gradle-wrapper.jar` 与 `gradle-wrapper.properties`（`.gitignore` 已显式放行）。
+- **必须提交**：`gradle/wrapper/gradle-wrapper.jar` 与 `gradle-wrapper.properties`（已显式放行）。
 - 签名 keystore 请放在仓库外单独备份；仓库里只记录**指纹（SHA-256）**。
-  丢了 keystore = 无法再给已安装用户推送更新。
-- 提交信息格式见 §4.3：`<type>(android): <中文一句话>`。
+- 提交信息格式见规范 §4.3：`<type>(android): <中文一句话>`。
+
+---
+
+## 7. 已完成 / 待做
+
+**已完成**：工程骨架、core（身份/网络/错误/偏好）、framework（本机+联动两类板块）、
+首页（网格/列表可切换）、设置（分片式）、绑定、笔记（本机样例）、任务墙（联动样例）、
+界面与交互第一轮打磨（导航栈/inset/设计令牌/底部标签栏）。
+任务墙已在**真实线上服务端**跑通全闭环（见 `LiveServerSmokeTest`）。
+
+**待做**：电脑控制（含实时通道与前台服务）、文件快传、推送、扫码绑定、页面过渡动画。

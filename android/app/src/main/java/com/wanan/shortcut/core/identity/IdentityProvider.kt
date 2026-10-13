@@ -21,7 +21,7 @@ import kotlinx.coroutines.sync.withLock
 class IdentityProvider(
     private val store: IdentityStore,
     private val tokenBox: TokenBox,
-) {
+) : IdentitySource {
 
     private val _state = MutableStateFlow(EmptyIdentity)
     /** 供 UI 观察：未绑定 → 显示绑定页；已绑定 → 显示首页。 */
@@ -97,12 +97,12 @@ class IdentityProvider(
      *
      * 幂等：本地已经清过就直接返回，保证 [onUnauthorized] 只触发一次。
      */
-    suspend fun onTokenRejected() {
+    override suspend fun onTokenRejected() {
         val wasBound = _state.value.isBound
         clear()
         if (wasBound) onUnauthorized?.invoke()
     }
 
     /** 当前快照（非挂起，供网络层同步拼接请求体用）。 */
-    fun current(): Identity = _state.value
+    override fun current(): Identity = _state.value
 }
