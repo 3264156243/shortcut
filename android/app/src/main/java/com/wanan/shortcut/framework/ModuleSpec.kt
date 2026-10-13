@@ -92,8 +92,15 @@ data class ModuleSpec(
      */
     val order: Int = 100,
 
-    /** LINKED 板块的最低客户端版本；为空表示不门禁 */
-    val minAppVersion: String? = null,
+    /**
+     * 本板块要求的**安卓端**最低版本；为空表示不门禁。
+     *
+     * ⚠️ 命名刻意带 `Android`：**不要**填服务端的 `minAppVersion`
+     * （那是桌面端版本号，如 "2.4.5"），否则会把安卓客户端永久锁死 —— 详见
+     * [com.wanan.shortcut.framework.ServerModule.minAppVersion] 的说明。
+     * 绝大多数情况下保持为空即可。
+     */
+    val minAndroidVersion: String? = null,
 
     /** 首页默认分组名；为空时按 [domain] 取默认分组 */
     val group: String? = null,

@@ -33,8 +33,25 @@ data class ServerModule(
     @SerializedName("desc") val desc: String = "",
     @SerializedName("entry") val entry: String = "",
     @SerializedName("capabilities") val capabilities: List<String> = emptyList(),
-    /** 该模块要求的客户端版本下限（服务端**不强制**，是否门禁由客户端决定，契约 §4.1） */
+    /**
+     * 该模块要求的**客户端版本**下限。
+     *
+     * ⚠️ **不要用它给安卓端做门禁**（这是踩过的坑，2026-10-13）：
+     * 这个字段里的值是**桌面端**的版本号（当前线上是 `2.4.5`，来自 `modules.json`），
+     * 而安卓端是自己的版本体系（`0.1.0`）。两者**不同源**，直接比较必然失败，
+     * 结果是任务墙/快传/控制全部被永久锁死并显示"需升级"。
+     *
+     * 保留该字段仅用于诊断展示。安卓端门禁请用 [minAndroidVersion]。
+     */
     @SerializedName("minAppVersion") val minAppVersion: String = "",
+    /**
+     * 该模块要求的**安卓端**版本下限（**服务端当前未下发此字段**）。
+     *
+     * 命名里带 `Android` 是为了从字段名上就区分版本命名空间，
+     * 避免再犯"拿桌面版本号卡安卓客户端"的错误。
+     * 为空表示不门禁 —— 即当前的实际行为。
+     */
+    @SerializedName("minAndroidVersion") val minAndroidVersion: String = "",
     /** 缺省 true（契约 §4.1：来自 defaultEnabled） */
     @SerializedName("enabled") val enabled: Boolean = true,
     /** 可能是数组也可能是对象，见类注释 */
@@ -50,11 +67,10 @@ data class ServerModule(
 }
 
 /**
- * 版本比较：判断客户端是否满足模块的 [ServerModule.minAppVersion]。
+ * 版本比较：判断安卓客户端是否满足某个版本下限。
  *
- * 契约 §4.1 明确服务端不做任何强制，门禁完全由客户端决定；
- * 但客户端也**不应该**因为版本低就拒绝服务——只提示、不崩溃。
- * 版本号形如 "2.4.5"，按数字段比较。
+ * ⚠️ **只在安卓端自己的版本体系内比较**（例如 `0.1.0` vs `0.2.0`）。
+ * 绝不能拿它去比 [ServerModule.minAppVersion]（那是桌面端版本号，见该字段注释）。
  */
 object VersionGate {
 

@@ -55,11 +55,13 @@ class ModuleRegistry(
      * 合成首页入口列表（设计文档 §3.2）。
      *
      * 规则：
-     *   - **LOCAL 板块**：无条件显示，不接受服务端启停、不受 `minAppVersion` 影响。
+     *   - **LOCAL 板块**：无条件显示，不接受服务端启停、不受版本门禁影响。
      *     服务端清单里即使没有它（正常情况），也不影响。
      *   - **LINKED 板块**：需要服务端声明；`enabled=false` 或无 `entry` 时不显示；
-     *     `minAppVersion` 高于当前客户端时显示但标记"需升级"
+     *     `minAndroidVersion` 高于当前安卓版本时显示但标记"需升级"
      *     （不隐藏 —— 隐藏会让用户以为功能消失，契约 §10.2 陷阱 #8）。
+     *     ⚠️ 只看 `minAndroidVersion`，**绝不**看服务端的 `minAppVersion`
+     *     （那是桌面端版本号，跨命名空间比较必然失败 → 会把板块永久锁死）。
      *   - **用户布局**：隐藏的滤掉，其余按 [HomeLayout.orderOf] 排序、按
      *     [HomeLayout.groupOf] 分组。
      *
@@ -106,9 +108,19 @@ class ModuleRegistry(
                     }
                     if (!displayable) return@mapNotNull null
 
-                    val required = server?.minAppVersion?.takeIf { it.isNotBlank() }
-                        ?: spec.minAppVersion.orEmpty()
-                    val needsUpgrade = !VersionGate.satisfies(currentAppVersion, required)
+                    // ⚠️ 版本门禁：只用**安卓端自己的版本体系**比较。
+                    //
+                    // 曾犯的错误（2026-10-13）：这里拿服务端下发的 minAppVersion
+                    // （桌面端版本，线上是 "2.4.5"）去比安卓端的 "0.1.0"，
+                    // 结果 0.1.0 < 2.4.5 恒成立 → 任务墙/快传/控制**全部被永久锁死**，
+                    // 界面上显示"需升级"。两个版本号根本不是同一个命名空间。
+                    //
+                    // 现在只认 minAndroidVersion（服务端未下发 → 不门禁），
+                    // 因此不会再出现"用桌面版本卡安卓客户端"。
+                    val required = server?.minAndroidVersion?.takeIf { it.isNotBlank() }
+                        ?: spec.minAndroidVersion.orEmpty()
+                    val needsUpgrade = required.isNotBlank() &&
+                        !VersionGate.satisfies(currentAppVersion, required)
 
                     ModuleEntry(
                         module = module,

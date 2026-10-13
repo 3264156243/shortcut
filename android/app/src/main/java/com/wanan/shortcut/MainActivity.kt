@@ -237,9 +237,14 @@ private fun AppTopBar(
     onBack: () -> Unit,
 ) {
     when (currentRoute) {
-        // 首页顶部栏只放标题：连接状态由内容区顶部的状态条承担（对应 web /mobile/ 的 bind-strip）。
-        // 两处都显示状态会重复。
-        Routes.HOME -> ShortCutTopBar(title = "ShortCut")
+        // 首页顶部栏：标题 + 连接状态（只读，不可点）。
+        // 「管理」入口由底部标签栏的「设置」承担，顶部不再重复放一个可点文字
+        //（用户反馈：首页上方不需要那个管理）。
+        Routes.HOME -> ShortCutTopBarWithStatus(
+            title = "ShortCut",
+            statusText = if (identity.isBound) "已连接 · ${identity.deviceName}" else "未连接电脑",
+            online = identity.isBound,
+        )
 
         Routes.SETTINGS -> ShortCutTopBar(title = "设置")
 

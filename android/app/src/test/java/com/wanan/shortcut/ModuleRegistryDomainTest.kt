@@ -41,12 +41,12 @@ class ModuleRegistryDomainTest {
     private class FakeLinked(
         id: String,
         order: Int = 100,
-        minAppVersion: String? = null,
+        minAndroidVersion: String? = null,
     ) : ShortcutModule {
         override val spec = ModuleSpec(
             id = id, label = "联动$id", icon = "🗂️", desc = "联动功能",
             domain = ModuleDomain.LINKED, capability = Capability.QUEUE,
-            order = order, minAppVersion = minAppVersion,
+            order = order, minAndroidVersion = minAndroidVersion,
         )
         @Composable override fun Screen(navigator: ModuleNavigator) = Unit
     }
@@ -61,10 +61,14 @@ class ModuleRegistryDomainTest {
         label: String = "",
         icon: String = "",
         desc: String = "",
+        /** 桌面端版本号（服务端下发），**不用于安卓门禁** */
         minAppVersion: String = "",
+        /** 安卓端版本号下限（服务端当前不下发） */
+        minAndroidVersion: String = "",
     ) = ServerModule(
         id = id, label = label, icon = icon, desc = desc, entry = entry,
         enabled = enabled, minAppVersion = minAppVersion,
+        minAndroidVersion = minAndroidVersion,
     )
 
     private fun manifest(vararg modules: ServerModule) =
@@ -185,12 +189,112 @@ class ModuleRegistryDomainTest {
         // 契约 §10.2 陷阱 #8：隐藏会让用户以为功能消失
         val reg = registry(FakeLinked("taskwall"))
         val entries = reg.resolve(
-            manifest = manifest(serverModule("taskwall", minAppVersion = "9.9.9")),
+            manifest = manifest(serverModule("taskwall", minAndroidVersion = "9.9.9")),
             currentAppVersion = "0.1.0",
             bound = true,
         )
         assertEquals("仍应显示", 1, entries.size)
         assertTrue("应标记需升级", entries.first().requiresUpgrade)
+    }
+
+    // ---------------- ★ 回归：绝不拿桌面端版本号卡安卓客户端 ----------------
+
+    @Test
+    fun `服务端的 minAppVersion 不得用于安卓端版本门禁`() {
+        // 这是真实踩过的 bug（2026-10-13）：
+        // 服务端 modules.json 下发的 minAppVersion 是**桌面端**版本号（"2.4.5"），
+        // 而安卓端是 0.1.0。若拿它做门禁，0.1.0 < 2.4.5 恒成立，
+        // → 任务墙/文件共享/电脑控制**全部永久显示"需升级"、点不进去**。
+        //
+        // 判据：只要服务端给了 minAppVersion，就绝不能因此把安卓端标成"需升级"。
+        val reg = registry(FakeLinked("taskwall"))
+        val entries = reg.resolve(
+            manifest = manifest(serverModule("taskwall", minAppVersion = "2.4.5")),
+            currentAppVersion = "0.1.0",
+            bound = true,
+        )
+
+        assertEquals(1, entries.size)
+        assertFalse(
+            "服务端 minAppVersion 是桌面端版本号，不得用于安卓门禁（否则板块被永久锁死）",
+            entries.first().requiresUpgrade,
+        )
+    }
+
+    @Test
+    fun `本机声明的 minAndroidVersion 仍能正常门禁`() {
+        // 与上一条对照：安卓端自己的版本体系内比较必须正常工作，
+        // 否则这个机制就形同虚设。
+        val reg = registry(FakeLinked("taskwall", minAndroidVersion = "0.5.0"))
+        val entries = reg.resolve(
+            manifest = manifest(serverModule("taskwall")),
+            currentAppVersion = "0.1.0",
+            bound = true,
+        )
+        assertTrue("安卓端 0.1.0 < 0.5.0 应标记需升级", entries.first().requiresUpgrade)
+    }
+
+    @Test
+    fun `安卓端版本满足时不应标记需升级`() {
+        val reg = registry(FakeLinked("taskwall", minAndroidVersion = "0.1.0"))
+        val entries = reg.resolve(
+            manifest = manifest(serverModule("taskwall")),
+            currentAppVersion = "0.1.0",
+            bound = true,
+        )
+        assertFalse(entries.first().requiresUpgrade)
+    }
+
+    // ---------------- ★ 集成级：用**真实注册的板块**验证 ----------------
+
+    @Test
+    fun `真实注册的板块在已绑定且服务端按线上清单下发时都应可进入`() {
+        // 这条用例的价值：它跑的是 Modules.all() 里**真实的板块声明**，
+        // 而不是测试替身。上一版把 minAppVersion="2.4.5" 写进 TaskwallModule 时，
+        // 上面那些用 FakeLinked 的用例全都会通过，只有这一条会失败。
+        val reg = ModuleRegistry(Modules.all(), NoopApiClient)
+
+        // 复刻线上 module.list 的真实形状（2026-10-13 实测）
+        val realManifest = manifest(
+            serverModule("taskwall", entry = "/taskwall/", minAppVersion = "2.4.5"),
+            serverModule(
+                "fileTransfer", entry = "/transfer/", minAppVersion = "2.4.5",
+                label = "文件共享", icon = "📤",
+            ),
+            serverModule(
+                "control", entry = "/control/", minAppVersion = "2.4.5",
+                label = "电脑控制", icon = "🖥️",
+            ),
+        )
+
+        val entries = reg.resolve(
+            manifest = realManifest,
+            currentAppVersion = "0.1.0",   // 安卓端当前版本
+            bound = true,
+        )
+
+        // 本机板块（笔记/自检）不受服务端清单影响，必然在列表里
+        val localIds = entries.filter { it.domain == ModuleDomain.LOCAL }.map { it.module.spec.id }
+        assertTrue("本机板块应存在", localIds.isNotEmpty())
+
+        // 关键断言：已绑定 + 服务端声明了模块 → 不得因版本被标记"需升级"
+        entries.forEach { entry ->
+            assertFalse(
+                "板块 ${entry.module.spec.id} 不该被标记需升级" +
+                    "（检查是否误用了服务端的 minAppVersion 做安卓门禁）",
+                entry.requiresUpgrade,
+            )
+        }
+
+        // 已绑定时联动板块必须可用
+        val linked = entries.filter { it.domain == ModuleDomain.LINKED }
+        assertTrue("线上清单里的 taskwall 应可显示", linked.any { it.module.spec.id == "taskwall" })
+        linked.forEach { entry ->
+            assertTrue(
+                "已绑定时联动板块 ${entry.module.spec.id} 应可进入",
+                entry.available,
+            )
+        }
     }
 
     @Test

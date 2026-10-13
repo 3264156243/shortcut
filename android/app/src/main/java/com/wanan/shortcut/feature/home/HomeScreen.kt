@@ -154,32 +154,18 @@ fun HomeScreen(
                 icon = "🧩",
             )
 
-            else -> Column(Modifier.fillMaxSize()) {
-                // 连接状态条（对应 web /mobile/ 顶部的绑定信息条）：
-                // 让用户一眼看到"是否已连接、连的是哪台"，并作为进入绑定管理的入口。
-                HomeStatusStrip(
-                    identity = identity,
-                    onManage = if (identity.isBound) onOpenSettings else onGoBind,
-                    modifier = Modifier.padding(
-                        start = Spacing.lg,
-                        end = Spacing.lg,
-                        top = Spacing.sm,
-                    ),
+            else -> when (state.style) {
+                HomeLayoutStyle.GRID -> HomeGrid(
+                    sections = state.sections,
+                    onOpenModule = onOpenModule,
+                    onGoBind = onGoBind,
                 )
 
-                when (state.style) {
-                    HomeLayoutStyle.GRID -> HomeGrid(
-                        sections = state.sections,
-                        onOpenModule = onOpenModule,
-                        onGoBind = onGoBind,
-                    )
-
-                    HomeLayoutStyle.LIST -> HomeList(
-                        sections = state.sections,
-                        onOpenModule = onOpenModule,
-                        onGoBind = onGoBind,
-                    )
-                }
+                HomeLayoutStyle.LIST -> HomeList(
+                    sections = state.sections,
+                    onOpenModule = onOpenModule,
+                    onGoBind = onGoBind,
+                )
             }
         }
     }
@@ -343,46 +329,9 @@ private fun handleEntryClick(
     }
 }
 
-/** 首页也要显示连接状态条（对应 web `/mobile/` 顶部绑定信息条） */
-@Composable
-fun HomeStatusStrip(
-    identity: Identity,
-    onManage: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.surfaceContainerLow)
-            .clickable(onClick = onManage)
-            .padding(Spacing.md),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
-    ) {
-        com.wanan.shortcut.ui.components.StatusDot(online = identity.isBound)
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = if (identity.isBound) identity.deviceName.ifBlank { "已连接" } else "未连接电脑",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = if (identity.isBound) {
-                    identity.bindId
-                } else {
-                    "连接后可用任务墙、文件共享、电脑控制"
-                },
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Text(
-            text = if (identity.isBound) "管理" else "去连接",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-        )
-    }
-}
+// 注：原先这里有一个 HomeStatusStrip（首页内容区顶部的"连接状态 + 管理"条）。
+// 已删除，原因：
+//   1. 用户反馈"首页上方不需要加那个管理"；
+//   2. 它与顶部栏的连接状态重复，且"去绑定/管理"入口已在底部标签栏的「设置」里；
+//   3. 未绑定用户仍可通过置灰的联动板块（点击 → 去连接）进入绑定页。
+// 连接状态现在只保留在顶部栏（只读，不可点）。

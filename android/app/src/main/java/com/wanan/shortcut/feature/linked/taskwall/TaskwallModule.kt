@@ -55,9 +55,11 @@ class TaskwallModule : ShortcutModule {
         desc = "把任务从手机钉到桌面任务墙",
         domain = ModuleDomain.LINKED,        // ★ 联动板块：需要绑定 + 服务端对账
         capability = Capability.QUEUE,       // ★ 用共享的队列能力
-        // 与服务端线上值一致（契约 §4.1 实测 minAppVersion=2.4.5）
-        minAppVersion = "2.4.5",
         order = 100,
+        // ⚠️ 此前这里写着 minAppVersion = "2.4.5"（照抄服务端 modules.json），
+        // 那是**桌面端**版本号，拿去比安卓端的 0.1.0 恒为"版本过低"，
+        // 导致任务墙永久显示"需升级"、点不进去。已移除：不设安卓端门禁。
+        // 若将来真要卡安卓版本，用 minAndroidVersion 并填安卓端版本号。
     )
 
     @Composable

@@ -25,7 +25,7 @@ data class ForegroundSpec(
  *
  *   - 首页入口卡片 / 分区 / 排序（由 [ModuleRegistry] + `module.list` + `HomeLayout` 合成）
  *   - **未绑定时的置灰与提示**（框架按 [ModuleSpec.domain] 决定，板块不判断）
- *   - `enabled=false` / 缺少 entry 的隐藏、`minAppVersion` 版本门禁
+ *   - `enabled=false` / 缺少 entry 的隐藏、`minAndroidVersion` 版本门禁
  *   - 请求自动带 `bindId` + `mobileToken`
  *   - 身份失效自动跳绑定页
  *   - loading / 空态 / 错误 / 重试
