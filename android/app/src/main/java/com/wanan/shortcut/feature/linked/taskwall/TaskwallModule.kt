@@ -1,4 +1,4 @@
-package com.wanan.shortcut.feature.taskwall
+package com.wanan.shortcut.feature.linked.taskwall
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
@@ -15,9 +15,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.wanan.shortcut.core.realtime.RelayMessage
+import com.wanan.shortcut.framework.Capability
 import com.wanan.shortcut.framework.LocalModuleSubRoute
-import com.wanan.shortcut.framework.ModuleMeta
+import com.wanan.shortcut.framework.ModuleDomain
 import com.wanan.shortcut.framework.ModuleNavigator
+import com.wanan.shortcut.framework.ModuleSpec
 import com.wanan.shortcut.framework.ShortcutModule
 
 /**
@@ -45,21 +47,18 @@ import com.wanan.shortcut.framework.ShortcutModule
  */
 class TaskwallModule : ShortcutModule {
 
-    override val id: String = "taskwall"
-
-    /**
-     * 本地兜底元数据。
-     *
-     * 运行时优先用服务端 `module.list` 下发的 label/icon/desc
-     * （线上实测返回：label=任务墙、icon=🗂️），这里只在断网首屏兜底。
-     */
-    override val meta: ModuleMeta = ModuleMeta(
-        id = id,
+    override val spec: ModuleSpec = ModuleSpec(
+        id = "taskwall",
+        // 本地兜底元数据：运行时优先用服务端 module.list 下发的值
+        // （线上实测返回 label=任务墙、icon=🗂️、desc=把任务从手机钉到桌面任务墙）
         label = "任务墙",
         icon = "🗂️",
         desc = "把任务从手机钉到桌面任务墙",
+        domain = ModuleDomain.LINKED,        // ★ 联动板块：需要绑定 + 服务端对账
+        capability = Capability.QUEUE,       // ★ 用共享的队列能力
         // 与服务端线上值一致（契约 §4.1 实测 minAppVersion=2.4.5）
         minAppVersion = "2.4.5",
+        order = 100,
     )
 
     @Composable

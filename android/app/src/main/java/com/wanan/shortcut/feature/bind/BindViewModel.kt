@@ -6,7 +6,7 @@ import com.google.gson.JsonObject
 import com.wanan.shortcut.core.error.ErrorAction
 import com.wanan.shortcut.core.error.ErrorMapper
 import com.wanan.shortcut.core.identity.IdentityProvider
-import com.wanan.shortcut.core.net.ApiClient
+import com.wanan.shortcut.core.net.ApiGateway
 import com.wanan.shortcut.core.result.ApiResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,7 +34,7 @@ sealed interface BindUiState {
  *   不带则每次都在设备列表里新增一台"我的手机"，很快占满上限（默认 5）。
  */
 class BindViewModel(
-    private val apiClient: ApiClient,
+    private val apiClient: ApiGateway,
     private val identityProvider: IdentityProvider,
     private val errorMapper: ErrorMapper,
 ) : ViewModel() {

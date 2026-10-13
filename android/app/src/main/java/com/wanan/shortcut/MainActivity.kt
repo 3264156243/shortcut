@@ -15,7 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.wanan.shortcut.core.identity.Identity
+import com.wanan.shortcut.core.prefs.AppPrefs
 import com.wanan.shortcut.feature.bind.BindScreen
 import com.wanan.shortcut.feature.home.HomeScreen
 import com.wanan.shortcut.feature.settings.SettingsScreen
@@ -37,7 +37,12 @@ class MainActivity : ComponentActivity() {
         val container = appContainer
 
         setContent {
-            ShortCutTheme {
+            // 界面偏好（字号/主题）在这里读取后交给主题层，
+            // 这样主题不依赖容器，且变更时整棵树自动重组。
+            val prefs by container.appPrefs.flow
+                .collectAsStateWithLifecycle(initialValue = AppPrefs())
+
+            ShortCutTheme(prefs = prefs) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
@@ -49,7 +54,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** 顶层路由：绑定 / 首页 / 设置 / 某板块。 */
+/** 顶层路由：首页 / 绑定 / 设置 / 某板块。 */
 private sealed interface Route {
     data object Splash : Route
     data object Bind : Route
@@ -63,22 +68,28 @@ private fun AppRoot(container: AppContainer) {
     val identity by container.identityProvider.state.collectAsStateWithLifecycle()
     var route by remember { mutableStateOf<Route>(Route.Splash) }
 
-    // 启动时恢复身份（含 deviceKey 惰性生成），决定首屏是绑定页还是首页
+    /**
+     * 首屏路由。
+     *
+     * ⚠️ 与 P0 的关键区别：**未绑定不再强制进绑定页**。
+     * 因为本机板块（笔记等）不需要绑定，强制跳转会把整个 App 变成"必须先连电脑"。
+     * 现在未绑定也进首页，只是联动板块置灰、点击才引导去绑定 —— 这正是本次重构的目的。
+     */
     LaunchedEffect(Unit) {
-        val restored = container.identityProvider.restore()
-        route = if (restored.isBound) Route.Home else Route.Bind
+        container.identityProvider.restore()
+        route = Route.Home
     }
 
     // 身份失效的全局出口：任何板块、任何请求命中"绑定已失效"都会走到这里，
     // 只触发一次（IdentityProvider.onTokenRejected 幂等），避免多个板块同时弹绑定页。
     LaunchedEffect(Unit) {
         container.identityProvider.setUnauthorizedHandler {
-            route = Route.Bind
+            route = Route.Home
         }
     }
 
     when (val r = route) {
-        Route.Splash -> Unit   // 首帧空白，等 restore() 完成；耗时极短，不做额外动画
+        Route.Splash -> Unit   // 首帧空白，等 restore() 完成；耗时极短
 
         Route.Bind -> BindScreen(onBound = { route = Route.Home })
 
@@ -99,6 +110,7 @@ private fun AppRoot(container: AppContainer) {
             identity = identity,
             onBack = { route = Route.Home },
             onSwitchModule = { id -> route = Route.Module(id) },
+            onGoBind = { route = Route.Bind },
         )
     }
 }

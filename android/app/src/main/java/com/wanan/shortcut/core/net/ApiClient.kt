@@ -22,7 +22,7 @@ import java.net.SocketTimeoutException
 class ApiClient(
     private val identityProvider: IdentityProvider,
     private val errorMapper: ErrorMapper,
-) {
+) : ApiGateway {
 
     /**
      * 发起一次 api.php 调用。
@@ -31,10 +31,10 @@ class ApiClient(
      * @param params 业务字段；**不要**自己塞 bindId/mobileToken，本方法自动加
      * @param requireIdentity 是否要求已绑定（绑定类接口传 false）
      */
-    suspend fun post(
+    override suspend fun post(
         action: String,
-        params: Map<String, Any?> = emptyMap(),
-        requireIdentity: Boolean = true,
+        params: Map<String, Any?>,
+        requireIdentity: Boolean,
     ): ApiResult<JsonObject> = withContext(Dispatchers.IO) {
         val identity = identityProvider.current()
 

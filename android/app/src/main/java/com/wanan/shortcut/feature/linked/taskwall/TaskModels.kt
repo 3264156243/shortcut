@@ -1,4 +1,4 @@
-package com.wanan.shortcut.feature.taskwall
+package com.wanan.shortcut.feature.linked.taskwall
 
 import com.google.gson.annotations.SerializedName
 

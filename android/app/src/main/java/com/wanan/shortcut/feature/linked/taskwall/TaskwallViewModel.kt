@@ -1,4 +1,4 @@
-package com.wanan.shortcut.feature.taskwall
+package com.wanan.shortcut.feature.linked.taskwall
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope

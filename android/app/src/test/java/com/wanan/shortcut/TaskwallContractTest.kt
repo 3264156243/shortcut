@@ -2,8 +2,8 @@ package com.wanan.shortcut
 
 import com.wanan.shortcut.core.net.Json
 import com.wanan.shortcut.core.util.DateFormats
-import com.wanan.shortcut.feature.taskwall.PullResponse
-import com.wanan.shortcut.feature.taskwall.PushResponse
+import com.wanan.shortcut.feature.linked.taskwall.PullResponse
+import com.wanan.shortcut.feature.linked.taskwall.PushResponse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull

@@ -4,28 +4,10 @@ import androidx.compose.runtime.Composable
 import com.wanan.shortcut.core.realtime.RelayMessage
 
 /**
- * 板块元数据。
- *
- * 服务端 `module.list` 是**权威**（契约 §4.1：客户端应跳过 `enabled === false` 或无 `entry` 的模块）；
- * 这里的是**本地兜底**，用于服务端不可达时仍能显示入口，避免"断网就一片空白"。
- */
-data class ModuleMeta(
-    /** 与服务端 `modules.json` 的 id 对齐（如 taskwall / fileTransfer / control） */
-    val id: String,
-    /** 兜底标题 */
-    val label: String,
-    /** 兜底图标：用 emoji，与服务端下发格式一致，省一套图标资源 */
-    val icon: String,
-    /** 兜底描述 */
-    val desc: String,
-    /** 本地要求的最低客户端版本；为空表示不门禁 */
-    val minAppVersion: String? = null,
-)
-
-/**
  * 一个前台服务需求。
  *
- * 由框架统一起停（板块自己不碰 Service 生命周期），避免多个板块各写一份通知渠道/权限判断。
+ * 由框架统一起停（板块自己不碰 Service 生命周期），避免多个板块各写一份
+ * 通知渠道/权限判断。
  */
 data class ForegroundSpec(
     val notificationId: Int,
@@ -38,32 +20,37 @@ data class ForegroundSpec(
 /**
  * ★ **板块契约** —— 框架的核心抽象。
  *
- * 设计目标（本文档 §0）：新增一个板块**只允许改一个文件**（注册表加一行）。
- * 因此凡是"每个板块都要做一遍"的事情，全部由框架代劳，不写进本接口：
+ * 设计目标（设计文档 §2.4）：新增一个板块**只允许改一个文件**（注册表加一行）。
+ * 凡是"每个板块都要做一遍"的事情，全部由框架代劳，不写进本接口：
  *
- *   - 首页卡片/导航入口（由 [ModuleRegistry] + `module.list` 自动渲染）
- *   - 服务端 `enabled=false` / 缺少 entry 的隐藏（框架判断）
- *   - `minAppVersion` 版本门禁与"请升级"提示（框架判断）
- *   - 请求自动带 `bindId` + `mobileToken`（`core/net/ApiClient` 自动注入）
- *   - 身份失效自动跳绑定页（`core/identity/IdentityProvider` 统一广播）
- *   - loading / 空态 / 错误 / 重试（`ui/components` 通用组件）
+ *   - 首页入口卡片 / 分区 / 排序（由 [ModuleRegistry] + `module.list` + `HomeLayout` 合成）
+ *   - **未绑定时的置灰与提示**（框架按 [ModuleSpec.domain] 决定，板块不判断）
+ *   - `enabled=false` / 缺少 entry 的隐藏、`minAppVersion` 版本门禁
+ *   - 请求自动带 `bindId` + `mobileToken`
+ *   - 身份失效自动跳绑定页
+ *   - loading / 空态 / 错误 / 重试
+ *   - 板块内子页导航
+ *   - 权限申请与前台服务起停
  *
- * 板块只需要回答三个问题：我是谁（[id]/[meta]）、我的界面是什么（[Screen]）、
- * 我关心哪些实时消息（[onRealtimeMessage]）。
+ * 板块只需要回答：我是谁（[spec]）、我的界面是什么（[Screen]）。
  */
 interface ShortcutModule {
 
-    /** 与服务端 `modules.json` 的 id 对齐。这是与 `module.list` 对账的唯一键。 */
-    val id: String
+    /**
+     * 板块声明（含 [ModuleDomain] 与 [Capability]）。
+     *
+     * 这是框架唯一用来识别板块的东西——[ModuleSpec.id] 是与服务端对账的键。
+     */
+    val spec: ModuleSpec
 
-    /** 本地兜底元数据，见 [ModuleMeta]。 */
-    val meta: ModuleMeta
+    /** 便捷访问（大量地方要用 id） */
+    val id: String get() = spec.id
 
     /**
      * 入口页面。
      *
-     * 实现者**不需要**自己处理"未绑定"——框架保证进入板块前身份已可用
-     * （未绑定时导航层不会放行，直接展示绑定页）。
+     * 实现者**不需要**自己处理"未绑定"——框架只对 [ModuleDomain.LINKED] 板块拦截，
+     * 且拦截逻辑在 `ModuleHostScreen`，不在这里。
      */
     @Composable
     fun Screen(navigator: ModuleNavigator)
@@ -81,7 +68,8 @@ interface ShortcutModule {
      * 实时通道消息回调（可选）。
      *
      * 框架把中继消息按注册顺序广播给所有已注册板块；板块自行按需过滤。
-     * 默认空实现——不做实时功能的板块（如文件快传）无需关心。
+     * ⚠️ 消息来自**全局唯一**的那条连接（见设计文档 §5），
+     * 板块**不要**自己建 WS —— 契约 §7.6：每 bindId 最多 3 条连接。
      */
     fun onRealtimeMessage(message: RelayMessage) = Unit
 
@@ -100,9 +88,7 @@ interface ShortcutModule {
      */
     val permissions: List<String> get() = emptyList()
 
-    /**
-     * 权限申请结果回调（可选）。仅在声明了 [permissions] 时被调用。
-     */
+    /** 权限申请结果回调（可选）。仅在声明了 [permissions] 时被调用。 */
     fun onPermissionResult(granted: Map<String, Boolean>) = Unit
 }
 
@@ -137,7 +123,6 @@ interface ModuleNavigator {
  *
  * 为什么用 CompositionLocal 而不是让板块自己存 `remember` 状态：
  * 子路由要能响应系统返回键、并在进程重建后恢复，这属于宿主职责。
- * 板块只声明"有哪些子页"，不承担导航框架的复杂度。
  */
 val LocalModuleSubRoute = androidx.compose.runtime.compositionLocalOf<String?> { null }
 

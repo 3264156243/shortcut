@@ -1,6 +1,6 @@
-package com.wanan.shortcut.feature.taskwall
+package com.wanan.shortcut.feature.linked.taskwall
 
-import com.wanan.shortcut.core.net.ApiClient
+import com.wanan.shortcut.core.net.ApiGateway
 import com.wanan.shortcut.core.net.Json
 import com.wanan.shortcut.core.result.ApiResult
 
@@ -11,7 +11,7 @@ import com.wanan.shortcut.core.result.ApiResult
  * 否则服务端返回 `暂不支持的板块`（契约 §5 开头）。
  * 把它固化成常量并只在本类里使用，避免各调用点写错或漏写。
  */
-class TaskwallRepository(private val apiClient: ApiClient) {
+class TaskwallRepository(private val apiClient: ApiGateway) {
 
     /**
      * 下发任务（契约 §5.1）。
