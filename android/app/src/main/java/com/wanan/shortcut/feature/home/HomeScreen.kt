@@ -1,18 +1,23 @@
 package com.wanan.shortcut.feature.home
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,61 +26,74 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.wanan.shortcut.AppContainer
 import com.wanan.shortcut.core.identity.Identity
+import com.wanan.shortcut.core.prefs.HomePrefsStore
 import com.wanan.shortcut.core.result.ApiResult
-import com.wanan.shortcut.framework.HomeLayout
-import com.wanan.shortcut.framework.HomeLayoutStore
 import com.wanan.shortcut.framework.ModuleDomain
 import com.wanan.shortcut.framework.ModuleEntry
 import com.wanan.shortcut.framework.ModuleRegistry
 import com.wanan.shortcut.framework.ModuleSection
 import com.wanan.shortcut.ui.components.LoadingState
+import com.wanan.shortcut.ui.components.ScListCard
+import com.wanan.shortcut.ui.components.SectionHeader
 import com.wanan.shortcut.ui.containerViewModel
+import com.wanan.shortcut.ui.theme.IconSizes
+import com.wanan.shortcut.ui.theme.Radii
+import com.wanan.shortcut.ui.theme.Sizes
+import com.wanan.shortcut.ui.theme.Spacing
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+/** 首页状态 */
+data class HomeUiState(
+    val sections: List<ModuleSection> = emptyList(),
+    val loading: Boolean = true,
+    val style: HomeLayoutStyle = HomeLayoutStyle.DEFAULT,
+)
+
 /**
  * 首页 ViewModel。
  *
- * 关键：模块列表是**三个来源合成**的结果（设计文档 §3.2）——
+ * 模块列表是**三个来源合成**（设计规范 §3.2）：
  * 本地注册表 + 服务端 `module.list`（仅联动板块）+ 用户布局覆盖。
- * 服务端加减模块、用户自定义排序，客户端渲染代码都不用改。
  */
 class HomeViewModel(
     private val registry: ModuleRegistry,
-    private val layoutStore: HomeLayoutStore,
+    private val layoutStore: com.wanan.shortcut.framework.HomeLayoutStore,
+    private val homePrefs: HomePrefsStore,
     private val appVersion: String,
 ) : ViewModel() {
 
-    private val _sections = MutableStateFlow<List<ModuleSection>>(emptyList())
-    val sections: StateFlow<List<ModuleSection>> = _sections.asStateFlow()
+    private val _state = MutableStateFlow(HomeUiState())
+    val state: StateFlow<HomeUiState> = _state.asStateFlow()
 
-    private val _loading = MutableStateFlow(true)
-    val loading: StateFlow<Boolean> = _loading.asStateFlow()
+    init {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(style = homePrefs.currentStyle())
+        }
+    }
 
     /**
      * 刷新。
      *
-     * @param bound 当前是否已绑定 —— 决定联动板块是否可进入（置灰与否）
+     * @param bound 是否已绑定 —— 决定联动板块是否可进入（置灰与否）
      */
     fun refresh(bound: Boolean) {
         viewModelScope.launch {
-            _loading.value = true
+            _state.value = _state.value.copy(loading = true)
 
-            // 布局覆盖层：当前恒为默认值，将来换成持久化实现即可
-            val layout: HomeLayout = layoutStore.load()
-
-            // 已绑定才需要拉服务端清单；未绑定时直接用本地兜底，省一次请求。
-            // （服务端对未鉴权的 module.list 不报错，只是 bound:false。）
+            val layout = layoutStore.load()
+            // 已绑定时才拉服务端清单；未绑定直接用本地兜底，省一次请求
             val manifest = if (bound) {
                 (registry.fetchManifest() as? ApiResult.Ok)?.data
             } else {
@@ -88,8 +106,18 @@ class HomeViewModel(
                 layout = layout,
                 bound = bound,
             )
-            _sections.value = registry.group(entries)
-            _loading.value = false
+            _state.value = _state.value.copy(
+                sections = registry.group(entries),
+                loading = false,
+            )
+        }
+    }
+
+    /** 切换首页形式（设置页可调；本轮默认网格，列表也已实现） */
+    fun setStyle(style: HomeLayoutStyle) {
+        viewModelScope.launch {
+            homePrefs.setStyle(style)
+            _state.value = _state.value.copy(style = style)
         }
     }
 }
@@ -101,153 +129,260 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     onGoBind: () -> Unit,
     viewModel: HomeViewModel = containerViewModel { c: AppContainer ->
-        HomeViewModel(c.moduleRegistry, c.homeLayoutStore, com.wanan.shortcut.BuildConfig.VERSION_NAME)
+        HomeViewModel(
+            registry = c.moduleRegistry,
+            layoutStore = c.homeLayoutStore,
+            homePrefs = c.homePrefs,
+            appVersion = com.wanan.shortcut.BuildConfig.VERSION_NAME,
+        )
     },
 ) {
-    val sections by viewModel.sections.collectAsStateWithLifecycle()
-    val loading by viewModel.loading.collectAsStateWithLifecycle()
+    val state by viewModel.state.collectAsStateWithLifecycle()
 
-    // 绑定状态变化时重新合成首页：未绑定→已绑定时，联动板块应从置灰变为可进入
+    // 绑定状态变化时重新合成：未绑定→已绑定时，联动板块应从置灰变为可进入
     LaunchedEffect(identity.isBound) {
         viewModel.refresh(identity.isBound)
     }
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Header(
-            identity = identity,
-            onOpenSettings = onOpenSettings,
-            onGoBind = onGoBind,
-        )
+    Box(Modifier.fillMaxSize()) {
+        when {
+            state.loading && state.sections.isEmpty() -> LoadingState()
 
-        if (loading && sections.isEmpty()) {
-            LoadingState(Modifier.padding(top = 40.dp))
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                modifier = Modifier.fillMaxSize().padding(top = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                sections.forEach { section ->
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        SectionTitle(section.title)
-                    }
-                    items(section.entries, key = { it.module.spec.id }) { entry ->
-                        ModuleTile(
-                            entry = entry,
-                            onClick = {
-                                when {
-                                    // 版本不够：已在磁贴上标注"需升级"，点击不进入
-                                    entry.requiresUpgrade -> Unit
+            state.sections.isEmpty() -> com.wanan.shortcut.ui.components.EmptyState(
+                text = "还没有可用的功能。",
+                title = "空空的",
+                icon = "🧩",
+            )
 
-                                    // 联动板块未绑定 → 引导去绑定
-                                    // （用户要求：显示但置灰，不隐藏，让人知道有这功能）
-                                    entry.domain == ModuleDomain.LINKED && !entry.available ->
-                                        onGoBind()
+            else -> Column(Modifier.fillMaxSize()) {
+                // 连接状态条（对应 web /mobile/ 顶部的绑定信息条）：
+                // 让用户一眼看到"是否已连接、连的是哪台"，并作为进入绑定管理的入口。
+                HomeStatusStrip(
+                    identity = identity,
+                    onManage = if (identity.isBound) onOpenSettings else onGoBind,
+                    modifier = Modifier.padding(
+                        start = Spacing.lg,
+                        end = Spacing.lg,
+                        top = Spacing.sm,
+                    ),
+                )
 
-                                    else -> onOpenModule(entry.module.spec.id)
-                                }
-                            },
-                        )
-                    }
+                when (state.style) {
+                    HomeLayoutStyle.GRID -> HomeGrid(
+                        sections = state.sections,
+                        onOpenModule = onOpenModule,
+                        onGoBind = onGoBind,
+                    )
+
+                    HomeLayoutStyle.LIST -> HomeList(
+                        sections = state.sections,
+                        onOpenModule = onOpenModule,
+                        onGoBind = onGoBind,
+                    )
                 }
             }
         }
     }
 }
 
+// ---------------- 形式一：图标网格（第一期默认） ----------------
+
+/**
+ * 图标网格。
+ *
+ * 相比上一版的关键改进：**每个格子是有包裹感的卡片**（图标容器 + 名称），
+ * 而不是"裸 emoji + 裸文字"直接贴在背景上 —— 后者正是"廉价感"的来源。
+ * 同时在名称下方留出一行**状态角标**（未连接/需升级），让置灰原因可读。
+ */
 @Composable
-private fun Header(identity: Identity, onOpenSettings: () -> Unit, onGoBind: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
+private fun HomeGrid(
+    sections: List<ModuleSection>,
+    onOpenModule: (String) -> Unit,
+    onGoBind: () -> Unit,
+) {
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(3),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = Spacing.lg,
+            end = Spacing.lg,
+            top = Spacing.sm,
+            bottom = Spacing.xxl,
+        ),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
-        Column {
-            Text("ShortCut", style = MaterialTheme.typography.headlineSmall)
-            Text(
-                text = if (identity.isBound) "已连接 · ${identity.deviceName}" else "未连接电脑",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (!identity.isBound) {
-                Text(
-                    text = "去连接",
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable { onGoBind() }.padding(8.dp),
+        sections.forEach { section ->
+            item(span = { GridItemSpan(maxLineSpan) }, key = "h_${section.title}") {
+                SectionHeader(
+                    title = section.title,
+                    trailing = "${section.entries.size}",
                 )
             }
-            Text(
-                text = "设置",
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clickable { onOpenSettings() }.padding(8.dp),
-            )
+            items(section.entries, key = { it.module.spec.id }) { entry ->
+                GridTile(entry = entry, onClick = { handleEntryClick(entry, onOpenModule, onGoBind) })
+            }
         }
     }
 }
 
 @Composable
-private fun SectionTitle(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
-    )
+private fun GridTile(entry: ModuleEntry, onClick: () -> Unit) {
+    val dimmed = isDimmed(entry)
+
+    Column(
+        modifier = Modifier
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .clickable(onClick = onClick)
+            .padding(vertical = Spacing.md, horizontal = Spacing.sm)
+            .alpha(if (dimmed) 0.55f else 1f),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+    ) {
+        // 图标容器：让 emoji 有"落地感"，而不是浮在卡片上
+        Box(
+            modifier = Modifier
+                .size(Sizes.gridIcon)
+                .clip(RoundedCornerShape(Radii.sm))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = entry.icon, fontSize = IconSizes.grid)
+        }
+
+        Text(
+            text = entry.label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
+
+        // 状态角标：让"为什么点不进去"可见
+        val badge = badgeOf(entry)
+        if (badge != null) {
+            Text(
+                text = badge,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (entry.requiresUpgrade) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                maxLines = 1,
+            )
+        }
+    }
 }
 
-/**
- * 单个板块图标（首页的主体形态 —— 用户要求"整体像一个导航页"）。
- *
- * 三种视觉状态：
- *   - 正常：可进入
- *   - **置灰**：联动板块未绑定 → 仍可点击，但点了是去绑定
- *     （不做成 disabled，否则用户不知道为什么点不动）
- *   - 需升级：版本不满足，副标题给出原因，点击不进入
- */
-@Composable
-private fun ModuleTile(entry: ModuleEntry, onClick: () -> Unit) {
-    val dimmed = (entry.domain == ModuleDomain.LINKED && !entry.available) || entry.requiresUpgrade
+// ---------------- 形式二：行式卡片列表（对齐 web /mobile/） ----------------
 
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable { onClick() },
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+@Composable
+private fun HomeList(
+    sections: List<ModuleSection>,
+    onOpenModule: (String) -> Unit,
+    onGoBind: () -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = Spacing.lg,
+            end = Spacing.lg,
+            top = Spacing.sm,
+            bottom = Spacing.xxl,
         ),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp, horizontal = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            // 用 alpha 表达"不可用"，而不是把图标藏起来
-            Text(
-                text = entry.icon,
-                fontSize = 30.sp,
-                modifier = Modifier.alpha(if (dimmed) 0.35f else 1f),
-            )
-            Text(
-                text = entry.label,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.alpha(if (dimmed) 0.5f else 1f),
-            )
-            if (entry.requiresUpgrade) {
-                Text(
-                    text = "需升级",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            } else if (entry.domain == ModuleDomain.LINKED && !entry.available) {
-                Text(
-                    text = "未连接",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+        sections.forEach { section ->
+            item(key = "h_${section.title}") {
+                SectionHeader(title = section.title, trailing = "${section.entries.size}")
+            }
+            items(section.entries, key = { it.module.spec.id }) { entry ->
+                ScListCard(
+                    icon = entry.icon,
+                    title = entry.label,
+                    subtitle = badgeOf(entry) ?: entry.desc,
+                    dimmed = isDimmed(entry),
+                    onClick = { handleEntryClick(entry, onOpenModule, onGoBind) },
                 )
             }
         }
+    }
+}
+
+// ---------------- 共用逻辑 ----------------
+
+/** 置灰 = 联动板块未绑定，或版本不满足 */
+private fun isDimmed(entry: ModuleEntry): Boolean =
+    (entry.domain == ModuleDomain.LINKED && !entry.available) || entry.requiresUpgrade
+
+/** 状态角标文案；无状态时返回 null（不占位） */
+private fun badgeOf(entry: ModuleEntry): String? = when {
+    entry.requiresUpgrade -> "需升级"
+    entry.domain == ModuleDomain.LINKED && !entry.available -> "未连接"
+    else -> null
+}
+
+/**
+ * 点击行为。
+ *
+ * ⚠️ 联动板块未绑定时**不是禁用，而是引导去绑定** ——
+ * 用户要求"显示但置灰，让人知道有这些功能"，做成 disabled 会让人不知道为什么点不动。
+ */
+private fun handleEntryClick(
+    entry: ModuleEntry,
+    onOpenModule: (String) -> Unit,
+    onGoBind: () -> Unit,
+) {
+    when {
+        entry.requiresUpgrade -> Unit   // 已标"需升级"，点击不进入
+        entry.domain == ModuleDomain.LINKED && !entry.available -> onGoBind()
+        else -> onOpenModule(entry.module.spec.id)
+    }
+}
+
+/** 首页也要显示连接状态条（对应 web `/mobile/` 顶部绑定信息条） */
+@Composable
+fun HomeStatusStrip(
+    identity: Identity,
+    onManage: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .clickable(onClick = onManage)
+            .padding(Spacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+    ) {
+        com.wanan.shortcut.ui.components.StatusDot(online = identity.isBound)
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = if (identity.isBound) identity.deviceName.ifBlank { "已连接" } else "未连接电脑",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = if (identity.isBound) {
+                    identity.bindId
+                } else {
+                    "连接后可用任务墙、文件共享、电脑控制"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Text(
+            text = if (identity.isBound) "管理" else "去连接",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
     }
 }

@@ -90,6 +90,16 @@ interface ShortcutModule {
 
     /** 权限申请结果回调（可选）。仅在声明了 [permissions] 时被调用。 */
     fun onPermissionResult(granted: Map<String, Boolean>) = Unit
+
+    /**
+     * 子页标题（可选）。
+     *
+     * 框架用它渲染顶部栏副标题；板块不实现时回落到板块名。
+     * 这样"新建任务"这类子页能显示自己的标题，而框架不必知道板块内部结构。
+     *
+     * @param subRoute 板块自己通过 [ModuleNavigator.to] 传的子页标识
+     */
+    fun subRouteTitle(subRoute: String): String? = null
 }
 
 /**

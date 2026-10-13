@@ -1,17 +1,20 @@
 package com.wanan.shortcut.feature.local.notes
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -27,7 +30,9 @@ import com.wanan.shortcut.framework.LocalModuleSubRoute
 import com.wanan.shortcut.framework.ModuleNavigator
 import com.wanan.shortcut.ui.components.EmptyState
 import com.wanan.shortcut.ui.components.LoadingState
+import com.wanan.shortcut.ui.components.ScCard
 import com.wanan.shortcut.ui.containerViewModel
+import com.wanan.shortcut.ui.theme.Spacing
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -35,8 +40,8 @@ import java.util.Locale
 /**
  * 笔记板块的界面（本机功能，[com.wanan.shortcut.framework.ModuleDomain.LOCAL]）。
  *
- * 注意本文件与任务墙的差别：**完全没有"未连接电脑"的概念**。
- * 因为它不需要绑定，框架也不会拦它 —— 这正是本次重构要达成的效果。
+ * 与任务墙的差别：**完全没有"未连接电脑"的概念** —— 本机板块不需要绑定，
+ * 框架也不会拦它。
  */
 @Composable
 fun NotesScreen(navigator: ModuleNavigator) {
@@ -55,9 +60,7 @@ fun NotesScreen(navigator: ModuleNavigator) {
             state = state,
             onTitleChange = viewModel::editTitle,
             onBodyChange = viewModel::editBody,
-            onSave = {
-                viewModel.save { navigator.back() }
-            },
+            onSave = { viewModel.save { navigator.back() } },
             onDelete = { viewModel.delete { navigator.back() } },
             onBack = { navigator.back() },
         )
@@ -74,26 +77,37 @@ private fun NotesList(
         when (state) {
             NotesUiState.Loading -> LoadingState()
 
-            // 编辑态由 NoteEditor 渲染，列表这里不会出现；
-            // 但 when 必须穷尽，否则以后新增状态时会被编译器漏掉。
+            // 编辑态由 NoteEditor 渲染；when 必须穷尽
             is NotesUiState.Editing -> LoadingState()
 
             is NotesUiState.Ready ->
                 if (state.notes.isEmpty()) {
-                    EmptyState("还没有笔记\n点右下角 ＋ 写一条")
+                    EmptyState(
+                        text = "随手记点东西，只存在这台手机上，不联网。",
+                        title = "还没有笔记",
+                        icon = "📝",
+                        actionText = "写第一条",
+                        onAction = onCreate,
+                    )
                 } else {
                     LazyColumn(
-                        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            start = Spacing.lg,
+                            end = Spacing.lg,
+                            top = Spacing.sm,
+                            // 底部留出 FAB 的高度，避免最后一条被遮住
+                            bottom = 96.dp,
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.md),
                     ) {
                         items(state.notes, key = { it.id }) { note ->
-                            Card(
-                                modifier = Modifier.fillMaxWidth().clickableCard { onOpen(note.id) },
-                            ) {
-                                Column(Modifier.padding(14.dp)) {
+                            ScCard(onClick = { onOpen(note.id) }, contentPadding = Spacing.md) {
+                                Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                                     Text(
                                         text = note.title.ifBlank { "（无标题）" },
                                         style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurface,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
@@ -104,14 +118,12 @@ private fun NotesList(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             maxLines = 2,
                                             overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.padding(top = 4.dp),
                                         )
                                     }
                                     Text(
                                         text = formatTime(note.updatedAt),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(top = 6.dp),
                                     )
                                 }
                             }
@@ -120,12 +132,16 @@ private fun NotesList(
                 }
         }
 
-        FloatingActionButton(
+        ExtendedFloatingActionButton(
             onClick = onCreate,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
-        ) {
-            Text("＋", style = MaterialTheme.typography.headlineSmall)
-        }
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(Spacing.xl),
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            text = { Text("新建") },
+            icon = { Text("＋") },
+        )
     }
 }
 
@@ -140,9 +156,12 @@ private fun NoteEditor(
 ) {
     val editing = (state as? NotesUiState.Editing) ?: return
 
+    // 编辑页的返回语义：回笔记列表（不退到首页）。
+    // NavHost 已保证系统返回会出栈，这里不额外注册 BackHandler ——
+    // 顶部栏返回箭头走的是同一个 popBackStack()，两者行为一致。
     Column(
-        Modifier.fillMaxSize().padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        Modifier.fillMaxSize().padding(Spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
         OutlinedTextField(
             value = editing.title,
@@ -155,11 +174,13 @@ private fun NoteEditor(
             value = editing.body,
             onValueChange = onBodyChange,
             label = { Text("内容") },
-            minLines = 6,
             modifier = Modifier.fillMaxWidth().weight(1f),
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TextButton(onClick = onSave) { Text("保存") }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Button(onClick = onSave) { Text("保存") }
             TextButton(onClick = onBack) { Text("取消") }
             if (!editing.isNew) {
                 TextButton(onClick = onDelete) {
@@ -169,9 +190,6 @@ private fun NoteEditor(
         }
     }
 }
-
-private fun Modifier.clickableCard(onClick: () -> Unit): Modifier =
-    this.clickable(onClick = onClick)
 
 private fun formatTime(millis: Long): String =
     SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(millis))

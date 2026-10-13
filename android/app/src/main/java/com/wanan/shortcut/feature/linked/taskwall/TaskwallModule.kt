@@ -1,6 +1,7 @@
 package com.wanan.shortcut.feature.linked.taskwall
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Text
@@ -12,8 +13,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import com.wanan.shortcut.core.realtime.RelayMessage
 import com.wanan.shortcut.framework.Capability
 import com.wanan.shortcut.framework.LocalModuleSubRoute
@@ -63,13 +62,13 @@ class TaskwallModule : ShortcutModule {
 
     @Composable
     override fun Screen(navigator: ModuleNavigator) {
-        // 子路由由框架维护，板块只读
+        // 子路由由框架维护（来自导航图），板块只读
         val subRoute = LocalModuleSubRoute.current
         val viewModel = com.wanan.shortcut.ui.containerViewModel { it.taskwallViewModel() }
 
         var snackbar by remember { mutableStateOf<String?>(null) }
 
-        Box(Modifier.padding(top = 4.dp)) {
+        Box(Modifier.fillMaxSize()) {
             when (subRoute) {
                 null -> TaskwallScreen(
                     onCompose = { navigator.to(ROUTE_COMPOSE) },
@@ -98,10 +97,18 @@ class TaskwallModule : ShortcutModule {
                     snackbar = null
                 }
                 Snackbar(
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(com.wanan.shortcut.ui.theme.Spacing.lg),
                 ) { Text(msg) }
             }
         }
+    }
+
+    /** 子页标题：让顶部栏显示"新建任务"而不是板块名 */
+    override fun subRouteTitle(subRoute: String): String? = when (subRoute) {
+        ROUTE_COMPOSE -> "新建任务"
+        else -> null
     }
 
     /**

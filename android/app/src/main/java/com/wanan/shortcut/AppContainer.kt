@@ -7,6 +7,7 @@ import com.wanan.shortcut.core.identity.IdentityStore
 import com.wanan.shortcut.core.identity.TokenBox
 import com.wanan.shortcut.core.net.ApiClient
 import com.wanan.shortcut.core.prefs.AppPrefsStore
+import com.wanan.shortcut.core.prefs.HomePrefsStore
 import com.wanan.shortcut.core.prefs.JsonListStore
 import com.wanan.shortcut.feature.bind.BindViewModel
 import com.wanan.shortcut.feature.linked.taskwall.TaskwallRepository
@@ -45,6 +46,7 @@ class AppContainer(context: Context) {
 
     // ---- core/prefs ----
     val appPrefs: AppPrefsStore by lazy { AppPrefsStore(appContext) }
+    val homePrefs: HomePrefsStore by lazy { HomePrefsStore(appContext) }
 
     /**
      * 首页布局存储。

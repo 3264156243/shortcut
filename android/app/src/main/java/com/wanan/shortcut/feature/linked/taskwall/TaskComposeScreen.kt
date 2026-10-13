@@ -1,6 +1,9 @@
 package com.wanan.shortcut.feature.linked.taskwall
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,18 +24,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import com.wanan.shortcut.ui.components.InlineError
+import com.wanan.shortcut.ui.components.ScCard
+import com.wanan.shortcut.ui.theme.Spacing
 import java.util.Calendar
 
 /**
  * 新建任务表单（契约 §5.1 的 `push`）。
  *
- * UI 上有意体现契约里的两处硬约束：
- *   1. **长文本开关**：关掉时长文本输入框不显示，且提交时不带 `details`
- *      （契约规定 `details` 仅当 `longText===true` 才被读取）；
- *   2. **提醒开关**：打开但没选时间时**本地就拦住**，不白跑一次网络请求
- *      （服务端会回 `提醒时间格式无效`，实测确认）。
+ * UI 上体现契约的两处硬约束：
+ *   1. **长文本开关**：关掉时不带 `details`（契约规定仅当 `longText===true` 才被读取）；
+ *   2. **提醒开关**：打开但没选时间时**本地拦住**，不白跑一次网络请求
+ *      （服务端会回 `提醒时间格式无效`）。
  */
 @Composable
 fun TaskComposeScreen(
@@ -55,93 +60,114 @@ fun TaskComposeScreen(
     /**
      * 提醒时间用"相对小时数"选择。
      *
-     * 为什么不用系统日期时间选择器：P1 阶段先保证协议链路正确，
-     * 引入 `DatePicker`/`TimePicker` 会牵涉时区与 Material3 版本细节。
-     * 这里给出明确的相对时间，天然避免时区误用（最终仍统一转 UTC ISO）。
+     * 不用系统日期时间选择器：先保证协议链路正确，且相对时间天然避免时区误用
+     * （最终仍统一转 UTC ISO，见 DateFormats.toIsoUtc）。
      */
     var reminderHours by remember { mutableStateOf(1) }
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(Spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
-        Text("新建任务", style = MaterialTheme.typography.titleLarge)
+        ScCard {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it; localError = "" },
+                    label = { Text("任务标题") },
+                    singleLine = true,
+                    supportingText = { Text("${title.length}/120") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
 
-        OutlinedTextField(
-            value = title,
-            onValueChange = { title = it; localError = "" },
-            label = { Text("任务标题（必填）") },
-            singleLine = true,
-            supportingText = { Text("${title.length}/120") },
-            modifier = Modifier.fillMaxWidth(),
-        )
+                SwitchRow(
+                    label = "长文本任务",
+                    checked = longText,
+                    onCheckedChange = { longText = it },
+                )
 
-        ToggleRow(
-            label = "长文本任务",
-            checked = longText,
-            onCheckedChange = { longText = it },
-        )
-        if (longText) {
-            OutlinedTextField(
-                value = details,
-                onValueChange = { details = it },
-                label = { Text("详细内容") },
-                minLines = 3,
-                supportingText = { Text("${details.length}/2000") },
-                modifier = Modifier.fillMaxWidth(),
-            )
+                if (longText) {
+                    OutlinedTextField(
+                        value = details,
+                        onValueChange = { details = it },
+                        label = { Text("详细内容") },
+                        minLines = 3,
+                        supportingText = { Text("${details.length}/2000") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
         }
 
-        ToggleRow(
-            label = "到时提醒",
-            checked = reminderEnabled,
-            onCheckedChange = { reminderEnabled = it; localError = "" },
-        )
-        if (reminderEnabled) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                listOf(1, 2, 4, 8, 24).forEach { h ->
-                    TextButton(onClick = { reminderHours = h }) {
-                        Text(
-                            text = "${h}小时后",
-                            color = if (reminderHours == h) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        )
+        ScCard {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                SwitchRow(
+                    label = "到时提醒",
+                    checked = reminderEnabled,
+                    onCheckedChange = { reminderEnabled = it; localError = "" },
+                )
+
+                if (reminderEnabled) {
+                    // 相对时间做成胶囊选项，比裸下拉更好按
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                        listOf(1, 2, 4, 8, 24).forEach { h ->
+                            val selected = reminderHours == h
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(MaterialTheme.shapes.small)
+                                    .background(
+                                        if (selected) MaterialTheme.colorScheme.primaryContainer
+                                        else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    )
+                                    .clickable { reminderHours = h }
+                                    .padding(vertical = Spacing.sm),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = "${h}h",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (selected) {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
 
-        OutlinedTextField(
-            value = boardName,
-            onValueChange = { boardName = it },
-            label = { Text("目标任务墙（可选，留空用默认墙）") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        ScCard {
+            OutlinedTextField(
+                value = boardName,
+                onValueChange = { boardName = it },
+                label = { Text("目标任务墙（可选）") },
+                supportingText = { Text("留空则用默认墙") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
 
         if (localError.isNotBlank()) {
-            Text(
-                text = localError,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-            )
+            InlineError(message = localError)
         }
 
         Button(
             onClick = {
-                // 本地校验：避免必然失败的网络往返
                 if (title.isBlank()) {
                     localError = "请填写任务标题"
                     return@Button
                 }
                 val reminderAt = if (reminderEnabled) {
-                    Calendar.getInstance().apply { add(Calendar.HOUR_OF_DAY, reminderHours) }.timeInMillis
+                    Calendar.getInstance()
+                        .apply { add(Calendar.HOUR_OF_DAY, reminderHours) }
+                        .timeInMillis
                 } else {
                     null
                 }
@@ -149,21 +175,32 @@ fun TaskComposeScreen(
             },
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("下发到电脑")
+            Text("钉到电脑任务墙")
         }
 
-        TextButton(onClick = onBack) { Text("返回列表") }
+        TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+            Text("取消")
+        }
     }
 }
 
+/** 开关行：左标签右开关。 */
 @Composable
-private fun ToggleRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun SwitchRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.xs),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
