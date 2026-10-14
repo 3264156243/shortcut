@@ -263,7 +263,11 @@ private fun AppTopBar(
 
         Routes.BIND_WITH_ID -> ShortCutTopBar(title = "连接电脑", onBack = onBack)
 
-        Routes.MODULE -> {
+        // ⚠️ 板块主页与**板块子页**是两个不同的路由模式。
+        // 早先这里只匹配了 `Routes.MODULE`，于是子页（如控制面板 module/control/sub/panel）
+        // 落到 `else` 分支 → 顶部栏既没有标题也没有返回箭头
+        //（用户反馈："控制界面没有提供返回上一层控件"）。
+        Routes.MODULE, Routes.MODULE_SUB -> {
             val module = moduleId?.let { container.moduleRegistry.get(it) }
             val title = when {
                 module == null -> "功能"
@@ -272,6 +276,7 @@ private fun AppTopBar(
             }
             ShortCutTopBar(
                 title = title,
+                // 子页显示板块名作为副标题，让用户知道自己在哪一层
                 subtitle = if (!subRoute.isNullOrBlank()) module?.spec?.label else null,
                 onBack = onBack,
             )

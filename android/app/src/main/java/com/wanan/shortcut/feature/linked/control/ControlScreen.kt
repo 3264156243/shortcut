@@ -90,6 +90,10 @@ private fun ControlEntryScreen(
 
     var manualHost by remember { mutableStateOf("") }
 
+    // 每次回到入口页都重读会话状态：
+    // 通道可能在控制页里被建立/切换，回到这里时 UI 必须跟上
+    LaunchedEffect(Unit) { viewModel.refreshAvailability() }
+
     Column(
         Modifier
             .fillMaxSize()
@@ -204,6 +208,9 @@ private fun ControlEntryScreen(
 private fun ControlPanelScreen(viewModel: ControlViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var section by remember { mutableStateOf(PanelSection.INPUT) }
+
+    // 进入控制页时同步一次可用性（通道可能在入口页刚建立）
+    LaunchedEffect(Unit) { viewModel.refreshAvailability() }
 
     Column(Modifier.fillMaxSize()) {
         Row(

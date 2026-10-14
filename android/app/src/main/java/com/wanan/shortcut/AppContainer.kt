@@ -13,6 +13,7 @@ import com.wanan.shortcut.core.prefs.HomePrefsStore
 import com.wanan.shortcut.core.prefs.JsonListStore
 import com.wanan.shortcut.core.realtime.RelayClient
 import com.wanan.shortcut.feature.bind.BindViewModel
+import com.wanan.shortcut.feature.linked.control.ControlSession
 import com.wanan.shortcut.feature.linked.control.ControlViewModel
 import com.wanan.shortcut.feature.linked.taskwall.TaskwallRepository
 import com.wanan.shortcut.feature.linked.taskwall.TaskwallViewModel
@@ -135,14 +136,26 @@ class AppContainer(context: Context) {
             errorMapper = errorMapper,
         )
 
-    /** 电脑控制（联动板块） */
-    fun controlViewModel(): ControlViewModel =
-        ControlViewModel(
+    /**
+     * 电脑控制的**会话**（容器级单例）。
+     *
+     * ⚠️ 必须是单例：通道选择与连接状态要**跨页面共享** ——
+     * 入口页连上的通道，控制页必须能看到。
+     * 早先把它放在页面级 ViewModel 里，导致"入口页显示已连接、控制页显示未连接"
+     * （Navigation Compose 里两个页面是两个目的地，各有独立 ViewModel 实例）。
+     */
+    val controlSession: ControlSession by lazy {
+        ControlSession(
+            scope = applicationScope,
             relay = relayClient,
             lanClient = lanClient,
-            bindIdProvider = { identityProvider.current().bindId },
             apiClient = apiClient,
+            bindIdProvider = { identityProvider.current().bindId },
         )
+    }
+
+    /** 电脑控制（联动板块，页面级 ViewModel） */
+    fun controlViewModel(): ControlViewModel = ControlViewModel(controlSession)
 
     /** 笔记（本机板块）：注意它**不需要** apiClient / errorMapper。 */
     fun notesViewModel(): NotesViewModel =
