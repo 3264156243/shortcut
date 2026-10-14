@@ -1,0 +1,169 @@
+package com.wanan.shortcut.core.lan
+
+import com.google.gson.JsonObject
+import com.wanan.shortcut.core.net.Json
+import com.wanan.shortcut.core.result.ApiResult
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.IOException
+import java.net.SocketTimeoutException
+import java.util.concurrent.TimeUnit
+
+/**
+ * 局域网 HTTP 客户端（契约 §8.3 / §8.4）。
+ *
+ * ## ⚠️ 与云端接口的三处关键差异（照 web 与控制页实现对齐）
+ *
+ * 1. **没有 `success` 字段**：局域网接口成功就是 HTTP 200 + 自己的 JSON 形状
+ *    （契约 §8.4 末尾明确写了"这里**没有** `success` 字段，与 api.php 不同！"）。
+ * 2. **鉴权走 `Authorization: Bearer <token>`**（或 `x-token`），不是 `bindId`+`mobileToken`。
+ * 3. **明文 HTTP**：`http://192.168.x.x:9823`。Android 9+ 默认拦截，
+ *    已在 `network_security_config.xml` 放行（契约 §8.5）。
+ *
+ * ## 地址会变（契约 §8.5-2）
+ *
+ * 每次「局域网直连」都要重新向云端问 `/api/lan-entry`，**不要缓存 IP**。
+ * 所以本类**不持有 baseUrl 字段** —— 每次调用都把 url 传进来，从类型上防止缓存。
+ */
+class LanClient(
+    private val client: OkHttpClient = defaultClient(),
+) {
+
+    /**
+     * 调一个局域网接口。
+     *
+     * @param baseUrl 形如 `http://192.168.1.5:9823`（由 `/api/lan-entry` 现取）
+     * @param token 预授权令牌（桌面端「局域网直连」运行期间有效）
+     * @param path 形如 `/api/type`
+     * @param body POST 的 JSON 体；null 表示不需要 body
+     */
+    suspend fun post(
+        baseUrl: String,
+        token: String,
+        path: String,
+        body: Map<String, Any?>? = null,
+    ): ApiResult<JsonObject> = withContext(Dispatchers.IO) {
+        val url = baseUrl.trimEnd('/') + path
+        val json = if (body == null) "{}" else Json.gson.toJson(body)
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $token")
+            // 同时也带 x-token：契约 §8.3 说两者都接受，多带一个不会更差
+            .header("x-token", token)
+            .post(json.toRequestBody(JSON_UTF8))
+            .build()
+
+        try {
+            client.newCall(request).execute().use { response ->
+                val raw = response.body?.string().orEmpty()
+                val obj = Json.parseObject(raw)
+
+                // 鉴权失败统一 401（契约 §8.4）
+                if (response.code == 401) {
+                    val mode = obj?.let { if (it.has("authMode")) it.get("authMode").asString else "" }.orEmpty()
+                    return@withContext ApiResult.Unauthorized
+                }
+
+                if (!response.isSuccessful) {
+                    // 局域网接口用真实状态码；错误体是 {error: "..."}（没有 success/message）
+                    val err = obj?.let { o ->
+                        when {
+                            o.has("error") && !o.get("error").isJsonNull -> o.get("error").asString
+                            o.has("message") && !o.get("message").isJsonNull -> o.get("message").asString
+                            else -> null
+                        }
+                    }
+                    return@withContext ApiResult.BusinessFail(
+                        err ?: "局域网请求失败（HTTP ${response.code}）",
+                        response.code,
+                    )
+                }
+
+                if (obj == null) {
+                    return@withContext ApiResult.TransportFail(
+                        ApiResult.TransportFail.Kind.BAD_RESPONSE, response.code,
+                    )
+                }
+                // ⚠️ 局域网接口**没有 success 字段**，到这里就算成功
+                ApiResult.Ok(obj)
+            }
+        } catch (e: SocketTimeoutException) {
+            ApiResult.TransportFail(ApiResult.TransportFail.Kind.TIMEOUT, cause = e)
+        } catch (e: IOException) {
+            // 最常见的原因：手机与电脑不在同一 Wi-Fi（契约 §8.5-3）
+            ApiResult.TransportFail(ApiResult.TransportFail.Kind.NETWORK, cause = e)
+        } catch (e: Exception) {
+            ApiResult.TransportFail(ApiResult.TransportFail.Kind.UNKNOWN, cause = e)
+        }
+    }
+
+    /**
+     * `POST /api/pair` —— 用 6 位绑定码换令牌（契约 §8.4）。
+     *
+     * 只有 `authMode='pair'` 时才需要；用 `/api/lan-entry` 拿到的预授权 token 可以直接用。
+     */
+    suspend fun pair(baseUrl: String, code: String): ApiResult<String> = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(baseUrl.trimEnd('/') + "/api/pair")
+            .post(Json.gson.toJson(mapOf("code" to code)).toRequestBody(JSON_UTF8))
+            .build()
+        try {
+            client.newCall(request).execute().use { response ->
+                val obj = Json.parseObject(response.body?.string().orEmpty())
+                if (!response.isSuccessful) {
+                    val err = obj?.let { if (it.has("error")) it.get("error").asString else null }
+                    return@withContext ApiResult.BusinessFail(
+                        err ?: "绑定码错误", response.code,
+                    )
+                }
+                val token = obj?.let { if (it.has("token") && !it.get("token").isJsonNull) it.get("token").asString else "" }
+                if (token.isNullOrBlank()) {
+                    ApiResult.TransportFail(ApiResult.TransportFail.Kind.BAD_RESPONSE)
+                } else {
+                    ApiResult.Ok(token)
+                }
+            }
+        } catch (e: Exception) {
+            ApiResult.TransportFail(ApiResult.TransportFail.Kind.NETWORK, cause = e)
+        }
+    }
+
+    /**
+     * `GET /api/config` —— 无需鉴权，用于探测"这个地址是不是一个局域网控制服务"。
+     *
+     * 手动填地址时先打它，能区分"地址不通"与"地址对了但令牌不对"。
+     */
+    suspend fun config(baseUrl: String): ApiResult<JsonObject> = withContext(Dispatchers.IO) {
+        val request = Request.Builder().url(baseUrl.trimEnd('/') + "/api/config").get().build()
+        try {
+            client.newCall(request).execute().use { response ->
+                val obj = Json.parseObject(response.body?.string().orEmpty())
+                if (!response.isSuccessful || obj == null) {
+                    ApiResult.TransportFail(ApiResult.TransportFail.Kind.BAD_RESPONSE, response.code)
+                } else {
+                    ApiResult.Ok(obj)
+                }
+            }
+        } catch (e: Exception) {
+            ApiResult.TransportFail(ApiResult.TransportFail.Kind.NETWORK, cause = e)
+        }
+    }
+
+    companion object {
+        private val JSON_UTF8 = "application/json; charset=utf-8".toMediaType()
+
+        /**
+         * 局域网请求超时给得比较短：同网段延迟通常 5–15ms（契约 §8.1），
+         * 长时间等待只说明"不在同一网络"，不如早点失败让用户回退到云端。
+         */
+        private fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
+            .connectTimeout(4, TimeUnit.SECONDS)
+            .readTimeout(8, TimeUnit.SECONDS)
+            .writeTimeout(8, TimeUnit.SECONDS)
+            .build()
+    }
+}

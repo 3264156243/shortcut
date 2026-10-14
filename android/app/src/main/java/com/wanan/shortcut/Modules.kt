@@ -1,6 +1,8 @@
 package com.wanan.shortcut
 
+import com.wanan.shortcut.feature.linked.control.ControlModule
 import com.wanan.shortcut.feature.linked.taskwall.TaskwallModule
+import com.wanan.shortcut.feature.linked.transfer.TransferModule
 import com.wanan.shortcut.feature.local.demo.DemoModule
 import com.wanan.shortcut.feature.local.notes.NotesModule
 import com.wanan.shortcut.framework.ShortcutModule
@@ -30,10 +32,8 @@ object Modules {
         DemoModule(),
 
         // ===== 连接电脑（LINKED）：需要绑定码 =====
-        TaskwallModule(),  // 🗂️ 任务墙（P1 已完成）
-
-        // —— 待做
-        // FileTransferModule(),   // 📤 文件快传（blob 能力）
-        // ControlModule(),        // 🖥️ 电脑控制（realtime 能力 + 前台服务）
+        TaskwallModule(),   // 🗂️ 任务墙（queue 能力）
+        TransferModule(),   // 📤 文件共享（blob 能力）
+        ControlModule(),    // 🖥️ 电脑控制（realtime 能力）
     )
 }

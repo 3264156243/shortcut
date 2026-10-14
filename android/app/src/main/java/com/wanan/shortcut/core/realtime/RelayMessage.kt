@@ -40,13 +40,22 @@ sealed interface RelayMessage {
      * ⚠️ 契约 §7.3：`api-res` 是**房间广播**（发给该 bindId 房间内所有手机），
      * 安卓端**必须用自己的 `id` 过滤**，且 `id` 要按 **String** 归一化比较
      * （中继回包时未做类型强转，可能是数字 2 也可能是字符串 "2"）。
-     * 归一化在 [RelayMessage] 的构造处完成，防止调用方漏做。
      */
     data class ApiRes(
         val id: String,
         val ok: Boolean,
         val status: Int,
         val error: String?,
+        /**
+         * 桌面端返回的完整 `data` 对象。
+         *
+         * 之所以带上整个对象而不是只抽 `error`：
+         * 部分指令的**结果就在 data 里**（最典型：`/api/clipboard/refresh` 返回
+         * `{current, history}`），只留 error 会让这些指令拿不到返回值。
+         * 早先版本用"最近一次 data"的旁路字段传递，那是竞态（并发指令会串数据），
+         * 改为随回执一起传递。
+         */
+        val data: com.google.gson.JsonObject = com.google.gson.JsonObject(),
     ) : RelayMessage
 
     /** 协议外的未知消息：保留原文，便于排查协议演进。 */

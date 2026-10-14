@@ -1,6 +1,8 @@
 package com.wanan.shortcut
 
 import android.content.Context
+import com.wanan.shortcut.core.blob.BlobEngine
+import com.wanan.shortcut.core.blob.FileApiClient
 import com.wanan.shortcut.core.error.ErrorMapper
 import com.wanan.shortcut.core.identity.IdentityProvider
 import com.wanan.shortcut.core.identity.IdentityStore
@@ -9,9 +11,13 @@ import com.wanan.shortcut.core.net.ApiClient
 import com.wanan.shortcut.core.prefs.AppPrefsStore
 import com.wanan.shortcut.core.prefs.HomePrefsStore
 import com.wanan.shortcut.core.prefs.JsonListStore
+import com.wanan.shortcut.core.realtime.RelayClient
 import com.wanan.shortcut.feature.bind.BindViewModel
+import com.wanan.shortcut.feature.linked.control.ControlViewModel
 import com.wanan.shortcut.feature.linked.taskwall.TaskwallRepository
 import com.wanan.shortcut.feature.linked.taskwall.TaskwallViewModel
+import com.wanan.shortcut.feature.linked.transfer.TransferRepository
+import com.wanan.shortcut.feature.linked.transfer.TransferViewModel
 import com.wanan.shortcut.feature.local.notes.Note
 import com.wanan.shortcut.feature.local.notes.NotesRepository
 import com.wanan.shortcut.feature.local.notes.NotesViewModel
@@ -82,6 +88,61 @@ class AppContainer(context: Context) {
      */
     fun taskwallViewModel(): TaskwallViewModel =
         TaskwallViewModel(TaskwallRepository(apiClient), errorMapper)
+
+    // ---- core/blob（共享能力底座）----
+    /**
+     * 分片上传/下载引擎。
+     *
+     * 放在容器里而不是让板块自己 new：文件上传是"文件共享"与"共享给他人"
+     * 两条路径共用的能力，且它依赖 [FileApiClient]（另一个需要身份的东西）。
+     */
+    private val fileApiClient: FileApiClient by lazy { FileApiClient(identityProvider) }
+    val blobEngine: BlobEngine by lazy { BlobEngine(apiClient, fileApiClient) }
+
+    // ---- core/realtime + core/lan（共享能力底座）----
+    /**
+     * 实时通道：**全应用唯一一条 WebSocket**。
+     *
+     * ⚠️ 必须在容器里做成单例（而不是每个实时板块各建一条）：
+     * 契约 §7.6 限制每 `bindId` 最多 3 条连接，各建一条会直接把用户踢下线。
+     */
+    val relayClient: RelayClient by lazy {
+        RelayClient(scope = applicationScope)
+    }
+
+    /** 局域网 HTTP 客户端（契约 §8.3） */
+    val lanClient: com.wanan.shortcut.core.lan.LanClient by lazy {
+        com.wanan.shortcut.core.lan.LanClient()
+    }
+
+    /**
+     * 应用级协程作用域。
+     *
+     * 供 [RelayClient] 这类**生命周期长于任何界面**的组件使用：
+     * 若用 `viewModelScope`，用户离开控制页就会把 WS 连接一并取消
+     * —— 那会导致"回到控制页总是要重连"。
+     */
+    private val applicationScope: kotlinx.coroutines.CoroutineScope by lazy {
+        kotlinx.coroutines.CoroutineScope(
+            kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default,
+        )
+    }
+
+    /** 文件共享（联动板块） */
+    fun transferViewModel(): TransferViewModel =
+        TransferViewModel(
+            repository = TransferRepository(apiClient, blobEngine),
+            errorMapper = errorMapper,
+        )
+
+    /** 电脑控制（联动板块） */
+    fun controlViewModel(): ControlViewModel =
+        ControlViewModel(
+            relay = relayClient,
+            lanClient = lanClient,
+            bindIdProvider = { identityProvider.current().bindId },
+            apiClient = apiClient,
+        )
 
     /** 笔记（本机板块）：注意它**不需要** apiClient / errorMapper。 */
     fun notesViewModel(): NotesViewModel =
