@@ -73,11 +73,11 @@ android/                     ← 本目录即工程根
 ### 4.1 常规单测（离线、确定性，进套件）
 
 ```powershell
-.\gradlew.bat testDebugUnitTest      # 87 个用例
+.\gradlew.bat testDebugUnitTest      # 148 个用例
 ```
 
-其中 `TaskwallMockServerTest` 用 MockWebServer 覆盖**真实网络代码路径**
-（请求体形状、失败语义、令牌失效），不需要网络。
+其中 `TaskwallMockServerTest` / `TransferMockServerTest` 用 MockWebServer 覆盖**真实网络代码路径**
+（请求体形状、失败语义、令牌失效、`msg_` 前缀处理），不需要网络。
 
 ### 4.2 打真实线上服务端（可选，默认跳过）
 
@@ -127,9 +127,13 @@ adb devices ; adb logcat         # 真机调试
 
 ## 7. 已完成 / 待做
 
-**已完成**：工程骨架、core（身份/网络/错误/偏好）、framework（本机+联动两类板块）、
-首页（网格/列表可切换）、设置（分片式）、绑定、笔记（本机样例）、任务墙（联动样例）、
+**已完成**：工程骨架、core（身份/网络/错误/偏好/**blob**/**realtime**/**lan**）、
+framework（本机+联动两类板块）、首页（网格/列表可切换）、设置（分片式）、绑定（含扫码）、
+笔记（本机样例）、**任务墙** / **文件共享** / **电脑控制**（三个联动板块）、
 界面与交互第一轮打磨（导航栈/inset/设计令牌/底部标签栏）。
-任务墙已在**真实线上服务端**跑通全闭环（见 `LiveServerSmokeTest`）。
 
-**待做**：电脑控制（含实时通道与前台服务）、文件快传、推送、扫码绑定、页面过渡动画。
+**线上验证**：任务墙与文件共享都在**真实线上服务端**跑通（见
+`LiveServerSmokeTest` / `LiveTransferSmokeTest`，默认跳过、提供凭据即跑）。
+
+**待做**：推送（等桌面侧 `push.register` + OPPO 网关）、页面过渡动画、
+`core/rpc` 底座、浅色主题精细打磨。
