@@ -44,6 +44,16 @@ object Routes {
     /** 绑定（从首页或置灰的联动板块进入） */
     const val BIND = "bind"
 
+    /**
+     * 带 bindId 的绑定直链（对应 web 的 `?bind=<bindId>`）。
+     *
+     * 场景：用外面相机扫桌面端二维码，打开的是网页链接；
+     * 但 App 内也可以直接以 bindId 进入本页并**自动绑定**。
+     */
+    const val BIND_WITH_ID = "bind/{bindId}"
+
+    const val ARG_BIND_ID = "bindId"
+
     /** 某板块首页 */
     const val MODULE = "module/{moduleId}"
 
@@ -62,6 +72,9 @@ object Routes {
 
     fun module(id: String) = "module/$id"
     fun moduleSub(id: String, sub: String) = "module/$id/sub/$sub"
+
+    /** 绑定直链（把 bindId 编进路径，进入即自动绑定） */
+    fun bindWithId(bindId: String) = "bind/$bindId"
 
     /** 哪些路由属于"顶层标签页"（决定底部标签栏是否显示） */
     val TOP_LEVEL = setOf(HOME, SETTINGS)

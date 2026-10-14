@@ -176,6 +176,17 @@ private fun AppRoot(container: AppContainer) {
                 BindScreen(onBound = { navController.popBackStack() })
             }
 
+            // 绑定直链（对应 web 的 ?bind=）：带 bindId 进来会**自动绑定**
+            composable(
+                route = Routes.BIND_WITH_ID,
+                arguments = listOf(navArgument(Routes.ARG_BIND_ID) { type = NavType.StringType }),
+            ) { entry ->
+                BindScreen(
+                    onBound = { navController.popBackStack() },
+                    initialBindId = entry.arguments?.getString(Routes.ARG_BIND_ID),
+                )
+            }
+
             composable(
                 route = Routes.MODULE,
                 arguments = listOf(navArgument(Routes.ARG_MODULE_ID) { type = NavType.StringType }),
@@ -249,6 +260,8 @@ private fun AppTopBar(
         Routes.SETTINGS -> ShortCutTopBar(title = "设置")
 
         Routes.BIND -> ShortCutTopBar(title = "连接电脑", onBack = onBack)
+
+        Routes.BIND_WITH_ID -> ShortCutTopBar(title = "连接电脑", onBack = onBack)
 
         Routes.MODULE -> {
             val module = moduleId?.let { container.moduleRegistry.get(it) }

@@ -51,9 +51,30 @@ data class PushResponse(
 /** `board.list` 的响应（契约 §5.4） */
 data class BoardListResponse(
     @SerializedName("boards") val boards: List<String> = emptyList(),
+
+    /**
+     * 桌面端**最后一次上报墙名**的时间（ISO-8601）。
+     *
+     * ⚠️ 该字段**不在仓库任何分支里**，但**线上服务端实际会返回**
+     * （2026-10-14 实测：`{"success":true,"boards":[],"boardsUpdatedAt":""}`）。
+     * 说明线上部署的 `api.php` 比仓库新。它是**新增字段**，向后兼容，
+     * 老客户端忽略它即可（Gson 默认忽略未知字段），所以不影响契约稳定性。
+     *
+     * 用途：诊断《任务墙板块待办》T1 那个"手机端又只剩默认任务墙"的问题 ——
+     *   - `boards` 为空 **且** `boardsUpdatedAt` 也为空 → 桌面端**从没上报过**墙名；
+     *   - `boards` 为空但 `boardsUpdatedAt` 有值 → 上报过，但内容为空/被清掉了。
+     * 两种情况的对策不同，有了这个字段就能给出准确提示，而不是让用户猜。
+     */
+    @SerializedName("boardsUpdatedAt") val boardsUpdatedAt: String = "",
 )
 
-/** `ack` 的响应（契约 §5.3） */
+/**
+ * `ack` 的响应（契约 §5.3）。
+ *
+ * ⚠️ **手机端不要用它**。见 [TaskwallRepository.ack] 的说明：
+ * `ack` 是**桌面端**的职责，手机端调用会把任务从云端队列删除，
+ * 导致桌面端永远收不到这条任务。
+ */
 data class AckResponse(
     @SerializedName("removed") val removed: Int = 0,
 )

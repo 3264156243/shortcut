@@ -99,6 +99,22 @@ dependencies {
     // mobileToken 加密存储
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
+    // ---- 二维码扫码（对齐 web 的「扫码绑定」）----
+    // 用 ML Kit 的**打包版**（barcode-scanning，非 play-services 版）：
+    // 模型随 APK 分发，不依赖设备上的 Google Play 服务 ——
+    // 国内 OPPO/ColorOS 设备上 play-services 版可能不可用。
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    // CameraX：相机预览 + 图像分析
+    implementation("androidx.camera:camera-core:1.3.4")
+    implementation("androidx.camera:camera-camera2:1.3.4")
+    implementation("androidx.camera:camera-lifecycle:1.3.4")
+    implementation("androidx.camera:camera-view:1.3.4")
+
+    // 二维码**编码**（生成绑定二维码，对齐 web 已绑定态的 qrcode 渲染）。
+    // 只取 zxing 的 core（纯 Java，无 Android 依赖），约 500KB。
+    // 不自己手写 QR 编码器：那是 1000+ 行的纠错/掩码算法，不值得也不该自研。
+    implementation("com.google.zxing:core:3.5.3")
+
     // ---- 测试 ----
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")

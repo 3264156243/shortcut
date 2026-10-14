@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.gson.JsonObject
 import com.wanan.shortcut.core.error.ErrorAction
 import com.wanan.shortcut.core.error.ErrorMapper
+import com.wanan.shortcut.core.identity.Identity
 import com.wanan.shortcut.core.identity.IdentityProvider
 import com.wanan.shortcut.core.net.ApiGateway
 import com.wanan.shortcut.core.result.ApiResult
@@ -27,11 +28,23 @@ sealed interface BindUiState {
 }
 
 /**
- * 绑定 ViewModel —— 实现契约 §2.6 `mobile.bind`，这是安卓端**第一个要实现的接口**。
+ * 绑定 ViewModel —— 实现契约 §2.6 `mobile.bind`。
  *
- * 关键点（契约 §3.4，本次已实测确认）：
- *   **必须带 `deviceKey`**。带了它，同一台手机重绑是"原地轮换"（deviceId 不变）；
- *   不带则每次都在设备列表里新增一台"我的手机"，很快占满上限（默认 5）。
+ * ## 支持四种绑定入口（对齐 web `bind/index.html`）
+ *
+ * | 入口 | 传什么 | web 对应 |
+ * |---|---|---|
+ * | 手输 6 位绑定码 | `code` | `doBind()` |
+ * | **扫码得到绑定链接** | `bindId`（`?bind=`） | `connectWithScannedValue()` 第一分支 |
+ * | 扫码得到裸 6 位码 / `?code=` | `code` | 同函数第二分支 |
+ * | **`?bind=` 直链进入** | `bindId` 自动绑定 | `init()` 里的自动绑定 |
+ *
+ * 契约 §2.6：`bindId` 与 `code` 二选一，**`bindId` 优先且跳过 code 校验**。
+ *
+ * ## 关键点（契约 §3.4，已实测确认）
+ *
+ * **必须带 `deviceKey`**。带了它，同一台手机重绑是"原地轮换"（deviceId 不变）；
+ * 不带则每次都在设备列表里新增一台"我的手机"，很快占满上限（默认 5）。
  */
 class BindViewModel(
     private val apiClient: ApiGateway,
@@ -42,15 +55,34 @@ class BindViewModel(
     private val _state = MutableStateFlow<BindUiState>(BindUiState.Idle)
     val state: StateFlow<BindUiState> = _state.asStateFlow()
 
-    fun bind(codeInput: String, deviceName: String) {
-        val code = codeInput.trim().uppercase()   // 契约 §2.2：绑定码大小写不敏感
-        if (code.isBlank()) {
-            _state.value = BindUiState.Failed("请输入绑定码")
-            return
-        }
-        if (code.length != CODE_LENGTH) {
-            _state.value = BindUiState.Failed("绑定码是 6 位")
-            return
+    /** 当前身份（绑定页要显示"已绑定"信息与二维码） */
+    val identity: StateFlow<Identity> = identityProvider.state
+
+    /**
+     * 绑定（web 的 `doBind` + `connectWithScannedValue` 合并逻辑）。
+     *
+     * @param codeInput 6 位码；大小写不敏感（契约 §2.2）
+     * @param deviceName 设备名，空则服务端用「我的手机」
+     * @param bindIdFromScan 扫码/直链得到的 bindId。
+     *        契约 §2.6：有有效 bindId 时**优先用它并跳过 code 校验**。
+     */
+    fun bind(
+        codeInput: String,
+        deviceName: String,
+        bindIdFromScan: String? = null,
+    ) {
+        val code = codeInput.trim().uppercase()
+
+        // 契约 §2.6：bindId 优先。只有拿不到 bindId 时才必须校验 6 位码。
+        if (bindIdFromScan.isNullOrBlank()) {
+            if (code.isBlank()) {
+                _state.value = BindUiState.Failed("请输入绑定码")
+                return
+            }
+            if (code.length != CODE_LENGTH) {
+                _state.value = BindUiState.Failed("绑定码是 6 位")
+                return
+            }
         }
 
         _state.value = BindUiState.Submitting
@@ -61,13 +93,21 @@ class BindViewModel(
 
             val name = deviceName.trim().ifBlank { DEFAULT_DEVICE_NAME }
 
+            val params = mutableMapOf<String, Any?>(
+                "deviceName" to name,
+                "deviceKey" to deviceKey,   // ★ 契约 §3.4 的头号要求
+            )
+            if (!bindIdFromScan.isNullOrBlank()) {
+                // 有 bindId 时不发 code：服务端会跳过 code 校验，
+                // 保持请求形状与 web 的 bindId 分支一致。
+                params["bindId"] = bindIdFromScan
+            } else {
+                params["code"] = code
+            }
+
             when (val result = apiClient.post(
                 action = "mobile.bind",
-                params = mapOf(
-                    "code" to code,
-                    "deviceName" to name,
-                    "deviceKey" to deviceKey,   // ★ 契约 §3.4 的头号要求
-                ),
+                params = params,
                 requireIdentity = false,        // 绑定前当然没有身份
             )) {
                 is ApiResult.Ok -> handleSuccess(result.data)
@@ -80,6 +120,16 @@ class BindViewModel(
         }
     }
 
+    /**
+     * 直接用一个 bindId 绑定（`?bind=` 直链 / 扫码得到的绑定链接）。
+     *
+     * web `init()` 在检测到 `?bind=` 且当前未绑定时会**自动绑定**，这里保持同样行为。
+     */
+    fun bindWithBindId(bindId: String, deviceName: String = DEFAULT_DEVICE_NAME) {
+        if (bindId.isBlank()) return
+        bind(codeInput = "", deviceName = deviceName, bindIdFromScan = bindId)
+    }
+
     private suspend fun handleSuccess(obj: JsonObject) {
         // 契约 §2.6 返回：{success, bindId, code, mobileToken, deviceId, deviceName}
         val bindId = obj.stringOrEmpty("bindId")
@@ -88,7 +138,7 @@ class BindViewModel(
         val deviceName = obj.stringOrEmpty("deviceName").ifBlank { DEFAULT_DEVICE_NAME }
 
         if (bindId.isBlank() || mobileToken.isBlank()) {
-            // success:true 但缺关键字段 —— 视为服务端异常，不要让用户进到一个"看似已绑定但没有凭证"的状态
+            // success:true 但缺关键字段 —— 不要让用户进到"看似已绑定但没有凭证"的状态
             _state.value = BindUiState.Failed("绑定失败：服务端返回不完整")
             return
         }
@@ -116,6 +166,14 @@ class BindViewModel(
 
     fun resetError() {
         if (_state.value is BindUiState.Failed) _state.value = BindUiState.Idle
+    }
+
+    /** 更换绑定（web 的「更换绑定」按钮）：只清本地身份，保留 deviceKey。 */
+    fun unbind() {
+        viewModelScope.launch {
+            identityProvider.clear()
+            _state.value = BindUiState.Idle
+        }
     }
 
     private companion object {

@@ -15,117 +15,80 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.wanan.shortcut.core.realtime.RelayMessage
 import com.wanan.shortcut.framework.Capability
-import com.wanan.shortcut.framework.LocalModuleSubRoute
 import com.wanan.shortcut.framework.ModuleDomain
 import com.wanan.shortcut.framework.ModuleNavigator
 import com.wanan.shortcut.framework.ModuleSpec
 import com.wanan.shortcut.framework.ShortcutModule
+import com.wanan.shortcut.ui.containerViewModel
+import com.wanan.shortcut.ui.theme.Spacing
 
 /**
- * 任务墙板块（queue 能力，契约 §5）。
+ * 任务墙板块（queue 能力，契约 §5）—— **手机端的角色是「下发任务」**。
  *
- * ## 这个文件是框架的第一次真实验证
+ * ## 与 web 参考实现对齐
  *
- * 它**只实现 [ShortcutModule] 需要的东西**，没有做以下任何一件事——
- * 这些都由框架完成，所以本文件里看不到：
+ * web `/taskwall/` 是一个**「新增任务」表单页**（只有 `push`），
+ * 本板块与它能力集一致。此前我做成"任务列表 + 勾选完成"是错的，
+ * 详见 [TaskwallRepository.ack] 的说明。
+ *
+ * ## 框架代劳的部分（本文件因此很薄）
  *
  * | 通常每个板块都要写的 | 谁做了 |
  * |---|---|
  * | 请求带 `bindId` / `mobileToken` | `core/net/ApiClient` 自动注入 |
- * | 收到"移动端绑定已失效"跳绑定页 | `core/identity/IdentityProvider` 统一广播 |
+ * | 收到"移动端绑定已失效"跳绑定页 | `core/identity/IdentityProvider` |
  * | 区分 HTTP 200 与 `success:false` | `core/result/ApiResult` |
  * | 服务端文案 → 提示语 | `core/error/ErrorMapper` |
- * | 首页入口卡片 / 图标 / 标题 | `framework/ModuleRegistry` + `module.list` |
- * | 版本门禁 | `framework/VersionGate` |
- * | 未绑定的拦截 | `ModuleHostScreen` |
- * | 子页返回栈 | `ModuleHostScreen` + `LocalModuleSubRoute` |
- *
- * ## 自证结果（2026-10-13）
- *
- * 加入本板块只改了 `Modules.kt` **一行**，未触碰首页、导航、Manifest、设置页。
+ * | 首页入口图标 / 标题 / 版本门禁 | `framework/ModuleRegistry` |
+ * | 未绑定的拦截与"去连接"引导 | `ModuleHostScreen` |
  */
 class TaskwallModule : ShortcutModule {
 
     override val spec: ModuleSpec = ModuleSpec(
         id = "taskwall",
         // 本地兜底元数据：运行时优先用服务端 module.list 下发的值
-        // （线上实测返回 label=任务墙、icon=🗂️、desc=把任务从手机钉到桌面任务墙）
         label = "任务墙",
         icon = "🗂️",
         desc = "把任务从手机钉到桌面任务墙",
-        domain = ModuleDomain.LINKED,        // ★ 联动板块：需要绑定 + 服务端对账
-        capability = Capability.QUEUE,       // ★ 用共享的队列能力
+        domain = ModuleDomain.LINKED,        // 联动板块：需要绑定 + 服务端对账
+        capability = Capability.QUEUE,
         order = 100,
-        // ⚠️ 此前这里写着 minAppVersion = "2.4.5"（照抄服务端 modules.json），
-        // 那是**桌面端**版本号，拿去比安卓端的 0.1.0 恒为"版本过低"，
-        // 导致任务墙永久显示"需升级"、点不进去。已移除：不设安卓端门禁。
-        // 若将来真要卡安卓版本，用 minAndroidVersion 并填安卓端版本号。
+        // ⚠️ 不要填 minAppVersion（那是桌面端版本号，会把安卓端永久锁死）。
+        // 详见 ModuleSpec.minAndroidVersion 的说明。
     )
 
     @Composable
     override fun Screen(navigator: ModuleNavigator) {
-        // 子路由由框架维护（来自导航图），板块只读
-        val subRoute = LocalModuleSubRoute.current
-        val viewModel = com.wanan.shortcut.ui.containerViewModel { it.taskwallViewModel() }
-
+        // 顶部栏标题由框架渲染；表单是唯一页面，没有子路由
         var snackbar by remember { mutableStateOf<String?>(null) }
+        val viewModel = containerViewModel { it.taskwallViewModel() }
 
         Box(Modifier.fillMaxSize()) {
-            when (subRoute) {
-                null -> TaskwallScreen(
-                    onCompose = { navigator.to(ROUTE_COMPOSE) },
-                    viewModel = viewModel,
-                )
-
-                ROUTE_COMPOSE -> TaskComposeScreen(
-                    onBack = { navigator.back() },
-                    onSubmit = { text, longText, details, reminderAt, boardName ->
-                        viewModel.push(text, longText, details, reminderAt, boardName) { outcome ->
-                            snackbar = when (outcome) {
-                                // 契约 §5.1：已排队不是失败，文案必须区分，否则用户以为发丢了
-                                PushOutcome.Delivered -> "已送达电脑"
-                                PushOutcome.Queued -> "电脑当前离线，任务已排队，等它上线就会收到"
-                                is PushOutcome.Failed -> outcome.message
-                            }
-                            if (outcome !is PushOutcome.Failed) navigator.back()
-                        }
-                    },
-                )
-            }
+            TaskwallScreen(
+                viewModel = viewModel,
+                onToast = { msg -> snackbar = msg },
+            )
 
             snackbar?.let { msg ->
                 LaunchedEffect(msg) {
-                    kotlinx.coroutines.delay(2600)
+                    kotlinx.coroutines.delay(2800)
                     snackbar = null
                 }
                 Snackbar(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(com.wanan.shortcut.ui.theme.Spacing.lg),
+                        .padding(Spacing.lg),
                 ) { Text(msg) }
             }
         }
     }
 
-    /** 子页标题：让顶部栏显示"新建任务"而不是板块名 */
-    override fun subRouteTitle(subRoute: String): String? = when (subRoute) {
-        ROUTE_COMPOSE -> "新建任务"
-        else -> null
-    }
-
     /**
      * 实时唤醒（可选实现）。
      *
-     * 契约 §7.3：`sync-wake` **只发给桌面端**，手机端收不到，
-     * 所以这里刻意不处理它——手机要拿新任务只能 `pull`。
-     * 保留该覆写是为了留下"板块关心什么消息"的位置，并说明为什么不处理。
+     * 契约 §7.3：`sync-wake` **只发给桌面端**，手机端收不到。
      */
     override fun onRealtimeMessage(message: RelayMessage) {
-        // 手机侧不会收到 sync-wake；桌面上下线也没必要立刻刷新列表
-        // （refresh 会真发请求，频繁触发只会浪费限流额度）。
-    }
-
-    private companion object {
-        const val ROUTE_COMPOSE = "compose"
+        // 手机侧收不到 sync-wake；这里无需处理。
     }
 }
