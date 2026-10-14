@@ -723,6 +723,8 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
         const PREARM_MARGIN: i32 = 12;
         let mut armed = false;
         let mut release_until: Option<std::time::Instant> = None;
+        /// 按住期间光标最后是否落在岛窗口内（松手位置判定用，见下面松手分支的注释）
+        let mut inside_while_down = false;
         let mut size_check_tick: u32 = 0;
         loop {
             std::thread::sleep(std::time::Duration::from_millis(POLL_MS));
@@ -756,6 +758,13 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
             }
             let now = std::time::Instant::now();
 
+            // 跟踪"按住期间光标最后落在哪"：松手位置必须在**松手那一刻**判定，
+            // 不能用宽限期结束（+500ms）时的位置——用户松手后几乎都会顺手把鼠标挪开，
+            // 那时 inside 已经是 false，兜底会被静默跳过，表现为"拖上去有提示、松手没反应"。
+            if down {
+                inside_while_down = inside;
+            }
+
             if down && near {
                 // 左键按住且光标已进入（或贴近）岛：这次多半是文件拖放，岛必须保持可交互。
                 // 用 near（外扩一点）而不是严格的 inside：抢在系统命中测试之前把窗口准备好。
@@ -768,9 +777,13 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
                 if now >= t {
                     armed = false;
                     release_until = None;
-                    // 宽限期过了还没有 Drop：说明 OLE 根本没投递（浏览器/聊天窗口拖图常见），
-                    // 用拖入时记下的路径自己补一个 drop，别让用户"松手后毫无反应"
-                    synthesize_drop_if_pending(&app, inside);
+                    // 宽限期过了还没有 Drop：说明 OLE 根本没投递（本机实测**从来投递不到**，
+                    // 只见 Enter/Leave——浏览器/聊天窗口拖图也是这个毛病），
+                    // 用拖入时记下的路径自己补一个 drop，别让用户"松手后毫无反应"。
+                    // 判定用"松手那一刻是否在岛上"（inside_while_down），不是现在的光标位置。
+                    let landed_on_island = inside_while_down;
+                    inside_while_down = false;
+                    synthesize_drop_if_pending(&app, landed_on_island);
                 }
             }
 
@@ -800,16 +813,21 @@ fn take_drag_paths() -> Vec<String> {
 }
 
 /// OLE 没投递 Drop 时的兜底：用拖入时记下的路径补发一次 `ball:drop`
-fn synthesize_drop_if_pending(app: &tauri::AppHandle, cursor_inside: bool) {
+fn synthesize_drop_if_pending(app: &tauri::AppHandle, landed_on_island: bool) {
     use std::sync::atomic::Ordering;
     if DRAG_DROPPED.load(Ordering::Relaxed) {
         note_drag_paths(Vec::new());
-        return;
+        return; // 已经真的收到过 Drop，不需要补
     }
     DRAG_DROPPED.store(true, Ordering::Relaxed);
     let paths = take_drag_paths();
-    if paths.is_empty() || !cursor_inside {
-        return; // 不是"在岛上松手"的一次真拖放，别乱补
+    if paths.is_empty() {
+        log::info!("[island] 松手：OLE 未投递且没有记下路径，无法补发（本次拖拽无 Enter 路径）");
+        return;
+    }
+    if !landed_on_island {
+        log::info!("[island] 松手：OLE 未投递，且松手时不在岛上，按放弃处理（文件数={}）", paths.len());
+        return;
     }
     log::info!("[island] 松手（OLE 未投递，补发 drop）文件数={}", paths.len());
     let _ = app.emit("ball:dragover", serde_json::json!({ "active": false }));
