@@ -303,7 +303,7 @@ pub fn effective_island_passthrough(app: &tauri::AppHandle) -> bool {
     if BALL_PASSTHROUGH.load(Ordering::Relaxed) {
         return true;
     }
-    let prefs = island_prefs();
+    let prefs = island_prefs_hot();
     if prefs.get("displayState").and_then(|v| v.as_str()) == Some("expanded") {
         return false;
     }
@@ -494,6 +494,7 @@ pub fn patch_island_config(app: &tauri::AppHandle, patch: Value) {
         }
     }
     config::write_config(&serde_json::to_string(&cfg).unwrap_or_default());
+    invalidate_island_prefs_cache(); // 显示态等字段变了，热路径缓存要立刻失效
 }
 
 /// 岛锚点（逻辑像素）：tasklist/SC球贴岛右侧（与 Electron taskListBounds/deepseekBallBounds 一致）
@@ -608,6 +609,42 @@ pub fn restore_passthrough_from_config() {
     log::info!("[island] 从配置恢复穿透开关 = {}", through);
 }
 
+/// 岛偏好快照缓存（`island_prefs()` 每次都会读配置文件，不能放在 30ms 的轮询热路径上）。
+///
+/// 为什么要缓存：拖放守卫改成 ~30ms 快轮询后，`effective_island_passthrough()` 每轮都会被调用，
+/// 而它要读 `displayState` —— 不缓存就等于每秒读盘 30 次。配置只在用户改设置时才变，
+/// 且 `patch_island_config()` 会主动让缓存失效，所以 500ms 的 TTL 足够安全。
+static ISLAND_PREFS_CACHE: std::sync::Mutex<Option<(std::time::Instant, Value)>> =
+    std::sync::Mutex::new(None);
+
+fn island_prefs_cached() -> Value {
+    let now = std::time::Instant::now();
+    if let Ok(g) = ISLAND_PREFS_CACHE.lock() {
+        if let Some((at, v)) = g.as_ref() {
+            if now.duration_since(*at) < std::time::Duration::from_millis(500) {
+                return v.clone();
+            }
+        }
+    }
+    let fresh = island_prefs();
+    if let Ok(mut g) = ISLAND_PREFS_CACHE.lock() {
+        *g = Some((now, fresh.clone()));
+    }
+    fresh
+}
+
+/// 配置被改写（`patch_island_config`）后让偏好缓存失效
+pub fn invalidate_island_prefs_cache() {
+    if let Ok(mut g) = ISLAND_PREFS_CACHE.lock() {
+        *g = None;
+    }
+}
+
+/// 岛偏好缓存快照（供 `effective_island_passthrough` 等热路径使用）
+fn island_prefs_hot() -> Value {
+    island_prefs_cached()
+}
+
 /// 只还原穿透的**运行期状态**（不写配置、不触发"配置变更 → 重建小球"）。
 /// 游戏模式解冻恢复穿透值时用这个：写配置会连带把小球窗口重建一次（实测有闪烁）。
 pub fn restore_passthrough_state(app: &tauri::AppHandle, on: bool) {
@@ -676,19 +713,22 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
         /// 松手后的宽限期：OLE 的 drop 投递可能比"左键抬起"晚几十~几百毫秒，
         /// 如果一检测到松开就恢复穿透，drop 会被岛下面的窗口抢走（实测导致"松手后没反应"）。
         const RELEASE_GRACE_MS: u64 = 500;
+        /// 轮询间隔：必须够快，才能在外来拖拽"光标刚压到岛上"时抢在 Windows 的命中测试之前
+        /// 把窗口变成可交互（否则 OLE 的 DragEnter 不会投给岛，用户表现就是"拖上去没反应"）。
+        /// 30ms 是实测量级：人拖动的移动速度下，光标进入岛到松手通常有几百毫秒，足够。
+        /// 这条路径只做 GetAsyncKeyState + GetCursorPos + 读缓存偏好，不读盘（见 island_prefs_cached）。
+        const POLL_MS: u64 = 30;
+        /// 提前量：光标进入岛的**外扩**这么多像素就先把窗口变可交互，
+        /// 等于把"抢跑"提前一点，进一步降低与系统命中测试赛跑的失败率。
+        const PREARM_MARGIN: i32 = 12;
         let mut armed = false;
         let mut release_until: Option<std::time::Instant> = None;
         let mut size_check_tick: u32 = 0;
         loop {
-            // 轮询间隔自适应：只有在"穿透值会随光标变化"时才需要快轮询
-            // （启用穿透=恒定穿透、展开态=整窗可交互，两者都与光标无关）。
-            // 收起/迷你态快轮询是给"球可点、周围不挡"用的：慢了会出现"快速点一下没反应"。
-            let needs_cursor = !BALL_PASSTHROUGH.load(Ordering::Relaxed)
-                && island_prefs().get("displayState").and_then(|v| v.as_str()) != Some("expanded");
-            std::thread::sleep(std::time::Duration::from_millis(if needs_cursor { 40 } else { 120 }));
+            std::thread::sleep(std::time::Duration::from_millis(POLL_MS));
             // 每 ~2 秒体检一次岛窗口尺寸（自愈 + 留痕），别每轮都查
             size_check_tick += 1;
-            if size_check_tick % 50 == 0 {
+            if size_check_tick % 66 == 0 {
                 enforce_island_size(&app);
             }
             let Some(win) = app.get_webview_window("island") else {
@@ -701,18 +741,24 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
             let mut pt = Pt { x: 0, y: 0 };
             let ok = unsafe { GetCursorPos(&mut pt) } != 0;
             let mut inside = false;
+            let mut near = false;
             if ok {
                 if let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) {
                     // outer_position/outer_size 都是物理像素；岛整窗就是拖放落点（远大于原来的 46px 小球）
                     let (x0, y0) = (pos.x, pos.y);
                     let (x1, y1) = (x0 + size.width as i32, y0 + size.height as i32);
                     inside = pt.x >= x0 && pt.x <= x1 && pt.y >= y0 && pt.y <= y1;
+                    near = pt.x >= x0 - PREARM_MARGIN
+                        && pt.x <= x1 + PREARM_MARGIN
+                        && pt.y >= y0 - PREARM_MARGIN
+                        && pt.y <= y1 + PREARM_MARGIN;
                 }
             }
             let now = std::time::Instant::now();
 
-            if down && inside {
-                // 左键按住且光标在岛上：这次多半是拖放，岛必须保持可交互
+            if down && near {
+                // 左键按住且光标已进入（或贴近）岛：这次多半是文件拖放，岛必须保持可交互。
+                // 用 near（外扩一点）而不是严格的 inside：抢在系统命中测试之前把窗口准备好。
                 armed = true;
                 release_until = None;
                 mark_drag_active(1000);
