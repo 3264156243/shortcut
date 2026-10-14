@@ -736,17 +736,27 @@ switch ($action) {
         $identitySide = require_identity($bindId, $input);
         $bind = get_bind($bindId);
         $boards = isset($bind['boards']) && is_array($bind['boards']) ? $bind['boards'] : [];
+        // 列表"新鲜度"：这份墙名是**桌面端上次上报**的快照，桌面离线时会过期。
+        // 一起回给手机端，让它能显示"列表同步于 X 分钟前"，而不是让用户对着旧墙名猜。
+        $boardsUpdatedAt = isset($bind['boards_updated_at']) && $bind['boards_updated_at'] !== ''
+            ? (string)$bind['boards_updated_at']
+            : '';
         // 诊断：手机端"又只剩默认任务墙"时，服务端这边到底回了什么必须留痕。
         // 如果这里打印的是空数组，问题在桌面端未上报（bind.boards.update）；如果是多项而手机上
         // 只有一个默认墙，问题在客户端渲染/凭证。没有这行就只能靠猜。
         error_log(sprintf(
-            '[sync] board.list bindId=%s side=%s count=%d boards=%s',
+            '[sync] board.list bindId=%s side=%s count=%d updatedAt=%s boards=%s',
             $bindId,
             $identitySide,
             count($boards),
+            $boardsUpdatedAt,
             json_encode($boards, JSON_UNESCAPED_UNICODE)
         ));
-        respond(['success' => true, 'boards' => $boards]);
+        respond([
+            'success' => true,
+            'boards' => $boards,
+            'boardsUpdatedAt' => $boardsUpdatedAt,
+        ]);
         break;
 
     default:

@@ -46,6 +46,10 @@
     #submitButton { width: 100%; min-height: 52px; border: 0; border-radius: 8px; color: #fff; background: #9f493a; font-size: 16px; font-weight: 700; box-shadow: 0 5px 14px rgba(99,44,33,.22); }
     .message { min-height: 18px; margin-top: 12px; text-align: center; font-size: 12px; color: #7e6f5e; }
 .board-hint { margin: 7px 0 0; font-size: 11px; line-height: 1.5; color: #a23932; }
+    /* 桌面端在线状态：在线=绿、离线=红、未知/检测中=灰 */
+    .desktop-state { font-size: 11px; color: #8a7c6b; }
+    .desktop-state.online { color: #337552; }
+    .desktop-state.offline { color: #a23932; }
     .message.error { color: #a23932; } .message.success { color: #337552; }
     @media (max-width: 420px) { .type-switches { grid-template-columns: 1fr; } }
   </style>
@@ -63,6 +67,7 @@
       <p class="hint">任务内容仅临时存储在 ShortCut 服务器，桌面端启动会自动接收，也可在任务墙板块点「同步云端」并从云端删除。</p>
       <div class="bind-summary">
         <span>当前桌面</span><strong id="currentBindCode" class="bind-code">--</strong>
+        <span id="desktopState" class="desktop-state">桌面端状态未知</span>
         <button id="refreshBoardsButton" class="text-button" type="button">刷新任务墙</button>
       </div>
       <form id="taskForm">
@@ -130,17 +135,55 @@
       const hint=el('boardHint');
       if(hint){hint.textContent=note||'';hint.hidden=!note}
     }
+
+    /** 把服务端回的 boardsUpdatedAt（ISO8601）渲染成"刚刚 / X 分钟前 / X 小时前 / X 天前" */
+    function freshText(iso){
+      if(!iso) return '';
+      const t=new Date(iso).getTime();
+      if(!t||isNaN(t)) return '';
+      const mins=Math.max(0,Math.round((Date.now()-t)/60000));
+      if(mins<1) return '刚刚';
+      if(mins<60) return mins+' 分钟前';
+      const hours=Math.round(mins/60);
+      if(hours<24) return hours+' 小时前';
+      return Math.round(hours/24)+' 天前';
+    }
+
+    /**
+     * 桌面端在线状态。
+     *
+     * 为什么不用 bind.devices 的 lastSeenAt：那个字段只在桌面端**主动调 api.php** 时才刷新
+     * （60 秒节流），桌面端平时靠中继长连接维持在线，lastSeenAt 会显得很旧、误判成离线。
+     * 所以这里经中继问一次 `/api/ping`：中继在 auth-ok 里明确告诉客户端 desktopOnline，
+     * sdk.requestDesktop 会把它翻译成 desktopOffline。失败一律"未知"，不吓唬用户。
+     */
+    let desktopProbeBusy=false;
+    async function refreshDesktopState(){
+      const state=el('desktopState'); if(!state||desktopProbeBusy) return;
+      desktopProbeBusy=true;
+      state.className='desktop-state'; state.textContent='检测桌面端…';
+      try{
+        const r=await window.ShortCutMobile.requestDesktop('/api/ping',{},6000);
+        if(r&&r.success){ state.className='desktop-state online'; state.textContent='桌面端在线'; }
+        else if(r&&r.desktopOffline){ state.className='desktop-state offline'; state.textContent='桌面端离线（任务会排队）'; }
+        else { state.className='desktop-state'; state.textContent='桌面端状态未知'; }
+      }catch(e){ state.className='desktop-state'; state.textContent='桌面端状态未知'; }
+      finally{ desktopProbeBusy=false; }
+    }
+
     async function loadBoards(){
       const select=el('boardName'),hint=el('boardHint');select.disabled=true;
       if(hint){hint.textContent='正在读取桌面任务墙…';hint.hidden=false}
       try{
         const d=await callApi({action:'board.list',board:'taskwall',bindId});
         const boards=Array.isArray(d.boards)?d.boards.filter(name=>typeof name==='string'&&name.trim()):[];
-        console.log('[taskwall] board.list 响应',d,'解析出墙名',boards);
+        const fresh=freshText(d.boardsUpdatedAt);
+        console.log('[taskwall] board.list 响应',d,'解析出墙名',boards,'列表同步于',fresh||'(未知)');
         if(!boards.length){
           fillBoards(['默认任务墙'],'桌面端尚未上报任务墙列表，已回退到「默认任务墙」。请在电脑上打开任务墙页面后点「刷新任务墙」重试。');
         }else{
-          fillBoards(boards,'');
+          // 墙名列表是桌面端上次上报的快照：桌面离线久了就可能过期（改了名/删了墙这里还是旧的）
+          fillBoards(boards, fresh?('列表同步于 '+fresh+(fresh==='刚刚'?'':'，桌面端开机后会自动更新')):'');
         }
       }catch(error){
         // 不静默兜底：把真实原因显示出来，用户/排查者才知道要不要重新绑定桌面端
@@ -149,13 +192,16 @@
       }finally{select.disabled=false}
     }
 
+    /** 列表与在线状态一起刷新（手动按钮、回到前台、定时都走这里） */
+    function refreshAll(){ void loadBoards(); void refreshDesktopState(); }
+
     function setConnected(){
       bindId=mobileAuth.bindId;
       bindCode=mobileAuth.code||'--';
       el('status').classList.add('connected');
       el('statusText').textContent='已连接';
       el('currentBindCode').textContent=bindCode;
-      void loadBoards();
+      refreshAll();
       setTimeout(()=>el('title').focus(),60);
     }
 
@@ -163,8 +209,16 @@
 
     el('longTextToggle').addEventListener('click',()=>setTypeEnabled('longTextToggle','detailsField',el('longTextToggle').getAttribute('aria-pressed')!=='true'));
     el('reminderToggle').addEventListener('click',()=>setTypeEnabled('reminderToggle','reminderField',el('reminderToggle').getAttribute('aria-pressed')!=='true'));
-    el('refreshBoardsButton').addEventListener('click',()=>void loadBoards());
+    el('refreshBoardsButton').addEventListener('click',()=>refreshAll());
     el('backBtn').addEventListener('click',()=>{ location.href='/mobile/'; });
+
+    // ── 列表自动刷新（需求 3）──
+    // 墙名是桌面端上报的快照，桌面端改了墙名/加了墙，手机端不该只能靠手动点刷新才知道。
+    // 两个时机：① 回到前台立刻刷（最常用）；② 前台时每 30 秒兜底刷一次。
+    // 后台不刷：省流量也省服务端限流配额（board.list 限 120 次/分钟/IP）。
+    const AUTO_REFRESH_MS=30000;
+    document.addEventListener('visibilitychange',()=>{ if(!document.hidden) refreshAll(); });
+    window.setInterval(()=>{ if(!document.hidden) refreshAll(); },AUTO_REFRESH_MS);
 
     el('taskForm').addEventListener('submit',async event=>{
       event.preventDefault();
@@ -179,7 +233,15 @@
         if(!d.success)throw new Error(d.message||'提交失败');
         el('title').value='';el('details').value='';el('reminderAt').value='';
         setTypeEnabled('longTextToggle','detailsField',false);setTypeEnabled('reminderToggle','reminderField',false);
-        setMessage(el('taskMessage'),'已钉到云端，等待桌面端接收','success');
+        // 区分"已实时送达"和"桌面端离线、任务排队"——服务端一直回了这两个字段，以前只是没用。
+        // 用户最怕的是"我钉了但它到底收没收到"，这两种情况的说法必须不一样。
+        if(d.desktopOnline===true){
+          setMessage(el('taskMessage'),d.deliveredRealtime===true?'已实时送达桌面端':'桌面端在线，任务已入队，稍后自动接收','success');
+        }else{
+          setMessage(el('taskMessage'),'桌面端离线：任务已排队，等它开机后自动接收','success');
+        }
+        // 状态条跟着刷新（离线时下一次检测会把状态点亮/熄灭，避免与实际不符）
+        void refreshDesktopState();
         setTimeout(()=>el('title').focus(),80);
       }catch(error){setMessage(el('taskMessage'),error.message||'提交失败，请稍后再试','error')}
       finally{el('submitButton').disabled=false}
