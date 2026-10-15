@@ -175,12 +175,23 @@ class ControlSession(
                 }
             }
 
+            if (!relay.state.value.connected) {
+                _connection.value = _connection.value.copy(
+                    lanBusy = false,
+                    lanError = "云端通道没连上，拿不到局域网入口。" +
+                        "局域网直连需要先经云端问电脑端要地址（契约 §8.2）。" +
+                        "请先确保「云端连接」可用。",
+                )
+                return@launch
+            }
+
             val res = relay.call(ControlPaths.LAN_ENTRY)
             if (!res.ok) {
                 _connection.value = _connection.value.copy(
                     lanBusy = false,
                     lanError = when (res.status) {
                         503 -> "拿不到局域网入口：电脑端未开启「云端连接」，或电脑不在线"
+                        504 -> "电脑端没有响应（超时），请确认桌面 ShortCut 正在运行"
                         else -> "拿不到局域网入口（${res.error ?: "未知原因"}）"
                     },
                 )
@@ -193,7 +204,7 @@ class ControlSession(
             val url = data.str("url")
             val token = data.str("token")
 
-            if (!running || url.isBlank() || token.isBlank()) {
+            if (!running || token.isBlank()) {
                 // 与 web 的提示逐字对齐
                 _connection.value = _connection.value.copy(
                     lanBusy = false,
@@ -203,11 +214,49 @@ class ControlSession(
                 return@launch
             }
 
-            channel = LanChannel(lanClient, url, token)
+            // ★ 逐个候选地址探测，只连真正可达的那个
+            //
+            // 为什么必须探测：桌面端用 UdpSocket 探测"默认出口网卡"生成地址，
+            // 装了 VMware/VirtualBox/Docker 的机器很容易选中虚拟网卡，
+            // 给出的 IP 手机连不上（而 web 端是浏览器直接跳转，失败就白屏）。
+            val candidates = buildList {
+                if (url.isNotBlank()) add(url)
+                addAll(data.stringList("urls"))
+            }
+
+            _connection.value = _connection.value.copy(
+                lanNotice = "正在探测电脑的局域网地址…",
+            )
+
+            val hit = lanClient.probeFirstReachable(candidates)
+            if (hit == null) {
+                val tried = candidates.filter { it.isNotBlank() }.joinToString("、")
+                _connection.value = _connection.value.copy(
+                    lanBusy = false,
+                    lanNotice = null,
+                    lanError = buildString {
+                        append("连不上电脑的局域网地址")
+                        if (tried.isNotBlank()) append("（试过：$tried）")
+                        append("。常见原因：\n")
+                        append("· 手机与电脑不在同一 Wi-Fi（或电脑走网线但不同网段）\n")
+                        append("· 路由器开了「AP 隔离」，同网段设备也互不可见\n")
+                        append("· 电脑防火墙拦住了 9823 端口\n")
+                        append("· 电脑装了 VMware/VirtualBox/Docker，桌面端取到的地址是虚拟网卡的\n")
+                        append("可以先用「云端连接」——任何网络都能用。")
+                    },
+                )
+                return@launch
+            }
+
+            channel = LanChannel(lanClient, hit.baseUrl, token)
             refreshReady()
             _connection.value = _connection.value.copy(
-                lanBusy = false, lanActive = true, lanBaseUrl = url,
-                lanNotice = "已直连 $url（局域网，延迟更低）",
+                lanBusy = false, lanActive = true, lanBaseUrl = hit.baseUrl,
+                lanNotice = if (hit.isControlService) {
+                    "已直连 ${hit.baseUrl}（局域网，延迟更低）"
+                } else {
+                    "已连上 ${hit.baseUrl}，但它可能不是 ShortCut 的控制服务"
+                },
             )
         }
     }
@@ -291,3 +340,24 @@ data class ConnectionState(
 
 private fun JsonObject.str(key: String): String =
     if (has(key) && !get(key).isJsonNull) runCatching { get(key).asString }.getOrDefault("") else ""
+
+/**
+ * 读一个字符串数组（桌面端 `urls` 是候选地址列表）。
+ *
+ * 容错：字段可能是数组、也可能是单个字符串（老版本服务端）；
+ * 也跳过非字符串元素，避免一个脏数据让整个候选列表为空。
+ */
+private fun JsonObject.stringList(key: String): List<String> {
+    if (!has(key) || get(key).isJsonNull) return emptyList()
+    val el = get(key)
+
+    if (el.isJsonArray) {
+        return el.asJsonArray.mapNotNull { item ->
+            runCatching { if (item.isJsonNull) null else item.asString }.getOrNull()
+        }
+    }
+    if (el.isJsonPrimitive) {
+        return runCatching { listOf(el.asString) }.getOrDefault(emptyList())
+    }
+    return emptyList()
+}

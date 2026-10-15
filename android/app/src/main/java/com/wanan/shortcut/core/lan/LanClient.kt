@@ -153,6 +153,85 @@ class LanClient(
         }
     }
 
+    /**
+     * 探测结果：一个候选局域网地址是否真的可达。
+     */
+    data class ProbeResult(
+        val baseUrl: String,
+        val reachable: Boolean,
+        /** 可达时是"这个服务"（`/api/config` 能解析出 authMode） */
+        val isControlService: Boolean,
+        /** 不可达时的原因（给用户看） */
+        val failure: String? = null,
+    )
+
+    /**
+     * 探测一个候选地址是否可达。
+     *
+     * ## 为什么必须有这一步（这是修掉的真实缺陷）
+     *
+     * 桌面端用 `UdpSocket.connect("8.8.8.8:80")` 探测"默认出口网卡"来生成局域网地址
+     * （`src-tauri/src/control.rs` 的 `lan_urls()`）。
+     * 装了 VMware / VirtualBox / Docker 的电脑上，**这个探测很容易选中虚拟网卡**，
+     * 得到的 IP（如 `192.168.56.1`）手机根本连不上。
+     *
+     * 更糟的是那个函数的"双网卡补充"**并未实现**（源码注释自己承认），
+     * 所以 `urls` 实际只有一个候选 —— 选错了就没有备选。
+     *
+     * 而 web 端拿到地址后是"浏览器直接跳转"，失败就是白屏、用户无从判断。
+     * 安卓端**不能重复这个体验**，所以这里先探测：
+     *   - 可达 → 才宣布"已直连"；
+     *   - 全不可达 → 给出可诊断的原因（而不是假装连上、每条指令都失败）。
+     */
+    suspend fun probe(baseUrl: String): ProbeResult = withContext(Dispatchers.IO) {
+        val normalized = baseUrl.trimEnd('/')
+        try {
+            // 用 /api/config（无需鉴权）判断"是不是一个局域网控制服务"
+            val request = Request.Builder().url("$normalized/api/config").get().build()
+            client.newCall(request).execute().use { response ->
+                val obj = Json.parseObject(response.body?.string().orEmpty())
+                val looksLikeService = obj != null &&
+                    (obj.has("authMode") || obj.has("basePath") || obj.has("requirePair"))
+                ProbeResult(
+                    baseUrl = normalized,
+                    reachable = response.isSuccessful,
+                    isControlService = looksLikeService,
+                    failure = if (response.isSuccessful) null else "HTTP ${response.code}",
+                )
+            }
+        } catch (e: SocketTimeoutException) {
+            ProbeResult(normalized, reachable = false, isControlService = false, failure = "连接超时")
+        } catch (e: IOException) {
+            // 最常见：不在同一 Wi-Fi、网段不同、AP 隔离、电脑防火墙拦截
+            ProbeResult(
+                normalized,
+                reachable = false,
+                isControlService = false,
+                failure = e.message ?: "网络不可达",
+            )
+        } catch (e: Exception) {
+            ProbeResult(normalized, reachable = false, isControlService = false, failure = e.message)
+        }
+    }
+
+    /**
+     * 逐个候选地址探测，返回**第一个真正可达**的。
+     *
+     * @param candidates 桌面端给的候选地址（`url` + `urls`）；会去重
+     * @return 命中的探测结果；全都不可达时返回 null
+     */
+    suspend fun probeFirstReachable(candidates: List<String>): ProbeResult? {
+        val unique = candidates.map { it.trim().trimEnd('/') }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        for (candidate in unique) {
+            val result = probe(candidate)
+            if (result.reachable) return result
+        }
+        return null
+    }
+
     companion object {
         private val JSON_UTF8 = "application/json; charset=utf-8".toMediaType()
 

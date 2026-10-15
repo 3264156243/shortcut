@@ -263,7 +263,14 @@ class ControlViewModel(
 
         when (val r = session.call(path, body)) {
             is ControlResult.Ok -> Unit
-            is ControlResult.Fail -> if (!silent) notice(r.message, isError = true)
+            is ControlResult.Fail -> {
+                // ★ 指令失败后重算会话可用性：
+                // 局域网通道在遇到网络类失败时会自我降级（available=false），
+                // 这里把变化同步到 UI，让界面**立刻**从"已连接"变成"未连接"
+                // —— 而不是继续显示已连接、用户却每点一下都没反应。
+                refreshAvailability()
+                if (!silent) notice(r.message, isError = true)
+            }
         }
     }
 

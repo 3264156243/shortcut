@@ -85,39 +85,80 @@ class CloudChannel(
     }
 }
 
-/** 局域网通道：直连 `http://<ip>:9823`（契约 §8.3 / §8.4）。 */
+/**
+ * 局域网通道：直连 `http://<ip>:9823`（契约 §8.3 / §8.4）。
+ *
+ * ## ⚠️ 关于 [available]（这是修掉的真实缺陷）
+ *
+ * 早先版本它**恒为 true** —— 只要通道被创建就宣称可用。
+ * 于是桌面端给了个手机根本连不上的地址（虚拟网卡）时，
+ * 界面显示"已直连"，但**每条指令都失败**，用户完全看不出问题在哪。
+ *
+ * 现在 [available] 反映**探测过的真实连通状态**：
+ * 只有 [markReachable] 之后才算可用；一旦某次指令拿到网络类失败，
+ * 立刻 [markUnreachable] 降级，让 UI 如实显示"连接已断开"。
+ */
 class LanChannel(
     private val lanClient: LanClient,
     private val baseUrl: String,
     private val token: String,
 ) : ControlChannel {
 
-    override val available: Boolean get() = true
+    @Volatile private var reachable: Boolean = true
+
+    override val available: Boolean get() = reachable
 
     override val label: String get() = "局域网"
 
+    /** 指令成功即确认可达（用于从降级状态恢复） */
+    fun markReachable() {
+        reachable = true
+    }
+
+    /** 网络类失败即降级（令牌失效除外 —— 那是鉴权问题，网络是通的） */
+    fun markUnreachable() {
+        reachable = false
+    }
+
     override suspend fun call(path: String, body: Map<String, Any?>): ControlResult =
         when (val r = lanClient.post(baseUrl, token, path, body)) {
-            is ApiResult.Ok -> ControlResult.Ok(r.data)
-            is ApiResult.BusinessFail -> ControlResult.Fail(r.httpCode ?: 400, r.message)
-            is ApiResult.TransportFail -> ControlResult.Fail(
-                when (r.kind) {
-                    ApiResult.TransportFail.Kind.TIMEOUT -> 504
-                    else -> 503
-                },
-                when (r.kind) {
-                    // 契约 §8.5-3：服务端无法判断"手机与电脑是否同一局域网"，客户端自行容错
-                    ApiResult.TransportFail.Kind.TIMEOUT -> "局域网连接超时，可能不在同一 Wi-Fi"
-                    ApiResult.TransportFail.Kind.NETWORK ->
-                        "连不上电脑（局域网直连可能已停止，或手机与电脑不在同一 Wi-Fi）"
-                    else -> "局域网请求失败"
-                },
-            )
+            is ApiResult.Ok -> {
+                markReachable()
+                ControlResult.Ok(r.data)
+            }
+
+            is ApiResult.BusinessFail -> {
+                // 业务失败说明网络是通的（服务端回了话），保持可用
+                markReachable()
+                ControlResult.Fail(r.httpCode ?: 400, r.message)
+            }
+
+            is ApiResult.TransportFail -> {
+                // ★ 网络类失败 → 降级，UI 会立刻变成"未连接"
+                markUnreachable()
+                ControlResult.Fail(
+                    when (r.kind) {
+                        ApiResult.TransportFail.Kind.TIMEOUT -> 504
+                        else -> 503
+                    },
+                    when (r.kind) {
+                        // 契约 §8.5-3：服务端无法判断"手机与电脑是否同一局域网"，客户端自行容错
+                        ApiResult.TransportFail.Kind.TIMEOUT -> "局域网连接超时，可能不在同一 Wi-Fi"
+                        ApiResult.TransportFail.Kind.NETWORK ->
+                            "连不上电脑（局域网直连可能已停止，或手机与电脑不在同一 Wi-Fi）"
+                        else -> "局域网请求失败"
+                    },
+                )
+            }
+
             // 契约 §8.5-4：桌面端停止「局域网直连」后所有请求 401 → 应回落到云端或提示
-            ApiResult.Unauthorized -> ControlResult.Fail(
-                401,
-                "局域网令牌已失效（电脑端可能已停止「局域网直连」），请重新连接",
-            )
+            ApiResult.Unauthorized -> {
+                markReachable()   // 网络是通的，只是令牌过期
+                ControlResult.Fail(
+                    401,
+                    "局域网令牌已失效（电脑端可能已停止「局域网直连」），请重新连接",
+                )
+            }
         }
 }
 
