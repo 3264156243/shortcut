@@ -104,13 +104,18 @@ class ControlViewModel(
         refreshAvailability()
     }
 
+    /**
+     * 局域网直连（**不依赖云端**）—— 填电脑地址 + 配对码。
+     *
+     * 这是当前的主力路径：绕开"必须经云端问地址"的前置条件。
+     */
+    fun connectLanDirect(host: String, pairCode: String = "") {
+        session.connectLanDirect(host, pairCode)
+    }
+
     fun connectLan() {
         session.connectLan()
         refreshAvailability()
-    }
-
-    fun connectLanManual(host: String) {
-        session.connectLanManual(host)
     }
 
     fun clearConnectionError() {

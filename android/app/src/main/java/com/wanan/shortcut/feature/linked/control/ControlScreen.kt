@@ -10,8 +10,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -24,6 +26,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.wanan.shortcut.framework.LocalModuleSubRoute
@@ -78,7 +82,15 @@ fun ControlScreen(navigator: ModuleNavigator) {
 }
 
 /**
- * 入口页：选择通道（对齐 web `/control/` 的双入口 + 手动填地址）。
+ * 入口页：填电脑地址 + 配对码直连（**不依赖云端**）。
+ *
+ * ## 为什么把"填地址"放在第一位
+ *
+ * 契约 §8.2 的"一键直连"要**经云端 WS 问 `/api/lan-entry`**，
+ * 那要求云端通道可用。当前阶段**云端暂不做**，所以主力路径必须是
+ * 那条完全独立于云端的：直接填电脑地址 → 读 `/api/status` → 用配对码换 token。
+ *
+ * 云端入口保留在下方，等功能可用时再启用。
  */
 @Composable
 private fun ControlEntryScreen(
@@ -88,10 +100,9 @@ private fun ControlEntryScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val conn by viewModel.connection.collectAsStateWithLifecycle()
 
-    var manualHost by remember { mutableStateOf("") }
+    var host by remember { mutableStateOf("") }
+    var pairCode by remember { mutableStateOf("") }
 
-    // 每次回到入口页都重读会话状态：
-    // 通道可能在控制页里被建立/切换，回到这里时 UI 必须跟上
     LaunchedEffect(Unit) { viewModel.refreshAvailability() }
 
     Column(
@@ -114,39 +125,103 @@ private fun ControlEntryScreen(
             )
         }
 
-        // ---- 入口 1：局域网直连（推荐）----
-        SectionHeader(title = "更快")
-        ScListCard(
-            icon = "📶",
-            title = "局域网直连",
-            subtitle = when {
-                conn.lanActive -> "已直连 ${conn.lanBaseUrl}，点进入控制"
-                conn.lanBusy -> "正在问电脑端要局域网入口…"
-                else -> "手机与电脑连同一 Wi-Fi 时点一下直连，不用输地址、不用输绑定码"
-            },
-            trailing = "›",
-            onClick = { if (conn.lanActive) onOpenPanel() else viewModel.connectLan() },
-        )
+        // ---- 主力入口：局域网直连（不依赖云端）----
+        SectionHeader(title = "局域网直连")
 
-        if (!conn.lanActive) {
+        ScCard {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                Text(
+                    text = "在电脑上打开 ShortCut「控制」板块，点开「局域网直连」，" +
+                        "状态页会显示**地址**和**6 位配对码**，照着填进来即可。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                OutlinedTextField(
+                    value = host,
+                    onValueChange = { host = it.trim(); viewModel.clearConnectionError() },
+                    label = { Text("电脑地址") },
+                    placeholder = { Text("192.168.1.5:9823") },
+                    supportingText = { Text("可只填 IP，端口默认 9823") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                OutlinedTextField(
+                    value = pairCode,
+                    onValueChange = { input ->
+                        pairCode = input.filter { it.isLetterOrDigit() }.take(6).uppercase()
+                        viewModel.clearConnectionError()
+                    },
+                    label = { Text("6 位配对码") },
+                    placeholder = { Text("电脑端状态页显示") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Characters,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Button(
+                    onClick = { viewModel.connectLanDirect(host, pairCode) },
+                    enabled = host.isNotBlank() && !conn.lanBusy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        when {
+                            conn.lanBusy -> "正在连接…"
+                            conn.lanActive -> "重新连接"
+                            else -> "连接"
+                        },
+                    )
+                }
+
+                if (conn.lanActive) {
+                    Button(
+                        onClick = onOpenPanel,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    ) { Text("进入控制面板") }
+                }
+            }
+        }
+
+        // 连不上时的可诊断提示（换行多，单独显示）
+        conn.lanError?.let { err ->
+            ScCard(
+                containerColor = MaterialTheme.colorScheme.errorContainer,
+                contentPadding = Spacing.md,
+            ) {
+                Text(
+                    text = err,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
+        }
+
+        conn.lanNotice?.let {
             Text(
-                text = "原理：电脑端 ShortCut「控制」板块点一下「局域网直连」后，" +
-                    "这里点一下就自动拿到它的局域网地址并连上。要求两边在同一网络。",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(horizontal = Spacing.xs),
             )
         }
 
-        // ---- 入口 2：云端连接 ----
-        SectionHeader(title = "任何网络可用")
+        // ---- 次要入口：云端（当前阶段暂不作为主力）----
+        SectionHeader(title = "其他方式")
+
         ScListCard(
             icon = "☁️",
             title = "云端连接",
             subtitle = if (state.ready && state.channelLabel == "云端") {
                 "已连接，点进入控制"
             } else {
-                "经云端中继自动配对（4G / 别处 Wi-Fi 均可）"
+                "经云端中继配对（需要电脑端开启「云端连接」）"
             },
             trailing = "›",
             onClick = {
@@ -154,47 +229,14 @@ private fun ControlEntryScreen(
                 onOpenPanel()
             },
         )
-        Text(
-            text = "前提：电脑端 ShortCut「控制」板块已启动「云端连接」。",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = Spacing.xs),
+
+        ScListCard(
+            icon = "📶",
+            title = "一键直连（经云端问地址）",
+            subtitle = "自动获取电脑地址，但需要云端通道可用",
+            trailing = "›",
+            onClick = { if (conn.lanActive) onOpenPanel() else viewModel.connectLan() },
         )
-
-        // ---- 备用：手动填地址（对齐 web 的「🔧 备用：手动填地址」）----
-        SectionHeader(title = "备用")
-        ScCard {
-            Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                Text(
-                    text = "手动填电脑的局域网地址（形如 192.168.1.5:9823）。" +
-                        "电脑端「局域网直连」状态卡会显示这个地址。",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                OutlinedTextField(
-                    value = manualHost,
-                    onValueChange = { manualHost = it.trim() },
-                    label = { Text("地址") },
-                    placeholder = { Text("192.168.1.5:9823") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Button(
-                    onClick = { viewModel.connectLanManual(manualHost) },
-                    enabled = manualHost.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("打开控制页") }
-            }
-        }
-
-        conn.lanError?.let { InlineError(message = it) }
-        conn.lanNotice?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
     }
 }
 

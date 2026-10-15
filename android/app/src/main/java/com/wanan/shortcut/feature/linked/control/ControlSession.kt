@@ -159,6 +159,134 @@ class ControlSession(
      * ⚠️ 契约 §8.5-2：**每次都要重新询问，不缓存 IP**。
      * ⚠️ 该接口需要云端 WS 在线（§8.2 末尾），所以先确保云端已连。
      */
+    /**
+     * 局域网直连（**不依赖云端**）—— 用户填地址 + 配对码。
+     *
+     * ## 为什么需要这条路径（这是当前的主力路径）
+     *
+     * 契约 §8.2 推荐的"一键直连"要**经云端 WS 问 `/api/lan-entry`**，
+     * 那要求云端通道可用。若云端暂不做/不通，局域网就连入口都拿不到。
+     *
+     * 但电脑端的局域网服务本身有**无需鉴权**的接口：
+     *   - `GET /api/status` → 返回 `{authMode, pairCode, urls, injector}`
+     *   - `POST /api/pair`  → 用 `pairCode` 换 `token`（契约 §8.4）
+     *
+     * 所以可以走一条完全独立于云端的路：
+     * ```
+     * 探测地址 → 读 status 拿到 authMode 与候选地址 → pair 换 token → 连接成功
+     * ```
+     *
+     * @param rawHost 用户填的地址（`192.168.1.5` 或 `192.168.1.5:9823`）
+     * @param pairCode 电脑端「局域网直连」状态页显示的 6 位配对码；留空则只探测不配对
+     */
+    fun connectLanDirect(rawHost: String, pairCode: String = "") {
+        val host = normalizeHost(rawHost)
+        if (host == null) {
+            _connection.value = _connection.value.copy(
+                lanError = "地址格式不对，请按电脑端显示的填写，如 192.168.1.5:9823",
+            )
+            return
+        }
+
+        scope.launch {
+            _connection.value = _connection.value.copy(
+                lanBusy = true, lanError = null, lanNotice = "正在连接 $host …",
+            )
+
+            // ① 探测：优先用 /api/status（一次拿到 authMode + 候选地址 + 配对码）
+            val statusRes = lanClient.status("http://$host")
+            val statusData = when (statusRes) {
+                is ApiResult.Ok -> statusRes.data
+                else -> null
+            }
+
+            if (statusData == null) {
+                // 退一步用更轻的 /api/config 再确认一次，以便区分"地址不通"与"不是这个服务"
+                val cfg = lanClient.config("http://$host")
+                _connection.value = _connection.value.copy(
+                    lanBusy = false,
+                    lanNotice = null,
+                    lanError = if (cfg is ApiResult.Ok) {
+                        "这个地址有服务在跑，但读不到状态（可能不是 ShortCut 的控制服务）"
+                    } else {
+                        "连不上 $host。请确认：\n" +
+                            "· 电脑端 ShortCut「控制」板块已点开「局域网直连」\n" +
+                            "· 手机与电脑连的是同一个 Wi-Fi\n" +
+                            "· 地址填的是电脑端状态页显示的那个（如 192.168.1.5:9823）\n" +
+                            "· 电脑防火墙没有拦住 9823 端口"
+                    },
+                )
+                return@launch
+            }
+
+            val authMode = statusData.str("authMode")
+
+            // ② 若服务端要求配对，用配对码换 token
+            if (authMode == "pair") {
+                if (pairCode.isBlank()) {
+                    // 还没填配对码：告诉用户去哪看，并把服务端当前显示的码回显出来
+                    //（/api/status 无需鉴权就会返回它，方便用户核对）
+                    val serverCode = statusData.str("pairCode")
+                    _connection.value = _connection.value.copy(
+                        lanBusy = false,
+                        lanNotice = null,
+                        lanError = if (serverCode.isNotBlank()) {
+                            "这个电脑需要配对码。电脑端「局域网直连」状态页显示的是：**$serverCode**，" +
+                                "填进去即可。"
+                        } else {
+                            "这个电脑需要配对码，请在电脑端「局域网直连」状态页查看后填入。"
+                        },
+                    )
+                    return@launch
+                }
+
+                when (val paired = lanClient.pair("http://$host", pairCode.trim().uppercase())) {
+                    is ApiResult.Ok -> {
+                        channel = LanChannel(lanClient, "http://$host", paired.data)
+                        refreshReady()
+                        _connection.value = _connection.value.copy(
+                            lanBusy = false, lanActive = true, lanBaseUrl = "http://$host",
+                            lanNotice = "已直连 $host（局域网，不经过云端）",
+                        )
+                    }
+                    is ApiResult.BusinessFail -> {
+                        _connection.value = _connection.value.copy(
+                            lanBusy = false, lanNotice = null,
+                            lanError = "配对码不对（电脑端回：${paired.message}）。" +
+                                "请在电脑端「局域网直连」状态页核对 6 位配对码。",
+                        )
+                    }
+                    is ApiResult.TransportFail -> {
+                        _connection.value = _connection.value.copy(
+                            lanBusy = false, lanNotice = null,
+                            lanError = "配对请求没发出去，请检查网络后重试。",
+                        )
+                    }
+                    ApiResult.Unauthorized -> {
+                        _connection.value = _connection.value.copy(
+                            lanBusy = false, lanNotice = null,
+                            lanError = "配对码不对，请在电脑端状态页核对。",
+                        )
+                    }
+                }
+                return@launch
+            }
+
+            // ③ authMode 不是 pair（例如 none）：直接连，不需要令牌
+            channel = LanChannel(lanClient, "http://$host", token = "")
+            refreshReady()
+            _connection.value = _connection.value.copy(
+                lanBusy = false, lanActive = true, lanBaseUrl = "http://$host",
+                lanNotice = "已直连 $host（该电脑无需配对码）",
+            )
+        }
+    }
+
+    /**
+     * 一键直连（**经云端**问地址）—— 契约 §8.2 的推荐路径。
+     *
+     * ⚠️ 依赖云端 WS。若云端不可用，请改用 [connectLanDirect]（用户填地址 + 配对码）。
+     */
     fun connectLan() {
         scope.launch {
             _connection.value = _connection.value.copy(
@@ -258,45 +386,6 @@ class ControlSession(
                     "已连上 ${hit.baseUrl}，但它可能不是 ShortCut 的控制服务"
                 },
             )
-        }
-    }
-
-    /**
-     * 手动填地址（web 的「备用：手动填地址」）。
-     *
-     * 契约 §8.3：默认 `authMode='pair'`，需先用 6 位绑定码换 token。
-     * 安卓端已绑定过，所以流程是：探测地址可达 → 提示用「局域网直连」拿预授权令牌。
-     */
-    fun connectLanManual(rawHost: String) {
-        val host = normalizeHost(rawHost)
-        if (host == null) {
-            _connection.value = _connection.value.copy(
-                lanError = "地址格式不对，请按桌面端显示填写，如 192.168.1.5:9823",
-            )
-            return
-        }
-
-        scope.launch {
-            val baseUrl = "http://$host"
-            val cfg = lanClient.config(baseUrl)
-            if (cfg !is ApiResult.Ok) {
-                _connection.value = _connection.value.copy(
-                    lanError = "连不上 $host（地址不对，或手机与电脑不在同一 Wi-Fi）",
-                )
-                return@launch
-            }
-
-            val authMode = cfg.data.str("authMode")
-            if (authMode == "pair") {
-                _connection.value = _connection.value.copy(
-                    lanError = "该地址需要 6 位绑定码配对。建议改用「局域网直连」入口" +
-                        "（它会自动带上预授权令牌，无需配对）。",
-                )
-            } else {
-                _connection.value = _connection.value.copy(
-                    lanError = "该地址的运行模式不支持手动连接（authMode=$authMode）。",
-                )
-            }
         }
     }
 

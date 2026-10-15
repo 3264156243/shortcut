@@ -1,6 +1,7 @@
 package com.wanan.shortcut
 
 import com.wanan.shortcut.core.lan.LanClient
+import com.wanan.shortcut.core.result.ApiResult
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -182,5 +183,111 @@ class LanProbeTest {
         assertEquals("GET 方法", "GET", recorded.method)
         // 契约 §8.4：/api/config 无需鉴权；探测阶段也还没拿到 token
         assertNull("不该带 Authorization", recorded.getHeader("Authorization"))
+    }
+
+    // ---------------- ★ 不依赖云端的局域网路径：status + pair ----------------
+
+    @Test
+    fun `status 应能读到 authMode 与配对码`() = runBlocking {
+        // 电脑端 /api/status 的真实形状（src-tauri/src/control.rs:340）
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """{"authMode":"pair","pairCode":"482913","clients":0,
+                   "urls":["http://192.168.1.5:9823"],"basePath":"",
+                   "recent":[],"injector":true}""",
+            ),
+        )
+
+        val r = client.status(baseUrl())
+
+        assertTrue("status 应成功：$r", r is ApiResult.Ok)
+        val data = (r as ApiResult.Ok).data
+        assertEquals("pair", data.get("authMode").asString)
+        assertEquals("应能读到配对码（这是不依赖云端的关键）", "482913", data.get("pairCode").asString)
+        assertTrue("应返回 injector 就绪状态", data.get("injector").asBoolean)
+    }
+
+    @Test
+    fun `status 请求不应带鉴权头`() = runBlocking {
+        server.enqueue(
+            MockResponse().setResponseCode(200)
+                .setBody("""{"authMode":"pair","pairCode":"111111"}"""),
+        )
+
+        client.status(baseUrl())
+
+        val recorded = server.takeRequest()
+        assertTrue(recorded.path.orEmpty().endsWith("/api/status"))
+        assertNull("无需鉴权（契约 §8.4）", recorded.getHeader("Authorization"))
+    }
+
+    @Test
+    fun `pair 应把配对码放在请求体里并换回 token`() = runBlocking {
+        // 电脑端 api_pair 读 body.code（control.rs:372）
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody("""{"token":"tok_abc123"}"""),
+        )
+
+        val r = client.pair(baseUrl(), "482913")
+
+        assertTrue("配对应成功：$r", r is ApiResult.Ok)
+        assertEquals("tok_abc123", (r as ApiResult.Ok).data)
+
+        val body = server.takeRequest().body.readUtf8()
+        assertTrue("配对码必须在 body 的 code 字段里：$body", body.contains("\"code\":\"482913\""))
+    }
+
+    @Test
+    fun `配对码错误时 pair 应返回业务失败并带上服务端文案`() = runBlocking {
+        // control.rs:378 用 401 + {"error":"绑定码错误"}
+        server.enqueue(
+            MockResponse().setResponseCode(401).setBody("""{"error":"绑定码错误"}"""),
+        )
+
+        val r = client.pair(baseUrl(), "000000")
+
+        assertTrue("应为失败：$r", r is ApiResult.BusinessFail)
+        assertTrue(
+            "应保留服务端文案供用户判断：${(r as ApiResult.BusinessFail).message}",
+            r.message.contains("绑定码错误"),
+        )
+    }
+
+    @Test
+    fun `pair 返回体缺 token 时应判为失败`() = runBlocking {
+        // 防御：服务端异常时可能给个空对象，不能让调用方拿着空 token 去连
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"ok":true}"""))
+
+        val r = client.pair(baseUrl(), "482913")
+        assertTrue("拿不到 token 应判失败：$r", r is ApiResult.TransportFail)
+    }
+
+    @Test
+    fun `authMode 非 pair 时不应要求配对码`() = runBlocking {
+        server.enqueue(
+            MockResponse().setResponseCode(200)
+                .setBody("""{"authMode":"none","pairCode":null,"urls":[],"injector":true}"""),
+        )
+
+        val r = client.status(baseUrl())
+        val data = (r as ApiResult.Ok).data
+        assertEquals("none", data.get("authMode").asString)
+        assertTrue("pairCode 为 null 是合法的", data.get("pairCode").isJsonNull)
+    }
+
+    // ---------------- 配对后的控制指令带 Bearer ----------------
+
+    @Test
+    fun `控制指令应带 Bearer 令牌`() = runBlocking {
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody("""{"ok":true,"injector":true}"""),
+        )
+
+        client.post(baseUrl(), token = "tok_abc123", path = "/api/ping")
+
+        val recorded = server.takeRequest()
+        assertTrue(recorded.path.orEmpty().endsWith("/api/ping"))
+        assertEquals("Bearer tok_abc123", recorded.getHeader("Authorization"))
+        assertEquals("契约 §8.3：x-token 也接受，两个都带更稳", "tok_abc123", recorded.getHeader("x-token"))
     }
 }

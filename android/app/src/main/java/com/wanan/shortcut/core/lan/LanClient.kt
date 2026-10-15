@@ -133,12 +133,47 @@ class LanClient(
     }
 
     /**
-     * `GET /api/config` —— 无需鉴权，用于探测"这个地址是不是一个局域网控制服务"。
+     * `GET /api/config` —— **无需鉴权**，告诉你这个服务要不要配对（契约 §8.4）。
      *
-     * 手动填地址时先打它，能区分"地址不通"与"地址对了但令牌不对"。
+     * 比 [status] 更轻：只返回 `{authMode, requirePair, basePath}`。
+     * 探测阶段用它**开销最小**；需要 `pairCode` / `urls` 时再用 [status]。
      */
     suspend fun config(baseUrl: String): ApiResult<JsonObject> = withContext(Dispatchers.IO) {
         val request = Request.Builder().url(baseUrl.trimEnd('/') + "/api/config").get().build()
+        try {
+            client.newCall(request).execute().use { response ->
+                val obj = Json.parseObject(response.body?.string().orEmpty())
+                if (!response.isSuccessful || obj == null) {
+                    ApiResult.TransportFail(ApiResult.TransportFail.Kind.BAD_RESPONSE, response.code)
+                } else {
+                    ApiResult.Ok(obj)
+                }
+            }
+        } catch (e: Exception) {
+            ApiResult.TransportFail(ApiResult.TransportFail.Kind.NETWORK, cause = e)
+        }
+    }
+
+    /**
+     * `GET /api/status` —— **无需鉴权**，返回运行状态、候选地址与配对码（契约 §8.4）。
+     *
+     * ## 为什么这个接口对"不依赖云端的局域网直连"至关重要
+     *
+     * 契约 §8.2 的推荐路径是"经云端 WS 问 `/api/lan-entry`"，
+     * 但那**要求云端通道可用**。而本接口无需鉴权、直接由电脑端的局域网服务提供，
+     * 因此可以支撑一条**完全独立于云端**的路径：
+     *
+     * ```
+     * 用户填/扫电脑地址 → GET /api/status 探测到服务 + 拿到 pairCode
+     *                  → POST /api/pair 用 pairCode 换 token
+     *                  → 之后所有控制指令带 Bearer token
+     * ```
+     *
+     * 注意 `pairCode` **不是绑定码**：它是电脑端「局域网直连」启动时随机生成的
+     * 6 位码（`src-tauri/src/control.rs` 的 `new_pair_code()`），可被 `/api/reset-code` 重置。
+     */
+    suspend fun status(baseUrl: String): ApiResult<JsonObject> = withContext(Dispatchers.IO) {
+        val request = Request.Builder().url(baseUrl.trimEnd('/') + "/api/status").get().build()
         try {
             client.newCall(request).execute().use { response ->
                 val obj = Json.parseObject(response.body?.string().orEmpty())
