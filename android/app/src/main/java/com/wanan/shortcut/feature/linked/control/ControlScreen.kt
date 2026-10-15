@@ -132,7 +132,8 @@ private fun ControlEntryScreen(
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
                 Text(
                     text = "在电脑上打开 ShortCut「控制」板块，点开「局域网直连」，" +
-                        "状态页会显示**地址**和**6 位配对码**，照着填进来即可。",
+                        "状态页会显示电脑的**局域网地址**（形如 192.168.1.5:9823），填进来即可。\n" +
+                        "配对码通常**不用填**（会自动从电脑读取），只有在连不上时才需要手输。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -154,8 +155,8 @@ private fun ControlEntryScreen(
                         pairCode = input.filter { it.isLetterOrDigit() }.take(6).uppercase()
                         viewModel.clearConnectionError()
                     },
-                    label = { Text("6 位配对码") },
-                    placeholder = { Text("电脑端状态页显示") },
+                    label = { Text("6 位配对码（可留空）") },
+                    placeholder = { Text("留空自动读取") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.Characters,

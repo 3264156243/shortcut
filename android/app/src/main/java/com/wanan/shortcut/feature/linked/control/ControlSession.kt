@@ -223,24 +223,23 @@ class ControlSession(
 
             // ② 若服务端要求配对，用配对码换 token
             if (authMode == "pair") {
-                if (pairCode.isBlank()) {
-                    // 还没填配对码：告诉用户去哪看，并把服务端当前显示的码回显出来
-                    //（/api/status 无需鉴权就会返回它，方便用户核对）
-                    val serverCode = statusData.str("pairCode")
+                // ★ 配对码可以**自动读取**：/api/status 无需鉴权就返回 pairCode。
+                // 所以用户不必手输——只填地址即可连上，少一个出错环节。
+                // （若用户明确填了码，以用户填的为准，便于排查"码变了"的情况）
+                val serverCode = statusData.str("pairCode")
+                val effectiveCode = pairCode.trim().uppercase().ifBlank { serverCode }
+
+                if (effectiveCode.isBlank()) {
                     _connection.value = _connection.value.copy(
                         lanBusy = false,
                         lanNotice = null,
-                        lanError = if (serverCode.isNotBlank()) {
-                            "这个电脑需要配对码。电脑端「局域网直连」状态页显示的是：**$serverCode**，" +
-                                "填进去即可。"
-                        } else {
-                            "这个电脑需要配对码，请在电脑端「局域网直连」状态页查看后填入。"
-                        },
+                        lanError = "这台电脑需要配对码，但没能从它那里读到。" +
+                            "请在电脑端「局域网直连」状态页查看 6 位配对码后填入。",
                     )
                     return@launch
                 }
 
-                when (val paired = lanClient.pair("http://$host", pairCode.trim().uppercase())) {
+                when (val paired = lanClient.pair("http://$host", effectiveCode)) {
                     is ApiResult.Ok -> {
                         channel = LanChannel(lanClient, "http://$host", paired.data)
                         refreshReady()
@@ -253,7 +252,12 @@ class ControlSession(
                         _connection.value = _connection.value.copy(
                             lanBusy = false, lanNotice = null,
                             lanError = "配对码不对（电脑端回：${paired.message}）。" +
-                                "请在电脑端「局域网直连」状态页核对 6 位配对码。",
+                                (if (serverCode.isNotBlank()) {
+                                    "电脑端当前显示的配对码是 $serverCode，" +
+                                        "若你填的与它不同，请以电脑端显示的为准。"
+                                } else {
+                                    "请在电脑端「局域网直连」状态页核对 6 位配对码。"
+                                }),
                         )
                     }
                     is ApiResult.TransportFail -> {
