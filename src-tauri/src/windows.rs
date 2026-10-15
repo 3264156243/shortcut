@@ -283,21 +283,19 @@ fn cursor_over_island_content(_app: &tauri::AppHandle) -> bool {
 
 /// SC球（岛）当前是否穿透——唯一判定入口：快捷键 / 设置开关 / 拖放守卫 / 状态变化都走这里。
 ///
-/// 优先级与语义（2026-10-16 修正，见 docs/球穿透开关修复说明.md §9）：
-///   1. 拖拽进行中 / 拖放菜单打开 → **不穿透**（否则收不到拖放、点不到菜单）
-///   2. 展开态 → **不穿透**（整窗可交互）
-///   3. 收起 / 迷你态 → **跟随可见内容**：光标在球上则不穿透，移开即穿透
+/// 优先级与语义（2026-10-16 修订，见 docs/球穿透开关修复说明.md §10）：
+///   1. 拖拽进行中（守卫判定，见下）→ **不穿透**：这是"穿透开着也能把文件拖到球上"的唯一入口
+///   2. 拖放菜单打开 → **不穿透**
+///   3. 用户开关打开（启用穿透）→ **恒定穿透**（点击落到下层窗口，球本身不响应）
+///   4. 展开态 → **不穿透**
+///   5. 收起 / 迷你态 → 跟随可见内容：光标在球上则不穿透，移开即穿透
 ///
-/// ⚠️ 这里**故意不再**因为"用户开关打开"就直接返回 true。原因是平台限制：
-/// `WS_EX_TRANSPARENT` 的窗口会被 Windows 的鼠标命中测试整体跳过 —— 连带 **OLE 文件拖放的
-/// DragEnter/Drop 也一并不投递**。所以"穿透开着还能收到文件拖放"只能靠抢在命中测试之前
-/// 把窗口变回可交互，那是与系统赛跑，实测不可靠（探测信号依赖左键状态/鼠标捕获）。
-///
-/// 现在的做法：**球身区域在两种状态下行为一致**（光标在球上就可交互 → 文件拖放走的正是
-/// 已被验证可用的那条路径，不依赖抢跑）；"穿透"改为由前端表达：
-///   - 球身 `.island-shell` 不再带 `grabbable` → 穿透时**不能拖走球**；
-///   - 球身加 `pointer-events:none`（拖放菜单出现时除外）→ 穿透时**点球不响应**
-///     （点击被窗口吞掉，但不会误触球上的按钮/拖动）。
+/// ⚠️ 平台背景：`WS_EX_TRANSPARENT` 窗口会被 Windows 鼠标命中测试整体跳过，
+/// **OLE 文件拖放的 DragEnter/Drop 也一并不投递**。所以"穿透开着还要收文件"必须让窗口在
+/// 拖拽期间临时退出穿透（第 1 条），而"怎么判断正在拖文件"是这里唯一的难点：
+/// 实测 `GetCapture()` 与剪贴板 `CF_HDROP` 在真实拖拽中**都不可用**，只剩左键状态，
+/// 于是改由**按住时长**区分（见拖放守卫的 ARM_DELAY_MS）：普通点击几十毫秒就松手→仍穿透；
+/// 拖文件到球上必然停留超过该阈值→临时变可交互、接收拖放，松手后恢复穿透。
 pub fn effective_island_passthrough(app: &tauri::AppHandle) -> bool {
     use std::sync::atomic::Ordering;
     if drag_active() {
@@ -305,6 +303,9 @@ pub fn effective_island_passthrough(app: &tauri::AppHandle) -> bool {
     }
     if ISLAND_MENU_OPEN.load(Ordering::Relaxed) {
         return false;
+    }
+    if BALL_PASSTHROUGH.load(Ordering::Relaxed) {
+        return true;
     }
     let prefs = island_prefs_hot();
     if prefs.get("displayState").and_then(|v| v.as_str()) == Some("expanded") {
@@ -705,7 +706,6 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
         #[link(name = "user32")]
         unsafe extern "system" {
             fn GetAsyncKeyState(vkey: i32) -> i16;
-            fn GetCapture() -> *mut std::ffi::c_void;
         }
         #[repr(C)]
         struct Pt { x: i32, y: i32 }
@@ -727,6 +727,8 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
         const PREARM_MARGIN: i32 = 12;
         let mut armed = false;
         let mut release_until: Option<std::time::Instant> = None;
+        // 本次"按住且光标在岛附近"的起始时刻（用于按住时长门槛，见 ARM_DELAY_MS）
+        let mut press_started_at: Option<std::time::Instant> = None;
         // 拖拽期间光标最后是否落在岛窗口内（松手位置判定用，见下面松手分支的注释）
         let mut inside_while_down = false;
         let mut size_check_tick: u32 = 0;
@@ -744,15 +746,6 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
             // 拖拽活跃期间 passthrough 恒为 false，若提前 continue 就永远走不到"松手兜底"分支。
             // 穿透下发统一放在循环末尾（带缓存，值没变不会重复扰动窗口样式）。
             let down = unsafe { GetAsyncKeyState(VK_LBUTTON) } < 0;
-            // 第二个"正在拖东西"的信号：OLE 拖放期间**拖拽源窗口持有鼠标捕获**
-            // （DoDragDrop 内部会 SetCapture）。为什么需要它：穿透开着时岛全靠守卫
-            // "抢在系统命中测试前变可交互"，而左键状态在某些拖放路径下可能读不到 ——
-            // 实测现象就是"穿透关能拖（那条路不依赖按键，靠光标位置）、穿透开完全没反应"。
-            // 捕获句柄不等于岛自己时（= 别人的拖拽）也算数。
-            let capture = unsafe { GetCapture() };
-            let foreign_capture = !capture.is_null()
-                && win.hwnd().map(|h| h.0 as *mut std::ffi::c_void != capture).unwrap_or(true);
-            let dragging_hint = down || foreign_capture;
             let mut pt = Pt { x: 0, y: 0 };
             let ok = unsafe { GetCursorPos(&mut pt) } != 0;
             let mut inside = false;
@@ -771,39 +764,50 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
             }
             let now = std::time::Instant::now();
 
-            // 跟踪"拖拽期间光标最后落在哪"：松手位置必须在**松手那一刻**判定，
-            // 不能用宽限期结束（+500ms）时的位置——用户松手后几乎都会顺手把鼠标挪开，
-            // 那时 inside 已经是 false，兜底会被静默跳过，表现为"拖上去有提示、松手没反应"。
-            if dragging_hint {
-                inside_while_down = inside;
+            // 按住时长门槛：系统层面**分不出**"拖文件"和"按住左键"（实测 GetCapture 与
+            // 剪贴板 CF_HDROP 在真实拖拽中都不成立，只剩左键状态），所以用时长区分：
+            //   · 普通点击：几十毫秒就松手 → 不越过门槛 → 球保持穿透（点击照常落到下层）✓
+            //   · 拖文件到球上停留再松手：必然超过门槛 → 临时退出穿透、接收拖放 ✓
+            const ARM_DELAY_MS: u64 = 220;
+            if down && near {
+                let since = *press_started_at.get_or_insert(now);
+                if now.duration_since(since) >= std::time::Duration::from_millis(ARM_DELAY_MS) {
+                    if !armed {
+                        log::info!(
+                            "[island] 按住 {:.0}ms 且光标在岛附近 → 临时退出穿透接收拖放（光标 {},{})",
+                            now.duration_since(since).as_millis(),
+                            pt.x,
+                            pt.y
+                        );
+                    }
+                    armed = true;
+                    release_until = None;
+                    mark_drag_active(1000);
+                }
+            } else {
+                // 没按住 / 不在岛附近：重置计时（点击的按下-抬起会被这里清掉）
+                press_started_at = None;
             }
 
-            if dragging_hint && near {
-                // 有拖拽迹象且光标已进入（或贴近）岛：这次多半是文件拖放，岛必须保持可交互。
-                // 用 near（外扩一点）而不是严格的 inside：抢在系统命中测试之前把窗口准备好。
-                if !armed {
-                    // 每次拖拽只打一条（armed 由 false→true 时），带够诊断信息便于定位
-                    log::info!(
-                        "[island] 检测到拖拽迹象：左键={} 外部捕获={} 光标在岛附近={}（光标 {},{})",
-                        down, foreign_capture, near, pt.x, pt.y
-                    );
+            if armed {
+                // 拖拽期间光标最后落在哪（松手位置判定用，见下面松手分支的注释）
+                if down {
+                    inside_while_down = inside;
                 }
-                armed = true;
-                release_until = None;
-                mark_drag_active(1000);
-            } else if armed {
-                // 松手（或拖出岛外）：先给宽限期，让真正的 Drop 有机会投递过来
-                let t = *release_until.get_or_insert(now + std::time::Duration::from_millis(RELEASE_GRACE_MS));
-                if now >= t {
-                    armed = false;
-                    release_until = None;
-                    // 宽限期过了还没有 Drop：说明 OLE 根本没投递（本机实测**从来投递不到**，
-                    // 只见 Enter/Leave——浏览器/聊天窗口拖图也是这个毛病），
-                    // 用拖入时记下的路径自己补一个 drop，别让用户"松手后毫无反应"。
-                    // 判定用"松手那一刻是否在岛上"（inside_while_down），不是现在的光标位置。
-                    let landed_on_island = inside_while_down;
-                    inside_while_down = false;
-                    synthesize_drop_if_pending(&app, landed_on_island);
+                if !(down && near) {
+                    // 松手（或拖出岛外）：先给宽限期，让真正的 Drop 有机会投递过来
+                    let t = *release_until.get_or_insert(now + std::time::Duration::from_millis(RELEASE_GRACE_MS));
+                    if now >= t {
+                        armed = false;
+                        release_until = None;
+                        // 宽限期过了还没有 Drop：说明 OLE 根本没投递（本机实测 OLE 的 Drop 从来到不了，
+                        // 只见 Enter/Leave），用拖入时记下的路径自己补一个 drop，
+                        // 别让用户"松手后毫无反应"。判定用"松手那一刻是否在岛上"（inside_while_down），
+                        // 不是宽限期结束时的光标位置——用户松手后几乎都会顺手把鼠标挪开。
+                        let landed_on_island = inside_while_down;
+                        inside_while_down = false;
+                        synthesize_drop_if_pending(&app, landed_on_island);
+                    }
                 }
             }
 
