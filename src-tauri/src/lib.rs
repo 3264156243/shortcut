@@ -2699,11 +2699,41 @@ fn conflicting_instance_running() -> Option<String> {
     None
 }
 
-/// SC 球鼠标穿透的全局快捷键（配置 island.ballPassthroughShortcut，缺省 Ctrl+Alt+B）
+/// SC 球鼠标穿透的全局快捷键（配置 island.ballPassthroughShortcut，缺省 Alt+B）
+///
+/// 2026-10-16：默认值由 `Ctrl+Alt+B` 改为 `Alt+B`（用户指定）。
+/// 为了防止旧配置里存着老默认值导致"改了默认值却不生效"，见 [`migrate_ball_shortcut_default`]。
 fn ball_passthrough_shortcut() -> String {
     config::read_config_value()
         .and_then(|c| c.get("island").and_then(|i| i.get("ballPassthroughShortcut")).and_then(|v| v.as_str()).map(String::from))
-        .unwrap_or_else(|| "Ctrl+Alt+B".to_string())
+        .unwrap_or_else(|| "Alt+B".to_string())
+}
+
+/// 迁移：把配置里**历史默认值** `Ctrl+Alt+B` 换成新默认值 `Alt+B`。
+///
+/// 为什么需要：`ball_passthrough_shortcut()` 只在配置**没有**该键时用默认值；
+/// 老版本启动时若把默认值写进过配置，改默认值就不会生效（用户会觉得"改了没反应"）。
+/// 只覆盖"恰好等于旧默认值"的情况——用户自定义过的其它值一律不动。
+pub(crate) fn migrate_ball_shortcut_default() {
+    const OLD_DEFAULT: &str = "Ctrl+Alt+B";
+    const NEW_DEFAULT: &str = "Alt+B";
+    let Some(mut cfg) = config::read_config_value() else {
+        return;
+    };
+    let current = cfg
+        .get("island")
+        .and_then(|i| i.get("ballPassthroughShortcut"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if current != OLD_DEFAULT {
+        return; // 没设置、或用户自定义过 → 不动
+    }
+    if let Some(island) = cfg.get_mut("island").and_then(|i| i.as_object_mut()) {
+        island.insert("ballPassthroughShortcut".into(), serde_json::json!(NEW_DEFAULT));
+    }
+    config::write_config(&serde_json::to_string(&cfg).unwrap_or_default());
+    log::info!("[hotkey] 穿透快捷键默认值迁移：{} → {}", OLD_DEFAULT, NEW_DEFAULT);
 }
 
 /// 当前配置下"应该处于注册状态"的全局快捷键清单（不含任何冻结热键，冻结不靠热键）。
@@ -2715,7 +2745,7 @@ pub(crate) fn configured_hotkeys() -> Vec<String> {
         .iter()
         .map(|s| s.to_string())
         .collect();
-    // Ctrl+Alt+B 切换 SC 球鼠标穿透（需求 5.2）
+    // Alt+B 切换 SC 球鼠标穿透（需求 5.2；2026-10-16 默认值由 Ctrl+Alt+B 改为 Alt+B）
     list.push(ball_passthrough_shortcut());
     let cfg = config::read_config_value().unwrap_or(json!({}));
     let module_on = |id: &str| {
@@ -2777,8 +2807,8 @@ pub(crate) fn unregister_configured_hotkeys(app: &tauri::AppHandle) {
 
 /// 快捷键归一化：注册名与插件回传的 W3C code 名对齐（keyb → b、大写转小写）
 fn normalize_accel(acc: &str) -> String {
-    // 插件回传的是 W3C code 名（control+alt+keyb），配置里写的是 Ctrl+Alt+B：
-    // 修饰键也必须归一化，否则两边永远不相等（Ctrl+Alt+B 之前就是这么失效的）。
+    // 插件回传的是 W3C code 名（alt+keyb 之类），配置里写的是 Alt+B 这种可读写法：
+    // 修饰键也必须归一化，否则两边永远不相等（历史上快捷键就是这么失效的）。
     let lower = acc.to_lowercase();
     let mut parts: Vec<String> = lower
         .split('+')
@@ -2890,7 +2920,7 @@ pub fn run() {
                             "alt+s" => capture_full_screen(app),
                             "alt+d" => start_region_capture(app),
                             "alt+e" => translate_current_selection(app),
-                            // SC 球鼠标穿透切换（需求 5.2，默认 Ctrl+Alt+B）
+                            // SC 球鼠标穿透切换（需求 5.2，默认 Alt+B）
                             k if normalize_accel(k) == normalize_accel(&ball_passthrough_shortcut()) => {
                                 let next = !windows::ball_passthrough();
                                 windows::set_ball_passthrough(app, next);
@@ -3068,6 +3098,9 @@ pub fn run() {
 
             // 注册全局快捷键（注册失败写日志——Electron 版同名键位如果被占也需要知道）
             // 清单集中在 configured_hotkeys()：游戏模式（冻结后台）会整份注销、退出时整份重注册
+            // 穿透快捷键的历史默认值迁移（Ctrl+Alt+B → Alt+B）必须在注册之前跑，
+            // 否则注册的还是配置里存着的旧默认值。
+            migrate_ball_shortcut_default();
             register_configured_hotkeys(app.handle());
 
             // 主窗口：Rust builder 创建（initialization_script 只能挂在 builder 上；conf 不再定义窗口）

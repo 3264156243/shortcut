@@ -70,7 +70,7 @@ function DeepseekBall() {
       <div
         className={['deepseek-ball-root', style, 'expand'].join(' ')}
         onClick={openPlatform}
-        title={passthrough ? '旁边小球（穿透跟随 SC球，Ctrl+Alt+B 可切换）' : (provider === 'opencode' ? 'OpenCode Go 5小时用量' : 'DeepSeek 余额')}
+        title={passthrough ? '旁边小球（穿透跟随 SC球，Alt+B 可切换）' : (provider === 'opencode' ? 'OpenCode Go 5小时用量' : 'DeepSeek 余额')}
       >
         {provider === 'opencode' ? (
           <svg className="deepseek-ball-ring" width="38" height="38" viewBox="0 0 38 38">

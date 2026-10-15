@@ -26,14 +26,14 @@ export default function IslandPanel() {
 
   // ── SC 球鼠标穿透（从转换板块迁来）──
   const [ballThrough, setBallThrough] = useState(false);
-  const [ballShortcut, setBallShortcut] = useState('Ctrl+Alt+B');
+  const [ballShortcut, setBallShortcut] = useState('Alt+B');
   useEffect(() => {
     void window.electronAPI?.ballState?.().then((s) => {
       if (!s) return;
       setBallThrough(!!s.passthrough);
       if (s.shortcut) setBallShortcut(s.shortcut);
     });
-    // 快捷键（Ctrl+Alt+B）切换时主进程会广播状态，这里跟着走
+    // 快捷键（默认 Alt+B）切换时主进程会广播状态，这里跟着走
     return window.electronAPI?.onBallPassthrough?.((d) => setBallThrough(!!d?.on));
   }, []);
   const toggleBallThrough = async (on: boolean) => {

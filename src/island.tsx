@@ -149,7 +149,7 @@ function IslandApp() {
   }, []);
 
   /**
-   * 跟随穿透开关（设置页切换 / Ctrl+Alt+B 都会广播 ball:passthrough）。
+   * 跟随穿透开关（设置页切换 / Alt+B 都会广播 ball:passthrough）。
    *
    * 用途：决定外壳是否作为"拖窗区域"（.grabbable）。
    * 规则（用户要求）：**拖拽移动球只在不可穿透时支持**。

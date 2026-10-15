@@ -110,13 +110,13 @@
 - 前端：新增 `src/IslandDrop.tsx` + `src/islandDrop.css`，在 `island.tsx` 根节点内渲染 —— 整窗虚线高亮、提示气泡、
   松手吸附（给 `.island-root` 加 `drop-suction` 类）、格式菜单（**不改窗口尺寸**，在岛窗口 360×340 内展开，超出可滚动）。
 - 旁边小球：不再接拖放、不再有独立穿透开关；位置仍跟随岛，**穿透状态跟随岛**（`apply_island_and_ball_passthrough`）。
-- 设置项：「启用穿透」位于 **SC 球** 板块（`SettingsPanel.tsx`），与快捷键 `Ctrl+Alt+B`（`island.ballPassthroughShortcut`）等价，
+- 设置项：「启用穿透」位于 **SC 球** 板块（`SettingsPanel.tsx`），与快捷键 `Alt+B`（`island.ballPassthroughShortcut`）等价，
   两处都会调 `set_ball_passthrough` → 落盘 `island.ballClickThrough`。
 
 ### 14.2 穿透判定（唯一入口 `effective_island_passthrough()`）
 优先级：**拖放菜单打开（不穿透，否则菜单点不动）** > **用户开关打开（恒定穿透）** > **岛自身显示态（收起穿透、展开可交互）**。
 即：开关关闭时不改变岛原有行为（默认收起态仍穿透），打开时"连展开态也穿透" → 开关一定看得见差别
-（日志 `[island] 穿透生效 = ...`，以及岛右上角「穿透中 · Ctrl+Alt+B」提示）。
+（日志 `[island] 穿透生效 = ...`，以及岛右上角「穿透中 · Alt+B」提示）。
 
 ### 14.3 穿透 ⇒ 收不到拖放（守卫）
 Windows 命中测试会整体跳过 `WS_EX_TRANSPARENT` 窗口，所以穿透态下拖到岛上不会有任何事件。
