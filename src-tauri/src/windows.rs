@@ -283,15 +283,21 @@ fn cursor_over_island_content(_app: &tauri::AppHandle) -> bool {
 
 /// SC球（岛）当前是否穿透——唯一判定入口：快捷键 / 设置开关 / 拖放守卫 / 状态变化都走这里。
 ///
-/// 优先级与语义（2026-10-13 修正，见 docs/球穿透开关修复说明.md）：
+/// 优先级与语义（2026-10-16 修正，见 docs/球穿透开关修复说明.md §9）：
 ///   1. 拖拽进行中 / 拖放菜单打开 → **不穿透**（否则收不到拖放、点不到菜单）
-///   2. 用户开关打开（启用穿透）→ **恒定穿透**（连可见的球一起穿透，交给下层窗口）
-///   3. 展开态 → **不穿透**（整窗可交互，就是原来的行为）
-///   4. 收起 / 迷你态 → **跟随可见内容**：光标在球的矩形内则不穿透，移开即穿透
+///   2. 展开态 → **不穿透**（整窗可交互）
+///   3. 收起 / 迷你态 → **跟随可见内容**：光标在球上则不穿透，移开即穿透
 ///
-/// 第 4 条是本次修复的核心：改之前"非展开态"一律穿透，导致"启用穿透"开关在收起态
-/// 怎么切都没差别（`PASSTHROUGH_APPLIED` 缓存发现值没变，连窗口样式都不下发），
-/// 用户看到的就是"状态变了，但实际还是能穿透"。
+/// ⚠️ 这里**故意不再**因为"用户开关打开"就直接返回 true。原因是平台限制：
+/// `WS_EX_TRANSPARENT` 的窗口会被 Windows 的鼠标命中测试整体跳过 —— 连带 **OLE 文件拖放的
+/// DragEnter/Drop 也一并不投递**。所以"穿透开着还能收到文件拖放"只能靠抢在命中测试之前
+/// 把窗口变回可交互，那是与系统赛跑，实测不可靠（探测信号依赖左键状态/鼠标捕获）。
+///
+/// 现在的做法：**球身区域在两种状态下行为一致**（光标在球上就可交互 → 文件拖放走的正是
+/// 已被验证可用的那条路径，不依赖抢跑）；"穿透"改为由前端表达：
+///   - 球身 `.island-shell` 不再带 `grabbable` → 穿透时**不能拖走球**；
+///   - 球身加 `pointer-events:none`（拖放菜单出现时除外）→ 穿透时**点球不响应**
+///     （点击被窗口吞掉，但不会误触球上的按钮/拖动）。
 pub fn effective_island_passthrough(app: &tauri::AppHandle) -> bool {
     use std::sync::atomic::Ordering;
     if drag_active() {
@@ -299,9 +305,6 @@ pub fn effective_island_passthrough(app: &tauri::AppHandle) -> bool {
     }
     if ISLAND_MENU_OPEN.load(Ordering::Relaxed) {
         return false;
-    }
-    if BALL_PASSTHROUGH.load(Ordering::Relaxed) {
-        return true;
     }
     let prefs = island_prefs_hot();
     if prefs.get("displayState").and_then(|v| v.as_str()) == Some("expanded") {

@@ -457,7 +457,16 @@ function IslandApp() {
           </svg>
         </div>
       ) : null}
-      <div className={ballThrough ? 'island-shell' : 'island-shell grabbable'}>
+      <div
+        className={[
+          'island-shell',
+          // 穿透时不给拖窗区域 → 拖不走球（OS 级 app-region 拦不住，只能靠类名开关）
+          ballThrough ? '' : 'grabbable',
+          // 穿透时让球"点不动"：点击仍被窗口吞掉（平台限制，见 windows.rs 的注释），
+          // 但至少不会误触球上的按钮/拉开菜单。拖放交互进行中必须放开，否则格式菜单点不了。
+          ballThrough && drop.phase === 'idle' ? 'passthrough-inert' : '',
+        ].filter(Boolean).join(' ')}
+      >
         {drop.phase !== 'idle' && <IslandDropView drop={drop} />}
         {showMusic ? (
           <div className="island-mini">

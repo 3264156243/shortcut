@@ -33,6 +33,11 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
 /* 只有"当前不可穿透"时外壳才是拖窗区域（按住球移动位置）。
    穿透开启 → 球不接收鼠标，自然也不能被拖走；由 island.tsx 按开关状态加/去这个类。 */
 .island-shell.grabbable { -webkit-app-region: drag; }
+/* 穿透时让球"点不动"：DOM 层不响应指针 → 不会误触球上的按钮/拉开菜单。
+   注意它**不影响文件拖放**（OLE 拖放由窗口接收，与 DOM pointer-events 无关）——
+   这正是"穿透开着也能把文件拖到球上"的关键：窗口仍会收到 DragEnter/Drop。
+   拖放菜单出现时 island.tsx 会去掉这个类，否则格式菜单点不了。 */
+.island-shell.passthrough-inert { pointer-events: none; }
 .island-root.expanded .island-shell {
   height: 312px;
   padding: 14px 16px;
