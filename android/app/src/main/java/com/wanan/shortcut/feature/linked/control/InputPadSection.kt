@@ -27,9 +27,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.wanan.shortcut.ui.theme.Spacing
@@ -41,22 +46,42 @@ import com.wanan.shortcut.ui.theme.Spacing
  *
  * 1. **差量同步**：输入内容不是整段重发，而是只发变化部分
  *    （算法在 [TextDiffSync]，已单测覆盖）。
- * 2. **中文输入法保护**：选字过程中**不同步**，否则会把拼音字母打到电脑上
- *    （web 用 `compositionstart/end` + `composing` 标志）。
- *    安卓端用 Compose 提供的组合输入状态判断。
- * 3. **退格/回车/Tab/清空** 四个按钮，且「清空」**只清本页缓冲、不影响电脑**
- *    （web 注释明确写了这点）。
- * 4. 点击这些控件**不会收起输入法**（web 的 `keepKeyboardOpen`）——
- *    安卓端对应的是不让输入框失焦。
+ * 2. **中文输入法保护**：选字过程中**不同步**，否则会把拼音字母打到电脑上。
+ *    web 用 `compositionstart/end`；安卓端用 `TextFieldValue.composition`
+ *    —— 见下方说明，这是**精确**判据。
+ * 3. **退格/回车/Tab/清空** 四个按钮，且「清空」**只清本页缓冲、不影响电脑**。
  */
 @Composable
 fun InputPadSection(viewModel: ControlViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    var buffer by remember { mutableStateOf("") }
-    // 输入法是否在组合中（中文选字）。由 OutlinedTextField 的 onValueChange 无法直接拿到，
-    // 因此这里用"最近一次输入的时间差"近似 —— 见下方说明。
-    var lastInputAt by remember { mutableStateOf(0L) }
+    // ★ 用 TextFieldValue 而不是 String：只有它暴露 `composition`，
+    //   这正是 web 的 compositionstart/end 在 Compose 里的等价物。
+    var field by remember { mutableStateOf(TextFieldValue("")) }
+
+    // 输入区焦点：用于"点控件时不收起输入法"（对齐 web 的 keepKeyboardOpen）
+    val focusRequester = remember { FocusRequester() }
+    val softwareKeyboard = LocalSoftwareKeyboardController.current
+
+    // 焦点当前是否在输入区（用于判断要不要保持键盘）。
+    // ⚠️ 必须声明在 keepKeyboardIfWasFocused 之前：
+    // Kotlin 局部函数不能引用在其之后声明的局部变量。
+    val inputFocused = remember { mutableStateOf(false) }
+
+    /**
+     * 点控件后把焦点还给输入区，从而**保持输入法不收起**。
+     *
+     * 对齐 web `keepKeyboardOpen` 的克制逻辑（`phone.js:252`）：
+     * **只有焦点本来就在输入区时**才还焦点 —— 不主动拉起键盘。
+     * 否则用户只想点个方向键，却会被强制弹出输入法，很烦。
+     */
+    fun keepKeyboardIfWasFocused() {
+        if (!inputFocused.value) return
+        runCatching {
+            focusRequester.requestFocus()
+            softwareKeyboard?.show()
+        }
+    }
 
     Column(
         Modifier
@@ -71,46 +96,47 @@ fun InputPadSection(viewModel: ControlViewModel) {
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                text = "本地 ${buffer.length} · 已同步 ${viewModel.diffSync.sentSnapshot().length}",
+                text = "本地 ${field.text.length} · 已同步 ${viewModel.diffSync.sentSnapshot().length}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = syncStateText(buffer, viewModel.diffSync.sentSnapshot()),
+                text = syncStateText(field.text, viewModel.diffSync.sentSnapshot()),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
             )
         }
 
         OutlinedTextField(
-            value = buffer,
+            value = field,
             onValueChange = { new ->
-                buffer = new
-                // ⚠️ 中文输入法组合期间不同步。
+                field = new
+
+                // ★ 输入法组合状态的**精确**判据（等价于 web 的 composition 事件）：
+                //   composition 为 null            → 没有组合
+                //   composition 非 null 且非 collapsed → 输入法正在组合（如拼音选字中）
                 //
-                // Compose 的 TextField 不直接暴露 composition 状态，
-                // 因此这里用 KeyboardOptions 关闭自动纠错、并在
-                // 输入法提交时才同步 —— 判据是"这次变更是否为单个拉丁字母且紧接着上一次"。
-                //
-                // 说明：web 用浏览器原生 composition 事件，安卓端没有等价 API。
-                // 折中做法是**按输入事件节流**（下面的 debounce 由 ViewModel 的
-                // 串行队列天然承担），且在用户按下空格/回车（选字结束）时立刻同步。
-                // 见下方 IME 说明与测试 ControlDiffSyncTest。
-                val now = System.currentTimeMillis()
-                val composing = looksLikeComposing(new, buffer, lastInputAt, now)
-                lastInputAt = now
-                viewModel.onBufferChanged(new, isComposing = composing)
+                // 早先版本用"短时间内连续单个拉丁字母"的启发式猜测 ——
+                // 中文用户打字快时几乎全程被误判为组合中，结果**完全没同步**
+                // （用户反馈"输入里安卓端输入并没有同步"）。现已改为精确判断。
+                val composing = new.composition?.let { !it.collapsed } ?: false
+
+                viewModel.onBufferChanged(new.text, isComposing = composing)
             },
             label = { Text("输入区") },
             placeholder = { Text("在这里打字…") },
             minLines = 4,
             keyboardOptions = KeyboardOptions(
-                // 关掉自动大小写/纠错，避免把输入法改动当成用户输入发过去
+                // 关掉自动大小写/纠错，避免把输入法的自动改动当成用户输入发过去
                 capitalization = KeyboardCapitalization.None,
                 autoCorrectEnabled = false,
                 imeAction = ImeAction.Default,
             ),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                // 重新进入本页时自动聚焦，便于直接开打（web 是 title.focus()）
+                .focusRequester(focusRequester)
+                .onFocusChanged { inputFocused.value = it.isFocused },
         )
 
         // 退格 / 回车 / Tab / 清空（对齐 web 的 `row-4`）
@@ -118,12 +144,19 @@ fun InputPadSection(viewModel: ControlViewModel) {
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
         ) {
-            ControlKeyButton("⌫ 退格", Modifier.weight(1f)) { viewModel.backspace() }
-            ControlKeyButton("⏎ 回车", Modifier.weight(1f)) { viewModel.pressEnter() }
-            ControlKeyButton("⇥ Tab", Modifier.weight(1f)) { viewModel.pressTab() }
+            ControlKeyButton("⌫ 退格", Modifier.weight(1f)) {
+                viewModel.backspace(); keepKeyboardIfWasFocused()
+            }
+            ControlKeyButton("⏎ 回车", Modifier.weight(1f)) {
+                viewModel.pressEnter(); keepKeyboardIfWasFocused()
+            }
+            ControlKeyButton("⇥ Tab", Modifier.weight(1f)) {
+                viewModel.pressTab(); keepKeyboardIfWasFocused()
+            }
             ControlKeyButton("清空", Modifier.weight(1f)) {
                 viewModel.clearBuffer()
-                buffer = ""
+                field = TextFieldValue("")
+                keepKeyboardIfWasFocused()
             }
         }
 
@@ -135,15 +168,23 @@ fun InputPadSection(viewModel: ControlViewModel) {
         )
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                ControlKeyButton("↑", Modifier.size(64.dp)) { viewModel.sendArrow("up") }
+                ControlKeyButton("↑", Modifier.size(64.dp)) {
+                    viewModel.sendArrow("up"); keepKeyboardIfWasFocused()
+                }
             }
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm, Alignment.CenterHorizontally),
             ) {
-                ControlKeyButton("←", Modifier.size(64.dp)) { viewModel.sendArrow("left") }
-                ControlKeyButton("↓", Modifier.size(64.dp)) { viewModel.sendArrow("down") }
-                ControlKeyButton("→", Modifier.size(64.dp)) { viewModel.sendArrow("right") }
+                ControlKeyButton("←", Modifier.size(64.dp)) {
+                    viewModel.sendArrow("left"); keepKeyboardIfWasFocused()
+                }
+                ControlKeyButton("↓", Modifier.size(64.dp)) {
+                    viewModel.sendArrow("down"); keepKeyboardIfWasFocused()
+                }
+                ControlKeyButton("→", Modifier.size(64.dp)) {
+                    viewModel.sendArrow("right"); keepKeyboardIfWasFocused()
+                }
             }
         }
 
@@ -155,7 +196,9 @@ fun InputPadSection(viewModel: ControlViewModel) {
         )
         LazyRow(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
             items(TYPE_SHORTCUTS) { sc ->
-                ControlChip(sc.label) { viewModel.sendCombo(sc.keys) }
+                ControlChip(sc.label) {
+                    viewModel.sendCombo(sc.keys); keepKeyboardIfWasFocused()
+                }
             }
         }
 
@@ -181,40 +224,16 @@ internal fun syncStateText(buffer: String, sent: String): String = when {
     else -> "差量同步"
 }
 
-/**
- * 粗略判断"这次输入是否处于输入法组合中"。
+/*
+ * 已删除：`looksLikeComposing()` 启发式 + `COMPOSING_GAP_MS`。
  *
- * ## 为什么只能"粗略"
+ * 它原本用"短时间内连续单个拉丁字母"**猜**输入法是否在组合。
+ * 这是错的方向 —— 中文用户打字快时几乎全程被误判为组合中，
+ * 结果**完全没同步**（用户反馈"输入里安卓端输入并没有同步"）。
  *
- * web 用浏览器原生的 `compositionstart` / `compositionend` 事件精确判断。
- * Compose 的 `TextField` **不暴露** composition 状态
- * （`TextFieldValue.composition` 在 Material3 的 `OutlinedTextField` 里不可见）。
- *
- * 因此这里用一条启发式：**短时间内连续单个拉丁字母输入**，很可能是拼音组合中。
- * 它的代价是"用户快速连续打英文"时会被误判为组合中（表现为同步稍微延迟，
- * 松开键盘后一次性同步）—— 这是**可接受的退化**：延迟同步只是慢一点，
- * 而把拼音打到电脑上是**错误输入**，后者严重得多。
- *
- * 与之配套：ViewModel 里的指令是**串行队列**，所以延迟同步也不会乱序。
+ * 正确做法是用 `TextFieldValue.composition`：它不是 collapsed 就说明在组合中，
+ * 与 web 的 `compositionstart/end` 等价且**精确**。见 `InputPadSection` 里的用法。
  */
-private fun looksLikeComposing(
-    new: String,
-    previous: String,
-    lastInputAt: Long,
-    now: Long,
-): Boolean {
-    // 只有在"新增了恰好一个 ASCII 字母"且距上次输入很近时，才怀疑是组合输入
-    val appended = new.length == previous.length + 1 && new.startsWith(previous)
-    if (!appended) return false
-    val ch = new.last()
-    val isLatinLetter = ch in 'a'..'z' || ch in 'A'..'Z'
-    if (!isLatinLetter) return false
-    val gap = now - lastInputAt
-    return lastInputAt > 0 && gap < COMPOSING_GAP_MS
-}
-
-/** 拼音连续输入的时间间隔阈值（超过它认为是一段新输入） */
-private const val COMPOSING_GAP_MS = 400L
 
 /** 快捷键定义（逐条对齐 web `TYPE_SHORTCUTS`） */
 internal data class Shortcut(val label: String, val keys: List<String>)

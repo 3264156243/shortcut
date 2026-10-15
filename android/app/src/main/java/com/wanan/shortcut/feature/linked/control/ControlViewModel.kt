@@ -152,6 +152,18 @@ class ControlViewModel(
 
     private fun sendKey(name: String) = sendCommand(ControlCommands.key(name))
 
+    /**
+     * 发**单个键**（`/api/key`）—— 键盘按键走这条。
+     *
+     * ⚠️ 与 [sendCombo] 的区别是语义性的，不是风格问题：
+     *   - `/api/key` → 桌面端 `inject("KEY <vk>")`，按下并释放一个键；
+     *   - `/api/combo` → "按键序列"，单个字母走它会被当成序列处理。
+     *
+     * 踩过的 bug：虚拟键盘一律走 combo，用户反馈
+     * "**键盘打字母却是一些快捷键一样的**"。
+     */
+    fun sendSingleKey(name: String) = sendKey(name)
+
     private fun sendCommand(
         command: Pair<String, Map<String, Any?>>,
         silent: Boolean = false,

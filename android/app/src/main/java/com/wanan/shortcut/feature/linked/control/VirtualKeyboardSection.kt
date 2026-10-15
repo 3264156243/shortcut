@@ -26,37 +26,61 @@ import androidx.compose.ui.unit.dp
 import com.wanan.shortcut.ui.theme.Spacing
 
 /**
- * 虚拟键盘（对齐 web `#vkSheet`）。
+ * 虚拟键盘（对齐 web `#vkSheet` 的 `pressVk()`）。
  *
- * ## web 的关键行为
+ * ## ★ 关键规则：有修饰键才走组合，否则走单键
  *
- * - 修饰键（Ctrl/Shift/Alt/Win）是**粘滞**的：点亮后与下一个普通键**组合**发出；
- * - 有「释放修饰」按钮一次性清掉所有修饰；
- * - 键盘**始终按横屏形态展示**（与手机方向无关）。
+ * web 的原文（`control/app/js/phone.js:753`）：
+ * ```js
+ * function pressVk(key) {
+ *   const k = String(key).toLowerCase();
+ *   if (['ctrl','shift','alt','win'].includes(k)) return;   // 修饰键本身不发
+ *   const active = [];
+ *   if (mods.ctrl) active.push('ctrl'); ...
+ *   if (active.length) sendCombo(active.concat([key]));     // 有修饰 → /api/combo
+ *   else sendKey(key);                                      // 没修饰 → /api/key
+ * }
+ * ```
  *
- * 安卓端：
- * - 保持粘滞修饰 + 组合发送的语义（这是虚拟键盘最实用的地方）；
- * - **不做横屏旋转**：那个设计是为了在竖屏手机上看清 14 列的键位。
- *   安卓端改为**横向可滚动**（14 列挤在一屏会小到按不准）。
+ * ⚠️ 我此前**一律走 `sendCombo`**，这是踩过的真实 bug（用户反馈
+ * "**键盘打字母却是一些快捷键一样的**"）：
+ * `/api/key` 是"按下一个键"（`inject("KEY <vk>")`），
+ * 而 `/api/combo` 是"按键序列"，单个字母走它会被当成序列处理。
+ *
+ * ## 与 web 的一处有意差异
+ *
+ * web 的修饰键是**粘滞**的（点亮后一直有效，直到手动「释放修饰」）。
+ * 安卓端改为**发完即清**（web 的 `pressVk` 末尾其实也调了 `clearMods()`，
+ * 只是按钮上的高亮另外维护）—— 这样不会出现"忘了释放修饰导致后续按键全变组合"。
  */
 @Composable
 fun VirtualKeyboardSection(viewModel: ControlViewModel) {
-    // 粘滞修饰键（web 的 `mods` 对象）
+    // 修饰键（web 的 `mods` 对象）
     var mods by remember { mutableStateOf(emptySet<String>()) }
 
     fun toggleModifier(name: String) {
         mods = if (name in mods) mods - name else mods + name
     }
 
-    /** 发一个普通键：有修饰则发组合，否则单键 */
+    /**
+     * 按一个键 —— 严格照 web 的 `pressVk` 分支。
+     *
+     * 修饰键本身不发送（web 第一行就 `return`）；有修饰才组合。
+     */
     fun pressKey(label: String) {
         val keyName = VirtualKeyboard.toKeyName(label)
+
+        // 修饰键本身不发送：它只是"待生效状态"
+        if (keyName in VirtualKeyboard.MODIFIERS) return
+
         if (mods.isEmpty()) {
-            viewModel.sendCombo(listOf(keyName))
+            // ★ 无修饰 → 单键（/api/key）。这里若走 combo 就会变成"快捷键"
+            viewModel.sendSingleKey(keyName)
         } else {
             viewModel.sendCombo(mods.toList() + keyName)
+            // 发完即清：避免用户忘了释放修饰，后续每个字母都变成组合键
+            mods = emptySet()
         }
-        // web 里修饰键是粘滞的（发完组合后仍保持点亮），这里保持一致
     }
 
     Column(
