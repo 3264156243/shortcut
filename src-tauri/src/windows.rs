@@ -702,6 +702,7 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
         #[link(name = "user32")]
         unsafe extern "system" {
             fn GetAsyncKeyState(vkey: i32) -> i16;
+            fn GetCapture() -> *mut std::ffi::c_void;
         }
         #[repr(C)]
         struct Pt { x: i32, y: i32 }
@@ -723,7 +724,7 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
         const PREARM_MARGIN: i32 = 12;
         let mut armed = false;
         let mut release_until: Option<std::time::Instant> = None;
-        /// 按住期间光标最后是否落在岛窗口内（松手位置判定用，见下面松手分支的注释）
+        // 拖拽期间光标最后是否落在岛窗口内（松手位置判定用，见下面松手分支的注释）
         let mut inside_while_down = false;
         let mut size_check_tick: u32 = 0;
         loop {
@@ -740,6 +741,15 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
             // 拖拽活跃期间 passthrough 恒为 false，若提前 continue 就永远走不到"松手兜底"分支。
             // 穿透下发统一放在循环末尾（带缓存，值没变不会重复扰动窗口样式）。
             let down = unsafe { GetAsyncKeyState(VK_LBUTTON) } < 0;
+            // 第二个"正在拖东西"的信号：OLE 拖放期间**拖拽源窗口持有鼠标捕获**
+            // （DoDragDrop 内部会 SetCapture）。为什么需要它：穿透开着时岛全靠守卫
+            // "抢在系统命中测试前变可交互"，而左键状态在某些拖放路径下可能读不到 ——
+            // 实测现象就是"穿透关能拖（那条路不依赖按键，靠光标位置）、穿透开完全没反应"。
+            // 捕获句柄不等于岛自己时（= 别人的拖拽）也算数。
+            let capture = unsafe { GetCapture() };
+            let foreign_capture = !capture.is_null()
+                && win.hwnd().map(|h| h.0 as *mut std::ffi::c_void != capture).unwrap_or(true);
+            let dragging_hint = down || foreign_capture;
             let mut pt = Pt { x: 0, y: 0 };
             let ok = unsafe { GetCursorPos(&mut pt) } != 0;
             let mut inside = false;
@@ -758,16 +768,23 @@ pub fn spawn_island_drop_guard(app: &tauri::AppHandle) {
             }
             let now = std::time::Instant::now();
 
-            // 跟踪"按住期间光标最后落在哪"：松手位置必须在**松手那一刻**判定，
+            // 跟踪"拖拽期间光标最后落在哪"：松手位置必须在**松手那一刻**判定，
             // 不能用宽限期结束（+500ms）时的位置——用户松手后几乎都会顺手把鼠标挪开，
             // 那时 inside 已经是 false，兜底会被静默跳过，表现为"拖上去有提示、松手没反应"。
-            if down {
+            if dragging_hint {
                 inside_while_down = inside;
             }
 
-            if down && near {
-                // 左键按住且光标已进入（或贴近）岛：这次多半是文件拖放，岛必须保持可交互。
+            if dragging_hint && near {
+                // 有拖拽迹象且光标已进入（或贴近）岛：这次多半是文件拖放，岛必须保持可交互。
                 // 用 near（外扩一点）而不是严格的 inside：抢在系统命中测试之前把窗口准备好。
+                if !armed {
+                    // 每次拖拽只打一条（armed 由 false→true 时），带够诊断信息便于定位
+                    log::info!(
+                        "[island] 检测到拖拽迹象：左键={} 外部捕获={} 光标在岛附近={}（光标 {},{})",
+                        down, foreign_capture, near, pt.x, pt.y
+                    );
+                }
                 armed = true;
                 release_until = None;
                 mark_drag_active(1000);
