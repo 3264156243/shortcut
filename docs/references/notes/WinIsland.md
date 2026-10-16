@@ -1,8 +1,10 @@
 # WinIsland — 项目介绍与关键源码索引
 
-> 本地路径：`references/WinIsland`（浅克隆，2026-08-02）
+> 本地路径：`docs/references/WinIsland`（浅克隆，2026-08-02）
 > 仓库地址：https://github.com/Eatgrapes/WinIsland
 > 许可证：**GPL-3.0** ⚠️（强传染；ShortCut 若非 GPL 开源，**禁止复制/翻译任何代码**，仅可读源码借鉴思路）
+
+> **状态**：🔵 已读、结论已定 · **功能域**：`媒体/音乐`、`窗口/层级`、`工程/架构` · **索引**：[../README.md](../README.md)
 
 ---
 

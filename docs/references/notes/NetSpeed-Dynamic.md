@@ -1,8 +1,10 @@
 # NetSpeed-Dynamic（NSD）— 项目介绍与关键源码索引
 
-> 本地路径：`references/NetSpeed-Dynamic`（浅克隆，2026-08-02）
+> 本地路径：`docs/references/NetSpeed-Dynamic`（浅克隆，2026-08-02）
 > 仓库地址：https://github.com/GEORGEWWWU/NetSpeed-Dynamic
 > 许可证：**MIT** ✅（可直接复用代码，保留版权声明即可）
+
+> **状态**：🔵 已读、结论已定 · **功能域**：`窗口/层级`、`UI/灵动岛`、`网络/协议` · **索引**：[../README.md](../README.md)
 
 ---
 

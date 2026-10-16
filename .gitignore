@@ -78,3 +78,9 @@ signing.properties
 !android/gradle/wrapper/gradle-wrapper.jar
 !android/gradle/wrapper/gradle-wrapper.properties
 
+# ===== 参考项目（docs/references）=====
+# 只入库「索引 + 阅读笔记」；克隆的外部源码各自是独立仓库，不入库
+# （原先它们是"没有 .gitmodules 的残缺子模块"，clone 拉不到、还总让 git status 脏）
+docs/references/*/
+!docs/references/notes/
+docs/references/**/.git/

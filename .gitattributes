@@ -1,0 +1,37 @@
+# 统一行尾策略：文本自动归一化为 LF 入库，检出时按平台转换
+* text=auto
+
+# 明确文本类型（避免"LF will be replaced by CRLF"这类噪音，也防止脚本在 Windows 上被改成 LF）
+*.ts   text eol=lf
+*.tsx  text eol=lf
+*.js   text eol=lf
+*.mjs  text eol=lf
+*.json text eol=lf
+*.css  text eol=lf
+*.html text eol=lf
+*.md   text eol=lf
+*.rs   text eol=lf
+
+# Windows 脚本必须是 CRLF（否则某些解析器会出问题）
+*.ps1  text eol=crlf
+*.cmd  text eol=crlf
+*.bat  text eol=crlf
+
+# 二进制：不做任何行尾/文本处理
+*.exe   binary
+*.dll   binary
+*.ico   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.webp  binary
+*.pdf   binary
+*.zip   binary
+*.tar   binary
+*.gz    binary
+*.sig   binary
+
+# 发行/产物目录（即使被显式 add 也不要 dif't 成文本）
+dist/**        -text
+src-tauri/target/**  -text
+release/**     -text
