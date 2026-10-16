@@ -160,20 +160,36 @@ ShortCut 运行时会把用户配置写入 Electron 的 `userData` 目录。主�
 
 ## 项目结构
 
+> ⚠️ 本文档是**面向用户**的功能介绍，技术栈说明可能滞后：项目正在从 Electron 迁移到 **Tauri 2**，
+> 当前主线是 `src/` + `src-tauri/`（详见 [docs/README.md](./docs/README.md) 的文档地图）。
+
 ```text
-electron/         Electron 主进程与 preload 桥接代码
-src/              React 渲染进程源码
+src/              React 前端源码（Tauri 与 Electron 共用的多窗口入口：index/island/tasklist/…）
 src/components/   前端 UI 组件
 src/store/        Zustand 应用状态
-src/i18n/         多语言文本
-resources/        应用图标和静态资源
-server/activation 服务器端激活码 API 与管理后台
-docs/             灵动岛开发规划与参考资料
+src-tauri/        当前主线：Tauri 2 桌面壳（Rust）
+electron/         历史：Electron 主进程与 preload 桥接（已冻结，不再改动）
+resources/        运行时资源：图标、局域网控制静态页（sj/）、侧车（硬件监控/音乐桥/语音）
+server/           服务端：同步与绑定（sync/）、激活（activation/）、实时中继（control-relay/）
+tools/            开发与联调工具（含 mock-desktop 假桌面桩）
+android/          安卓端（原生 Kotlin，另一位协作者负责）
+docs/             全部文档 → 先看 docs/README.md 的文档地图
 ```
+
+### 文档去哪找
+
+| 我想… | 看 |
+|---|---|
+| 了解项目现状 / 该读哪些文档 | [`docs/README.md`](./docs/README.md) |
+| 改移动互联 / 安卓端接口 | [`docs/移动互联-协议契约.md`](./docs/移动互联-协议契约.md)（唯一真源） |
+| 参与协作（分支、提交、构建） | [`docs/协同开发规范.md`](./docs/协同开发规范.md) |
+| 提问 / 要接口 / 看双方待办 | [`docs/协作交流-问答台.md`](./docs/协作交流-问答台.md) |
+| 桌面端踩坑与回归（启动方式、构建顺序等） | [`docs/desktop/tauri-regression.md`](./docs/desktop/tauri-regression.md) |
+| Electron 时期的资料（已归档） | [`docs/archive/`](./docs/archive/) |
 
 ## 需求文档
 
-更完整的产品目标、功能边界和设计标准见 [requirements.md](./requirements.md) 与 [docs/灵动岛开发规划.md](./docs/灵动岛开发规划.md)。
+更完整的产品目标、功能边界和设计标准见 [docs/archive/requirements.md](./docs/archive/requirements.md) 与 [docs/desktop/灵动岛开发规划.md](./docs/desktop/灵动岛开发规划.md)。
 
 ## 许可证
 

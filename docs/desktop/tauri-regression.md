@@ -64,10 +64,10 @@
 
 ## 十一、更新（M6）
 - [ ] downloadUpdate：updater.check→latest.json→进度→downloaded；installUpdate 安装器启动并重启
-- [ ] 服务器端 latest.json + .sig 部署流程（见 docs/updater-deploy.md）
+- [ ] 服务器端 latest.json + .sig 部署流程（见 docs/server/updater-deploy.md）
 
 ## 十二、内存基线
-- [ ] Tauri 版启动 5 分钟 WorkingSet vs Electron 版（基线记录 docs/memory-baseline.md）
+- [ ] Tauri 版启动 5 分钟 WorkingSet vs Electron 版（基线记录 docs/desktop/memory-baseline.md）
 
 ## 十三、P3 拖放 / 右键菜单 实测结论（2026-10-02）
 > 这一轮把"外壳能跑但功能不工作"的三个问题定位到根因并修好了，结论记在这里避免重复排查。
@@ -200,7 +200,7 @@ Start-Process explorer.exe -ArgumentList '"D:\wenjian\js\ShortCut\src-tauri\targ
 > **已修复**：主进程改为**永久保持普通权限**，温度由"以 `Highest` 运行的计划任务侧车 +
 > 命名管道"读取（首次点一次授权，之后零 UAC）。界面上"请以管理员方式运行 ShortCut"的
 > 错误引导已删除，改成「一次授权并启用温度」。完整方案 / 验收 / 回滚见
-> `docs/驾驶舱温度与拖放冲突-解决方案.md`。下面保留实测边界数据作为依据。
+> `docs/desktop/驾驶舱温度与拖放冲突-解决方案.md`。下面保留实测边界数据作为依据。
 
 **冲突**：驾驶舱靠 `resources/hardware-monitor/ShortCut.HardwareMonitor.exe` 读传感器，
 其中 CPU/内存温度走 LibreHardwareMonitorLib 的 ring0 驱动 → 需要管理员；

@@ -67,7 +67,7 @@
 
 ### P6 回归与文档收尾
 - 回归：穿透开/关都能拖入（守卫）；小球跟随穿透；快捷键 `Alt+B` 不变；`cargo test` 20 项全过；前端 `npm run build`。
-- 更新 `docs/tauri-regression.md`（新增本轮结论）与本文档「实施记录」。
+- 更新 `docs/desktop/tauri-regression.md`（新增本轮结论）与本文档「实施记录」。
 - 提交 + 推送 + 中文验收步骤。
 
 ---
