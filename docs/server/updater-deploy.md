@@ -27,14 +27,24 @@
 ## 发布流程
 
 1. 版本号三处同步：`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`、（前端如需）`package.json`
-2. 构建：`cargo tauri build`（或 `cargo build --release` + `tauri build`）；`bundle.createUpdaterArtifacts: true` 会自动产出：
+2. 前端必须先构建：`npm run build`（`frontendDist` 是**编译期嵌入**的，顺序反了会得到一个"能跑但界面是上一版"的安装包）
+3. **打包必须在 `vcvars64` 环境里跑**（踩过：否则 `lzma-sys` 的 C 编译会报
+   `fatal error C1083: 无法打开包括文件: "vcruntime.h"`）：
+   ```bat
+   call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+   npx tauri build --features custom-protocol
+   ```
+   `bundle.createUpdaterArtifacts: true` 会自动产出：
    - `src-tauri/target/release/bundle/nsis/ShortCut_<ver>_x64-setup.exe`
    - `src-tauri/target/release/bundle/nsis/ShortCut_<ver>_x64-setup.exe.sig`
-3. 签名环境变量（构建机）：
+4. 签名环境变量（构建机）——**两个都要设**，且密码**必填**（见 §密钥）：
    - `TAURI_SIGNING_PRIVATE_KEY_PATH=%USERPROFILE%\.tauri\shortcut-updater.key`
-   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD=`（空，密钥未设密码）
-4. 上传 `ShortCut_<ver>_x64-setup.exe` 与 `.sig` 到服务器 updates 目录；更新 `latest.json` 的 version/signature/url
-5. 客户端验证链：latest.json.version > 当前版本 → 下载 url → minisign 公钥（已内置于 tauri.conf.json）验签 .sig → 执行安装
+   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD=<该密钥的口令>`
+   > ⚠️ 这里原来写的是"空，密钥未设密码"，**是错的**：该密钥**设了口令**，
+   > 传空会报 `incorrect updater private key password: Wrong password for that key`
+   > （安装包会照常产出，但 `.sig` 缺失败，发布流程等于半成品）。
+5. 上传 `ShortCut_<ver>_x64-setup.exe` 与 `.sig` 到服务器 updates 目录；更新 `latest.json` 的 version/signature/url
+6. 客户端验证链：latest.json.version > 当前版本 → 下载 url → minisign 公钥（已内置于 tauri.conf.json）验签 .sig → 执行安装
 
 ## 密钥保管
 

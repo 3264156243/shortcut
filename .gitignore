@@ -84,3 +84,6 @@ signing.properties
 docs/references/*/
 !docs/references/notes/
 docs/references/**/.git/
+
+# 发布过程中的临时产物（含签名，用完即弃）
+docs/server/_latest-*.pending.json

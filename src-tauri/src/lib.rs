@@ -2052,7 +2052,39 @@ fn ensure_cloud_link(app: &tauri::AppHandle) -> Result<(), String> {
     }
 }
 
-/// sj 静态资源目录：生产=resource_dir/resources/sj，开发=CARGO_MANIFEST_DIR/../resources/sj
+/// resources 根目录（**同时兼容安装版与开发版**，所有侧车/静态页都走这里）。
+///
+/// 为什么需要（2026-10-17 发版阻塞级修复）：原来这些路径直接写
+/// `env!("CARGO_MANIFEST_DIR")/../resources/...`，那是**编译期绝对路径**
+/// （= `D:\wenjian\js\ShortCut\src-tauri`）。在别人的机器上这个路径不存在 →
+/// 硬件监控（驾驶舱温度）、音乐桥、语音桥、局域网控制静态页**全部失效**；
+/// 而且 `sj_static_root_pub()` 连 `resource_dir()` 都没试。
+///
+/// 判定顺序（实测 NSIS 安装版把 `../resources/**` 放到了 **`<_up_>/resources`**，
+/// 不是 exe 同级的 `resources/`，所以两个都要试）：
+///   1. `<exe 所在目录>/_up_/resources`（NSIS 安装版实测布局）
+///   2. `<exe 所在目录>/resources`（部分打包方式/手工解压布局）
+///   3. `CARGO_MANIFEST_DIR/../resources`（开发时从 target/ 直接跑）
+pub fn resources_root() -> PathBuf {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            for rel in ["_up_/resources", "resources"] {
+                let p = dir.join(rel);
+                if p.exists() {
+                    return p;
+                }
+            }
+        }
+    }
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("resources")
+}
+
+/// 取 resources 下的某个文件（例：`resource_path("sj/index.html")`）
+pub fn resource_path(rel: &str) -> PathBuf {
+    resources_root().join(rel)
+}
+
+/// sj 静态资源目录：安装版=`<安装目录>/resources/sj`，开发=`<仓库>/resources/sj`
 fn sj_static_root(app: &tauri::AppHandle) -> PathBuf {
     if let Ok(rd) = app.path().resource_dir() {
         let p = rd.join("resources").join("sj");
@@ -2060,11 +2092,11 @@ fn sj_static_root(app: &tauri::AppHandle) -> PathBuf {
             return p;
         }
     }
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("resources").join("sj")
+    resource_path("sj")
 }
 
 pub fn sj_static_root_pub() -> std::path::PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("resources").join("sj")
+    resource_path("sj")
 }
 
 async fn start_control(app: &tauri::AppHandle, port: u16, auth_mode: &str) -> Result<Value, String> {
@@ -2675,12 +2707,24 @@ pub fn translate_current_selection(app: &tauri::AppHandle) {
     });
 }
 
-/// 冲突检测：Electron 版在跑 → tasklist 精确匹配（两版并行会竞争写 config.json）
-/// 本程序多开由 tauri-plugin-single-instance（命名互斥体）兜底
+/// 冲突检测：**旧版 Electron 版**在跑 → tasklist 匹配（两版并行会竞争写 config.json）
+/// 本程序多开由 tauri-plugin-single-instance（命名互斥体）兜底。
+///
+/// ⚠️ 2026-10-17 修（发版阻塞级）：原实现只要发现名为 `shortcut.exe` 的进程就报冲突，
+/// **既不排除自己、也不看路径**。而 Tauri 打包出来的安装版进程名正是 `ShortCut.exe`
+/// （productName=ShortCut）——于是"装完第一次启动"会被自己拦下，弹出
+/// "检测到旧版 ShortCut（Electron）正在运行"并 exit(1)，用户看到的就是**双击没反应**。
+/// （本地把安装目录的 exe 命名成 ShortCut.exe 时也复现过同样的静默退出。）
+///
+/// 现在两条判据都必须满足才算冲突：
+///   1. 该 PID 不是我们自己（`std::process::id()`）；
+///   2. 该进程的可执行文件路径**不等于我们自己所在的路径**（同名但不同副本才算旧版）。
 fn conflicting_instance_running() -> Option<String> {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
+        let own_pid = std::process::id();
+        let own_exe = std::env::current_exe().ok();
         let out = std::process::Command::new("tasklist")
             .args(["/NH", "/FO", "CSV"])
             .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
@@ -2688,12 +2732,44 @@ fn conflicting_instance_running() -> Option<String> {
             .ok()?;
         let text = String::from_utf8_lossy(&out.stdout);
         for line in text.lines() {
-            let first = line.split(',').next().unwrap_or("").trim_matches('"').to_ascii_lowercase();
-            if first == "shortcut.exe" {
-                return Some(
-                    "检测到旧版 ShortCut（Electron）正在运行。\n\n两版同时运行会竞争写配置文件、造成任务墙/快捷方式数据丢失。\n\n请先退出旧版（托盘图标 → 退出），再启动本程序。".to_string(),
-                );
+            let mut cols = line.split(',').map(|c| c.trim_matches('"').trim());
+            let name = cols.next().unwrap_or("").to_ascii_lowercase();
+            // CSV 列：映像名称, PID, 会话名, 会话#, 内存
+            let pid: u32 = cols.next().unwrap_or("").parse().unwrap_or(0);
+            if name != "shortcut.exe" || pid == 0 {
+                continue;
             }
+            // 判据 1：排除自己
+            if pid == own_pid {
+                continue;
+            }
+            // 判据 2：排除"与自己完全同一个可执行文件"的实例（同路径再启一个=多开，交给单实例插件处理）
+            let same_exe = std::process::Command::new("wmic")
+                .args([
+                    "process",
+                    "where",
+                    &format!("ProcessId={pid}"),
+                    "get",
+                    "ExecutablePath",
+                    "/value",
+                ])
+                .creation_flags(0x0800_0000)
+                .output()
+                .ok()
+                .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+                .and_then(|s| {
+                    s.lines()
+                        .find_map(|l| l.strip_prefix("ExecutablePath=").map(|p| p.trim().to_string()))
+                })
+                .filter(|p| !p.is_empty());
+            if let (Some(a), Some(b)) = (own_exe.as_ref(), same_exe.as_ref()) {
+                if a.to_string_lossy().eq_ignore_ascii_case(b) {
+                    continue;
+                }
+            }
+            return Some(
+                "检测到旧版 ShortCut（Electron）正在运行。\n\n两版同时运行会竞争写配置文件、造成任务墙/快捷方式数据丢失。\n\n请先退出旧版（托盘图标 → 退出），再启动本程序。".to_string(),
+            );
         }
     }
     None

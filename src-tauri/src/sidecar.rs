@@ -116,7 +116,8 @@ pub fn music_bridge_script_pub() -> Option<std::path::PathBuf> {
 
 fn music_bridge_script() -> Option<std::path::PathBuf> {
     let candidates = [
-        crate::sj_static_root_pub().join("../music-bridge/netmusic-bridge.ps1"),
+        // 安装版：<安装目录>/resources/music-bridge/...；开发：<仓库>/resources/music-bridge/...
+        crate::resource_path("music-bridge/netmusic-bridge.ps1"),
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/music-bridge/netmusic-bridge.ps1"),
     ];
     candidates.into_iter().find(|p| p.exists())
@@ -124,7 +125,8 @@ fn music_bridge_script() -> Option<std::path::PathBuf> {
 
 fn hardware_monitor_exe() -> Option<std::path::PathBuf> {
     let candidates = [
-        crate::sj_static_root_pub().join("../hardware-monitor/ShortCut.HardwareMonitor.exe"),
+        // 安装版：<安装目录>/resources/hardware-monitor/...；开发：<仓库>/resources/hardware-monitor/...
+        crate::resource_path("hardware-monitor/ShortCut.HardwareMonitor.exe"),
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/hardware-monitor/ShortCut.HardwareMonitor.exe"),
     ];
     candidates.into_iter().find(|p| p.exists())

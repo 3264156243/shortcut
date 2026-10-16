@@ -42,7 +42,8 @@ fn write_voice_config(patch: &Value) {
 
 fn bridge_script_path() -> std::path::PathBuf {
     let candidates = [
-        crate::sj_static_root_pub().join("../scripts/voice-input-bridge.ps1"),
+        // 安装版：<安装目录>/resources/scripts/...；开发：<仓库>/resources/scripts/...
+        crate::resource_path("scripts/voice-input-bridge.ps1"),
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/scripts/voice-input-bridge.ps1"),
     ];
     candidates.iter().find(|p| p.exists()).cloned().unwrap_or_else(|| candidates[0].clone())
