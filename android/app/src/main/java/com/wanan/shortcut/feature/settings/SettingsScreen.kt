@@ -38,6 +38,7 @@ import com.wanan.shortcut.core.net.Protocol
 import com.wanan.shortcut.core.prefs.AppPrefs
 import com.wanan.shortcut.core.prefs.FontScale
 import com.wanan.shortcut.core.prefs.ThemeMode
+import com.wanan.shortcut.core.update.UpdateUiState
 import com.wanan.shortcut.feature.home.HomeLayoutStyle
 import com.wanan.shortcut.ui.components.InfoRow
 import com.wanan.shortcut.ui.components.ScCard
@@ -128,10 +129,12 @@ fun SettingsScreen(
     identity: Identity,
     onUnbound: () -> Unit,
     viewModel: SettingsViewModel = containerViewModel { SettingsViewModel(it) },
+    updateViewModel: com.wanan.shortcut.core.update.UpdateViewModel = containerViewModel { it.updateViewModel() },
 ) {
     val prefs by viewModel.prefs.collectAsStateWithLifecycle()
     val homeStyle by viewModel.homeStyle.collectAsStateWithLifecycle()
     val cleared by viewModel.cleared.collectAsStateWithLifecycle()
+    val updateState by updateViewModel.state.collectAsStateWithLifecycle()
     var showUnbindDialog by remember { mutableStateOf(false) }
 
     Column(
@@ -157,7 +160,10 @@ fun SettingsScreen(
         )
         StorageSection(onClearLocalData = viewModel::clearLocalData, cleared = cleared)
         ModulesSection()
-        AboutSection()
+        AboutSection(
+            updateState = updateState,
+            onCheckUpdate = { updateViewModel.check(silent = false) },
+        )
     }
 
     if (showUnbindDialog) {
@@ -375,9 +381,19 @@ private fun ModulesSection() {
     }
 }
 
-/** 关于：版本、协议版本、包名。 */
+/**
+ * 关于：版本、协议版本、包名，以及**手动检查更新**入口。
+ *
+ * 更新检查放在这里（而不是只靠启动时自动检查），
+ * 是因为用户可能刚听说有新版本、想主动确认一下；
+ * 手动检查的任何结果都会被明确告知（包括"已是最新"），
+ * 因为点了按钮没反应会让人以为功能坏了。
+ */
 @Composable
-private fun AboutSection() {
+private fun AboutSection(
+    updateState: UpdateUiState,
+    onCheckUpdate: () -> Unit,
+) {
     SectionHeader(title = SettingsSectionId.ABOUT.title)
     ScCard {
         Column {
@@ -385,6 +401,29 @@ private fun AboutSection() {
             // 契约 §1.2：服务端不校验协议版本，兼容由客户端自己判断；这里只展示不阻断
             InfoRow("协议版本", Protocol.VERSION.toString())
             InfoRow("包名", BuildConfig.APPLICATION_ID)
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = Spacing.sm),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = when (updateState) {
+                        is UpdateUiState.Checking -> "正在检查…"
+                        is UpdateUiState.UpToDate -> "已是最新版本"
+                        else -> "检查更新"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(
+                    onClick = onCheckUpdate,
+                    enabled = updateState !is UpdateUiState.Checking &&
+                        updateState !is UpdateUiState.Downloading,
+                ) {
+                    Text(if (updateState is UpdateUiState.Checking) "检查中" else "检查")
+                }
+            }
         }
     }
 }

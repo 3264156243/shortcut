@@ -1,9 +1,35 @@
 // ShortCut 安卓端 · app 模块构建脚本
+import java.io.File
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+/**
+ * 发布签名配置。
+ *
+ * ## 为什么用"存在才启用"而不是写死
+ *
+ * `keystore.properties` **已 gitignore**（规范 §5 红线：签名材料绝不入库）。
+ * 换机器 / 别人 clone 下来时该文件不存在 —— 那时 release 构建不带签名但**不应报错**，
+ * 否则连 `assembleDebug` 都跑不了。所以这里做成可选的。
+ *
+ * ## 为什么签名这件事必须一次做对
+ *
+ * 签名指纹是"已安装用户能否收到更新"的唯一依据：
+ * 换了签名，Android 会**拒绝覆盖安装**，用户只能卸载重装（数据全丢）。
+ * 因此正式 keystore 生成后必须离线备份，且此后所有版本都用它签。
+ */
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) {
+        keystorePropsFile.inputStream().use { load(it) }
+    }
+}
+val hasReleaseSigning = keystoreProps.getProperty("storeFile")?.let { File(it).exists() } == true
 
 android {
     namespace = "com.wanan.shortcut"
@@ -14,10 +40,23 @@ android {
         applicationId = "com.wanan.shortcut"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // 版本号是"能否更新"的判据（更新检查按 versionCode 比较），
+        // 每次发版**必须**同时递增这两个值。
+        versionCode = 2
+        versionName = "0.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = File(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
     }
 
     buildFeatures {
@@ -32,6 +71,9 @@ android {
         release {
             isMinifyEnabled = false // 首版不混淆，避免反射/序列化类被裁掉
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

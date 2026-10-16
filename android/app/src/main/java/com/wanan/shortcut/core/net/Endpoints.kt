@@ -24,6 +24,27 @@ object Endpoints {
     const val SDK_REFERENCE = "$CLOUD_BASE/sync/sdk.php"
 
     /**
+     * 安卓端版本清单（**静态文件，不是 sync API**）。
+     *
+     * 与桌面端的更新目录**平级**：
+     * ```
+     * https://shortcut.326415.xyz/updates/
+     * ├── latest.yml              ← 桌面端（electron-updater）
+     * ├── ShortCut-x.x.x-Setup.exe
+     * └── android/                ← 安卓端
+     *     ├── latest.json          ← 本常量
+     *     └── ShortCut-x.x.x.apk
+     * ```
+     *
+     * 字段设计借鉴桌面端 `latest.yml`（版本/大小/sha256/更新说明），
+     * 但判据换成 `versionCode`（见 `core/update/UpdateManifest`）。
+     */
+    const val ANDROID_UPDATE_MANIFEST = "$CLOUD_BASE/updates/android/latest.json"
+
+    /** 安卓端 APK 的下载目录（清单里的 apkUrl 也指向这个目录） */
+    const val ANDROID_UPDATE_DIR = "$CLOUD_BASE/updates/android"
+
+    /**
      * 局域网直连基地址。
      *
      * ⚠️ 契约 §8.5-2：**不要缓存 IP**，每次「一键直连」都要重新经云端 WS 问 `/api/lan-entry`。

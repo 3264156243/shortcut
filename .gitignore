@@ -78,3 +78,6 @@ signing.properties
 !android/gradle/wrapper/gradle-wrapper.jar
 !android/gradle/wrapper/gradle-wrapper.properties
 
+
+# 安卓端发布产物（APK 与清单；发布时上传服务器，不入库）
+android/build-update/

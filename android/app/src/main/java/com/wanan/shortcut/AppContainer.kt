@@ -157,6 +157,19 @@ class AppContainer(context: Context) {
     /** 电脑控制（联动板块，页面级 ViewModel） */
     fun controlViewModel(): ControlViewModel = ControlViewModel(controlSession)
 
+    /**
+     * 应用更新。
+     *
+     * 刻意做成**每次调用返回同一个实例**（容器级单例）：
+     * 启动时的静默检查与设置页的手动检查必须共享同一份状态，
+     * 否则用户在启动检查刚发现新版本、又去设置页点一下，会出现两个并行检查。
+     */
+    private val updateViewModelInstance: com.wanan.shortcut.core.update.UpdateViewModel by lazy {
+        com.wanan.shortcut.core.update.UpdateViewModel()
+    }
+
+    fun updateViewModel(): com.wanan.shortcut.core.update.UpdateViewModel = updateViewModelInstance
+
     /** 笔记（本机板块）：注意它**不需要** apiClient / errorMapper。 */
     fun notesViewModel(): NotesViewModel =
         NotesViewModel(notesRepository)

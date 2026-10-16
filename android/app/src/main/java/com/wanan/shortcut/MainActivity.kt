@@ -122,6 +122,29 @@ private fun AppRoot(container: AppContainer) {
         }
     }
 
+    // 启动时**静默**检查更新：
+    // 只有"发现新版本"才会弹窗，无更新或网络失败都不打扰用户
+    // （用户开 App 是要用功能，不是来更新的）。
+    val updateViewModel = container.updateViewModel()
+    val updateState by updateViewModel.state.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        updateViewModel.check(silent = true)
+    }
+
+    // 有可用更新时才显示对话框（Idle/Checking/UpToDate 都不显示）
+    if (updateState is com.wanan.shortcut.core.update.UpdateUiState.Available ||
+        updateState is com.wanan.shortcut.core.update.UpdateUiState.RequiresFreshInstall ||
+        updateState is com.wanan.shortcut.core.update.UpdateUiState.Downloading ||
+        updateState is com.wanan.shortcut.core.update.UpdateUiState.ReadyToInstall ||
+        updateState is com.wanan.shortcut.core.update.UpdateUiState.Failed
+    ) {
+        com.wanan.shortcut.core.update.UpdateDialog(
+            viewModel = updateViewModel,
+            onDismiss = { },
+        )
+    }
+
     val isTopLevel = currentRoute in Routes.TOP_LEVEL
 
     Scaffold(

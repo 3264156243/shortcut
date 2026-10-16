@@ -17,6 +17,15 @@
         tools:targetApi="34" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!--
+      应用内更新：下载新 APK 后需要交给系统安装器。
+      Android 8+ 该权限是"每个来源 App 单独授权"，且 **Android 14+ 每次安装都要用户再确认** ——
+      所以本权限只让"安装对话框能弹出来"，点确认仍必须用户自己操作。
+    -->
+    <uses-permission
+        android:name="android.permission.REQUEST_INSTALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+
     <!-- 上传文件选择（P3 文件快传）；此处先声明，避免后续加功能时改 manifest 权限分组 -->
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
@@ -58,6 +67,22 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+          应用内更新的 FileProvider。
+          为什么需要：Android 7+ 禁止把 file:// URI 暴露给其它 App
+          （会抛 FileUriExposedException），必须用 content:// URI 交给系统安装器。
+          authority 必须与 ApkInstaller 里拼的 "${context.packageName}.fileprovider" 一致。
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>
