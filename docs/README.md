@@ -92,16 +92,42 @@ docs/
 
 ---
 
-## 五、历史遗留（不再改动，别在它上面加功能）
+## 五、Electron 遗留（已退役，2026-10-17）
 
-| 东西 | 状态 | 何时能删 |
-|---|---|---|
-| `electron/`（10 个 ts） | 冻结 | 已切换日常启动到 Tauri 版；确认一段时间无回退需求后即可删 |
-| `release/win-unpacked/`（Electron 验收包，~335MB） | **保留作回退** | 同上（安装包已全部移出到云端归档） |
-| `dist-electron/` | 已删（可再生） | — |
-| `electron-builder.json5`、`tsconfig.electron.json`、`package.json` 的 `electron:*` 脚本 | 冻结 | 与 `electron/` 一起删 |
-| `config-rescue/` | 已从版本库移除（历史保留） | — |
+**结论：Electron 版已从仓库退役**，只剩文字记录。当前唯一的技术栈是 Tauri 2。
 
-> **启动方式（2026-10-17 起）**：开机自启、桌面与开始菜单快捷方式全部指向 Tauri 版
-> `src-tauri/target/release/shortcut-tauri.exe`；用 `scripts/run-app.ps1` 可"以普通权限启动并校验完整性级别"。
-> ⚠️ 该路径是构建产物目录：**别对它 `cargo clean`**，否则自启会指向不存在的文件（正式做法是以后出安装包）。
+| 东西 | 现状 |
+|---|---|
+| `electron/`（10 个 ts：main/preload/control-*/sync/voice-input/memory-monitor） | ✅ 已从仓库移除（`git log` 里有历史，需要时可 `git checkout` 取回） |
+| `electron-builder.json5`、`tsconfig.electron.json` | ✅ 已移除 |
+| `package.json` 的 `electron:dev` / `electron:build` / `electron:build:dir` 脚本 | ✅ 已移除 |
+| devDeps：`electron`、`electron-builder`、`concurrently`、`wait-on` | ✅ 已移除（`npm ci` 更轻） |
+| `scripts/publish-update.ps1`、`scripts/prepare-release-notes.mjs`、`release:prepare`/`release:update` | ✅ 已移除——它们依赖已删的 `electron:build` 与 Electron 期元数据（`latest.yml`）。**Tauri 的发布流程见 [`server/updater-deploy.md`](server/updater-deploy.md)** |
+| `release/`（Electron 安装包与 win-unpacked 验收包） | ✅ 已删除：安装包已归档到云端 `/updates/`（2.4.2~2.4.5 逐个 MD5 校验一致）；想回退到 Electron 版就从云端装一次 |
+| `dist-electron/`、`config-rescue/`、`src-tauri/_dsh_mybackup/` | ✅ 已清理（备份移出到 `D:\wenjian\js\ShortCut-archive\`，未删除） |
+
+> 仍保留的历史文件：`release-notes/*.md`（各版本更新说明，也是内容资产）、`docs/archive/`（Electron 时期的文档）。
+
+### 启动方式（2026-10-17 起）
+
+**本地"安装"到固定目录，自启与快捷方式都指向它：**
+
+```
+D:\APP\ShortCut-Tauri\ShortCut-Tauri.exe   ← 自启 / 桌面 / 开始菜单都指这里
+```
+
+**重建并更新这个安装**（一条命令）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/install-local.ps1 -Build
+```
+
+它做四件事：前端构建 → Rust release 构建 → 拷 exe+`app_lib.dll` 到安装目录 → 重指自启/快捷方式并以**普通权限**启动。
+
+> ⚠️ 两个坑（都踩过）：
+> 1. 安装后的 exe **不能命名成 `ShortCut.exe`**：程序里的实例守卫会扫 `tasklist`，见到 `shortcut.exe`
+>    就判定"旧版 Electron 在运行"并拒绝启动——命名成 `ShortCut.exe` 时它会**把自己认成 Electron**，
+>    表现为双击无反应、连日志都不写。
+> 2. `src-tauri/target/` 是**纯缓存**，可以随时 `cargo clean`；因为安装目录是独立的，
+>    清理不会再影响自启（这正是加这个安装步骤的原因）。
+

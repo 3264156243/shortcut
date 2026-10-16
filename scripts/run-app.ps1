@@ -1,13 +1,17 @@
-﻿# 以【普通权限】启动构建产物，并校验完整性级别。
+# 以【普通权限】启动构建产物，并校验完整性级别。
 #
 # 为什么必须这样启动：Windows 的 UIPI 会掐掉"资源管理器(Medium) → 管理员窗口(High)"的拖放，
 # 表现为禁止光标 + 完全不触发任何事件（连 Tauri 的 DragDrop Enter 都没有）。
 # 从管理员 shell 直接 Start-Process 会让 App 继承管理员权限 → 拖放、'SC 球/转换面板' 一起失效。
-# 详见 docs/tauri-regression.md §15.2 / §15.3。
+# 详见 docs/desktop/tauri-regression.md §15.2 / §15.3。
+#
+# 用途：**开发/临时**从构建产物目录直接跑（改了代码想立刻看效果用这个）。
+# 日常使用请用 scripts/install-local.ps1 -Build：它会把 exe 装到固定目录
+# （D:\APP\ShortCut-Tauri\），自启与快捷方式都指向那里，target/ 才能随时清理。
 #
 # 用法：
 #   powershell -ExecutionPolicy Bypass -File scripts/run-app.ps1            # release
-#   powershell -ExecutionPolicy Bypass -File scripts/run-app.ps1 -Debug     # debug 产物
+#   powershell -ExecutionPolicy Bypass -File scripts/run-app.ps1 -Debug     # debug 产物（需先 build debug）
 param(
   [switch]$Debug,
   [switch]$KeepRunning

@@ -26,7 +26,8 @@
 ## 复现
 
 ```powershell
-# Electron 版
+# Electron 版（⚠️ 2026-10-17 已退役：`release/win-unpacked/` 已删除。
+# 想复现这一列，先从云端 /updates/ShortCut-2.4.5-Setup.exe 装一次 Electron 版）
 Start-Process 'D:\wenjian\js\ShortCut\release\win-unpacked\ShortCut.exe'
 .\scripts\measure-memory.ps1 -Name electron
 taskkill /F /IM ShortCut.exe
