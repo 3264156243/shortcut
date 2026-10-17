@@ -28,6 +28,7 @@
       "entry": "/taskwall/",
       "capabilities": ["queue"],
       "minAppVersion": "2.4.5",
+      "minAndroidVersion": "0.1.0",
       "defaultEnabled": true
     },
     {
@@ -38,6 +39,7 @@
       "entry": "/transfer/",
       "capabilities": ["blob"],
       "minAppVersion": "2.4.5",
+      "minAndroidVersion": "0.1.0",
       "defaultEnabled": true,
       "policy": {
         "maxFileMb": 1024,
@@ -55,6 +57,7 @@
       "entry": "/control/",
       "capabilities": ["realtime"],
       "minAppVersion": "2.4.5",
+      "minAndroidVersion": "0.1.0",
       "defaultEnabled": true
     }
   ]

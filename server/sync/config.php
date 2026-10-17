@@ -1129,6 +1129,12 @@ function sync_modules_for_client($bindId = '') {
             'entry' => isset($module['entry']) ? (string)$module['entry'] : '',
             'capabilities' => isset($module['capabilities']) && is_array($module['capabilities']) ? array_values($module['capabilities']) : [],
             'minAppVersion' => isset($module['minAppVersion']) ? (string)$module['minAppVersion'] : '',
+            // ✅ 2026-10-18（回应安卓侧 A2）：minAppVersion 装的是**桌面端**版本号（如 2.4.5），
+            // 安卓端是 0.1.0，两者不是同一个命名空间 —— 安卓端拿它做门禁会「0.1.0 < 2.4.5 恒成立」，
+            // 表现为任务墙/文件共享/电脑控制全部被锁死（线上已发生）。
+            // 这里补一个**安卓端专用**的版本下限字段；不下发（或空串）时安卓端不做门禁。
+            // 桌面端/移动 Web 继续只看 minAppVersion，互不影响。
+            'minAndroidVersion' => isset($module['minAndroidVersion']) ? (string)$module['minAndroidVersion'] : '',
             'enabled' => isset($module['defaultEnabled']) ? (bool)$module['defaultEnabled'] : true,
             'policy' => $policy,
         ];
