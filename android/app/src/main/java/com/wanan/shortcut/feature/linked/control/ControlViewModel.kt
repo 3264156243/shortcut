@@ -258,10 +258,17 @@ class ControlViewModel(
         viewModelScope.launch {
             for (action in actions) {
                 when (action) {
-                    is SyncAction.TypeText ->
-                        runCommand(ControlCommands.type(action.text), silent = true)
+                    is SyncAction.TypeText -> {
+                        // ⚠️ 必须分片：桌面端 `/api/type` 单次上限 2000 **UTF-8 字节**
+                        // （超了直接 400）。一次性粘贴很多字、或一次输入很长时会超限。
+                        // 逐片**串行**发送，保证电脑上出现顺序与输入顺序一致。
+                        for (chunk in ControlCommands.typeChunks(action.text)) {
+                            runCommand(chunk, silent = false)
+                        }
+                    }
+
                     is SyncAction.PressKey ->
-                        runCommand(ControlCommands.key(action.key), silent = true)
+                        runCommand(ControlCommands.key(action.key), silent = false)
                 }
             }
         }

@@ -147,20 +147,23 @@ if ($SkipUpload) {
   exit 0
 }
 
-# 私钥：默认找仓库外的 D:\wenjian\mima\android-pub-key（与桌面端放服务器信息的习惯一致）
+# 私钥：桌面侧文档指定存到 %USERPROFILE%\.ssh\shortcut_android_pub，这是首选；
+# 其余候选留给"自己另存一份"的情况。
 if ([string]::IsNullOrWhiteSpace($KeyPath)) {
   $candidates = @(
+    "$env:USERPROFILE\.ssh\shortcut_android_pub",
+    "$env:USERPROFILE\.ssh\android-pub",
     'D:\wenjian\mima\android-pub-key',
-    'D:\wenjian\mima\android-pub',
-    "$env:USERPROFILE\.ssh\android-pub"
+    'D:\wenjian\mima\android-pub'
   )
   foreach ($c in $candidates) {
     if (Test-Path -LiteralPath $c) { $KeyPath = $c; break }
   }
 }
 if ([string]::IsNullOrWhiteSpace($KeyPath) -or -not (Test-Path -LiteralPath $KeyPath)) {
-  throw "未找到 android-pub 私钥。请用 -KeyPath 指定，或放到 D:\wenjian\mima\android-pub-key（**不要提交进 Git**）。"
+  throw "未找到 android-pub 私钥。请用 -KeyPath 指定，或放到 %USERPROFILE%\.ssh\shortcut_android_pub（**不要提交进 Git**）。"
 }
+Write-Host "私钥：$KeyPath"
 
 $sftp = 'C:\Windows\System32\OpenSSH\sftp.exe'
 if (-not (Test-Path -LiteralPath $sftp)) {

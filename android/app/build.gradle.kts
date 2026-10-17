@@ -42,8 +42,8 @@ android {
         targetSdk = 35
         // 版本号是"能否更新"的判据（更新检查按 versionCode 比较），
         // 每次发版**必须**同时递增这两个值。
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

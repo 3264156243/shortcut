@@ -124,7 +124,40 @@ class LanChannel(
         when (val r = lanClient.post(baseUrl, token, path, body)) {
             is ApiResult.Ok -> {
                 markReachable()
-                ControlResult.Ok(r.data)
+
+                // ★ 关键：控制指令的响应带 `ok` 字段，**HTTP 200 不代表注入成功**。
+                //
+                // 桌面端（`src-tauri/src/control.rs` 的 api_type / api_key / api_combo）：
+                // ```rust
+                // let ok = st.injector.inject(&format!("TYPE {b64}"));
+                // ok_json(json!({ "ok": ok, "injector": st.injector.is_ready() }))
+                // ```
+                // 注入器没就绪 / 注入失败时依然是 **HTTP 200 + ok:false**。
+                //
+                // 早先版本只看 HTTP 状态（注释还写着"局域网接口没有 success 字段"），
+                // 于是 `ok:false` 被当成成功 → 界面显示已发送、**电脑毫无反应且没有任何提示**
+                // —— 这正是用户反馈"打字还是没有同步"却看不出原因的直接来源。
+                //
+                // 注意：`/api/ping`、`/api/status`、`/api/config` 这些**不带** ok 字段，
+                // 所以只有在响应里**确实有** ok 时才据此判定。
+                val data = r.data
+                val hasOk = data.has("ok") && !data.get("ok").isJsonNull
+                if (hasOk && !data.get("ok").asBoolean) {
+                    val injectorReady = !data.has("injector") ||
+                        data.get("injector").isJsonNull ||
+                        data.get("injector").asBoolean
+                    ControlResult.Fail(
+                        500,
+                        if (!injectorReady) {
+                            "电脑端没有准备好接收输入（注入器未就绪）。" +
+                                "请确认桌面 ShortCut 正在运行，且「局域网直连」已开启。"
+                        } else {
+                            "电脑端拒绝了这条输入（可能是当前窗口不接受按键，或权限不足）。"
+                        },
+                    )
+                } else {
+                    ControlResult.Ok(data)
+                }
             }
 
             is ApiResult.BusinessFail -> {
@@ -171,8 +204,35 @@ class LanChannel(
  */
 object ControlCommands {
 
-    /** 打字（文本 ≤2000 字节） */
-    fun type(text: String) = ControlPaths.TYPE to mapOf<String, Any?>("text" to text)
+    /**
+     * 桌面端 `/api/type` 的文本上限（`src-tauri/src/control.rs`：`if text.len() > 2000`）。
+     *
+     * 注意那是 **UTF-8 字节数**，不是字符数 —— 中文一个字 3 字节，
+     * 所以 2000 字节约等于 **666 个汉字**。超了服务端直接 400。
+     */
+    private const val MAX_TYPE_BYTES = 2000
+
+    /**
+     * 打字。
+     *
+     * **必须分片**：差量同步在"粘贴一大段"或"一次输入很多"时会算出很长的文本，
+     * 直接发会被服务端 400 拒掉（而且早先版本是静默的，表现为"打字没反应"）。
+     *
+     * 按 **UTF-8 字节** 切片而不是按字符数，才能与桌面端的判据对齐；
+     * 且不能在多字节字符中间切断（否则中文会变成乱码）。
+     */
+    fun type(text: String): Pair<String, Map<String, Any?>> =
+        ControlPaths.TYPE to mapOf<String, Any?>("text" to text.takeUtf8Bytes(MAX_TYPE_BYTES))
+
+    /**
+     * 把 [text] 按 UTF-8 字节切成若干片，每片 ≤ [MAX_TYPE_BYTES]，且不切断字符。
+     *
+     * 一次输入很长文本时，调用方应逐片发送（见 `ControlViewModel.dispatch`）。
+     */
+    fun typeChunks(text: String): List<Pair<String, Map<String, Any?>>> =
+        text.chunkByUtf8Bytes(MAX_TYPE_BYTES).map { chunk ->
+            ControlPaths.TYPE to mapOf<String, Any?>("text" to chunk)
+        }
 
     /** 单键（`enter` / `f5` 等 vk 名，或数字） */
     fun key(name: String) = ControlPaths.KEY to mapOf<String, Any?>("key" to name)
@@ -198,6 +258,60 @@ object ControlCommands {
 
     /** 清空电脑剪贴板历史 */
     fun clipboardClear() = ControlPaths.CLIPBOARD_CLEAR to emptyMap<String, Any?>()
+}
+
+/**
+ * 按 **UTF-8 字节数** 截断，且不切断多字节字符。
+ *
+ * 为什么不能用 `String.take(n)`：那是按 **Char（UTF-16 码元）** 截断，
+ * 与桌面端判据（UTF-8 字节）不一致 —— 中文一个字算 1 个 Char 但 3 个字节，
+ * 于是 `take(2000)` 可能得到 6000 字节 → 服务端仍然 400 拒绝。
+ */
+internal fun String.takeUtf8Bytes(maxBytes: Int): String =
+    chunkByUtf8Bytes(maxBytes).firstOrNull().orEmpty()
+
+/**
+ * 按 UTF-8 字节数把字符串切成多片，每片 ≤ [maxBytes]，**不切断字符**。
+ *
+ * ## ⚠️ 必须按**码点**（code point）遍历，不能按 char
+ *
+ * Java/Kotlin 的 `String` 是 UTF-16：一个 BMP 内的字符占 1 个 char，
+ * 而 emoji 等补充平面字符占 **2 个 char（代理对）**。
+ *
+ * 若逐 `char` 累加，就会把一对代理拆到两片里 →
+ * 拼回来是两个孤立的代理字符 → 编码成 UTF-8 时变成 `?` 或乱码。
+ *
+ * 这个问题是**测试抓出来的**：`emoji 不应被切成两半` 一开始就是红的。
+ * 现在的实现遍历码点，一个 emoji 整体落在同一片里。
+ */
+internal fun String.chunkByUtf8Bytes(maxBytes: Int): List<String> {
+    if (this.isEmpty()) return emptyList()
+
+    val chunks = mutableListOf<String>()
+    val current = StringBuilder()
+    var bytes = 0
+
+    // 按码点遍历：charCount 为 1（BMP）或 2（代理对）
+    var index = 0
+    while (index < length) {
+        val codePoint = codePointAt(index)
+        val charCount = Character.charCount(codePoint)
+        val piece = substring(index, index + charCount)
+        val len = piece.toByteArray(Charsets.UTF_8).size
+
+        // 单片本身就超限（例如 maxBytes 极小）：仍整块放进去，避免死循环
+        if (bytes + len > maxBytes && current.isNotEmpty()) {
+            chunks.add(current.toString())
+            current.setLength(0)
+            bytes = 0
+        }
+        current.append(piece)
+        bytes += len
+        index += charCount
+    }
+
+    if (current.isNotEmpty()) chunks.add(current.toString())
+    return chunks
 }
 
 /**
