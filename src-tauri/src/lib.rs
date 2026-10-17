@@ -1142,29 +1142,92 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             transfer::claim(code)
         }
 
-        // ---- M5：更新检查（读 electron-updater latest.yml 对比版本；完整下载安装 M6 接 tauri updater）----
+        // ---- M5：更新检查 ----
+        // ⚠️ 2026-10-17 修（用户报"旧版显示检查更新失败"）：
+        // 原实现去拉 **Electron 期的 `latest.yml`**，且返回 `{status:"available"|"up-to-date", …}`
+        // —— **既没有 `success` 字段**，状态串也不是前端认识的 `not-available`。
+        // 前端 App.tsx 的判定是 `!result.success && status !== 'error'` → 于是**任何**结果
+        // （有新版本、没新版本都一样）都会显示「检查更新失败」。
+        // 现在改为走**真正的 Tauri updater**（读 tauri.conf.json 的 endpoints/latest.json），
+        // 并按前端契约返回 status=available/not-available/error + success。
         "getUpdateState" => {
-            json!({ "status": "idle", "checking": false, "downloading": false })
+            // 前端挂载时会调它恢复界面状态；形状必须符合 UpdateState（status/currentVersion/…）
+            let current = app.package_info().version.to_string();
+            let (has_pending, pending_ver) = {
+                let g = update_pending().lock().unwrap();
+                match g.as_ref() {
+                    Some((u, _)) => (true, u.version.clone()),
+                    None => (false, String::new()),
+                }
+            };
+            if has_pending {
+                json!({ "status": "downloaded", "currentVersion": current, "version": pending_ver, "progress": 100 })
+            } else {
+                json!({ "status": "idle", "currentVersion": current })
+            }
         }
         "checkForUpdates" => {
-            match tokio::task::spawn_blocking(|| {
-                let resp = ureq::get("https://shortcut.326415.xyz/updates/latest.yml")
-                    .timeout(std::time::Duration::from_millis(10_000))
-                    .call()
-                    .map_err(|e| e.to_string())?;
-                resp.into_string().map_err(|e| e.to_string())
-            }).await
-            {
-                Ok(Ok(yml)) => {
-                    let latest = yml.lines()
-                        .find_map(|l| l.strip_prefix("version: ").map(|v| v.trim().trim_matches('"').trim_matches('\'').to_string()))
-                        .unwrap_or_default();
-                    let current = app.package_info().version.to_string();
-                    let has_update = version_gt(&latest, &current);
-                    json!({ "status": if has_update { "available" } else { "up-to-date" }, "current": current, "version": latest, "hasUpdate": has_update })
+            use tauri_plugin_updater::UpdaterExt;
+            let current = app.package_info().version.to_string();
+            let _ = app.emit(
+                "update:state",
+                json!({ "status": "checking", "currentVersion": current, "manual": true }),
+            );
+            let updater = match app.updater() {
+                Ok(u) => u,
+                Err(e) => {
+                    let msg = format!("更新服务未配置：{e}");
+                    let _ = app.emit(
+                        "update:state",
+                        json!({ "status": "error", "currentVersion": current, "error": msg, "manual": true }),
+                    );
+                    return json!({ "success": false, "status": "error", "current": current, "error": msg });
                 }
-                Ok(Err(e)) => json!({ "status": "error", "error": e }),
-                Err(e) => json!({ "status": "error", "error": e.to_string() }),
+            };
+            match updater.check().await {
+                Ok(Some(update)) => {
+                    let version = update.version.clone();
+                    let notes = update.body.clone().unwrap_or_default();
+                    let _ = app.emit(
+                        "update:state",
+                        json!({
+                            "status": "available",
+                            "currentVersion": current,
+                            "version": version,
+                            "releaseNotes": notes,
+                            "manual": true,
+                        }),
+                    );
+                    json!({
+                        "success": true,
+                        "status": "available",
+                        "current": current,
+                        "version": version,
+                        "hasUpdate": true,
+                        "releaseNotes": notes,
+                    })
+                }
+                Ok(None) => {
+                    let _ = app.emit(
+                        "update:state",
+                        json!({ "status": "not-available", "currentVersion": current, "manual": true }),
+                    );
+                    json!({
+                        "success": true,
+                        "status": "not-available",
+                        "current": current,
+                        "version": current,
+                        "hasUpdate": false,
+                    })
+                }
+                Err(e) => {
+                    let msg = e.to_string();
+                    let _ = app.emit(
+                        "update:state",
+                        json!({ "status": "error", "currentVersion": current, "error": msg, "manual": true }),
+                    );
+                    json!({ "success": false, "status": "error", "current": current, "error": msg })
+                }
             }
         }
         // M6：应用内更新（tauri updater，对齐 update:download/install）
@@ -1185,14 +1248,38 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
                     return json!({ "success": false, "message": e.to_string() });
                 }
             };
-            let _ = app.emit("update:state", json!({ "state": "downloading" }));
+            // ⚠️ 事件字段必须用前端契约里的名字（status/progress/transferred/total/currentVersion），
+            // 原来发的是 `{"state": …}` + `received`，前端读 `state.status`/`state.progress` → 进度条永远不动。
+            let current = app.package_info().version.to_string();
+            let started = std::time::Instant::now();
+            let _ = app.emit(
+                "update:state",
+                json!({ "status": "downloading", "currentVersion": current, "version": update.version, "progress": 0 }),
+            );
             let app2 = app.clone();
+            let ver = update.version.clone();
             let mut downloaded: u64 = 0;
             let result = update
                 .download(
                     &mut |chunk, total| {
                         downloaded += chunk as u64;
-                        let _ = app2.emit("update:state", json!({ "state": "downloading", "received": downloaded, "total": total }));
+                        let elapsed = started.elapsed().as_secs_f64().max(0.001);
+                        let progress = match total {
+                            Some(t) if t > 0 => (downloaded as f64 / t as f64 * 100.0) as i32,
+                            _ => 0,
+                        };
+                        let _ = app2.emit(
+                            "update:state",
+                            json!({
+                                "status": "downloading",
+                                "currentVersion": current,
+                                "version": ver,
+                                "progress": progress,
+                                "transferred": downloaded,
+                                "total": total.unwrap_or(0),
+                                "bytesPerSecond": (downloaded as f64 / elapsed) as u64,
+                            }),
+                        );
                     },
                     &mut || {},
                 )
@@ -1200,12 +1287,18 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             match result {
                 Ok(bytes) => {
                     *update_pending().lock().unwrap() = Some((update, bytes));
-                    let _ = app.emit("update:state", json!({ "state": "downloaded" }));
-                    json!({ "success": true })
+                    let _ = app.emit(
+                        "update:state",
+                        json!({ "status": "downloaded", "currentVersion": current, "version": ver, "progress": 100 }),
+                    );
+                    json!({ "success": true, "status": "downloaded" })
                 }
                 Err(e) => {
-                    let _ = app.emit("update:state", json!({ "state": "error", "message": e.to_string() }));
-                    json!({ "success": false, "message": e.to_string() })
+                    let _ = app.emit(
+                        "update:state",
+                        json!({ "status": "error", "currentVersion": current, "error": e.to_string(), "manual": true }),
+                    );
+                    json!({ "success": false, "status": "error", "message": e.to_string() })
                 }
             }
         }
@@ -1213,7 +1306,7 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             let pending = update_pending().lock().unwrap().take();
             match pending {
                 Some((update, bytes)) => {
-                    let _ = app.emit("update:state", json!({ "state": "installing" }));
+                    let _ = app.emit("update:state", json!({ "status": "installing" }));
                     if let Err(e) = update.install(&bytes[..]) {
                         json!({ "success": false, "message": e.to_string() })
                     } else {
@@ -1225,10 +1318,6 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
                 }
                 None => json!({ "success": false, "message": "请先下载更新" }),
             }
-        }
-        "getUpdateState" => {
-            let pending = update_pending().lock().unwrap().is_some();
-            json!({ "state": if pending { "downloaded" } else { "idle" } })
         }
 
         // ---- M5：文件系统 ----

@@ -1,11 +1,11 @@
 {
-    "version":  "2.5.0",
-    "notes":  "v2.5.0（Tauri 2 重构后首个正式版）：Electron 版正式退役（源码/配置/脚本/devDeps 全部移除），仓库与文档分层整理；修复两处发版阻塞问题——① 实例守卫会把自己误判为旧版导致启动被拦；② 侧车（硬件监控/音乐桥/用量监控/语音桥）与局域网控制静态页依赖构建机绝对路径、且未打进安装包（本版已随包分发）；穿透快捷键改为 Alt+B。",
-    "pub_date":  "2026-10-17T00:24:07Z",
+    "version":  "2.5.1",
+    "notes":  "v2.5.1：修复「检查更新」一直失败的问题——旧实现去读 Electron 期的 latest.yml 且返回体缺少 success 字段，导致无论有没有新版本前端都显示\"检查更新失败\"；现已改为调用 Tauri 官方 updater（读 latest.json），并按前端契约返回 available/not-available/error，更新进度条也随之生效。",
+    "pub_date":  "2026-10-17T00:37:03Z",
     "platforms":  {
                       "windows-x86_64":  {
-                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRR3lWYXB6R2FMMURrK04zcEI2OUVXR2N2bVUxM21LSUcxMXltRy9ja3dRL21sNXFuVCt1eTFTdGtoaERHOXRmMG5SQXRSMUNMMC83TnBpNFdaenhpbnp3U09BN2dSTEFBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMTk2NjE4CWZpbGU6U2hvcnRDdXRfMi41LjBfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjIuNS4wCjM2YjRBQXcxUlJsdlNTU0hGbS9QTXZabGkzRm11d2F3MmZyTkducXBOeFBnaEN4aUJSaWxqUmN6TFJyNXdjcmpUVkhETCtaNFFzWDJvSklxczN4REN3PT0K",
-                                             "url":  "https://shortcut.326415.xyz/updates/ShortCut_2.5.0_x64-setup.exe"
+                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRR3lWYXB6R2FMMU1vdjk3NkhhbmpUbXRtVVZmbUk5MlN2WDQ3U3FjZyt5RHBBTUk5b3A5enN5cW8xQUpOVDBZakphVlRyMXExbHd3c01GWkN4Yk1xKzNXTGk0bUhKNkFjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMTk3NDEyCWZpbGU6U2hvcnRDdXRfMi41LjFfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjIuNS4xCitVUFkxMjNCSEF0dVJ5QXczQzdLdW50TTZlbjhmWXNzL09KaXRXaFZnSm1DekRrV21aNzlOeWJHNlRHT1djL0h2TUJMYTFQNUx3M0xrT3NXeFVsUERRPT0K",
+                                             "url":  "https://shortcut.326415.xyz/updates/ShortCut_2.5.1_x64-setup.exe"
                                          }
                   }
 }

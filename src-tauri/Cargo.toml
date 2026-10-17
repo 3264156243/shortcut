@@ -1,6 +1,6 @@
 [package]
 name = "shortcut-tauri"
-version = "2.5.0"
+version = "2.5.1"
 description = "ShortCut - Desktop quick panel for shortcuts (Tauri 2)"
 authors = ["wanan"]
 license = ""
