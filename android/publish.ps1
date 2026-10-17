@@ -1,35 +1,47 @@
 ﻿# ShortCut 安卓端发布脚本
 #
 # 用法：
-#   powershell -ExecutionPolicy Bypass -File android/publish.ps1
-#   powershell -ExecutionPolicy Bypass -File android/publish.ps1 -SkipUpload   # 只出产物
+#   powershell -ExecutionPolicy Bypass -File android/publish.ps1                    # 构建 + 上传
+#   powershell -ExecutionPolicy Bypass -File android/publish.ps1 -SkipUpload        # 只出产物
+#   powershell -ExecutionPolicy Bypass -File android/publish.ps1 -KeyPath <私钥>    # 指定私钥
 #
-# 它做什么：构建 release → 校验签名与版本 → 生成 latest.json → 上传到服务器
+# 它做什么：构建 release → 校验签名与版本 → 生成 latest.json → **SFTP** 上传到服务器
 #
-# 为什么不放 scripts/：按《协同开发规范》§3，scripts/** 归桌面侧，安卓侧不能动。
+# ## 为什么用 sftp 而不是 scp（2026-10-18 桌面侧实测结论）
 #
-# ⚠️ 含中文，必须以 UTF-8 BOM 保存（规范 §8.3：PowerShell 5.1 的坑）。
+# 桌面侧给了专用的最小权限账号 `android-pub`：
+#   - **只能 SFTP**（shell 被强制为 internal-sftp，拿不到命令行）
+#   - **只能写** /www/wwwroot/ShortCut/updates/android/
+#   - 只允许密钥登录（密码已锁定）
+#
+# `scp` 在旧版本 OpenSSH 里会调用远端 shell，在这个账号上会被拒，
+# 所以改用 sftp 批处理（最稳）。
+#
+# ## 为什么不放 scripts/
+#
+# 按《协同开发规范》§3，scripts/** 归桌面侧，安卓侧不能动。
+#
+# ⚠️ 含中文，必须以 UTF-8 BOM 保存（Windows PowerShell 5.1 的坑）。
 
 param(
-  [string]$ServerHost = '',
+  [string]$ServerHost = '43.108.21.35',
   [int]$Port = 22,
-  [string]$User = 'root',
+  [string]$User = 'android-pub',
   [string]$RemoteDirectory = '/www/wwwroot/ShortCut/updates/android',
   [string]$BaseUrl = 'https://shortcut.326415.xyz/updates/android',
+  [string]$KeyPath = '',
   [switch]$SkipUpload
 )
 
 $ErrorActionPreference = 'Stop'
 
 $androidRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$repoRoot = Split-Path -Parent $androidRoot
 $outputDirectory = Join-Path $androidRoot 'build-update'
 
 Write-Host '=== ShortCut 安卓端发布 ===' -ForegroundColor Cyan
 
 # ---------- 0. 环境 ----------
-# 本机 PATH 默认解析到 JDK 25，而 AGP 不支持（Unsupported class file major version 69），
-# 所以这里显式指定 JDK 21。
+# 本机 PATH 默认解析到 JDK 25，而 AGP 不支持（Unsupported class file major version 69）
 $env:JAVA_HOME = 'C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot'
 $env:ANDROID_HOME = 'D:\Android\Sdk'
 $env:ANDROID_SDK_ROOT = 'D:\Android\Sdk'
@@ -75,7 +87,7 @@ try {
 $apkSource = Join-Path $androidRoot 'app/build/outputs/apk/release/app-release.apk'
 if (-not (Test-Path -LiteralPath $apkSource)) { throw "未找到构建产物：$apkSource" }
 
-# ---------- 5. 校验签名（关键：未签名的包用户装不上） ----------
+# ---------- 5. 校验签名（关键：未签名/错签名的包用户装不上） ----------
 Write-Host '校验签名…' -ForegroundColor Cyan
 $apksigner = 'D:\Android\Sdk\build-tools\35.0.0\apksigner.bat'
 if (Test-Path -LiteralPath $apksigner) {
@@ -104,44 +116,93 @@ Write-Host "SHA-256：$sha256"
 
 # ---------- 7. 生成 latest.json ----------
 # 字段与桌面端 latest.yml 对齐（版本/大小/sha256/更新说明），
-# 但判据换成 versionCode —— 安卓系统本身就是按它判断能否覆盖安装。
-$manifest = [ordered]@{
-  versionCode             = $versionCode
-  versionName             = $versionName
-  apkUrl                  = "$BaseUrl/$apkName"
-  sha256                  = $sha256
-  size                    = $size
-  releaseNotes            = $releaseNotes
-  releaseDate             = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
-  minSupportedVersionCode = 1
+# 但判据换成 versionCode —— 安卓系统本身就是按它判断能否覆盖安装；
+# 而且能避开 "0.10.0" 字典序小于 "0.9.0" 的坑。
+#
+# ⚠️ 不用 ConvertTo-Json：PS 5.1 会把中文转成 \uXXXX 转义。
+#    那虽是合法 JSON（客户端能解析），但线上文件对人不友好，这里手写原始中文。
+$escapedNotes = ($releaseNotes -replace '\\', '\\\\' -replace '"', '\"' -replace "`r`n", '\n' -replace "`n", '\n')
+$manifestText = @"
+{
+  "versionCode": $versionCode,
+  "versionName": "$versionName",
+  "apkUrl": "$BaseUrl/$apkName",
+  "sha256": "$sha256",
+  "size": $size,
+  "releaseNotes": "$escapedNotes",
+  "releaseDate": "$((Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ'))",
+  "minSupportedVersionCode": 1
 }
+"@
 $manifestPath = Join-Path $outputDirectory 'latest.json'
-$manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+[System.IO.File]::WriteAllText($manifestPath, $manifestText, (New-Object System.Text.UTF8Encoding($false)))
 
 Write-Host "清单：$manifestPath"
-Write-Host '--- latest.json ---'
-Get-Content -LiteralPath $manifestPath -Encoding UTF8
+Write-Host '--- latest.json（前 3 行）---'
+Get-Content -LiteralPath $manifestPath -Encoding UTF8 | Select-Object -First 3
 
-# ---------- 8. 上传 ----------
+# ---------- 8. 上传（SFTP） ----------
 if ($SkipUpload) {
   Write-Host '已跳过上传（-SkipUpload）。' -ForegroundColor Yellow
   exit 0
 }
 
-if ([string]::IsNullOrWhiteSpace($ServerHost)) {
-  throw '未指定 -ServerHost。服务器连接信息不在仓库里，请显式传入或使用 -SkipUpload。'
+# 私钥：默认找仓库外的 D:\wenjian\mima\android-pub-key（与桌面端放服务器信息的习惯一致）
+if ([string]::IsNullOrWhiteSpace($KeyPath)) {
+  $candidates = @(
+    'D:\wenjian\mima\android-pub-key',
+    'D:\wenjian\mima\android-pub',
+    "$env:USERPROFILE\.ssh\android-pub"
+  )
+  foreach ($c in $candidates) {
+    if (Test-Path -LiteralPath $c) { $KeyPath = $c; break }
+  }
+}
+if ([string]::IsNullOrWhiteSpace($KeyPath) -or -not (Test-Path -LiteralPath $KeyPath)) {
+  throw "未找到 android-pub 私钥。请用 -KeyPath 指定，或放到 D:\wenjian\mima\android-pub-key（**不要提交进 Git**）。"
 }
 
-$scp = 'C:\Windows\System32\OpenSSH\scp.exe'
-if (-not (Test-Path -LiteralPath $scp)) {
-  # 回退：本机 OpenSSH 未装时用 Git 自带的
-  $scp = 'D:\dev\git\usr\bin\scp.exe'
-  if (-not (Test-Path -LiteralPath $scp)) { throw '未找到 scp，请安装 OpenSSH 客户端。' }
+$sftp = 'C:\Windows\System32\OpenSSH\sftp.exe'
+if (-not (Test-Path -LiteralPath $sftp)) {
+  $sftp = 'D:\dev\git\usr\bin\sftp.exe'
+  if (-not (Test-Path -LiteralPath $sftp)) { throw '未找到 sftp.exe' }
 }
 
-Write-Host "上传到 $User@$ServerHost`:$RemoteDirectory …" -ForegroundColor Cyan
-& $scp -P $Port $apkTarget $manifestPath "${User}@${ServerHost}:${RemoteDirectory}/"
-if ($LASTEXITCODE -ne 0) { throw '上传失败' }
+# OpenSSH 要求私钥权限收紧，否则直接拒绝使用（Windows 上的经典坑）
+Write-Host '收紧私钥权限…'
+& icacls $KeyPath /inheritance:r | Out-Null
+& icacls $KeyPath /grant:r "$($env:USERNAME):(R)" | Out-Null
 
-Write-Host '上传完成。验证：' -ForegroundColor Green
-Write-Host "  $BaseUrl/latest.json"
+# SFTP 批处理：逐条 put，最后 bye
+$batchFile = Join-Path $env:TEMP ("sc-sftp-" + [guid]::NewGuid().ToString('N') + ".txt")
+$apkLeaf = Split-Path $apkTarget -Leaf
+$apkRemote = $apkTarget.Replace('\', '/')
+$manifestRemote = $manifestPath.Replace('\', '/')
+@(
+  "put `"$apkRemote`" $RemoteDirectory/$apkLeaf"
+  "put `"$manifestRemote`" $RemoteDirectory/latest.json"
+  'bye'
+) | Set-Content -LiteralPath $batchFile -Encoding ascii
+
+Write-Host "SFTP 上传到 ${User}@${ServerHost}:${RemoteDirectory} …" -ForegroundColor Cyan
+try {
+  & $sftp -i $KeyPath -P $Port -o StrictHostKeyChecking=accept-new -o BatchMode=yes -b $batchFile "${User}@${ServerHost}"
+  if ($LASTEXITCODE -ne 0) { throw "SFTP 上传失败（退出码 $LASTEXITCODE）" }
+} finally {
+  Remove-Item -LiteralPath $batchFile -Force -ErrorAction SilentlyContinue
+}
+
+# ---------- 9. 验证公网可访问 ----------
+Write-Host '验证公网地址…' -ForegroundColor Cyan
+try {
+  $probe = Invoke-WebRequest -Uri "$BaseUrl/latest.json" -TimeoutSec 20 -UseBasicParsing
+  if ($probe.StatusCode -eq 200) {
+    Write-Host "✓ $BaseUrl/latest.json 已可访问" -ForegroundColor Green
+  }
+} catch {
+  Write-Warning "上传完成，但公网验证失败：$($_.Exception.Message)（CDN 可能有几秒延迟，稍后重试）"
+}
+
+Write-Host '发布完成。' -ForegroundColor Green
+Write-Host "  清单：$BaseUrl/latest.json"
+Write-Host "  APK ：$BaseUrl/$apkName"
