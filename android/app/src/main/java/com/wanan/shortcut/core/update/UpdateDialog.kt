@@ -119,6 +119,30 @@ fun UpdateDialog(
                             color = MaterialTheme.colorScheme.primary,
                         )
                     }
+
+                    // ★ 显示实测速度与剩余时间。
+                    // 没有它用户只能凭感觉判断"是不是卡住了"，也无法区分
+                    // "真的慢"还是"只是没有进度反馈" —— 这对排查网络问题很关键。
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = if (s.bytesPerSecond > 0) {
+                                "${formatSpeed(s.bytesPerSecond)}/s"
+                            } else {
+                                "正在测速…"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = s.remainingSeconds?.let { "剩余约 ${formatDuration(it)}" } ?: "",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+
                     Text(
                         text = s.fileName,
                         style = MaterialTheme.typography.labelSmall,
@@ -212,4 +236,24 @@ private fun formatBytes(n: Long): String = when {
     n < 1024 * 1024 -> String.format("%.1f KB", n / 1024.0)
     n < 1024L * 1024 * 1024 -> String.format("%.1f MB", n / 1048576.0)
     else -> String.format("%.2f GB", n / 1073741824.0)
+}
+
+/** 速度格式化：优先用 KB/s、MB/s，避免出现"1234567 B/s"这种难以直觉判断的数字 */
+private fun formatSpeed(bytesPerSecond: Long): String = when {
+    bytesPerSecond <= 0 -> "—"
+    bytesPerSecond < 1024 -> "$bytesPerSecond B"
+    bytesPerSecond < 1024 * 1024 -> String.format("%.0f KB", bytesPerSecond / 1024.0)
+    else -> String.format("%.1f MB", bytesPerSecond / 1048576.0)
+}
+
+/** 剩余时间的人类可读形式：45秒 / 3分20秒 / 12分钟 */
+private fun formatDuration(seconds: Long): String = when {
+    seconds <= 0 -> "0 秒"
+    seconds < 60 -> "$seconds 秒"
+    seconds < 3600 -> {
+        val m = seconds / 60
+        val s = seconds % 60
+        if (s == 0L) "$m 分钟" else "$m 分 $s 秒"
+    }
+    else -> "${seconds / 3600} 小时"
 }

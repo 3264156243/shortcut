@@ -95,12 +95,27 @@ class UpdateClient(
     /**
      * 下载 APK 到 [targetFile]，并**校验 sha256**。
      *
-     * @param onProgress 进度回调（在 IO 线程调用）
+     * ## ★ 进度回调必须限流（这是修掉的真实性能问题）
+     *
+     * 用户反馈"更新下载速度太慢，几 kb/s，手机网络正常"。
+     * 服务端本身不慢（实测 Cloudflare 命中缓存、本机 1.3 MB/s），
+     * 慢在**客户端自己的回调频率**：
+     *
+     * 早先每读 64 KB 就回调一次 → 35 MB 约 **565 次**回调，
+     * 而每次回调都会新建一个 `UpdateUiState.Downloading` 推给 StateFlow，
+     * 触发整页 Compose 重组（重建整个对话框 + 进度条 + 文本）。
+     * 这些重组跑在主线程，反过来拖住下载循环 → 下载看起来只有几 KB/s。
+     *
+     * 现在改成：**按时间限流**（默认 150ms 一次，约 6.7 次/秒），
+     * UI 刷新足够顺滑，又不会把下载线程压住。
+     *
+     * @param onProgress 进度回调（在 IO 线程调用，已限流）
      * @return 成功返回文件；校验失败/网络失败返回失败，且**已删除半成品文件**
      */
     suspend fun download(
         manifest: UpdateManifest,
         targetFile: File,
+        progressIntervalMs: Long = 150L,
         onProgress: ProgressListener? = null,
     ): ApiResult<File> = withContext(Dispatchers.IO) {
         val request = Request.Builder().url(manifest.apkUrl).get().build()
@@ -125,21 +140,35 @@ class UpdateClient(
                 val digest = MessageDigest.getInstance("SHA-256")
                 var downloaded = 0L
 
+                // 限流用的时间戳（见 KDoc：无限流会拖死下载）
+                var lastReportMs = 0L
+
                 try {
                     FileOutputStream(targetFile).use { out ->
                         body.byteStream().use { input ->
-                            val buffer = ByteArray(64 * 1024)
+                            // 缓冲区从 64KB 提到 256KB：减少系统调用次数，
+                            // 对 35MB 的文件更友好（移动网络下尤其明显）
+                            val buffer = ByteArray(256 * 1024)
                             while (true) {
                                 val read = input.read(buffer)
                                 if (read <= 0) break
                                 out.write(buffer, 0, read)
                                 digest.update(buffer, 0, read)
                                 downloaded += read
-                                onProgress?.onProgress(downloaded, total)
+
+                                // ★ 按时间限流，而不是每次读都回调
+                                val now = System.currentTimeMillis()
+                                if (now - lastReportMs >= progressIntervalMs) {
+                                    lastReportMs = now
+                                    onProgress?.onProgress(downloaded, total)
+                                }
                             }
                         }
                         out.flush()
                     }
+
+                    // 收尾：保证 UI 一定看到 100%（限流可能跳过了最后一次）
+                    onProgress?.onProgress(downloaded, total)
                 } catch (e: IOException) {
                     targetFile.delete()
                     return@withContext ApiResult.TransportFail(

@@ -39,9 +39,20 @@ sealed interface UpdateUiState {
         val downloaded: Long,
         val total: Long,
         val fileName: String,
+        /** 实测速度（字节/秒）。0 表示还在测速（刚开始的几百毫秒） */
+        val bytesPerSecond: Long = 0,
     ) : UpdateUiState {
         /** 0f..1f；总大小未知时返回 0f */
         val progress: Float get() = if (total > 0) (downloaded.toFloat() / total).coerceIn(0f, 1f) else 0f
+
+        /** 剩余时间（秒）。总大小或速度未知时返回 null */
+        val remainingSeconds: Long?
+            get() {
+                if (bytesPerSecond <= 0 || total <= 0) return null
+                val left = total - downloaded
+                if (left <= 0) return 0
+                return left / bytesPerSecond
+            }
     }
 
     /**
@@ -145,13 +156,24 @@ class UpdateViewModel(
                 fileName = fileName,
             )
 
+            // 测速用的基线（首次回调时初始化）
+            val startedAt = System.currentTimeMillis()
+
             val result = client.download(manifest, target) { downloaded, total ->
-                // 回调在 IO 线程；StateFlow 是线程安全的，直接更新
+                // 回调已由 UpdateClient 按时间限流（150ms 一次），这里直接更新即可
+                val elapsedMs = System.currentTimeMillis() - startedAt
+                // 前 500ms 的数据太少，算出的速度会剧烈跳动，先不显示
+                val speed = if (elapsedMs >= 500 && downloaded > 0) {
+                    (downloaded * 1000L) / elapsedMs
+                } else {
+                    0L
+                }
                 _state.value = UpdateUiState.Downloading(
                     manifest = manifest,
                     downloaded = downloaded,
                     total = if (total > 0) total else manifest.size,
                     fileName = fileName,
+                    bytesPerSecond = speed,
                 )
             }
 

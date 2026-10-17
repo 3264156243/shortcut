@@ -1,4 +1,4 @@
-// ShortCut 安卓端 · app 模块构建脚本
+﻿// ShortCut 安卓端 · app 模块构建脚本
 import java.io.File
 import java.util.Properties
 
@@ -42,8 +42,8 @@ android {
         targetSdk = 35
         // 版本号是"能否更新"的判据（更新检查按 versionCode 比较），
         // 每次发版**必须**同时递增这两个值。
-        versionCode = 3
-        versionName = "0.2.1"
+        versionCode = 4
+        versionName = "0.2.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
