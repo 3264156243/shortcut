@@ -83,6 +83,10 @@ fun InputPadSection(viewModel: ControlViewModel) {
         }
     }
 
+    // 已同步文本用 ViewModel 里的**响应式**镜像，而不是直接读 diffSync.sentSnapshot()
+    // —— 后者不是 Compose 状态，改了不会重组，界面上的数字可能一直是旧值。
+    val sentText by viewModel.sentText.collectAsStateWithLifecycle()
+
     Column(
         Modifier
             .fillMaxSize()
@@ -96,12 +100,12 @@ fun InputPadSection(viewModel: ControlViewModel) {
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                text = "本地 ${field.text.length} · 已同步 ${viewModel.diffSync.sentSnapshot().length}",
+                text = "本地 ${field.text.length} · 已同步 ${sentText.length}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = syncStateText(field.text, viewModel.diffSync.sentSnapshot()),
+                text = syncStateText(field.text, sentText),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
             )

@@ -296,6 +296,41 @@ private fun ControlPanelScreen(viewModel: ControlViewModel) {
             modifier = Modifier.padding(horizontal = Spacing.lg),
         )
 
+        // ★ 指令诊断条：显示最近一条指令的真实结果。
+        //
+        // 加这个是因为用户连续反馈"打字没同步、任何提示没有" ——
+        // 看不到任何信息时，只能靠反复描述现象，排查成本极高。
+        // 现在这里会直接写出：发出了什么、结果如何、耗时多少。
+        val traces by viewModel.recentCommands.collectAsStateWithLifecycle()
+        traces.firstOrNull()?.let { t ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.lg, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+            ) {
+                Text(
+                    text = if (t.ok) "✓" else "✗",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (t.ok) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
+                )
+                Text(
+                    text = "${t.path} ${t.result} · ${t.elapsedMs}ms",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (t.ok) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+
         Box(Modifier.weight(1f)) {
             when (section) {
                 PanelSection.INPUT -> InputPadSection(viewModel)

@@ -404,10 +404,25 @@ class ControlSession(
         return null
     }
 
-    /** 执行一条指令（页面统一走这里，不直接碰通道） */
+    /**
+     * 执行一条指令（页面统一走这里，不直接碰通道）。
+     *
+     * ## 为什么在这里计数
+     *
+     * 早先 `sentCount` 只在**云端通道**里由 `relay.state` 递增，
+     * 局域网通道完全不更新它 —— 于是局域网模式下界面永远显示"已发 0 条指令"，
+     * 用户无法判断"到底有没有发出去"。这是一个真实的诊断盲区
+     * （用户反馈"打字没同步、任何提示没有"，而这个数字本该是最直接的线索）。
+     *
+     * 现在改成在**通道抽象层**统一计数：不论走云端还是局域网都算。
+     */
     suspend fun call(path: String, body: Map<String, Any?>): ControlResult {
         val ch = channel ?: return ControlResult.Fail(503, "还没有可用通道，请先连接电脑")
-        return ch.call(path, body)
+        val result = ch.call(path, body)
+        if (result is ControlResult.Ok) {
+            _sentCount.value = _sentCount.value + 1
+        }
+        return result
     }
 }
 
