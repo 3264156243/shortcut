@@ -95,16 +95,19 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
 
-        // 把 -Dsc.live.* 透传给测试进程。
+        // 把 -Dsc.* 透传给测试进程。
         //
         // 为什么需要：Gradle 的 -D 只作用于 Gradle 守护进程，
         // **不会**进到 fork 出来的测试 JVM，于是 System.getProperty 拿到 null
-        // （表现为 LiveServerSmokeTest 一直被跳过，看起来"跑了其实没跑"）。
+        // （表现为线上测试一直"跳过"，看起来跑了其实没跑）。
+        //
+        // 用**前缀匹配**而不是逐个列 key：以后加新的线上测试不用再改这里，
+        // 也就不会再犯"加了测试却忘了加透传"的错（这个错犯过一次：
+        // LiveUpdateManifestTest 加了却没透传 sc.live.update，直接跳过）。
         unitTests.all {
-            listOf("sc.live.bindId", "sc.live.mobileToken").forEach { key ->
-                (System.getProperty(key) ?: System.getenv(key.replace('.', '_').uppercase()))
-                    ?.let { value -> it.systemProperty(key, value) }
-            }
+            System.getProperties().stringPropertyNames()
+                .filter { it.startsWith("sc.") }
+                .forEach { key -> it.systemProperty(key, System.getProperty(key)) }
         }
     }
 }
