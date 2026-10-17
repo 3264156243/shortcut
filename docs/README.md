@@ -108,26 +108,33 @@ docs/
 
 > 仍保留的历史文件：`release-notes/*.md`（各版本更新说明，也是内容资产）、`docs/archive/`（Electron 时期的文档）。
 
-### 启动方式（2026-10-17 起）
+### 分发与启动方式（2026-10-17 定稿：**统一走安装包**）
 
-**本地"安装"到固定目录，自启与快捷方式都指向它：**
+**唯一正式渠道 = NSIS 安装包**（构建产物 `src-tauri/target/release/bundle/nsis/ShortCut_<ver>_x64-setup.exe`）。
+安装后：自启、桌面与开始菜单快捷方式**都由安装器管理**，指向安装目录里的 `shortcut-tauri.exe`。
 
 ```
-D:\APP\ShortCut-Tauri\ShortCut-Tauri.exe   ← 自启 / 桌面 / 开始菜单都指这里
+D:\APP\shortcut1\ShortCut\        ← 本机当前安装位置（安装时可选目录）
+  ├─ shortcut-tauri.exe           ← 自启 / 桌面 / 开始菜单都指这里
+  ├─ uninstall.exe
+  └─ _up_\resources\{sj,scripts,hardware-monitor,music-bridge,usage-monitor}
 ```
 
-**重建并更新这个安装**（一条命令）：
+**为什么改成"只认安装包"**：此前用 `scripts/install-local.ps1` 把 exe 拷到自建目录
+（`D:\APP\ShortCut-Tauri`）并让自启/快捷方式指过去，结果是"同一程序两份并存"——
+用户装安装包后，自启还指着自建目录，升级/卸载行为不一致。2026-10-17 已统一到安装包版，
+自建目录已删除，三处指针（自启 / 两个快捷方式 / 运行中进程）全部指向安装目录。
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/install-local.ps1 -Build
-```
-
-它做四件事：前端构建 → Rust release 构建 → 拷 exe+`app_lib.dll` 到安装目录 → 重指自启/快捷方式并以**普通权限**启动。
+| 场景 | 用什么 |
+|---|---|
+| 用户日常使用 / 升级 | **安装包**（2.5.1 起可在应用内「检查更新」自动更新） |
+| 开发时快速看效果 | `powershell -ExecutionPolicy Bypass -File scripts/run-app.ps1`（直接从 `target/release` 跑，**不改任何指针**） |
+| ~~`scripts/install-local.ps1`~~ | ⚠️ **仅调试用**：它会把自启/快捷方式改指自建目录，日常别用，否则又回到"两份并存" |
 
 > ⚠️ 两个坑（都踩过）：
-> 1. 安装后的 exe **不能命名成 `ShortCut.exe`**：程序里的实例守卫会扫 `tasklist`，见到 `shortcut.exe`
+> 1. 可执行文件**别命名成 `ShortCut.exe`**：程序里的实例守卫会扫 `tasklist`，见到 `shortcut.exe`
 >    就判定"旧版 Electron 在运行"并拒绝启动——命名成 `ShortCut.exe` 时它会**把自己认成 Electron**，
->    表现为双击无反应、连日志都不写。
-> 2. `src-tauri/target/` 是**纯缓存**，可以随时 `cargo clean`；因为安装目录是独立的，
->    清理不会再影响自启（这正是加这个安装步骤的原因）。
+>    表现为双击无反应、连日志都不写。（NSIS 安装版实际叫 `shortcut-tauri.exe`，不触发。）
+> 2. `src-tauri/target/` 是**纯缓存**，可以随时 `cargo clean`；安装目录独立，清理不影响自启。
+
 
