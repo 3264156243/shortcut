@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,6 +18,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -26,9 +28,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.wanan.shortcut.feature.bind.scan.ScanBindScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.wanan.shortcut.framework.LocalModuleSubRoute
 import com.wanan.shortcut.framework.ModuleNavigator
@@ -102,8 +106,39 @@ private fun ControlEntryScreen(
 
     var host by remember { mutableStateOf("") }
     var pairCode by remember { mutableStateOf("") }
+    // 扫码界面开关
+    var scanning by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { viewModel.refreshAvailability() }
+
+    // ---- 扫码连接（对齐桌面端"扫码即连"）----
+    // 为什么单独做一个全屏扫码而不是塞进输入框：
+    // 二维码里带的是**预授权令牌**，扫到就能直接连，比"手输地址 + 配对码"省两步，
+    // 也是桌面端状态卡主推的方式。
+    if (scanning) {
+        ScanBindScreen(
+            onClose = { scanning = false },
+            onRecognized = { raw ->
+                scanning = false
+                when (val parsed = LanQrPayload.parse(raw)) {
+                    is LanQrPayload.Result.Lan -> {
+                        if (parsed.token.isBlank()) {
+                            // 没带令牌（桌面端 lanEntry 未就绪时会退化成纯地址）
+                            // → 回填地址，让用户走配对流程
+                            host = parsed.host
+                        } else {
+                            viewModel.connectLanWithToken(parsed.host, parsed.token)
+                        }
+                    }
+                    is LanQrPayload.Result.CloudControlPage ->
+                        viewModel.showScanError("这是云端控制页的二维码，请用「云端连接」；局域网请扫桌面端「局域网直连」状态卡上的码。")
+                    is LanQrPayload.Result.Unknown ->
+                        viewModel.showScanError(parsed.reason)
+                }
+            },
+        )
+        return
+    }
 
     Column(
         Modifier
@@ -128,12 +163,29 @@ private fun ControlEntryScreen(
         // ---- 主力入口：局域网直连（不依赖云端）----
         SectionHeader(title = "局域网直连")
 
+        // 扫码优先：桌面端状态卡的二维码里带预授权令牌，扫到就能连，不用输地址也不用输配对码
         ScCard {
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
                 Text(
-                    text = "在电脑上打开 ShortCut「控制」板块，点开「局域网直连」，" +
-                        "状态页会显示电脑的**局域网地址**（形如 192.168.1.5:9823），填进来即可。\n" +
-                        "配对码通常**不用填**（会自动从电脑读取），只有在连不上时才需要手输。",
+                    text = "最快的方式：用手机扫电脑屏幕上「局域网直连」状态卡的二维码，" +
+                        "扫到即连，不用输任何东西。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Button(
+                    onClick = { scanning = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("扫码连接") }
+            }
+        }
+
+        // 备用：手填地址（扫码不方便、或二维码没带令牌时用）
+        ScCard {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                Text(
+                    text = "或者手填：在电脑上打开 ShortCut「控制」板块，点开「局域网直连」，" +
+                        "状态页会显示电脑的**局域网地址**（形如 192.168.1.5:9823）。\n" +
+                        "配对码通常**不用填**（会自动从电脑读取）。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -251,9 +303,16 @@ private fun ControlEntryScreen(
 private fun ControlPanelScreen(viewModel: ControlViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var section by remember { mutableStateOf(PanelSection.INPUT) }
+    val context = LocalContext.current
 
     // 进入控制页时同步一次可用性（通道可能在入口页刚建立）
     LaunchedEffect(Unit) { viewModel.refreshAvailability() }
+
+    // ★ 已连接时启动前台服务，让 App 退到后台也保持连接。
+    // 用户要求："除非断网或者手动断联，否则长期维持连接状态"。
+    LaunchedEffect(state.ready) {
+        if (state.ready) viewModel.ensureForegroundService(context)
+    }
 
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -289,12 +348,38 @@ private fun ControlPanelScreen(viewModel: ControlViewModel) {
             }
         }
 
-        Text(
-            text = "通道：${state.channelLabel.ifBlank { "未连接" }}　·　已发 ${state.sentCount} 条指令",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = Spacing.lg),
-        )
+        // ★ 连接状态 + 手动断开控件。
+        //
+        // 用户要求："除非断网或者手动断联，否则长期维持连接状态"——
+        // 既然连接会长期保持，就必须给一个**明确、显眼**的断开出口，
+        // 否则用户既不知道还连着没有，也没有办法主动结束。
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.lg),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "通道：${state.channelLabel.ifBlank { "未连接" }}" +
+                    "　·　已发 ${state.sentCount} 条指令",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            if (state.ready) {
+                TextButton(
+                    onClick = { viewModel.disconnect(context) },
+                    contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = 0.dp),
+                ) {
+                    Text(
+                        text = "断开",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        }
 
         // ★ 指令诊断条：显示最近一条指令的真实结果。
         //

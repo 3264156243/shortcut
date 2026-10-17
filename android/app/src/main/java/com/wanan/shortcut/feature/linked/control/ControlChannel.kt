@@ -342,7 +342,41 @@ object VirtualKeyboard {
         "caps" -> "capslock"
         "enter" -> "enter"
         "space" -> "space"
-        // 单字符键直接发字符本身（服务端按 vk 名或字符解析，契约 §7.5）
+        // 单字符键直接发字符本身
         else -> label
+    }
+
+    /**
+     * 字母键要用**大写**发给服务端。
+     *
+     * ## ★ 这是修掉的一个真实 bug（用户反馈："点字母，电脑收到的却是些快捷键"）
+     *
+     * 桌面端 `resolve_vk`（`src-tauri/src/control.rs`）对单字符的处理是：
+     *
+     * ```rust
+     * if bytes.len() == 1 && bytes[0].is_ascii_alphabetic() {
+     *     return Some(bytes[0] as u32);   // 'a' → 0x61
+     * }
+     * ```
+     *
+     * 而 `inject.ps1` 的 `SendVk` 直接把这个值当 **Windows 虚拟键码（VK）** 发给
+     * `SendInput`。可 Windows 的字母键 VK 是**大写 ASCII**：
+     *
+     * | 键 | 正确 VK | 用小写会变成 |
+     * |---|---|---|
+     * | A | `0x41` | `0x61` = **VK_NUMPAD1（小键盘 1）** |
+     * | B | `0x42` | `0x62` = 小键盘 2 |
+     * | … | … | 依次错位到小键盘数字 |
+     * | Z | `0x5A` | `0x7A` = **VK_F11** |
+     *
+     * 也就是说小写字母会落到**小键盘数字和 F 键**上 ——
+     * 用户看到的就是"点字母出来的是些快捷键"。
+     *
+     * 修法：字母一律发**大写**。数字与符号的 VK 恰好与 ASCII 一致（`'1'`=0x31 正确），
+     * 所以只有字母需要转换。
+     */
+    fun toServerKey(label: String): String {
+        val name = toKeyName(label)
+        return if (name.length == 1 && name[0] in 'a'..'z') name.uppercase() else name
     }
 }

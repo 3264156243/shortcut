@@ -1,5 +1,6 @@
 package com.wanan.shortcut.feature.linked.control
 
+import android.content.Context
 import com.google.gson.JsonObject
 import com.wanan.shortcut.core.lan.LanClient
 import com.wanan.shortcut.core.net.ApiGateway
@@ -96,8 +97,42 @@ class ControlSession(
     /** 通道名（"云端"/"局域网"），未连接返回空串 */
     val channelLabel: String get() = channel?.label ?: ""
 
+    /**
+     * 主动断开连接（用户点"断开"或通知栏里的"断开连接"）。
+     *
+     * ## 为什么需要这个方法（用户要求）
+     *
+     * "除非断网或者手动断联，否则长期维持连接状态" ——
+     * 反过来也要给用户一个**明确的断开出口**，否则连接会一直挂着，
+     * 既耗电也让人不确定"到底还连着没有"。
+     *
+     * 断开时做三件事：
+     * 1. 清掉通道（之后所有指令都会得到"未连接"）
+     * 2. 停掉中继 WS（释放连接，避免占着契约 §7.6 的 3 条配额）
+     * 3. 停掉前台服务（通知栏的常驻提示随之消失）
+     *
+     * 注意**不清空** bindId/身份：断开连接 ≠ 解绑设备，
+     * 下次连上还是同一个绑定。
+     */
+    fun disconnect(context: Context? = null) {
+        channel = null
+        refreshReady()
+        relay.disconnect()
+        _connection.value = ConnectionState(
+            lanNotice = null,
+            lanError = null,
+            lastError = null,
+        )
+        context?.let { ControlForegroundService.stop(it) }
+    }
+
     fun clearError() {
         _connection.value = _connection.value.copy(lanError = null, lastError = null)
+    }
+
+    /** 从外部（如扫码解析）写入一条局域网错误提示 */
+    fun showLanError(message: String) {
+        _connection.value = _connection.value.copy(lanError = message, lanNotice = null, lanBusy = false)
     }
 
     // ---------------- 云端 ----------------
@@ -159,6 +194,54 @@ class ControlSession(
      * ⚠️ 契约 §8.5-2：**每次都要重新询问，不缓存 IP**。
      * ⚠️ 该接口需要云端 WS 在线（§8.2 末尾），所以先确保云端已连。
      */
+    /**
+     * 扫码得到的地址 + **预授权令牌** 直接连（不用配对码）。
+     *
+     * ## 这是最省事的一条路（对齐桌面端"扫码即连"）
+     *
+     * 桌面端状态卡的二维码里带了 `?token=<预授权令牌>`
+     * （`src/components/ControlPanel.tsx`："扫码即连，不用输地址与绑定码"）。
+     * 拿它直接当 Bearer 用即可，**跳过 `/api/pair` 整个配对流程**。
+     *
+     * 仍然先探测地址：桌面端可能给的是虚拟网卡地址（见问答台 A3）。
+     */
+    fun connectLanWithToken(rawHost: String, token: String) {
+        val host = normalizeHost(rawHost)
+        if (host == null) {
+            _connection.value = _connection.value.copy(
+                lanError = "二维码里的地址无法识别：$rawHost",
+            )
+            return
+        }
+
+        scope.launch {
+            _connection.value = _connection.value.copy(
+                lanBusy = true, lanError = null, lanNotice = "正在连接 $host …",
+            )
+
+            // 探测：必须确认这个地址真的可达，否则会"显示已连接但用不了"
+            val probe = lanClient.probe("http://$host")
+            if (!probe.reachable) {
+                _connection.value = _connection.value.copy(
+                    lanBusy = false,
+                    lanNotice = null,
+                    lanError = "连不上 $host（${probe.failure ?: "网络不可达"}）。\n" +
+                        "请确认：手机与电脑连的是同一个 Wi-Fi；" +
+                        "电脑端「局域网直连」还在运行；电脑防火墙没拦住 $host 的端口。",
+                )
+                return@launch
+            }
+
+            // 直接用预授权令牌建立通道
+            channel = LanChannel(lanClient, "http://$host", token)
+            refreshReady()
+            _connection.value = _connection.value.copy(
+                lanBusy = false, lanActive = true, lanBaseUrl = "http://$host",
+                lanNotice = "已扫码直连 $host（局域网，不经过云端）",
+            )
+        }
+    }
+
     /**
      * 局域网直连（**不依赖云端**）—— 用户填地址 + 配对码。
      *

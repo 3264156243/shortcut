@@ -128,6 +128,16 @@ class ControlViewModel(
         session.connectLanDirect(host, pairCode)
     }
 
+    /** 扫码得到地址 + 预授权令牌，直接连（不用配对码） */
+    fun connectLanWithToken(host: String, token: String) {
+        session.connectLanWithToken(host, token)
+    }
+
+    /** 扫码内容无法识别时给出提示（走连接状态里的 lanError，入口页会显示成红色卡片） */
+    fun showScanError(message: String) {
+        session.showLanError(message)
+    }
+
     fun connectLan() {
         session.connectLan()
         refreshAvailability()
@@ -135,6 +145,32 @@ class ControlViewModel(
 
     fun clearConnectionError() {
         session.clearError()
+    }
+
+    /**
+     * 主动断开（用户点了"断开连接"）。
+     *
+     * 同时停掉前台服务，通知栏的常驻提示一并消失。
+     */
+    fun disconnect(context: android.content.Context) {
+        session.disconnect(context)
+        refreshAvailability()
+        _sentText.value = ""
+    }
+
+    /**
+     * 连接可用时启动前台服务，保持长连接。
+     *
+     * 由 UI 在"已连接"时调用一次。刻意**不**放在 Connect 流程里：
+     * 那样会依赖调用方记得传 Context，容易漏；放在界面观察处更可靠。
+     */
+    fun ensureForegroundService(context: android.content.Context) {
+        if (!session.isReady) return
+        ControlForegroundService.start(
+            context,
+            title = "电脑控制已连接",
+            text = "通道：${session.channelLabel}　·　可在通知栏或控制页断开",
+        )
     }
 
     // ---------------- 输入区 ----------------

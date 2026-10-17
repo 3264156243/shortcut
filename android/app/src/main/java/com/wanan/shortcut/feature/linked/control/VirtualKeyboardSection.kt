@@ -68,13 +68,17 @@ fun VirtualKeyboardSection(viewModel: ControlViewModel) {
      * 修饰键本身不发送（web 第一行就 `return`）；有修饰才组合。
      */
     fun pressKey(label: String) {
-        val keyName = VirtualKeyboard.toKeyName(label)
+        // ★ 字母要用大写发（见 VirtualKeyboard.toServerKey 的说明）：
+        //   桌面端把单字符直接当 VK 用，而 Windows 字母键的 VK 是大写 ASCII。
+        //   发小写 'a'=0x61 会变成"小键盘 1"，'z'=0x7A 会变成 F11 ——
+        //   表现就是用户说的"点字母，电脑收到的却是些快捷键"。
+        val keyName = VirtualKeyboard.toServerKey(label)
 
         // 修饰键本身不发送：它只是"待生效状态"
-        if (keyName in VirtualKeyboard.MODIFIERS) return
+        if (keyName.lowercase() in VirtualKeyboard.MODIFIERS) return
 
         if (mods.isEmpty()) {
-            // ★ 无修饰 → 单键（/api/key）。这里若走 combo 就会变成"快捷键"
+            // 无修饰 → 单键（/api/key）
             viewModel.sendSingleKey(keyName)
         } else {
             viewModel.sendCombo(mods.toList() + keyName)

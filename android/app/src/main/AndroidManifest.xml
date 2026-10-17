@@ -69,6 +69,17 @@
         </activity>
 
         <!--
+          电脑控制的常驻连接服务。
+          用途：用户要求"除非断网或手动断联，否则长期维持连接"——
+          App 退到后台/锁屏时，普通进程会被系统回收，连接随之断开。
+          foregroundServiceType 必须与代码里 startForeground(...) 的类型一致（connectedDevice）。
+        -->
+        <service
+            android:name=".feature.linked.control.ControlForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <!--
           应用内更新的 FileProvider。
           为什么需要：Android 7+ 禁止把 file:// URI 暴露给其它 App
           （会抛 FileUriExposedException），必须用 content:// URI 交给系统安装器。
