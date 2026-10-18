@@ -14,7 +14,7 @@
 - 当前 `package.json` 版本：**2.4.4**（V2.4.4 已正式构建并发布到更新服务器）。
 - 当前工作分支：`codex/v2-development`（所有开发提交到该分支，Gitee 远端 `https://gitee.com/wanan6/short-cut.git`）。
 - 工作根目录：`D:\wenjian\js\ShortCut`。
-- 服务器：`43.108.21.35`（宝塔面板，Web 站点根 `/www/wwwroot/ShortCut`），SSH 连接信息在本机 `D:\wenjian\mima\服务器连接信息.md`。连接凭据不得写入本文件或提交到 Git。
+- 服务器：`<SERVER_IP>`（宝塔面板，Web 站点根 `/www/wwwroot/ShortCut`），SSH 连接信息在本机 `D:\wenjian\mima\服务器连接信息.md`。连接凭据不得写入本文件或提交到 Git。
 - 服务器文件上传手段：本机已装 **Posh-SSH**（PowerShell 模块，3.2.7），用 `New-SSHSession` + `Set-SCPItem` / `Invoke-SSHCommand`，密码即可连，无需公钥。示例见下方「关键命令」。
 
 ---
@@ -139,9 +139,9 @@ $serverInfo = Get-Content 'D:\wenjian\mima\服务器连接信息.md' -Raw -Encod
 $password = [regex]::Match($serverInfo, '密码：([^\r\n]+)').Groups[1].Value.Trim()
 $pass = ConvertTo-SecureString $password -AsPlainText -Force
 $cred = New-Object System.Management.Automation.PSCredential('root', $pass)
-$s = New-SSHSession -ComputerName '43.108.21.35' -Port 22 -Credential $cred -AcceptKey -ConnectionTimeout 15 -ErrorAction Stop
+$s = New-SSHSession -ComputerName '<SERVER_IP>' -Port 22 -Credential $cred -AcceptKey -ConnectionTimeout 15 -ErrorAction Stop
 Invoke-SSHCommand -SessionId $s.SessionId -Command '你的shell命令'
-Set-SCPItem -ComputerName '43.108.21.35' -Port 22 -Credential $cred -AcceptKey -Path '本地路径' -Destination '/www/wwwroot/ShortCut/目录/' -Force
+Set-SCPItem -ComputerName '<SERVER_IP>' -Port 22 -Credential $cred -AcceptKey -Path '本地路径' -Destination '/www/wwwroot/ShortCut/目录/' -Force
 Remove-SSHSession -SessionId $s.SessionId | Out-Null
 ```
 

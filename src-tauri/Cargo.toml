@@ -1,10 +1,10 @@
 [package]
 name = "shortcut-tauri"
 version = "2.5.1"
-description = "ShortCut - Desktop quick panel for shortcuts (Tauri 2)"
+description = "ShortCut - Desktop quick panel + mobile interconnect (Tauri 2)"
 authors = ["wanan"]
-license = ""
-repository = ""
+license = "MIT"
+repository = "https://github.com/3264156243/shortcut"
 edition = "2024"
 rust-version = "1.90"
 
