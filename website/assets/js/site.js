@@ -472,9 +472,17 @@
     });
   }
   function boot() {
-    initNav();
-    initToTop();
-    initReveal();
+    /* 每个初始化互相隔离：任何一项抛错都不能连带其它功能失效 */
+    var tasks = [initNav, initToTop, initReveal];
+    for (var i = 0; i < tasks.length; i++) {
+      try {
+        tasks[i]();
+      } catch (err) {
+        if (global.console && global.console.warn) {
+          global.console.warn('[site] 初始化失败: ' + (tasks[i].name || i), err);
+        }
+      }
+    }
   }
 
   if (document.readyState === 'loading') {

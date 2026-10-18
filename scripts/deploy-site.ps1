@@ -56,6 +56,17 @@ try {
     $drop = Join-Path $stage 'assets\img\logo-512.png'
     if (Test-Path $drop) { Remove-Item $drop -Force }
 
+    # ── 缓存击穿：给 css/js 引用加内容哈希版本号 ─────────────────────────────
+    # 源站对 js/css 设了 12 小时缓存，不改 URL 的话用户会一直拿到旧脚本
+    # （典型表现：新加的导航入口"看不见"）。这里只在暂存目录改写，仓库保持干净。
+    $stampScript = Join-Path $PSScriptRoot 'stamp-assets.mjs'
+    if ((Test-Path $stampScript) -and (Get-Command node -ErrorAction SilentlyContinue)) {
+        $stampOut = & node $stampScript $stage 2>&1
+        $stampOut | Where-Object { $_ -match '改写|资源引用' } | ForEach-Object { Write-Host ('  ' + $_) }
+    } else {
+        Write-Warning '跳过资源版本戳（缺 stamp-assets.mjs 或 node）'
+    }
+
     $zip = Join-Path $env:TEMP 'sc-site.zip'
     Remove-Item $zip -Force -ErrorAction SilentlyContinue
     Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
