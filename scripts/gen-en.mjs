@@ -15,7 +15,7 @@
  *
  * 用法：node scripts/gen-en.mjs
  */
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -210,14 +210,22 @@ ${enPager(en.pagerPrev, en.pagerNext)}
     </div>
   </section>`;
   } else {
-    /* 下载 / 日志 / FAQ / 反馈：复用中文页的 body 片段（结构相同，文案少量替换） */
+    /* 下载 / 日志 / FAQ / 反馈：
+       优先使用独立的英文正文片段（_bodies/en-<page>），
+       没有时才退回到"中文片段 + 字符串替换"（替换对散文容易切碎） */
     let frag = '';
+    const enBodyPath = join(SITE, '_bodies', 'en-' + p.file);
+    const zhBodyPath = join(SITE, '_bodies', p.file);
     try {
-      frag = readFileSync(join(SITE, '_bodies', p.file), 'utf8');
+      if (existsSync(enBodyPath)) {
+        body = readFileSync(enBodyPath, 'utf8');
+      } else {
+        frag = readFileSync(zhBodyPath, 'utf8');
+        body = localizeBody(frag, p.file);
+      }
     } catch (e) {
-      frag = '  <section class="section"><div class="wrap"><p>Content pending.</p></div></section>';
+      body = '  <section class="section"><div class="wrap"><p>Content pending.</p></div></section>';
     }
-    body = localizeBody(frag, p.file);
   }
 
   const html = `${head({ title: en.title, desc: en.desc })}
@@ -376,6 +384,13 @@ function localizeBody(html, file) {
     ],
     'faq.html': [],
     'feedback.html': [
+      ['已有反馈？查询回复', 'Already sent feedback? Check for replies'],
+      ['提交成功后会得到反馈编号和查询凭据；两项一起填写才能查看回复。',
+       'After submitting you receive a feedback ID and a lookup token. Both are required to see replies.'],
+      ['feedback_id', 'feedback_id'],
+      ['查询凭据', 'Lookup token'],
+      ['查询回复', 'Check replies'],
+      ['反馈编号', 'Feedback ID'],
       ['问题反馈', 'Feedback'],
       ['反馈类型', 'Type'],
       ['问题 / Bug', 'Bug report'],

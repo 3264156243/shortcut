@@ -26,7 +26,55 @@
 
   var ENDPOINT = '/sync/feedback.php';
 
-  /* ── 字数统计 ── */
+  var lookupId = doc.getElementById('fbLookupId');
+  var lookupToken = doc.getElementById('fbLookupToken');
+  var lookupBtn = doc.getElementById('fbLookupBtn');
+  var lookupStatus = doc.getElementById('fbLookupStatus');
+  var repliesBox = doc.getElementById('fbReplies');
+
+  function esc(s) {
+    return String(s || '').replace(/[&<>"']/g, function (c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+    });
+  }
+
+  function showReplies(data) {
+    if (!repliesBox) return;
+    var replies = data.replies || [];
+    if (!replies.length) {
+      repliesBox.innerHTML = '<div class="reply" style="margin-top:12px"><small>当前状态</small>暂时还没有管理员回复，请稍后再查。</div>';
+      return;
+    }
+    repliesBox.innerHTML = replies.map(function (r) {
+      return '<div class="reply" style="margin-top:12px"><small>' + esc(r.time) + ' · ' + esc(r.status) + '</small>' + esc(r.body) + '</div>';
+    }).join('');
+  }
+
+  if (lookupBtn) {
+    lookupBtn.addEventListener('click', function () {
+      var id = (lookupId && lookupId.value || '').trim();
+      var token = (lookupToken && lookupToken.value || '').trim();
+      if (!/^[a-f0-9]{12}$/.test(id) || !/^[a-f0-9]{32}$/.test(token)) {
+        if (lookupStatus) { lookupStatus.textContent = '请填写提交成功后得到的 12 位编号与 32 位查询凭据。'; lookupStatus.className = 'fb-status is-err'; }
+        return;
+      }
+      if (lookupStatus) { lookupStatus.textContent = '查询中…'; lookupStatus.className = 'fb-status'; }
+      fetch(ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'lookup', id: id, token: token })
+      }).then(function (r) { return r.json(); }).then(function (res) {
+        if (!res.ok) throw new Error(res.message || '没有找到这条反馈');
+        if (lookupStatus) { lookupStatus.textContent = '查询成功'; lookupStatus.className = 'fb-status is-ok'; }
+        showReplies(res);
+      }).catch(function (err) {
+        if (lookupStatus) { lookupStatus.textContent = err.message || '查询失败'; lookupStatus.className = 'fb-status is-err'; }
+        if (repliesBox) repliesBox.innerHTML = '';
+      });
+    });
+  }
+
+
   function updateCount() {
     if (elCount && elContent) elCount.textContent = elContent.value.length;
   }
@@ -90,7 +138,10 @@
       })
       .then(function (res) {
         if (res && res.ok) {
-          setStatus('已收到，编号 ' + (res.id || '—') + '。感谢反馈！', 'ok');
+          var successText = '已收到，编号 ' + (res.id || '—') + '。请保存查询凭据：' + (res.token || '—');
+          setStatus(successText, 'ok');
+          if (lookupId && res.id) lookupId.value = res.id;
+          if (lookupToken && res.token) lookupToken.value = res.token;
           elContent.value = '';
           updateCount();
           if (elContact) elContact.value = '';

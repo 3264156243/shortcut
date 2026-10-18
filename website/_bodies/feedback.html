@@ -66,6 +66,18 @@
               <div><b>不一定逐条回复</b><p>缺少联系方式时只做记录。如果是能复现的 Bug，会优先修。</p></div>
             </div>
           </div>
+          <div class="hint-box" id="fbLookupBox">
+            <b>已有反馈？查询回复</b>
+            <p style="margin:6px 0 10px;color:var(--muted)">提交成功后会得到反馈编号和查询凭据；两项一起填写才能查看回复。</p>
+            <div class="fb-row">
+              <input class="fb-input" id="fbLookupId" placeholder="反馈编号" maxlength="12" />
+              <input class="fb-input" id="fbLookupToken" placeholder="查询凭据" maxlength="32" />
+            </div>
+            <button class="btn" id="fbLookupBtn" type="button" style="margin-top:10px">查询回复</button>
+            <div class="fb-status" id="fbLookupStatus" role="status" aria-live="polite"></div>
+            <div id="fbReplies"></div>
+          </div>
+
           <div class="hint-box">
             <b>下面这些不用发反馈</b>
             <ul>

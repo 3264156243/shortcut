@@ -1,0 +1,94 @@
+  <!-- Feedback form -->
+  <section class="section section--flush">
+    <div class="wrap">
+      <div class="grid grid--2" style="gap:44px;align-items:start">
+
+        <form class="fb-form reveal" id="fbForm" novalidate>
+          <div class="fb-field">
+            <label for="fbType">Type</label>
+            <select class="fb-select" id="fbType" name="type">
+              <option value="bug">Bug report</option>
+              <option value="feature">Feature request</option>
+              <option value="ui">UI and UX</option>
+              <option value="update">Updates and install</option>
+              <option value="other" selected>Something else</option>
+            </select>
+          </div>
+
+          <div class="fb-field">
+            <label for="fbContent">Details <small>required, at least 5 characters</small></label>
+            <textarea class="fb-textarea" id="fbContent" name="content" required
+              placeholder="What happened, in which module, and how can it be reproduced?&#10;&#10;For a bug it helps to include:&#10;1. what you did&#10;2. what you expected&#10;3. what actually happened"></textarea>
+            <div class="fb-hint"><span id="fbCount">0</span> / 4000</div>
+          </div>
+
+          <div class="fb-row">
+            <div class="fb-field">
+              <label for="fbContact">Contact <small>optional</small></label>
+              <input class="fb-input" id="fbContact" name="contact" type="text"
+                placeholder="Email / QQ / WeChat so I can reply" maxlength="120" />
+            </div>
+            <div class="fb-field">
+              <label for="fbVersion">Your version <small>optional, filled automatically</small></label>
+              <input class="fb-input" id="fbVersion" name="version" type="text" placeholder="e.g. 2.5.1" maxlength="40" />
+            </div>
+          </div>
+
+          <!-- honeypot: hidden from humans, bots fill it -->
+          <div class="fb-hp" aria-hidden="true">
+            <label for="fbHp">Leave empty</label>
+            <input id="fbHp" name="hp" type="text" tabindex="-1" autocomplete="off" />
+          </div>
+
+          <div class="btn-row">
+            <button class="btn btn--primary" id="fbSubmit" type="submit">Submit feedback</button>
+            <a class="btn btn--ghost" href="/en/faq.html">Read the FAQ first</a>
+          </div>
+          <div class="fb-status" id="fbStatus" role="status" aria-live="polite"></div>
+        </form>
+
+        <div class="reveal">
+          <div class="section-head" style="margin-bottom:20px">
+            <span class="eyebrow">About</span>
+            <h2>How feedback is handled</h2>
+          </div>
+          <div class="grid" style="gap:12px">
+            <div class="capability">
+              <span class="cap-ico" data-icon="check"></span>
+              <div><b>Recorded on your own server</b><p>No third-party platform and no sign-up. Entries are appended as JSONL under the server's data directory.</p></div>
+            </div>
+            <div class="capability">
+              <span class="cap-ico" data-icon="shield"></span>
+              <div><b>No raw IP address stored</b><p>Only a salted hash is kept for rate limiting. The same IP is limited to 5 submissions per hour and 20 per day.</p></div>
+            </div>
+            <div class="capability">
+              <span class="cap-ico" data-icon="clock"></span>
+              <div><b>Replies are not guaranteed</b><p>Without contact details an entry is only recorded. Reproducible bugs are fixed first.</p></div>
+            </div>
+          </div>
+
+          <div class="hint-box" id="fbLookupBox">
+            <b>Already sent feedback? Check for replies</b>
+            <p style="margin:6px 0 10px;color:var(--muted)">After submitting you receive a feedback ID and a lookup token. Both are required to view replies.</p>
+            <div class="fb-row">
+              <input class="fb-input" id="fbLookupId" placeholder="Feedback ID" maxlength="12" />
+              <input class="fb-input" id="fbLookupToken" placeholder="Lookup token" maxlength="32" />
+            </div>
+            <button class="btn" id="fbLookupBtn" type="button" style="margin-top:10px">Check replies</button>
+            <div class="fb-status" id="fbLookupStatus" role="status" aria-live="polite"></div>
+            <div id="fbReplies"></div>
+          </div>
+
+          <div class="hint-box">
+            <b>You do not need to send these</b>
+            <ul>
+              <li>"Unknown publisher" during install — the installer is not code-signed yet; choose "More info → Run anyway"</li>
+              <li>Old versions fail to check for updates — a known 2.4.x issue; install 2.5.1 once manually and it works afterwards</li>
+              <li>LAN control cannot connect — make sure phone and PC are on the same Wi-Fi and AP isolation is off</li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>

@@ -48,6 +48,57 @@ if (!is_array($in)) {
     fb_reply(['ok' => false, 'error' => 'bad_request'], 400);
 }
 
+/* ── 2.5. 用户查询回复（POST action=lookup）────────────────────────────── */
+if (($in['action'] ?? '') === 'lookup') {
+    $lookupId = trim((string)($in['id'] ?? ''));
+    $lookupToken = trim((string)($in['token'] ?? ''));
+    if (!preg_match('/^[a-f0-9]{12}$/', $lookupId) || !preg_match('/^[a-f0-9]{32}$/', $lookupToken)) {
+        fb_reply(['ok' => false, 'error' => 'bad_lookup'], 400);
+    }
+
+    $found = null;
+    foreach (glob(rtrim($DATA_DIR, '/') . '/feedback/feedback-*.jsonl') ?: [] as $feedbackFile) {
+        $lines = @file($feedbackFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+        foreach ($lines as $line) {
+            $row = json_decode($line, true);
+            if (!is_array($row) || ($row['id'] ?? '') !== $lookupId) continue;
+            $hash = (string)($row['token_hash'] ?? '');
+            if ($hash !== '' && hash_equals($hash, hash('sha256', $lookupToken))) {
+                $found = $row;
+                break 2;
+            }
+        }
+    }
+    if (!$found) {
+        fb_reply(['ok' => false, 'error' => 'not_found', 'message' => '反馈编号或查询凭据不正确'], 404);
+    }
+
+    $replies = [];
+    $replyFile = rtrim($DATA_DIR, '/') . '/feedback/feedback-replies.jsonl';
+    foreach ((@file($replyFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: []) as $line) {
+        $row = json_decode($line, true);
+        if (is_array($row) && ($row['feedback_id'] ?? '') === $lookupId) $replies[] = $row;
+    }
+
+    /* 状态以最后一条回复为准（反馈本身是追加式日志，不回写） */
+    $status = 'open';
+    foreach ($replies as $replyRow) {
+        if (!empty($replyRow['status'])) $status = (string)$replyRow['status'];
+    }
+
+    fb_reply([
+        'ok' => true,
+        'feedback' => [
+            'id' => $found['id'],
+            'time' => $found['time'] ?? '',
+            'type' => $found['type'] ?? 'other',
+            'content' => $found['content'] ?? '',
+            'status' => $status,
+        ],
+        'replies' => $replies,
+    ]);
+}
+
 /* ── 3. 蜜罐：大概率是机器人 ──────────────────────────────────────────── */
 if (!empty($in['hp'])) {
     fb_reply(['ok' => true, 'skipped' => true]);
@@ -127,8 +178,12 @@ if (!is_dir($fbDir) && !@mkdir($fbDir, 0775, true) && !is_dir($fbDir)) {
     fb_reply(['ok' => false, 'error' => 'storage_unavailable', 'message' => '服务端存储目录不可用'], 500);
 }
 
+$token = bin2hex(random_bytes(16));
+$tokenHash = hash('sha256', $token);
+
 $entry = [
     'id' => bin2hex(random_bytes(6)),
+    'token_hash' => $tokenHash,
     'time' => gmdate('c'),
     'type' => $type,
     'content' => $content,
@@ -166,4 +221,4 @@ foreach ($rates as $k => $list) {
 }
 @file_put_contents($rateFile, json_encode($rates, JSON_UNESCAPED_UNICODE), LOCK_EX);
 
-fb_reply(['ok' => true, 'id' => $entry['id']]);
+fb_reply(['ok' => true, 'id' => $entry['id'], 'token' => $token]);

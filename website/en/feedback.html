@@ -48,7 +48,7 @@
     </div>
   </section>
 
-  <!-- 反馈表单 -->
+  <!-- Feedback form -->
   <section class="section section--flush">
     <div class="wrap">
       <div class="grid grid--2" style="gap:44px;align-items:start">
@@ -68,7 +68,7 @@
           <div class="fb-field">
             <label for="fbContent">Details <small>required, at least 5 characters</small></label>
             <textarea class="fb-textarea" id="fbContent" name="content" required
-              placeholder="遇到什么问题、在哪个板块、复现步骤是什么？&#10;&#10;如果是 Bug，建议写上：&#10;1. 你做了什么&#10;2. 期望看到什么&#10;3. 实际发生了什么"></textarea>
+              placeholder="What happened, in which module, and how can it be reproduced?&#10;&#10;For a bug it helps to include:&#10;1. what you did&#10;2. what you expected&#10;3. what actually happened"></textarea>
             <div class="fb-hint"><span id="fbCount">0</span> / 4000</div>
           </div>
 
@@ -79,12 +79,12 @@
                 placeholder="Email / QQ / WeChat so I can reply" maxlength="120" />
             </div>
             <div class="fb-field">
-              <label for="fbVersion">Your version <small>optional，可自动填</small></label>
-              <input class="fb-input" id="fbVersion" name="version" type="text" placeholder="例如 2.5.1" maxlength="40" />
+              <label for="fbVersion">Your version <small>optional, filled automatically</small></label>
+              <input class="fb-input" id="fbVersion" name="version" type="text" placeholder="e.g. 2.5.1" maxlength="40" />
             </div>
           </div>
 
-          <!-- 蜜罐：人类看不到，机器人会填 -->
+          <!-- honeypot: hidden from humans, bots fill it -->
           <div class="fb-hp" aria-hidden="true">
             <label for="fbHp">Leave empty</label>
             <input id="fbHp" name="hp" type="text" tabindex="-1" autocomplete="off" />
@@ -92,7 +92,7 @@
 
           <div class="btn-row">
             <button class="btn btn--primary" id="fbSubmit" type="submit">Submit feedback</button>
-            <a class="btn btn--ghost" href="/faq.html">Read the FAQ first</a>
+            <a class="btn btn--ghost" href="/en/faq.html">Read the FAQ first</a>
           </div>
           <div class="fb-status" id="fbStatus" role="status" aria-live="polite"></div>
         </form>
@@ -105,23 +105,36 @@
           <div class="grid" style="gap:12px">
             <div class="capability">
               <span class="cap-ico" data-icon="check"></span>
-              <div><b>Recorded on the project server</b><p>不存在第三方平台，也没有注册流程；Details按 JSONL 追加保存在服务端数据目录。</p></div>
+              <div><b>Recorded on your own server</b><p>No third-party platform and no sign-up. Entries are appended as JSONL under the server's data directory.</p></div>
             </div>
             <div class="capability">
               <span class="cap-ico" data-icon="shield"></span>
-              <div><b>No raw IP stored</b><p>只保存加盐哈希用于限流，不保存 IP 明文；同一 IP 每小时最多 5 条、每天 20 条。</p></div>
+              <div><b>No raw IP address stored</b><p>Only a salted hash is kept for rate limiting. The same IP is limited to 5 submissions per hour and 20 per day.</p></div>
             </div>
             <div class="capability">
               <span class="cap-ico" data-icon="clock"></span>
-              <div><b>Replies are not guaranteed</b><p>缺少Contact时只做记录。如果是能复现的 Bug，会优先修。</p></div>
+              <div><b>Replies are not guaranteed</b><p>Without contact details an entry is only recorded. Reproducible bugs are fixed first.</p></div>
             </div>
           </div>
+
+          <div class="hint-box" id="fbLookupBox">
+            <b>Already sent feedback? Check for replies</b>
+            <p style="margin:6px 0 10px;color:var(--muted)">After submitting you receive a feedback ID and a lookup token. Both are required to view replies.</p>
+            <div class="fb-row">
+              <input class="fb-input" id="fbLookupId" placeholder="Feedback ID" maxlength="12" />
+              <input class="fb-input" id="fbLookupToken" placeholder="Lookup token" maxlength="32" />
+            </div>
+            <button class="btn" id="fbLookupBtn" type="button" style="margin-top:10px">Check replies</button>
+            <div class="fb-status" id="fbLookupStatus" role="status" aria-live="polite"></div>
+            <div id="fbReplies"></div>
+          </div>
+
           <div class="hint-box">
             <b>You do not need to send these</b>
             <ul>
-              <li>「安装时提示未知发布者」——安装包未做代码签名，点「更多信息 → 仍要运行」即可</li>
-              <li>「旧版本检查更新失败」——2.4.x 及更早的已知问题，手动装一次 2.5.1 后正常</li>
-              <li>「局域网控制连不上」——先确认手机与电脑在同一 Wi-Fi，且没开 AP 隔离</li>
+              <li>"Unknown publisher" during install — the installer is not code-signed yet; choose "More info → Run anyway"</li>
+              <li>Old versions fail to check for updates — a known 2.4.x issue; install 2.5.1 once manually and it works afterwards</li>
+              <li>LAN control cannot connect — make sure phone and PC are on the same Wi-Fi and AP isolation is off</li>
             </ul>
           </div>
         </div>
