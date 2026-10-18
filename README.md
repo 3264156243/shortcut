@@ -1,6 +1,21 @@
 # ShortCut
 
-ShortCut 是一个面向 Windows 的桌面多功能快捷工具，包含快捷方式面板、任务墙、翻译、电脑驾驶舱和常驻桌面的 SC球 灵动岛。项目基于 Electron、React、TypeScript、Vite、Zustand、Framer Motion 和 Tailwind CSS 构建。
+ShortCut 是一个**桌面 + 移动互联**的多功能效率工具：Windows 端提供快捷面板、任务墙、文件转换、电脑驾驶舱、截图翻译与常驻桌面的 **SC球（灵动岛）**；移动端通过 Web / 安卓 App 与桌面联动（任务墙、文件快传、手机远程控制电脑）。
+
+> **当前版本 v2.5.1** · 桌面端已完成 **Electron → Tauri 2** 技术栈重构（体积 -94%、内存 -30%）
+
+## 技术栈
+
+| 部分 | 技术 |
+|---|---|
+| **桌面端**（主线） | **Tauri 2.12** + Rust · 前端 React 19 + TypeScript + Vite + Zustand + Tailwind CSS + Framer Motion |
+| **移动 Web** | 原生 JS（`server/sync/web/**`：任务墙 / 文件共享 / 电脑控制 / 绑定） |
+| **安卓端** | 原生 Kotlin + Jetpack Compose（`android/`） |
+| **服务端** | PHP（同步与绑定 `server/sync/`）+ Node（实时中继 `server/control-relay/`）+ nginx |
+
+> ℹ️ **Electron 版已于 2026-10 退役**（`electron/` 与 `electron-builder` 已从仓库移除）。
+> 老用户（≤2.4.5 Electron 版）可通过应用内「检查更新」自动迁移到 Tauri 版；
+> 历史安装包仍归档在 `https://shortcut.326415.xyz/updates/`。
 
 ## 功能特性
 
@@ -33,6 +48,20 @@ ShortCut 是一个面向 Windows 的桌面多功能快捷工具，包含快捷�
 - 空闲 10 分钟自动暂停，锁屏/睡眠不补记
 - 支持查看历史日期和删除单日数据
 - 后台常驻应用计时与忽略名单管理
+
+### 电脑控制（移动互联）
+
+- 手机远程操作电脑：键盘输入、触控板、常用组合键、剪贴板读写
+- **云端模式**：任意网络（4G / 异地 Wi-Fi）经中继连接，扫码或一键直连
+- **局域网模式**：同一 Wi-Fi 下直连 `9823` 端口，延迟最低
+- 手机端实时显示云端通道 / 输入注入 / 桌面在线状态
+
+### 移动互联
+
+- **任务墙同步**：手机钉任务 → 电脑任务墙（桌面离线时排队，上线自动接收）
+- **文件快传**：手机 ↔ 电脑互传文件与文本，支持分享与过期清理
+- **身份与设备**：绑定码配对、设备列表管理、多端身份隔离
+- 模块清单（`module.list`）由服务端下发，新增板块无需改动移动端
 
 ### 电脑驾驶舱
 
@@ -75,106 +104,99 @@ ShortCut 是一个面向 Windows 的桌面多功能快捷工具，包含快捷�
 
 ## 环境要求
 
-- Windows 10 / 11（64 位）
-- Node.js
-- npm
+- Windows 10 / 11（64 位，桌面端）
+- **Rust**（stable）+ Visual Studio C++ Build Tools（Tauri 编译需要）
+- Node.js 20+ / npm
+- WebView2 Runtime（Windows 11 自带）
+- 安卓端：JDK 21 + Android SDK（见 `android/README.md`）
 
-## 安装依赖
+## 快速开始
 
 ```bash
 npm install
-```
 
-## 开发运行
-
-仅启动 Vite 渲染进程：
-
-```bash
+# 前端热更新（浏览器调试 UI）
 npm run dev
+
+# 启动完整桌面端（Tauri，普通权限）
+powershell -ExecutionPolicy Bypass -File scripts\run-app.ps1
 ```
 
-启动 Electron 开发环境：
-
-```bash
-npm run electron:dev
-```
+> ⚠️ **必须以普通权限启动**：管理员权限会触发 Windows UIPI，导致「从资源管理器拖文件到 SC球」整体失效（症状是禁止光标 + 无任何事件）。
 
 ## 构建
 
-构建前端产物：
-
 ```bash
+# 1. 前端构建（必须先执行：frontendDist 是编译期嵌入的）
 npm run build
+
+# 2. 打包安装包（必须在 vcvars64 环境里，否则 lzma-sys 的 C 编译会失败）
+& "scripts\install-local.ps1" -Build     # 构建 + 安装到本地固定目录 + 以普通权限启动
 ```
 
-构建 Windows 解包目录：
+发布用的 NSIS 安装包需手动执行：
 
-```bash
-npm run electron:build:dir
+```bat
+call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+set TAURI_SIGNING_PRIVATE_KEY=<密钥内容>
+set TAURI_SIGNING_PRIVATE_KEY_PASSWORD=<密钥口令>
+npx tauri build --features custom-protocol
 ```
 
-构建 Windows 安装包：
-
-```bash
-npm run electron:build
-```
+产物：`src-tauri/target/release/bundle/nsis/ShortCut_<ver>_x64-setup.exe`（+ `.sig` 更新签名）
 
 ## 自动更新发布
 
-正式安装版使用 `electron-updater` 检查更新。程序启动后只检查版本，不会自动下载；发现新版本时会展示版本号和本次更新内容，由用户确认后才开始下载。用户配置保存在安装目录之外，不会因为覆盖安装丢失。
+正式安装版使用 **Tauri updater**（`tauri-plugin-updater`）检查更新：读取 `updates/latest.json`，用内置 minisign 公钥校验安装包签名。**只检查不自动装**——发现新版本时展示版本号与更新说明，由用户确认后才下载安装。用户配置保存在安装目录之外（`%APPDATA%`），覆盖升级不会丢失。
 
-每个版本都必须在 `release-notes` 目录中提供同版本说明文件，例如：
+历史版本说明保留在 `release-notes/` 目录，例如 `release-notes/2.4.0.md`。
 
-```text
-release-notes/2.4.0.md
+```powershell
+# 1. 三处同步版本号：src-tauri/Cargo.toml、src-tauri/tauri.conf.json、package.json
+# 2. 按上面「构建」章节打包（拿到 .exe 与 .sig）
+# 3. 上传 .exe 与 .sig 到服务器 updates 目录
+# 4. 更新 updates/latest.json（version / pub_date / url / signature=**.sig 文件全文**）
 ```
 
-构建脚本会自动校验版本说明，将当前版本内容嵌入 `latest.yml`，为所有历史版本生成独立说明文件，并生成便于网站读取的 `release-notes.json`。更新目录结构：
+发布链路（详见 [docs/server/updater-deploy.md](./docs/server/updater-deploy.md)）：
 
 ```text
 https://shortcut.326415.xyz/updates/
-├── latest.yml
-├── ShortCut-x.x.x-Setup.exe
-├── ShortCut-x.x.x-Setup.exe.blockmap
-├── ShortCut-x.x.x-ReleaseNotes.md
-└── release-notes.json
+├── latest.json                       ← Tauri updater 读取（minisign 签名校验）
+├── ShortCut_2.5.1_x64-setup.exe
+├── ShortCut_2.5.1_x64-setup.exe.sig
+├── latest.yml                         ← 兼容旧版 Electron 客户端（迁移引导）
+└── android/                           ← 安卓端
+    ├── latest.json                    ← 以 versionCode 判据
+    └── ShortCut-x.x.x.apk
 ```
 
-发布步骤：
-
-```powershell
-# 1. 修改 package.json 中的版本号
-# 2. 新增 release-notes/x.x.x.md
-# 3. 构建并检查安装包
-npm run electron:build
-
-# 4. 用户确认后再上传服务器
-npm run release:update
-```
-
-服务器静态目录为 `/www/wwwroot/ShortCut`，项目介绍网站放在根目录，更新文件放在 `updates` 子目录，激活码管理后台放在 `activation` 子目录。
+服务器静态目录为 `/www/wwwroot/ShortCut`：项目介绍网站放在根目录，更新文件放在 `updates` 子目录，激活码管理后台放在 `activation` 子目录。
 
 ## 配置存储
 
-ShortCut 运行时会把用户配置写入 Electron 的 `userData` 目录。主配置文件使用 JSON 格式，并通过临时文件写入后重命名的方式降低配置损坏风险；每次写入前保留最近 3 份时间点备份，启动时自动检查配置完整性并从健康备份恢复。
+用户配置写入 `%APPDATA%\ShortCut\shortcut\config.json`（Tauri 与旧 Electron 版共用同一位置，升级不丢配置）。
+写入采用「临时文件 + 重命名」，每次写入前保留最近 3 份时间点备份，启动时校验完整性并从健康备份恢复。
+
+应用日志：`%LOCALAPPDATA%\com.wanan.shortcut\logs\tauri.log`（**时间戳为 UTC，比北京时间早 8 小时**）。
 
 ## 项目结构
 
-> ⚠️ 本文档是**面向用户**的功能介绍，技术栈说明可能滞后：项目正在从 Electron 迁移到 **Tauri 2**，
-> 当前主线是 `src/` + `src-tauri/`（详见 [docs/README.md](./docs/README.md) 的文档地图）。
-
 ```text
-src/              React 前端源码（Tauri 与 Electron 共用的多窗口入口：index/island/tasklist/…）
+src/              React 前端源码（多窗口入口：index / island / tasklist / deepseekball / reminder / voiceinput）
 src/components/   前端 UI 组件
 src/store/        Zustand 应用状态
-src-tauri/        当前主线：Tauri 2 桌面壳（Rust）
-electron/         历史：Electron 主进程与 preload 桥接（已冻结，不再改动）
-resources/        运行时资源：图标、局域网控制静态页（sj/）、侧车（硬件监控/音乐桥/语音）
-server/           服务端：同步与绑定（sync/）、激活（activation/）、实时中继（control-relay/）
+src-tauri/        桌面壳：Tauri 2 + Rust（窗口/拖放/穿透/同步/控制/侧车）
+resources/        运行时资源：图标、局域网控制静态页（sj/）、侧车（硬件监控/音乐桥/语音/用量）
+public/           静态页面（翻译气泡、截图覆盖层）
+server/           服务端：同步与绑定（sync/）、激活（activation/）、实时中继（control-relay/）、nginx
+android/          安卓端（原生 Kotlin，独立协作者维护，见 android/README.md）
 tools/            开发与联调工具（含 mock-desktop 假桌面桩）
-android/          安卓端（原生 Kotlin，另一位协作者负责）
+scripts/          本地启动 / 安装 / 侧车构建脚本
 docs/             全部文档 → 先看 docs/README.md 的文档地图
 ```
+
+> ℹ️ **Electron 遗留**：`electron/`、`electron-builder.json5` 等已于 2026-10 移除，历史见 git。
 
 ### 文档去哪找
 
@@ -186,6 +208,19 @@ docs/             全部文档 → 先看 docs/README.md 的文档地图
 | 提问 / 要接口 / 看双方待办 | [`docs/协作交流-问答台.md`](./docs/协作交流-问答台.md) |
 | 桌面端踩坑与回归（启动方式、构建顺序等） | [`docs/desktop/tauri-regression.md`](./docs/desktop/tauri-regression.md) |
 | Electron 时期的资料（已归档） | [`docs/archive/`](./docs/archive/) |
+
+## 协作开发
+
+本仓库由两端并行开发，边界见 [docs/协同开发规范.md](./docs/协同开发规范.md)：
+
+| 分支 | 归属 | 说明 |
+|---|---|---|
+| `main` | 桌面侧 | 主线（默认分支） |
+| `codex/tauri2-migration` | 桌面侧 | 桌面端开发分支 |
+| `feature/android-shell` | 安卓侧 | 安卓端开发分支（独立协作者维护） |
+
+- **接口契约唯一真源**：[`docs/移动互联-协议契约.md`](./docs/移动互联-协议契约.md)（与代码冲突即为 bug）
+- **提问与待办**：[`docs/协作交流-问答台.md`](./docs/协作交流-问答台.md)
 
 ## 需求文档
 
