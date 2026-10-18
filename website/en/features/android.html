@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Android App — native Android client | ShortCut</title>
+<meta name="description" content="The ShortCut Android app: a native Kotlin client speaking the same contract as the desktop app. In-app updates, direct LAN connection and device pairing." />
+<meta name="theme-color" content="#0a0a0b" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="ShortCut" />
+<meta property="og:title" content="Android App — native Android client | ShortCut" />
+<meta property="og:description" content="The ShortCut Android app: a native Kotlin client speaking the same contract as the desktop app. In-app updates, direct LAN connection and device pairing." />
+<meta property="og:image" content="/assets/img/og.png" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<link rel="icon" href="/assets/img/favicon.ico" sizes="any" />
+<link rel="icon" type="image/png" href="/assets/img/logo-64.png" sizes="64x64" />
+<link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
+
+  <script>
+  /* Apply colour mode before styles load to avoid a flash */
+  (function () {
+    try {
+      var m = localStorage.getItem('sc-mode');
+      if (m !== 'light' && m !== 'dark') m = 'dark';
+      document.documentElement.setAttribute('data-mode', m);
+    } catch (e) {
+      document.documentElement.setAttribute('data-mode', 'dark');
+    }
+  })();
+  </script>
+<link rel="stylesheet" href="/assets/css/site.css" />
+<link rel="stylesheet" href="/assets/css/pages.css" />
+</head>
+
+<body data-page="features">
+
+<div id="site-nav"></div>
+
+<main>
+
+  <section class="page-head">
+    <div class="wrap">
+        <nav class="crumbs" aria-label="Breadcrumb"><a href="/en/">Home</a><span>/</span><a href="/en/features/shortcut.html">Features</a><span>/</span><span>Android App</span></nav>
+      <h1>The Android app:<br />the interconnect, in your pocket</h1>
+      <p>The mobile web pages work in any browser, while the Android app is native — smoother, with in-app updates and a direct LAN connection on the same Wi-Fi. It speaks the same API contract as the desktop app, so features ship together.</p>
+    </div>
+  </section>
+
+  <section class="section section--flush">
+    <div class="wrap">
+<div class="feature-lead">
+        <div class="feature-lead__text reveal"><p class="hero__lead" style="margin-bottom:0">The mobile web pages work in any browser, while the Android app is native — smoother, with in-app updates and a direct LAN connection on the same Wi-Fi. It speaks the same API contract as the desktop app, so features ship together.</p></div>
+        <div class="reveal">        <div class="grid" style="gap:18px;justify-items:center">
+          <div class="phone" role="img" aria-label="ShortCut interface illustration">
+            <div class="phone__screen">
+              <div class="phone__title"><span class="dot-live"></span>ShortCut</div>
+              <div class="phone__card is-accent"><span class="pc-dot"></span>My PC · connected</div>
+              <div class="phone__card"><span class="pc-dot"></span>Task Wall</div>
+              <div class="phone__card"><span class="pc-dot"></span>File transfer</div>
+              <div class="phone__card"><span class="pc-dot"></span>电脑Control</div>
+              <div class="phone__card"><span class="pc-dot"></span>Check for updates</div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">Details</span>
+        <h2>One contract with the desktop, features moving forward together.</h2>
+      </div>
+      <div class="grid grid--2" style="gap:14px">
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="android"></span>
+            <div><b>Native Kotlin client</b><p>Not a wrapped web view — the UI and interactions follow Android conventions.</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="cloud"></span>
+            <div><b>In-app updates</b><p>Reads the update manifest, and when a new version exists it guides the install directly.</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="bolt"></span>
+            <div><b>Direct LAN connection</b><p>On the same Wi-Fi it connects to the desktop directly for lower command latency.</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="phone"></span>
+            <div><b>Device pairing</b><p>Pair the phone with the desktop once using a pairing code; it is recognised afterwards.</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="send"></span>
+            <div><b>Task wall, transfer, control</b><p>All three interconnect features are available from the phone.</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="shield"></span>
+            <div><b>A single API contract</b><p>Every endpoint and field follows the interconnect contract, so the two ends never disagree.</p></div>
+          </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <nav class="pager" aria-label="Feature navigation">
+        <a href="/en/features/transfer.html"><small>Previous feature</small><b>← File Transfer</b></a>
+        <span></span>
+      </nav>
+    </div>
+  </section>
+
+  <!-- Call to action -->
+  <section class="cta">
+    <div class="wrap">
+      <h2>Try <span class="grad">ShortCut</span></h2>
+      <p id="ctaSub">Windows 10 / 11 · free download · no account needed</p>
+      <div class="btn-row center">
+        <a class="btn btn--primary btn--lg" href="/en/download.html">Download the latest</a>
+        <a class="btn btn--ghost btn--lg" href="/en/faq.html">Read the FAQ first</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div id="site-footer"></div>
+
+  <script src="/assets/js/data-en.js"></script>
+  <script src="/assets/js/data.js"></script>
+  <script src="/assets/js/site.js"></script>
+  <script src="/assets/js/motion.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-icon]'), function (n) {
+      n.innerHTML = SC.icon(n.getAttribute('data-icon'), 20);
+    });
+  })();
+  </script>
+</body>
+</html>

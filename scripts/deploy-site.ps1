@@ -35,8 +35,8 @@ if (-not $ip -or -not $user -or -not $pass) { throw '凭据文件缺少 IP / 用
 $remoteRoot = '/www/wwwroot/ShortCut'
 
 # ── 2. 白名单：只发布这些内容 ────────────────────────────────────────────────
-$rootFiles = @('index.html', 'download.html', 'changelog.html', 'faq.html')
-$dirs      = @('features', 'assets')
+$rootFiles = @('index.html', 'download.html', 'changelog.html', 'faq.html', 'feedback.html')
+$dirs      = @('features', 'en', 'assets')
 
 $stage = Join-Path $env:TEMP ('sc-site-' + [guid]::NewGuid().ToString('N').Substring(0, 6))
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
@@ -88,8 +88,8 @@ cd $remoteRoot
 [ -f index.html ] && cp -p index.html index.html.bak-$ts
 unzip -o -q /tmp/sc-site.zip
 chown -R www:www index.html download.html changelog.html faq.html features assets
-chmod 644 *.html features/*.html assets/css/* assets/js/* assets/img/*
-chmod 755 features assets assets/css assets/js assets/img
+chmod -R 644 features en assets/js assets/css assets/img 2>/dev/null; chmod 644 *.html; find features en -type d -exec chmod 755 {} \;
+chmod 755 features en assets assets/css assets/js assets/img
 rm -f /tmp/sc-site.zip
 echo "OK backup=index.html.bak-$ts"
 "@

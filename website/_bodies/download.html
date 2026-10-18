@@ -1,0 +1,118 @@
+  <!-- 最新版 -->
+  <section class="section section--flush">
+    <div class="wrap">
+      <div class="dl-hero">
+        <div class="reveal">
+          <span class="badge"><span class="dot-live"></span>Windows 10 / 11 · 64 位</span>
+          <div class="dl-meta">
+            <span class="tag" id="dlVersion">版本读取中…</span>
+            <span class="tag" id="dlDate">—</span>
+            <span class="tag" id="dlSize">—</span>
+          </div>
+          <div class="btn-row">
+            <a class="btn btn--primary btn--lg" id="dlMain" href="/updates/">官网直链下载</a>
+            <a class="btn btn--ghost btn--lg" href="#channels">其他下载渠道</a>
+          </div>
+          <div class="dl-facts" style="margin-top:26px">
+            <div class="dl-fact"><b id="factVersion">—</b><span>当前版本</span></div>
+            <div class="dl-fact"><b id="factSize">—</b><span>安装包体积</span></div>
+            <div class="dl-fact"><b>Tauri 2</b><span>技术栈</span></div>
+          </div>
+        </div>
+        <div class="reveal">
+          <div class="device" role="img" aria-label="安装包信息示意图">
+            <div class="device__bar">
+              <span class="device__dots"><i></i><i></i><i></i></span>
+              <span class="device__title">ShortCut 安装程序</span>
+            </div>
+            <div class="pane" style="grid-template-columns:1fr;min-height:auto;padding:22px;gap:14px">
+              <div class="setting-row"><div>目标平台<small>Windows 10 / 11（64 位）</small></div><span class="tag">x64</span></div>
+              <div class="setting-row"><div>安装位置<small>由安装程序管理，卸载可从设置里完成</small></div><span class="tag">自定义</span></div>
+              <div class="setting-row"><div>更新签名<small>更新包带签名校验，不会被替换</small></div><span class="tag">已校验</span></div>
+              <div class="setting-row"><div>用户数据<small>配置存放在 %APPDATA%\\ShortCut，覆盖安装不丢</small></div><span class="tag">保留</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 四渠道 -->
+  <section class="section section--alt" id="channels">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">下载渠道</span>
+        <h2>四个渠道，任选其一</h2>
+        <p>官网直链始终是最新版本；蓝奏云在国内较快但需人工同步，版本可能滞后；Gitee / GitHub 为源码仓库。</p>
+      </div>
+      <div class="channel-grid" id="channelGrid"><!-- 由 download.js 渲染 --></div>
+    </div>
+  </section>
+
+  <!-- 安卓端 -->
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">安卓端</span>
+        <h2>手机上也能用</h2>
+      </div>
+      <div class="android-card reveal">
+        <span class="ac-icon" data-icon="android"></span>
+        <div>
+          <b style="font-size:16px">ShortCut 安卓端</b>
+          <div style="color:var(--muted);font-size:13.5px;margin-top:4px" id="androidMeta">正在读取版本…</div>
+        </div>
+        <a class="btn btn--primary" id="androidDl" href="#">下载 APK</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 安装步骤 -->
+  <section class="section section--alt">
+    <div class="wrap">
+      <div class="grid grid--2" style="gap:44px;align-items:start">
+        <div class="reveal">
+          <div class="section-head" style="margin-bottom:26px">
+            <span class="eyebrow">安装步骤</span>
+            <h2>三步装好</h2>
+          </div>
+          <div class="steps">
+            <div class="step"><div><b>下载安装包</b><p>从上面任一渠道下载 <code>ShortCut_x.y.z_x64-setup.exe</code>。</p></div></div>
+            <div class="step"><div><b>运行安装程序</b><p>若出现 SmartScreen「未知发布者」提示，点「更多信息 → 仍要运行」。安装包当前未做代码签名。</p></div></div>
+            <div class="step"><div><b>正常权限启动</b><p><strong>不要以管理员身份运行</strong>：管理员权限会触发 Windows 的窗口隔离机制，导致「从资源管理器拖文件到 SC球」整体失效。</p></div></div>
+          </div>
+        </div>
+        <div class="reveal">
+          <div class="section-head" style="margin-bottom:26px">
+            <span class="eyebrow">系统要求</span>
+            <h2>需要什么环境</h2>
+          </div>
+          <div class="narrow">
+            <table class="hotkey-table"><tbody>
+              <tr><td>操作系统</td><td>Windows 10 / 11（64 位）</td></tr>
+              <tr><td>运行时</td><td>WebView2（Windows 11 已自带；Win10 若无，安装器会提示）</td></tr>
+              <tr><td>磁盘</td><td>约 40 MB（安装后）</td></tr>
+              <tr><td>权限</td><td>普通用户权限即可；驾驶舱温度如需更精确可单独授权</td></tr>
+              <tr><td>网络</td><td>离线可用；移动互联功能需你的自建服务端</td></tr>
+            </tbody></table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 安装常见问题 -->
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">安装问题</span>
+        <h2>装的时候可能遇到</h2>
+      </div>
+      <div class="narrow">
+        <details class="faq"><summary>提示「未知发布者」怎么办？</summary><div class="faq__body"><p>安装包未做代码签名（Authenticode），Windows SmartScreen 会提示未知发布者。点「更多信息 → 仍要运行」即可。更新包本身有签名校验，不会被替换。</p></div></details>
+        <details class="faq"><summary>覆盖安装会不会丢配置和任务？</summary><div class="faq__body"><p>不会。配置与任务存放在 <code>%APPDATA%\\ShortCut\\shortcut</code>，与安装目录分离；每次写入还会保留最近 3 份备份。</p></div></details>
+        <details class="faq"><summary>旧版本（2.4.x 及更早）的自带更新会失败？</summary><div class="faq__body"><p>是的。旧版的「检查更新」读取的是 Electron 时期留下的清单格式，该问题在 2.5.1 修复。手动下载一次 2.5.1 之后即可正常自动更新。</p></div></details>
+        <details class="faq"><summary>能不能绿色版 / 便携版？</summary><div class="faq__body"><p>目前只提供 NSIS 安装包。它会把自启与快捷方式一并配置好；解压即用的便携版可能后续提供。</p></div></details>
+      </div>
+    </div>
+  </section>

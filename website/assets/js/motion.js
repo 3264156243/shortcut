@@ -193,6 +193,53 @@
     /* 键盘/触摸滚动离开视口时复位，避免停住不动 */
     global.addEventListener('blur', reset);
   }
+
+  /* ═══ 6b. 所有演示面板：悬停跟随光标的 3D 视差 ═════════════════════════
+     适用：功能页里的设备框 / 手机 / 便签墙 / 文件列表等示意图
+     做法：以元素自身为枢轴，perspective + rotateX/Y + 轻微位移，
+           比只做旋转更像"整块板子跟着鼠标动" */
+  function initTiltAll() {
+    if (!global.matchMedia || !global.matchMedia('(hover: hover)').matches) return;
+
+    var sel = '.reveal > .device, .reveal > .phone, .reveal > .sticky-mock, .reveal > .file-mock';
+    var els = document.querySelectorAll(sel);
+    if (!els.length) return;
+
+    var STRENGTH = reduce ? 3 : 6;      /* 最大倾角（度） */
+    var SHIFT = reduce ? 3 : 7;         /* 最大位移（px） */
+
+    Array.prototype.forEach.call(els, function (el) {
+      var host = el.parentElement || el;
+      var frame = null;
+
+      function onMove(e) {
+        var r = host.getBoundingClientRect();
+        if (!r.width || !r.height) return;
+        var px = (e.clientX - r.left) / r.width - .5;
+        var py = (e.clientY - r.top) / r.height - .5;
+
+        el.style.transform =
+          'perspective(1000px) ' +
+          'rotateX(' + (-py * 2 * STRENGTH).toFixed(2) + 'deg) ' +
+          'rotateY(' + (px * 2 * STRENGTH).toFixed(2) + 'deg) ' +
+          'translate3d(' + (px * SHIFT).toFixed(1) + 'px, ' + (py * SHIFT).toFixed(1) + 'px, 0) ' +
+          'scale(1.015)';
+        el.style.transition = 'transform .1s linear, box-shadow .4s';
+        el.style.willChange = 'transform';
+      }
+
+      function reset() {
+        el.style.transform = '';
+        el.style.transition = 'transform .7s cubic-bezier(.16,1,.3,1)';
+        el.style.willChange = '';
+      }
+
+      var throttled = rafThrottle(onMove);
+      host.addEventListener('mouseenter', function (e) { onMove(e); }, { passive: true });
+      host.addEventListener('mousemove', throttled, { passive: true });
+      host.addEventListener('mouseleave', reset, { passive: true });
+    });
+  }
   /* ═══ 7. 锚点平滑滚动（修正固定导航遮挡）═══════════════════════════════ */
   function initAnchors() {
     document.addEventListener('click', function (e) {
@@ -211,7 +258,7 @@
 
   /* ═══ 启动（每项独立，互不影响）═══════════════════════════════════════ */
   function boot() {
-    var tasks = [initProgress, initOrbs, initSpotlight, initCounts, initStagger, initFigureTilt, initAnchors];
+    var tasks = [initProgress, initOrbs, initSpotlight, initCounts, initStagger, initFigureTilt, initTiltAll, initAnchors];
     tasks.forEach(function (fn) {
       try { fn(); } catch (err) { /* 单项失败不影响其它 */ }
     });

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Download ShortCut — desktop efficiency tool for Windows</title>
+<meta name="description" content="Download the latest ShortCut: official direct link, Lanzou cloud, Gitee and GitHub, plus the Android APK. Windows 10 / 11 64-bit." />
+<meta name="theme-color" content="#0a0a0b" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="ShortCut" />
+<meta property="og:title" content="Download ShortCut — desktop efficiency tool for Windows" />
+<meta property="og:description" content="Download the latest ShortCut: official direct link, Lanzou cloud, Gitee and GitHub, plus the Android APK. Windows 10 / 11 64-bit." />
+<meta property="og:image" content="/assets/img/og.png" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<link rel="icon" href="/assets/img/favicon.ico" sizes="any" />
+<link rel="icon" type="image/png" href="/assets/img/logo-64.png" sizes="64x64" />
+<link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
+
+  <script>
+  /* Apply colour mode before styles load to avoid a flash */
+  (function () {
+    try {
+      var m = localStorage.getItem('sc-mode');
+      if (m !== 'light' && m !== 'dark') m = 'dark';
+      document.documentElement.setAttribute('data-mode', m);
+    } catch (e) {
+      document.documentElement.setAttribute('data-mode', 'dark');
+    }
+  })();
+  </script>
+<link rel="stylesheet" href="/assets/css/site.css" />
+<link rel="stylesheet" href="/assets/css/pages.css" />
+</head>
+
+<body data-page="download">
+
+<div id="site-nav"></div>
+
+<main>
+
+  <section class="page-head">
+    <div class="wrap">
+        <nav class="crumbs" aria-label="Breadcrumb"><a href="/en/">Home</a><span>/</span><span>Download</span></nav>
+      <h1>Download ShortCut</h1>
+      <p>Pick a channel. The official direct link always carries the newest build; Lanzou is faster in mainland China but is uploaded by hand, so its version may lag behind.</p>
+    </div>
+  </section>
+
+  <!-- 最新版 -->
+  <section class="section section--flush">
+    <div class="wrap">
+      <div class="dl-hero">
+        <div class="reveal">
+          <span class="badge"><span class="dot-live"></span>Windows 10 / 11 · 64-bit</span>
+          <div class="dl-meta">
+            <span class="tag" id="dlVersion">Reading version…</span>
+            <span class="tag" id="dlDate">—</span>
+            <span class="tag" id="dlSize">—</span>
+          </div>
+          <div class="btn-row">
+            <a class="btn btn--primary btn--lg" id="dlMain" href="/updates/">Official direct download</a>
+            <a class="btn btn--ghost btn--lg" href="#channels">Other download channels</a>
+          </div>
+          <div class="dl-facts" style="margin-top:26px">
+            <div class="dl-fact"><b id="factVersion">—</b><span>Current version</span></div>
+            <div class="dl-fact"><b id="factSize">—</b><span>Installer size</span></div>
+            <div class="dl-fact"><b>Tauri 2</b><span>Stack</span></div>
+          </div>
+        </div>
+        <div class="reveal">
+          <div class="device" role="img" aria-label="installer信息示意图">
+            <div class="device__bar">
+              <span class="device__dots"><i></i><i></i><i></i></span>
+              <span class="device__title">ShortCut Installer</span>
+            </div>
+            <div class="pane" style="grid-template-columns:1fr;min-height:auto;padding:22px;gap:14px">
+              <div class="setting-row"><div>Target platform<small>Windows 10 / 11 (64-bit)</small></div><span class="tag">x64</span></div>
+              <div class="setting-row"><div>Install location<small>Managed by the installer; uninstall from Settings</small></div><span class="tag">Custom</span></div>
+              <div class="setting-row"><div>Update signature<small>Update packages are signature-checked and cannot be swapped</small></div><span class="tag">Verified</span></div>
+              <div class="setting-row"><div>User data<small>Stored in %APPDATA%\\ShortCut, kept across upgrades</small></div><span class="tag">Kept</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 四渠道 -->
+  <section class="section section--alt" id="channels">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">Download channels</span>
+        <h2>Four channels, pick one</h2>
+        <p>The official link always has the newest build; Lanzou is faster in mainland China but uploaded by hand, so it may lag. Gitee / GitHub are source repositories.</p>
+      </div>
+      <div class="channel-grid" id="channelGrid"><!-- 由 download.js 渲染 --></div>
+    </div>
+  </section>
+
+  <!-- Android App -->
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">Android App</span>
+        <h2>Also available on your phone</h2>
+      </div>
+      <div class="android-card reveal">
+        <span class="ac-icon" data-icon="android"></span>
+        <div>
+          <b style="font-size:16px">ShortCut Android App</b>
+          <div style="color:var(--muted);font-size:13.5px;margin-top:4px" id="androidMeta">Reading version…</div>
+        </div>
+        <a class="btn btn--primary" id="androidDl" href="#">Download APK</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Installation -->
+  <section class="section section--alt">
+    <div class="wrap">
+      <div class="grid grid--2" style="gap:44px;align-items:start">
+        <div class="reveal">
+          <div class="section-head" style="margin-bottom:26px">
+            <span class="eyebrow">Installation</span>
+            <h2>Three steps</h2>
+          </div>
+          <div class="steps">
+            <div class="step"><div><b>下载installer</b><p>从上面任一渠道下载 <code>ShortCut_x.y.z_x64-setup.exe</code>。</p></div></div>
+            <div class="step"><div><b>Run the installer</b><p>若出现 SmartScreen「未知发布者」提示，点「更多信息 → 仍要运行」。installer当前未做代码签名。</p></div></div>
+            <div class="step"><div><b>Launch with normal privileges</b><p><strong>Do not run as administrator</strong>: elevated processes trigger Windows UIPI, which breaks dragging files from Explorer onto the SC Ball.</p></div></div>
+          </div>
+        </div>
+        <div class="reveal">
+          <div class="section-head" style="margin-bottom:26px">
+            <span class="eyebrow">System requirements</span>
+            <h2>What you need</h2>
+          </div>
+          <div class="narrow">
+            <table class="hotkey-table"><tbody>
+              <tr><td>OS</td><td>Windows 10 / 11 (64-bit)</td></tr>
+              <tr><td>Runtime</td><td>WebView2 (bundled with Windows 11; the installer prompts on Windows 10 if missing)</td></tr>
+              <tr><td>Disk</td><td>About 40 MB installed</td></tr>
+              <tr><td>Privileges</td><td>普通用户Privileges即可；驾驶舱温度如需更精确可单独授权</td></tr>
+              <tr><td>Network</td><td>Works offline; interconnect features need your own server</td></tr>
+            </tbody></table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 安装常见问题 -->
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">Installation issues</span>
+        <h2>Things you may run into</h2>
+      </div>
+      <div class="narrow">
+        <details class="faq"><summary>What about the "unknown publisher" warning?</summary><div class="faq__body"><p>installer未做代码签名（Authenticode），Windows SmartScreen 会提示未知发布者。点「更多信息 → 仍要运行」即可。更新包本身有签名校验，不会被替换。</p></div></details>
+        <details class="faq"><summary>Will upgrading lose my settings and tasks?</summary><div class="faq__body"><p>不会。配置与任务存放在 <code>%APPDATA%\\ShortCut\\shortcut</code>，与安装目录分离；每次写入还会Kept最近 3 份备份。</p></div></details>
+        <details class="faq"><summary>Old versions (2.4.x and earlier) fail to update in-app?</summary><div class="faq__body"><p>是的。旧版的「检查更新」读取的是 Electron 时期留下的清单格式，该问题在 2.5.1 修复。手动下载一次 2.5.1 之后即可正常自动更新。</p></div></details>
+        <details class="faq"><summary>Is there a portable build?</summary><div class="faq__body"><p>目前只提供 NSIS installer。它会把自启与快捷方式一并配置好；解压即用的便携版可能后续提供。</p></div></details>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- Call to action -->
+  <section class="cta">
+    <div class="wrap">
+      <h2>Try <span class="grad">ShortCut</span></h2>
+      <p id="ctaSub">Windows 10 / 11 · free download · no account needed</p>
+      <div class="btn-row center">
+        <a class="btn btn--primary btn--lg" href="/en/download.html">Download the latest</a>
+        <a class="btn btn--ghost btn--lg" href="/en/faq.html">Read the FAQ first</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div id="site-footer"></div>
+
+  <script src="/assets/js/data-en.js"></script>
+  <script src="/assets/js/data.js"></script>
+  <script src="/assets/js/site.js"></script>
+  <script src="/assets/js/motion.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-icon]'), function (n) {
+      n.innerHTML = SC.icon(n.getAttribute('data-icon'), 20);
+    });
+  })();
+  </script>
+</body>
+</html>

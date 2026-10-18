@@ -1,0 +1,81 @@
+  <!-- 反馈表单 -->
+  <section class="section section--flush">
+    <div class="wrap">
+      <div class="grid grid--2" style="gap:44px;align-items:start">
+
+        <form class="fb-form reveal" id="fbForm" novalidate>
+          <div class="fb-field">
+            <label for="fbType">反馈类型</label>
+            <select class="fb-select" id="fbType" name="type">
+              <option value="bug">问题 / Bug</option>
+              <option value="feature">功能建议</option>
+              <option value="ui">界面与体验</option>
+              <option value="update">更新与安装</option>
+              <option value="other" selected>其它</option>
+            </select>
+          </div>
+
+          <div class="fb-field">
+            <label for="fbContent">内容 <small>必填，至少 5 个字</small></label>
+            <textarea class="fb-textarea" id="fbContent" name="content" required
+              placeholder="遇到什么问题、在哪个板块、复现步骤是什么？&#10;&#10;如果是 Bug，建议写上：&#10;1. 你做了什么&#10;2. 期望看到什么&#10;3. 实际发生了什么"></textarea>
+            <div class="fb-hint"><span id="fbCount">0</span> / 4000</div>
+          </div>
+
+          <div class="fb-row">
+            <div class="fb-field">
+              <label for="fbContact">联系方式 <small>选填</small></label>
+              <input class="fb-input" id="fbContact" name="contact" type="text"
+                placeholder="邮箱 / QQ / 微信，方便回你" maxlength="120" />
+            </div>
+            <div class="fb-field">
+              <label for="fbVersion">你的版本 <small>选填，可自动填</small></label>
+              <input class="fb-input" id="fbVersion" name="version" type="text" placeholder="例如 2.5.1" maxlength="40" />
+            </div>
+          </div>
+
+          <!-- 蜜罐：人类看不到，机器人会填 -->
+          <div class="fb-hp" aria-hidden="true">
+            <label for="fbHp">请勿填写</label>
+            <input id="fbHp" name="hp" type="text" tabindex="-1" autocomplete="off" />
+          </div>
+
+          <div class="btn-row">
+            <button class="btn btn--primary" id="fbSubmit" type="submit">提交反馈</button>
+            <a class="btn btn--ghost" href="/faq.html">先看常见问题</a>
+          </div>
+          <div class="fb-status" id="fbStatus" role="status" aria-live="polite"></div>
+        </form>
+
+        <div class="reveal">
+          <div class="section-head" style="margin-bottom:20px">
+            <span class="eyebrow">说明</span>
+            <h2>反馈会怎么处理</h2>
+          </div>
+          <div class="grid" style="gap:12px">
+            <div class="capability">
+              <span class="cap-ico" data-icon="check"></span>
+              <div><b>直接记录到你自己的服务器</b><p>不存在第三方平台，也没有注册流程；内容按 JSONL 追加保存在服务端数据目录。</p></div>
+            </div>
+            <div class="capability">
+              <span class="cap-ico" data-icon="shield"></span>
+              <div><b>不留 IP 原文</b><p>只保存加盐哈希用于限流，不保存 IP 明文；同一 IP 每小时最多 5 条、每天 20 条。</p></div>
+            </div>
+            <div class="capability">
+              <span class="cap-ico" data-icon="clock"></span>
+              <div><b>不一定逐条回复</b><p>缺少联系方式时只做记录。如果是能复现的 Bug，会优先修。</p></div>
+            </div>
+          </div>
+          <div class="hint-box">
+            <b>下面这些不用发反馈</b>
+            <ul>
+              <li>「安装时提示未知发布者」——安装包未做代码签名，点「更多信息 → 仍要运行」即可</li>
+              <li>「旧版本检查更新失败」——2.4.x 及更早的已知问题，手动装一次 2.5.1 后正常</li>
+              <li>「局域网控制连不上」——先确认手机与电脑在同一 Wi-Fi，且没开 AP 隔离</li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>

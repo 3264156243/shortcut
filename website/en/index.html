@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ShortCut — desktop efficiency tool for Windows | Quick Launch · Task Wall · SC Ball</title>
+<meta name="description" content="ShortCut is a Windows desktop efficiency tool: quick launch, task wall, SC Ball island, file conversion and screenshot translation — plus phone interconnect (task sync, file transfer, phone control). No account, data stays local by default." />
+<meta name="theme-color" content="#080a0f" />
+
+<!-- Open Graph -->
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="ShortCut" />
+<meta property="og:title" content="ShortCut — desktop efficiency tool for Windows" />
+<meta property="og:description" content="Quick launch, task wall and the SC Ball island, plus phone interconnect. Data stays local by default." />
+<meta property="og:image" content="/assets/img/og.png" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<link rel="icon" href="/assets/img/favicon.ico" sizes="any" />
+<link rel="icon" type="image/png" href="/assets/img/logo-64.png" sizes="64x64" />
+<link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
+
+<script>
+/* 明暗模式：在样式生效前应用，避免刷新闪烁 */
+(function () {
+  try {
+    var m = localStorage.getItem('sc-mode');
+    if (m !== 'light' && m !== 'dark') m = 'dark';
+    document.documentElement.setAttribute('data-mode', m);
+  } catch (e) {
+    document.documentElement.setAttribute('data-mode', 'dark');
+  }
+})();
+</script>
+<link rel="stylesheet" href="/assets/css/site.css" />
+<link rel="stylesheet" href="/assets/css/pages.css" />
+</head>
+
+<body data-page="home">
+
+<!-- 导航（由 site.js 注入） -->
+<div id="site-nav"></div>
+
+<main>
+
+  <!-- ══ 1. 首屏 ═══════════════════════════════════════════════════════ -->
+  <section class="hero">
+    <span class="hero__grid" aria-hidden="true"></span>
+    <span class="orb orb--a" aria-hidden="true"></span>
+    <span class="orb orb--b" aria-hidden="true"></span>
+    <span class="orb orb--c" aria-hidden="true"></span>
+
+    <div class="wrap hero__inner">
+      <div class="hero__text">
+        <span class="badge"><span class="dot-live"></span>v<span id="heroVersionInline">2.5.1</span> · Windows 10 / 11</span>
+        <h1>Everything in one place, <span class="grad">one keystroke away</span><br />with SC Ball on your desktop</h1>
+        <p class="hero__lead">
+          Keep your frequently used apps, files, folders and links in one place and open them with a keystroke. Tasks live on a sticky-note wall, and the always-on-screen SC Ball folds music, tasks, system stats and balance into one little pill. <strong>Nothing about your habits has to change, and there is no account to create.</strong>
+        </p>
+        <div class="btn-row">
+          <a class="btn btn--primary btn--lg" id="heroDownload" href="/en/download.html">Download free</a>
+          <a class="btn btn--ghost btn--lg" href="/en/features/shortcut.html">See what it does</a>
+        </div>
+        <div class="hero__meta">
+          <div><b id="heroVersion">—</b><span>Current version</span></div>
+          <div><b id="heroSize">7.3 MB</b><span>Installer size</span></div>
+          <div><b>Stored locally</b><span>Data stays local</span></div>
+        </div>
+      </div>
+
+      <!-- 产品示意图（纯 CSS 绘制 + 动画，非截图） -->
+      <div class="hero__figure">
+        <div class="figure-float">
+        <div class="device" role="img" aria-label="ShortCut interface illustration">
+          <div class="device__bar">
+            <span class="device__dots"><i></i><i></i><i></i></span>
+            <span class="device__title">ShortCut</span>
+            <span class="device__actions"><i></i><i></i></span>
+          </div>
+
+          <!-- 悬浮 SC球（会呼吸 / 进度 / 波形） -->
+          <div class="island-live">
+            <span class="il-dot"></span>
+            <span class="il-text">Now playing</span>
+            <span class="il-track"><span class="il-fill"></span></span>
+            <span class="il-wave"><i></i><i></i><i></i><i></i><i></i></span>
+          </div>
+
+          <div class="pane">
+            <div class="pane__side">
+              <span class="pane__item is-active"><b></b>Shortcuts</span>
+              <span class="pane__item"><b></b>Task Wall</span>
+              <span class="pane__item"><b></b>Dashboard</span>
+              <span class="pane__item"><b></b>Translate</span>
+              <span class="pane__item"><b></b>Usage log</span>
+              <span class="pane__item"><b></b>Control</span>
+            </div>
+            <div class="pane__main">
+              <div class="pane__search">Search shortcuts…</div>
+              <div class="pane__grid">
+                <span class="tile is-selected"></span><span class="tile"></span>
+                <span class="tile"></span><span class="tile"></span>
+                <span class="tile"></span><span class="tile"></span>
+                <span class="tile"></span><span class="tile"></span>
+                <span class="tile"></span><span class="tile"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        </div><!-- /.figure-float -->
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 2. 功能卡网格 ══ 功能卡网格 ═════════════════════════════════════════════════ -->
+  <section class="section" id="features">
+    <div class="wrap">
+      <div class="section-head center reveal">
+        <span class="eyebrow">Core features</span>
+        <h2>Six things, one tool</h2>
+        <p>Four on the desktop and two across devices. Each works on its own, and they work together.</p>
+      </div>
+      <div class="grid grid--3" id="featureGrid"><!-- 由脚本渲染 --></div>
+    </div>
+  </section>
+
+  <!-- ══ 3. Interconnect ═══════════════════════════════════════════════════ -->
+  <section class="section section--alt" id="mobile">
+    <div class="wrap">
+      <div class="section-head center reveal">
+        <span class="eyebrow">Interconnect</span>
+        <h2>Start on your phone, finish on your computer</h2>
+        <p>Two-way task sync, file transfer, and your phone acting as the keyboard and trackpad. All of it goes through your own server.</p>
+      </div>
+
+      <div class="grid grid--2" style="align-items:center;gap:48px">
+        <div class="reveal">
+          <div class="phone" role="img" aria-label="ShortCut interface illustration">
+            <div class="phone__screen">
+              <div class="phone__title"><span class="dot-live"></span>ShortCut Connect</div>
+              <div class="phone__card is-accent"><span class="pc-dot"></span>Task Wall · pin a task</div>
+              <div class="phone__card"><span class="pc-dot"></span>File transfer</div>
+              <div class="phone__card"><span class="pc-dot"></span>PC control</div>
+              <div class="phone__card"><span class="pc-dot"></span>Devices & pairing</div>
+              <div class="phone__typing">Type here — it appears on the PC<span class="caret-line"></span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="reveal">
+          <div class="link-diagram">
+            <div class="link-node">
+              <span class="ln-icon" data-icon="phone"></span>
+              <span>Phone</span>
+            </div>
+            <div class="link-arrow">
+              <div class="la-line"></div>
+              <span>Cloud relay · direct LAN</span>
+            </div>
+            <div class="link-node">
+              <span class="ln-icon" data-icon="windows"></span>
+              <span>Computer</span>
+            </div>
+          </div>
+
+          <div class="grid" style="gap:13px;margin-top:22px">
+            <div class="capability">
+              <span class="cap-ico" data-icon="sticky"></span>
+              <div><b>Task sync</b><p>Pin a task on your phone and it shows up on the desktop at once — offline desktops queue it and receive it once back online.</p></div>
+            </div>
+            <div class="capability">
+              <span class="cap-ico" data-icon="send"></span>
+              <div><b>File transfer</b><p>Move files and text between phone and computer, chunked uploads for big files, cleaned up by expiry.</p></div>
+            </div>
+            <div class="capability">
+              <span class="cap-ico" data-icon="phone"></span>
+              <div><b>Phone control</b><p>Turn your phone into a keyboard and trackpad: typing, key combos, clipboard sync. Works on 4G, faster on the same Wi-Fi.</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 4. Why ShortCut ═════════════════════════════════════════════════ -->
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head center reveal">
+        <span class="eyebrow">Why use it</span>
+        <h2>Light, fast, unobtrusive</h2>
+        <p>Your habits stay as they are, and nothing happens behind your back.</p>
+      </div>
+      <div class="home-values">
+        <div class="value-item reveal">
+          <span class="vi-icon" data-icon="bolt"></span>
+          <div><b>7 MB, ready on launch</b><p>After the Tauri 2 rewrite the installer is about 94% smaller and memory use is down about 30%.</p></div>
+        </div>
+        <div class="value-item reveal">
+          <span class="vi-icon" data-icon="shield"></span>
+          <div><b>Data stays on your machine</b><p>Shortcuts, tasks and usage records live on your computer; only the interconnect features talk to your own server.</p></div>
+        </div>
+        <div class="value-item reveal">
+          <span class="vi-icon" data-icon="check"></span>
+          <div><b>No change to your habits</b><p>SC Ball can be click-through or hidden and never blocks desktop clicks; press Alt+I to tuck it away.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 5. 最新更新 ═══════════════════════════════════════════════════ -->
+  <section class="section section--tight section--alt">
+    <div class="wrap">
+      <div class="update-strip reveal">
+        <div>
+          <span class="badge"><span class="dot-live" ></span>Latest release</span>
+        </div>
+        <div>
+          <h3 id="updateTitle">Reading version…</h3>
+          <ul id="updateList"></ul>
+        </div>
+        <div class="btn-row">
+          <a class="btn" href="/en/changelog.html">View all changes</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 6. 结尾 CTA ═══════════════════════════════════════════════════ -->
+  <section class="cta">
+    <div class="wrap">
+      <h2>Try <span class="grad">ShortCut</span></h2>
+      <p id="ctaSub">Windows 10 / 11 · free download · no account needed</p>
+      <div class="btn-row center">
+        <a class="btn btn--primary btn--lg" id="ctaDownload" href="/en/download.html">Download the latest</a>
+        <a class="btn btn--ghost btn--lg" href="/en/faq.html">Read the FAQ first</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- 页脚（由 site.js 注入） -->
+<div id="site-footer"></div>
+
+<script src="/assets/js/data-en.js"></script>
+<script src="/assets/js/data.js"></script>
+<script src="/assets/js/site.js"></script>
+<script src="/assets/js/motion.js"></script>
+<script>
+(function () {
+  'use strict';
+  var D = SC.getData();
+
+  /* ── 功能卡渲染 ── */
+  var grid = document.getElementById('featureGrid');
+  if (grid && D.FEATURES) {
+    D.FEATURES.forEach(function (f, i) {
+      var a = document.createElement('a');
+      a.className = 'card card--feature reveal';
+      a.href = f.href;
+      a.style.setProperty('--d', (i * 70) + 'ms');
+      a.innerHTML =
+        '<span class="card__icon">' + SC.icon(f.icon, 22) + '</span>' +
+        '<h3>' + f.label + '</h3>' +
+        '<p class="tagline">' + f.tagline + '</p>' +
+        '<ul class="card__points">' +
+        f.points.map(function (p) { return '<li>' + p + '</li>'; }).join('') +
+        '</ul>' +
+        '<span class="card__more">Learn more ' + SC.icon('arrow', 15) + '</span>';
+      grid.appendChild(a);
+    });
+    if ('IntersectionObserver' in window) {
+      var io = new IntersectionObserver(function (es) {
+        es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('is-in'); io.unobserve(e.target); } });
+      }, { threshold: 0.05 });
+      Array.prototype.forEach.call(grid.querySelectorAll('.reveal'), function (n) { io.observe(n); });
+    } else {
+      Array.prototype.forEach.call(grid.querySelectorAll('.reveal'), function (n) { n.classList.add('is-in'); });
+    }
+  }
+
+  /* ── data-icon → 内联 SVG ── */
+  Array.prototype.forEach.call(document.querySelectorAll('[data-icon]'), function (n) {
+    n.innerHTML = SC.icon(n.getAttribute('data-icon'), 21);
+  });
+
+  /* ── 版本信息（失败静默降级）── */
+  SC.loadDesktopVersion().then(function (v) {
+    var hv = document.getElementById('heroVersion');
+    if (hv) hv.textContent = 'v' + v.version;
+    var hvi = document.getElementById('heroVersionInline');
+    if (hvi) hvi.textContent = v.version;
+
+    if (v.size) {
+      var hs = document.getElementById('heroSize');
+      if (hs) hs.textContent = SC.formatSize(v.size);
+    }
+
+    var title = document.getElementById('updateTitle');
+    if (title) {
+      title.textContent = 'v' + v.version + (v.pubDate ? ' · ' + v.pubDate : '') +
+        (v.size ? ' · ' + SC.formatSize(v.size) : '');
+    }
+
+    var list = document.getElementById('updateList');
+    if (list) {
+      var notes = (v.notes || '').split(/\r?\n/).map(function (s) {
+        return s.replace(/^[#*\-\s]+/, '').trim();
+      }).filter(function (s) { return s && s.length > 3; }).slice(0, 3);
+
+      if (!notes.length && D.CHANGELOG && D.CHANGELOG[0]) {
+        notes = D.CHANGELOG[0].items.slice(0, 3);
+      }
+      list.innerHTML = notes.map(function (s) { return '<li>' + s + '</li>'; }).join('');
+    }
+
+    var sub = document.getElementById('ctaSub');
+    if (sub) sub.textContent = 'Windows 10 / 11 · v' + v.version + ' · Download free · No account needed';
+  });
+})();
+</script>
+</body>
+</html>

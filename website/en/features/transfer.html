@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>File Transfer — move files between phone and PC | ShortCut</title>
+<meta name="description" content="Send files and text between phone and computer: chunked uploads for large files, expiry-based cleanup, share links and hash verification. No third-party cloud." />
+<meta name="theme-color" content="#0a0a0b" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="ShortCut" />
+<meta property="og:title" content="File Transfer — move files between phone and PC | ShortCut" />
+<meta property="og:description" content="Send files and text between phone and computer: chunked uploads for large files, expiry-based cleanup, share links and hash verification. No third-party cloud." />
+<meta property="og:image" content="/assets/img/og.png" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<link rel="icon" href="/assets/img/favicon.ico" sizes="any" />
+<link rel="icon" type="image/png" href="/assets/img/logo-64.png" sizes="64x64" />
+<link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
+
+  <script>
+  /* Apply colour mode before styles load to avoid a flash */
+  (function () {
+    try {
+      var m = localStorage.getItem('sc-mode');
+      if (m !== 'light' && m !== 'dark') m = 'dark';
+      document.documentElement.setAttribute('data-mode', m);
+    } catch (e) {
+      document.documentElement.setAttribute('data-mode', 'dark');
+    }
+  })();
+  </script>
+<link rel="stylesheet" href="/assets/css/site.css" />
+<link rel="stylesheet" href="/assets/css/pages.css" />
+</head>
+
+<body data-page="features">
+
+<div id="site-nav"></div>
+
+<main>
+
+  <section class="page-head">
+    <div class="wrap">
+        <nav class="crumbs" aria-label="Breadcrumb"><a href="/en/">Home</a><span>/</span><a href="/en/features/shortcut.html">Features</a><span>/</span><span>File Transfer</span></nav>
+      <h1>Move files between phone and PC<br />without fighting with cables</h1>
+      <p>Drop a file in and pick it up on the other side. Files live on your own server and expire automatically — no third-party cloud involved. Large files upload in chunks, so an interrupted transfer can resume.</p>
+    </div>
+  </section>
+
+  <section class="section section--flush">
+    <div class="wrap">
+<div class="feature-lead feature-lead--flip">
+        <div class="feature-lead__text reveal"><p class="hero__lead" style="margin-bottom:0">Drop a file in and pick it up on the other side. Files live on your own server and expire automatically — no third-party cloud involved. Large files upload in chunks, so an interrupted transfer can resume.</p></div>
+        <div class="reveal">        <div class="file-mock" role="img" aria-label="ShortCut interface illustration">
+          <div class="file-mock__bar"><span class="dot-live"></span>My transfers · 3 files</div>
+          <div class="file-row">
+            <span class="file-row__ico">PDF</span>
+            <div><div class="file-row__name">manual-v2.pdf</div><div class="file-row__meta">2.4 MB · expires in 24 h</div></div>
+            <span class="file-row__pct">100%</span>
+          </div>
+          <div class="file-row">
+            <span class="file-row__ico">ZIP</span>
+            <div><div class="file-row__name">project-backup.zip</div><div class="file-row__meta">86.1 MB · uploading in chunks</div></div>
+            <span class="file-row__pct">64%</span>
+          </div>
+          <div class="file-row">
+            <span class="file-row__ico">PNG</span>
+            <div><div class="file-row__name">screenshot-island.png</div><div class="file-row__meta">480 KB · share link created</div></div>
+            <span class="file-row__pct">100%</span>
+          </div>
+        </div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">Details</span>
+        <h2>Send it and forget it; expiry handles the rest.</h2>
+      </div>
+      <div class="grid grid--2" style="gap:14px">
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="send"></span>
+            <div><b>Chunked uploads</b><p>Large files are split into chunks; an interrupted network does not force you to start over.</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="clock"></span>
+            <div><b>Automatic expiry</b><p>Every file can carry a time-to-live and is deleted when it expires — nothing to clean up by hand.</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="check"></span>
+            <div><b>Hash verification</b><p>Both upload and download verify integrity, so you never end up with a corrupt file.</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="grid"></span>
+            <div><b>Text as well as files</b><p>Send a snippet or a link straight to the other clipboard — handier than copying across devices.</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="shield"></span>
+            <div><b>Never touches a third-party cloud</b><p>Files stay on the server you deployed; links are yours to revoke at any time.</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="windows"></span>
+            <div><b>Share links</b><p>Generate a download link with an expiry and send it to someone who does not even need the client.</p></div>
+          </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <nav class="pager" aria-label="Feature navigation">
+        <a href="/en/features/control.html"><small>Previous feature</small><b>← Phone Control</b></a>
+        <a class="pager--next" href="/en/features/android.html"><small>Next feature</small><b>Android App →</b></a>
+      </nav>
+    </div>
+  </section>
+
+  <!-- Call to action -->
+  <section class="cta">
+    <div class="wrap">
+      <h2>Try <span class="grad">ShortCut</span></h2>
+      <p id="ctaSub">Windows 10 / 11 · free download · no account needed</p>
+      <div class="btn-row center">
+        <a class="btn btn--primary btn--lg" href="/en/download.html">Download the latest</a>
+        <a class="btn btn--ghost btn--lg" href="/en/faq.html">Read the FAQ first</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div id="site-footer"></div>
+
+  <script src="/assets/js/data-en.js"></script>
+  <script src="/assets/js/data.js"></script>
+  <script src="/assets/js/site.js"></script>
+  <script src="/assets/js/motion.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-icon]'), function (n) {
+      n.innerHTML = SC.icon(n.getAttribute('data-icon'), 20);
+    });
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+  <!-- 最新版本 + 版本总览 -->
+  <section class="section section--flush">
+    <div class="wrap">
+      <div class="latest-release reveal" id="latestRelease">
+        <div class="latest-release__head">
+          <span class="badge"><span class="dot-live"></span>最新版本</span>
+          <h2 id="latestVersion">读取中…</h2>
+          <span class="tag" id="latestDate">—</span>
+          <span class="tag" id="latestSize">—</span>
+        </div>
+        <ul id="latestNotes"></ul>
+        <div class="btn-row" style="margin-top:20px">
+          <a class="btn btn--primary btn--sm" id="latestDownload" href="/download.html">下载此版本</a>
+          <button class="btn btn--sm" id="expandAll" type="button">展开全部版本</button>
+        </div>
+      </div>
+
+      <!-- 版本索引（快速跳转） -->
+      <nav class="version-index reveal" id="versionIndex" aria-label="版本索引"></nav>
+    </div>
+  </section>
+
+  <!-- 完整时间轴 -->
+  <section class="section section--tight">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">完整历史</span>
+        <h2>所有版本，点开看详情</h2>
+        <p id="timelineStats">—</p>
+      </div>
+      <div class="timeline" id="timeline"><!-- 由 changelog.js 渲染 --></div>
+    </div>
+  </section>

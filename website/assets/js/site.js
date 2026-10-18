@@ -128,6 +128,21 @@
     /* 右侧操作 */
     var actions = el('div', 'nav__actions');
 
+    /* 语言切换：中文 ↔ English */
+    var isEN = (document.documentElement.getAttribute('lang') || 'zh-CN').toLowerCase().indexOf('en') === 0;
+    var langBtn = el('a', 'nav__lang');
+    if (isEN) {
+      var zhPath = location.pathname.replace(/^\/en(\/|$)/, '/');
+      if (zhPath === '') zhPath = '/';
+      langBtn.href = zhPath + location.search + location.hash;
+      langBtn.textContent = '中文';
+      langBtn.title = '切换到中文';
+    } else {
+      langBtn.href = '/en' + (location.pathname === '/' ? '/' : location.pathname) + location.search + location.hash;
+      langBtn.textContent = 'EN';
+      langBtn.title = 'Switch to English';
+    }
+    actions.appendChild(langBtn);
     /* 明暗切换 */
     var mode = el('button', 'nav__mode');
     mode.type = 'button';

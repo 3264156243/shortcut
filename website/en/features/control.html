@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Phone Control — use your phone as a keyboard and trackpad | ShortCut</title>
+<meta name="description" content="Control your computer from your phone: typing, trackpad, modifier combos and clipboard. Works over a relay on 4G, or directly over LAN for the lowest latency." />
+<meta name="theme-color" content="#0a0a0b" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="ShortCut" />
+<meta property="og:title" content="Phone Control — use your phone as a keyboard and trackpad | ShortCut" />
+<meta property="og:description" content="Control your computer from your phone: typing, trackpad, modifier combos and clipboard. Works over a relay on 4G, or directly over LAN for the lowest latency." />
+<meta property="og:image" content="/assets/img/og.png" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<link rel="icon" href="/assets/img/favicon.ico" sizes="any" />
+<link rel="icon" type="image/png" href="/assets/img/logo-64.png" sizes="64x64" />
+<link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
+
+  <script>
+  /* Apply colour mode before styles load to avoid a flash */
+  (function () {
+    try {
+      var m = localStorage.getItem('sc-mode');
+      if (m !== 'light' && m !== 'dark') m = 'dark';
+      document.documentElement.setAttribute('data-mode', m);
+    } catch (e) {
+      document.documentElement.setAttribute('data-mode', 'dark');
+    }
+  })();
+  </script>
+<link rel="stylesheet" href="/assets/css/site.css" />
+<link rel="stylesheet" href="/assets/css/pages.css" />
+</head>
+
+<body data-page="features">
+
+<div id="site-nav"></div>
+
+<main>
+
+  <section class="page-head">
+    <div class="wrap">
+        <nav class="crumbs" aria-label="Breadcrumb"><a href="/en/">Home</a><span>/</span><a href="/en/features/shortcut.html">Features</a><span>/</span><span>Phone Control</span></nav>
+      <h1>Your phone as keyboard and trackpad,<br />controlling your computer</h1>
+      <p>Pause the video on your PC without getting up: open the mobile page and you can type, move the cursor and press key combinations. Over 4G it goes through a cloud relay; on the same Wi-Fi it connects directly over LAN, where latency is almost unnoticeable.</p>
+    </div>
+  </section>
+
+  <section class="section section--flush">
+    <div class="wrap">
+<div class="feature-lead">
+        <div class="feature-lead__text reveal"><p class="hero__lead" style="margin-bottom:0">Pause the video on your PC without getting up: open the mobile page and you can type, move the cursor and press key combinations. Over 4G it goes through a cloud relay; on the same Wi-Fi it connects directly over LAN, where latency is almost unnoticeable.</p></div>
+        <div class="reveal">        <div class="grid" style="gap:18px;justify-items:center">
+          <div class="phone" role="img" aria-label="ShortCut interface illustration">
+            <div class="phone__screen">
+              <div class="phone__title"><span class="dot-live"></span>电脑Control · 已连接</div>
+              <div class="phone__card is-accent"><span class="pc-dot"></span>Keyboard</div>
+              <div class="phone__card"><span class="pc-dot"></span>Trackpad</div>
+              <div class="phone__card"><span class="pc-dot"></span>Ctrl+C / Ctrl+V</div>
+              <div class="phone__card"><span class="pc-dot"></span>Clipboard</div>
+              <div class="phone__typing">Type here — it appears on the PC<span class="caret-line"></span></div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">Details</span>
+        <h2>Two connection modes, picked by the situation.</h2>
+      </div>
+      <div class="grid grid--2" style="gap:14px">
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="cloud"></span>
+            <div><b>Cloud relay (works on 4G)</b><p>Not on the same network: phone and desktop each connect to your own server and commands are relayed.</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="bolt"></span>
+            <div><b>Direct LAN connection</b><p>On the same Wi-Fi it talks straight to port 9823 on the desktop — no server in between, lowest latency.</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="grid"></span>
+            <div><b>Keyboard input</b><p>Chinese text, symbols and everything else your phone keyboard produces is injected into the focused window.</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="phone"></span>
+            <div><b>Trackpad and combos</b><p>Relative cursor movement, single and double clicks, one-tap modifier combinations.</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="send"></span>
+            <div><b>Clipboard transfer</b><p>Send text from your phone to the desktop clipboard, or read it back the other way.</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="shield"></span>
+            <div><b>Least privilege</b><p>You must enable the control service on the desktop and pair first; you can stop it at any time.</p></div>
+          </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <nav class="pager" aria-label="Feature navigation">
+        <a href="/en/features/scball.html"><small>Previous feature</small><b>← SC Ball</b></a>
+        <a class="pager--next" href="/en/features/transfer.html"><small>Next feature</small><b>File Transfer →</b></a>
+      </nav>
+    </div>
+  </section>
+
+  <!-- Call to action -->
+  <section class="cta">
+    <div class="wrap">
+      <h2>Try <span class="grad">ShortCut</span></h2>
+      <p id="ctaSub">Windows 10 / 11 · free download · no account needed</p>
+      <div class="btn-row center">
+        <a class="btn btn--primary btn--lg" href="/en/download.html">Download the latest</a>
+        <a class="btn btn--ghost btn--lg" href="/en/faq.html">Read the FAQ first</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div id="site-footer"></div>
+
+  <script src="/assets/js/data-en.js"></script>
+  <script src="/assets/js/data.js"></script>
+  <script src="/assets/js/site.js"></script>
+  <script src="/assets/js/motion.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-icon]'), function (n) {
+      n.innerHTML = SC.icon(n.getAttribute('data-icon'), 20);
+    });
+  })();
+  </script>
+</body>
+</html>

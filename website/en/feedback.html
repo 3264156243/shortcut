@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Feedback — ShortCut</title>
+<meta name="description" content="Report a problem, suggest a feature or ask a question about ShortCut. No account needed." />
+<meta name="theme-color" content="#0a0a0b" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="ShortCut" />
+<meta property="og:title" content="Feedback — ShortCut" />
+<meta property="og:description" content="Report a problem, suggest a feature or ask a question about ShortCut. No account needed." />
+<meta property="og:image" content="/assets/img/og.png" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<link rel="icon" href="/assets/img/favicon.ico" sizes="any" />
+<link rel="icon" type="image/png" href="/assets/img/logo-64.png" sizes="64x64" />
+<link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
+
+  <script>
+  /* Apply colour mode before styles load to avoid a flash */
+  (function () {
+    try {
+      var m = localStorage.getItem('sc-mode');
+      if (m !== 'light' && m !== 'dark') m = 'dark';
+      document.documentElement.setAttribute('data-mode', m);
+    } catch (e) {
+      document.documentElement.setAttribute('data-mode', 'dark');
+    }
+  })();
+  </script>
+<link rel="stylesheet" href="/assets/css/site.css" />
+<link rel="stylesheet" href="/assets/css/pages.css" />
+</head>
+
+<body data-page="feedback">
+
+<div id="site-nav"></div>
+
+<main>
+
+  <section class="page-head">
+    <div class="wrap">
+        <nav class="crumbs" aria-label="Breadcrumb"><a href="/en/">Home</a><span>/</span><span>Feedback</span></nav>
+      <h1>Feedback</h1>
+      <p>Found a bug, want a feature, or just want to say something? Write it here. No account, no contact details required (but leaving one makes a reply possible).</p>
+    </div>
+  </section>
+
+  <!-- 反馈表单 -->
+  <section class="section section--flush">
+    <div class="wrap">
+      <div class="grid grid--2" style="gap:44px;align-items:start">
+
+        <form class="fb-form reveal" id="fbForm" novalidate>
+          <div class="fb-field">
+            <label for="fbType">Type</label>
+            <select class="fb-select" id="fbType" name="type">
+              <option value="bug">Bug report</option>
+              <option value="feature">Feature request</option>
+              <option value="ui">UI and UX</option>
+              <option value="update">Updates and install</option>
+              <option value="other" selected>Something else</option>
+            </select>
+          </div>
+
+          <div class="fb-field">
+            <label for="fbContent">Details <small>required, at least 5 characters</small></label>
+            <textarea class="fb-textarea" id="fbContent" name="content" required
+              placeholder="遇到什么问题、在哪个板块、复现步骤是什么？&#10;&#10;如果是 Bug，建议写上：&#10;1. 你做了什么&#10;2. 期望看到什么&#10;3. 实际发生了什么"></textarea>
+            <div class="fb-hint"><span id="fbCount">0</span> / 4000</div>
+          </div>
+
+          <div class="fb-row">
+            <div class="fb-field">
+              <label for="fbContact">Contact <small>optional</small></label>
+              <input class="fb-input" id="fbContact" name="contact" type="text"
+                placeholder="Email / QQ / WeChat so I can reply" maxlength="120" />
+            </div>
+            <div class="fb-field">
+              <label for="fbVersion">Your version <small>optional，可自动填</small></label>
+              <input class="fb-input" id="fbVersion" name="version" type="text" placeholder="例如 2.5.1" maxlength="40" />
+            </div>
+          </div>
+
+          <!-- 蜜罐：人类看不到，机器人会填 -->
+          <div class="fb-hp" aria-hidden="true">
+            <label for="fbHp">Leave empty</label>
+            <input id="fbHp" name="hp" type="text" tabindex="-1" autocomplete="off" />
+          </div>
+
+          <div class="btn-row">
+            <button class="btn btn--primary" id="fbSubmit" type="submit">Submit feedback</button>
+            <a class="btn btn--ghost" href="/faq.html">Read the FAQ first</a>
+          </div>
+          <div class="fb-status" id="fbStatus" role="status" aria-live="polite"></div>
+        </form>
+
+        <div class="reveal">
+          <div class="section-head" style="margin-bottom:20px">
+            <span class="eyebrow">About</span>
+            <h2>How feedback is handled</h2>
+          </div>
+          <div class="grid" style="gap:12px">
+            <div class="capability">
+              <span class="cap-ico" data-icon="check"></span>
+              <div><b>Recorded on the project server</b><p>不存在第三方平台，也没有注册流程；Details按 JSONL 追加保存在服务端数据目录。</p></div>
+            </div>
+            <div class="capability">
+              <span class="cap-ico" data-icon="shield"></span>
+              <div><b>No raw IP stored</b><p>只保存加盐哈希用于限流，不保存 IP 明文；同一 IP 每小时最多 5 条、每天 20 条。</p></div>
+            </div>
+            <div class="capability">
+              <span class="cap-ico" data-icon="clock"></span>
+              <div><b>Replies are not guaranteed</b><p>缺少Contact时只做记录。如果是能复现的 Bug，会优先修。</p></div>
+            </div>
+          </div>
+          <div class="hint-box">
+            <b>You do not need to send these</b>
+            <ul>
+              <li>「安装时提示未知发布者」——安装包未做代码签名，点「更多信息 → 仍要运行」即可</li>
+              <li>「旧版本检查更新失败」——2.4.x 及更早的已知问题，手动装一次 2.5.1 后正常</li>
+              <li>「局域网控制连不上」——先确认手机与电脑在同一 Wi-Fi，且没开 AP 隔离</li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+
+  <!-- Call to action -->
+  <section class="cta">
+    <div class="wrap">
+      <h2>Try <span class="grad">ShortCut</span></h2>
+      <p id="ctaSub">Windows 10 / 11 · free download · no account needed</p>
+      <div class="btn-row center">
+        <a class="btn btn--primary btn--lg" href="/en/download.html">Download the latest</a>
+        <a class="btn btn--ghost btn--lg" href="/en/faq.html">Read the FAQ first</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div id="site-footer"></div>
+
+  <script src="/assets/js/data-en.js"></script>
+  <script src="/assets/js/data.js"></script>
+  <script src="/assets/js/site.js"></script>
+  <script src="/assets/js/motion.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-icon]'), function (n) {
+      n.innerHTML = SC.icon(n.getAttribute('data-icon'), 20);
+    });
+  })();
+  </script>
+</body>
+</html>

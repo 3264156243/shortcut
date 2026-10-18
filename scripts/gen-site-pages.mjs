@@ -454,6 +454,18 @@ const PAGES = [
     customBody: true
   },
 
+  /* ═══════════ 10. 问题反馈 ═══════════ */
+  {
+    file: 'feedback.html',
+    nav: 'feedback',
+    title: '问题反馈 — ShortCut',
+    desc: '提交 ShortCut 的问题反馈、功能建议或使用疑问。填写内容会直接记录到服务端，无需注册账号。',
+    crumbs: [{ label: '问题反馈' }],
+    h1: '问题反馈',
+    lead: '遇到问题、想要某个功能、或者只是想说点什么，都可以写在这里。不需要注册，也不用留联系方式（留了更方便回你）。',
+    customBody: true
+  },
+
   /* ═══════════ 9. FAQ ═══════════ */
   {
     file: 'faq.html',
@@ -548,8 +560,9 @@ ${SCRIPTS}
 /* 自定义页面的额外脚本引用 */
 const EXTRA_SCRIPTS = {
   'download.html': '  <script src="/assets/js/download.js"></script>',
-  'changelog.html': '  <script src="/assets/js/changelog.js"></script>',
-  'faq.html': '  <script src="/assets/js/faq.js"></script>'
+  'changelog.html': '  <script src="/assets/js/changelog-data.js"></script>\n  <script src="/assets/js/changelog.js"></script>',
+  'faq.html': '  <script src="/assets/js/faq.js"></script>',
+  'feedback.html': '  <script src="/assets/js/feedback.js"></script>'
 };
 
 let written = 0;
@@ -613,3 +626,5 @@ ${EXTRA_SCRIPTS[p.file] || ''}
 }
 
 console.log('\n共生成 ' + written + ' 个页面。');
+
+export { PAGES, head, crumbs, pager, caps, CTA };

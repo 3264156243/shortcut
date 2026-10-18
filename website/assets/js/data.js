@@ -45,7 +45,8 @@
     },
     { id: 'download', label: '下载', href: '/download.html' },
     { id: 'changelog', label: '更新日志', href: '/changelog.html' },
-    { id: 'faq', label: '常见问题', href: '/faq.html' }
+    { id: 'faq', label: '常见问题', href: '/faq.html' },
+    { id: 'feedback', label: '问题反馈', href: '/feedback.html' }
   ];
 
   /* ── 功能清单（首页卡片 + 功能页导航共用）────────────────────────────── */
@@ -217,28 +218,97 @@
   var FOOTER = {
     columns: [
       {
-        title: '产品', links: [
-          { label: '功能总览', href: '/features/shortcut.html' },
-          { label: '下载', href: '/download.html' },
-          { label: '更新日志', href: '/changelog.html' },
-          { label: '常见问题', href: '/faq.html' }
+        key: 'product', title: '产品', links: [
+          { key: 'overview', label: '功能总览', href: '/features/shortcut.html' },
+          { key: 'download', label: '下载', href: '/download.html' },
+          { key: 'changelog', label: '更新日志', href: '/changelog.html' },
+          { key: 'faq', label: '常见问题', href: '/faq.html' },
+          { key: 'feedback', label: '问题反馈', href: '/feedback.html' }
         ]
       },
       {
-        title: '功能', links: FEATURES.map(function (f) { return { label: f.label, href: f.href }; })
+        key: 'features', title: '功能',
+        links: FEATURES.map(function (f) { return { key: f.id, label: f.label, href: f.href }; })
       },
       {
-        title: '仓库', links: [
-          { label: 'Gitee', href: 'https://gitee.com/wanan6/short-cut', external: true },
-          { label: 'GitHub（私有）', href: 'https://github.com/3264156243/shortcut', external: true }
+        key: 'repos', title: '仓库', links: [
+          { key: 'gitee', label: 'Gitee', href: 'https://gitee.com/wanan6/short-cut', external: true },
+          { key: 'github', label: 'GitHub', href: 'https://github.com/3264156243/shortcut', external: true }
         ]
       }
     ],
-    // 许可证情况：项目为专有软件（未开源）
     legal: '专有软件 · 保留所有权利',
     copyright: '© 2026 ShortCut'
   };
 
+
+  /* ═══ 英文站点：切换数据（英文页先引入 data-en.js）═══════════════════════ */
+  var LANG = (document.documentElement.getAttribute('lang') || 'zh-CN').toLowerCase();
+  if (LANG.indexOf('en') === 0 && global.SC_EN) {
+    var EN = global.SC_EN;
+
+    function enHref(h) {
+      if (!h || h.charAt(0) !== '/') return h;
+      return h.indexOf('/en/') === 0 ? h : '/en' + h;
+    }
+
+    if (EN.nav) {
+      NAV = EN.nav.map(function (item) {
+        var copy = { id: item.id, label: item.label, href: enHref(item.href) };
+        if (item.children) {
+          copy.children = item.children.map(function (c) {
+            return { label: c.label, href: enHref(c.href) };
+          });
+        }
+        return copy;
+      });
+    }
+
+    if (EN.features) {
+      FEATURES = FEATURES.map(function (f) {
+        var t = EN.features[f.id];
+        if (!t) return f;
+        return {
+          id: f.id, icon: f.icon, href: enHref(f.href),
+          label: t.label || f.label,
+          tagline: t.tagline || f.tagline,
+          points: t.points || f.points
+        };
+      });
+    }
+
+    if (EN.hotkeys && EN.hotkeys.length === HOTKEYS.length) {
+      HOTKEYS = HOTKEYS.map(function (h, i) {
+        return { keys: h.keys, desc: EN.hotkeys[i] || h.desc };
+      });
+    } else if (EN.hotkeys) {
+      /* 按组合键匹配（数组顺序变了也不会错位） */
+      HOTKEYS = HOTKEYS.map(function (h) {
+        var combo = h.keys.join('+');
+        return { keys: h.keys, desc: EN.hotkeys[combo] || h.desc };
+      });
+    }
+
+    if (EN.footer) {
+      FOOTER = {
+        columns: FOOTER.columns.map(function (col) {
+          return {
+            title: EN.footer[col.key] || col.title,
+            links: col.links.map(function (l) {
+              return { label: EN.footer[l.key] || l.label, href: enHref(l.href), external: l.external };
+            })
+          };
+        }),
+        legal: EN.footer.legal || FOOTER.legal,
+        copyright: FOOTER.copyright
+      };
+    }
+
+    SITE.description =
+      'ShortCut is a Windows desktop efficiency tool: quick launch, task wall and the SC Ball island,' +
+      ' plus phone interconnect (task sync, file transfer, phone control).';
+    SITE.tagline = 'Everything in one place, one keystroke away';
+  }
   /* ── 导出 ─────────────────────────────────────────────────────────────── */
   global.SC_DATA = {
     SITE: SITE,
