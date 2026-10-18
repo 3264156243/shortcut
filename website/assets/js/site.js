@@ -422,8 +422,43 @@
   }
 
   /* ═══ 9. 启动 ═════════════════════════════════════════════════════════ */
+  /* ═══ 回到顶部 ════════════════════════════════════════════════════════ */
+  function initToTop() {
+    var btn = el('button', 'to-top');
+    btn.type = 'button';
+    btn.setAttribute('aria-label', '回到顶部');
+    btn.title = '回到顶部';
+    btn.innerHTML =
+      '<span class="to-top__ring" aria-hidden="true"></span>' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+      'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<path d="M12 19V6"/><path d="M5 12l7-7 7 7"/></svg>';
+    document.body.appendChild(btn);
+
+    function update() {
+      var doc = document.documentElement;
+      var y = global.pageYOffset;
+      var max = (doc.scrollHeight - global.innerHeight) || 1;
+      /* 下滑超过 1.2 屏才出现 */
+      if (y > global.innerHeight * 1.2) btn.classList.add('is-on');
+      else btn.classList.remove('is-on');
+      btn.style.setProperty('--p', Math.min(100, Math.max(0, (y / max) * 100)).toFixed(1));
+    }
+
+    var onScroll = function () { update(); };
+    global.addEventListener('scroll', onScroll, { passive: true });
+    global.addEventListener('resize', update);
+    update();
+
+    btn.addEventListener('click', function () {
+      var reduceMotion = global.matchMedia &&
+        global.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      global.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+    });
+  }
   function boot() {
     initNav();
+    initToTop();
     initReveal();
   }
 

@@ -90,3 +90,6 @@ docs/server/_latest-*.pending.json
 
 # 官网预览构建产物（scripts/build-site-preview.mjs 生成）
 website/_preview*.html
+
+# 官网页面生成器的输入片段（产出才是静态 HTML）
+website/_bodies/

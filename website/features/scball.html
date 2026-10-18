@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SC球 灵动岛 — 常驻桌面的小岛 | ShortCut</title>
+<meta name="description" content="SC球是常驻桌面的悬浮小岛：收起 / 迷你 / 展开三态，显示音乐封面歌词、任务提醒、驾驶舱温度与余额，可鼠标穿透，不挡桌面操作。" />
+<meta name="theme-color" content="#0a0a0b" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="ShortCut" />
+<meta property="og:title" content="SC球 灵动岛 — 常驻桌面的小岛 | ShortCut" />
+<meta property="og:description" content="SC球是常驻桌面的悬浮小岛：收起 / 迷你 / 展开三态，显示音乐封面歌词、任务提醒、驾驶舱温度与余额，可鼠标穿透，不挡桌面操作。" />
+<meta property="og:image" content="/assets/img/og.png" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<link rel="icon" href="/assets/img/favicon.ico" sizes="any" />
+<link rel="icon" type="image/png" href="/assets/img/logo-64.png" sizes="64x64" />
+<link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
+
+  <script>
+  /* 明暗模式：在样式生效前应用，避免刷新闪烁 */
+  (function () {
+    try {
+      var m = localStorage.getItem('sc-mode');
+      if (m !== 'light' && m !== 'dark') m = 'dark';
+      document.documentElement.setAttribute('data-mode', m);
+    } catch (e) {
+      document.documentElement.setAttribute('data-mode', 'dark');
+    }
+  })();
+  </script>
+<link rel="stylesheet" href="/assets/css/site.css" />
+<link rel="stylesheet" href="/assets/css/pages.css" />
+</head>
+
+<body data-page="features">
+
+<div id="site-nav"></div>
+
+<main>
+
+  <section class="page-head">
+    <div class="wrap">
+        <nav class="crumbs" aria-label="面包屑"><a href="/">首页</a><span>/</span><a href="/features/shortcut.html">功能</a><span>/</span><span>SC球 灵动岛</span></nav>
+      <h1>一颗小球，<br />收着音乐、任务和驾驶舱</h1>
+    </div>
+  </section>
+
+  <section class="section section--flush">
+    <div class="wrap">
+<div class="feature-lead">
+        <div class="feature-lead__text reveal">
+          <p class="hero__lead" style="margin-bottom:0">平时缩成一条细胶囊，不占地方；要听歌时点开就有封面、歌词和播放控制。鼠标穿透可以打开，让它完全不挡桌面点击——想点它的时候按快捷键临时关闭穿透就行。</p>
+        </div>
+        <div class="reveal">        <div class="hero__figure" style="perspective:none">
+          <div class="device" role="img" aria-label="SC球 示意图：悬浮胶囊显示播放状态与进度，下方为设置项">
+            <div class="device__bar">
+              <span class="device__dots"><i></i><i></i><i></i></span>
+              <span class="device__title">SC球 设置</span>
+            </div>
+            <div class="pane" style="grid-template-columns:1fr;min-height:auto;padding:16px;gap:0">
+              <div class="island-live" style="position:relative;top:0;left:0;transform:none;margin:0 auto 18px">
+                <span class="il-dot"></span>
+                <span class="il-text">正在播放</span>
+                <span class="il-track"><span class="il-fill"></span></span>
+                <span class="il-wave"><i></i><i></i><i></i><i></i><i></i></span>
+              </div>
+              <div class="setting-row"><div>显示音乐模块<small>封面、歌词、播放控制</small></div><span class="switch is-on"></span></div>
+              <div class="setting-row"><div>显示驾驶舱<small>CPU / GPU / 内存温度</small></div><span class="switch is-on"></span></div>
+              <div class="setting-row"><div>鼠标穿透<small>开启后不挡桌面点击（Alt+B 切换）</small></div><span class="switch"></span></div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">能力细节</span>
+        <h2>它常驻桌面，所以每一处都考虑「不打扰」。</h2>
+      </div>
+      <div class="grid grid--2" style="gap:14px">
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="island"></span>
+            <div><b>收起 / 迷你 / 展开三态</b><p>收起时宽度随内容自适应，播放音乐时保持固定宽度，不会来回跳。</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="send"></span>
+            <div><b>音乐封面与歌词</b><p>内置网易云音乐桥：封面、进度、歌词逐字跳动、长歌词轮播，还能提前半句显示。</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="check"></span>
+            <div><b>任务提醒球</b><p>任务到时弹出提醒，可直接查看跳转或标记完成。</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="bolt"></span>
+            <div><b>驾驶舱与余额</b><p>CPU/GPU/内存占用与温度随时可见；DeepSeek 余额每分钟刷新，播放音乐时分离成右侧小球。</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="shield"></span>
+            <div><b>鼠标穿透</b><p>打开后完全不挡桌面点击；窗口仍可被快捷快捷键唤起。默认 Alt+B 切换。</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="windows"></span>
+            <div><b>独立置顶窗口</b><p>与主面板互不影响：主面板关掉，SC球 仍在。</p></div>
+          </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 设置项 -->
+  <section class="section section--alt">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">快捷键</span>
+        <h2>球的几个键</h2>
+      </div>
+      <div class="narrow">
+        <table class="hotkey-table"><tbody>
+          <tr><td><span class="kbd">Alt</span> <span class="kbd">I</span></td><td>显示 / 隐藏 SC球</td></tr>
+          <tr><td><span class="kbd">Alt</span> <span class="kbd">U</span></td><td>显示 / 隐藏 SC任务清单球</td></tr>
+          <tr><td><span class="kbd">Alt</span> <span class="kbd">B</span></td><td>切换鼠标穿透</td></tr>
+          <tr><td><span class="kbd">Alt</span> <span class="kbd">Z</span> / <span class="kbd">X</span> / <span class="kbd">C</span></td><td>音乐 上一首 / 播放暂停 / 下一首</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <nav class="pager" aria-label="功能翻页">
+        <a href="/features/taskwall.html"><small>上一功能</small><b>← 任务墙</b></a>
+        <a class="pager--next" href="/features/control.html"><small>下一功能</small><b>手机控电脑 →</b></a>
+      </nav>
+    </div>
+  </section>
+
+  <!-- 结尾 CTA -->
+  <section class="cta">
+    <div class="wrap">
+      <h2>试试 <span class="grad">ShortCut</span></h2>
+      <p>Windows 10 / 11 · 免费下载 · 无需登录</p>
+      <div class="btn-row center">
+        <a class="btn btn--primary btn--lg" href="/download.html">下载最新版本</a>
+        <a class="btn btn--ghost btn--lg" href="/faq.html">先看看常见问题</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div id="site-footer"></div>
+
+  <script src="/assets/js/data.js"></script>
+  <script src="/assets/js/site.js"></script>
+  <script src="/assets/js/motion.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-icon]'), function (n) {
+      n.innerHTML = SC.icon(n.getAttribute('data-icon'), 20);
+    });
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>常见问题 — ShortCut</title>
+<meta name="description" content="ShortCut 常见问题：安装与更新、功能使用、移动互联、隐私与数据、安卓端。" />
+<meta name="theme-color" content="#0a0a0b" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="ShortCut" />
+<meta property="og:title" content="常见问题 — ShortCut" />
+<meta property="og:description" content="ShortCut 常见问题：安装与更新、功能使用、移动互联、隐私与数据、安卓端。" />
+<meta property="og:image" content="/assets/img/og.png" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<link rel="icon" href="/assets/img/favicon.ico" sizes="any" />
+<link rel="icon" type="image/png" href="/assets/img/logo-64.png" sizes="64x64" />
+<link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
+
+  <script>
+  /* 明暗模式：在样式生效前应用，避免刷新闪烁 */
+  (function () {
+    try {
+      var m = localStorage.getItem('sc-mode');
+      if (m !== 'light' && m !== 'dark') m = 'dark';
+      document.documentElement.setAttribute('data-mode', m);
+    } catch (e) {
+      document.documentElement.setAttribute('data-mode', 'dark');
+    }
+  })();
+  </script>
+<link rel="stylesheet" href="/assets/css/site.css" />
+<link rel="stylesheet" href="/assets/css/pages.css" />
+</head>
+
+<body data-page="faq">
+
+<div id="site-nav"></div>
+
+<main>
+
+  <section class="page-head">
+    <div class="wrap">
+        <nav class="crumbs" aria-label="面包屑"><a href="/">首页</a><span>/</span><span>常见问题</span></nav>
+      <h1>常见问题</h1>
+      <p>按分类整理。没找到答案可以到仓库的问答台留言。</p>
+    </div>
+  </section>
+
+  <section class="section section--flush">
+    <div class="wrap">
+      <div class="faq-layout">
+        <aside class="faq-toc reveal" id="faqToc" aria-label="问题分类"><!-- 由 faq.js 渲染 --></aside>
+        <div id="faqGroups"><!-- 由 faq.js 渲染 --></div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- 结尾 CTA -->
+  <section class="cta">
+    <div class="wrap">
+      <h2>试试 <span class="grad">ShortCut</span></h2>
+      <p>Windows 10 / 11 · 免费下载 · 无需登录</p>
+      <div class="btn-row center">
+        <a class="btn btn--primary btn--lg" href="/download.html">下载最新版本</a>
+        <a class="btn btn--ghost btn--lg" href="/faq.html">先看看常见问题</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div id="site-footer"></div>
+
+  <script src="/assets/js/data.js"></script>
+  <script src="/assets/js/site.js"></script>
+  <script src="/assets/js/motion.js"></script>
+  <script src="/assets/js/faq.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-icon]'), function (n) {
+      n.innerHTML = SC.icon(n.getAttribute('data-icon'), 20);
+    });
+  })();
+  </script>
+</body>
+</html>

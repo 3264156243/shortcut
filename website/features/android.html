@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>安卓端 — 原生 Android 客户端 | ShortCut</title>
+<meta name="description" content="ShortCut 安卓端：原生 Kotlin 客户端，与桌面端使用同一套接口契约。支持应用内更新、局域网直连与设备绑定。" />
+<meta name="theme-color" content="#0a0a0b" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="ShortCut" />
+<meta property="og:title" content="安卓端 — 原生 Android 客户端 | ShortCut" />
+<meta property="og:description" content="ShortCut 安卓端：原生 Kotlin 客户端，与桌面端使用同一套接口契约。支持应用内更新、局域网直连与设备绑定。" />
+<meta property="og:image" content="/assets/img/og.png" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<link rel="icon" href="/assets/img/favicon.ico" sizes="any" />
+<link rel="icon" type="image/png" href="/assets/img/logo-64.png" sizes="64x64" />
+<link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
+
+  <script>
+  /* 明暗模式：在样式生效前应用，避免刷新闪烁 */
+  (function () {
+    try {
+      var m = localStorage.getItem('sc-mode');
+      if (m !== 'light' && m !== 'dark') m = 'dark';
+      document.documentElement.setAttribute('data-mode', m);
+    } catch (e) {
+      document.documentElement.setAttribute('data-mode', 'dark');
+    }
+  })();
+  </script>
+<link rel="stylesheet" href="/assets/css/site.css" />
+<link rel="stylesheet" href="/assets/css/pages.css" />
+</head>
+
+<body data-page="features">
+
+<div id="site-nav"></div>
+
+<main>
+
+  <section class="page-head">
+    <div class="wrap">
+        <nav class="crumbs" aria-label="面包屑"><a href="/">首页</a><span>/</span><a href="/features/shortcut.html">功能</a><span>/</span><span>安卓端</span></nav>
+      <h1>安卓端：<br />把联动装进口袋</h1>
+    </div>
+  </section>
+
+  <section class="section section--flush">
+    <div class="wrap">
+<div class="feature-lead">
+        <div class="feature-lead__text reveal">
+          <p class="hero__lead" style="margin-bottom:0">手机网页用浏览器打开就能用，而安卓端是原生 App —— 界面更跟手，支持应用内更新，同一 Wi-Fi 下还有局域网直连。它与桌面端用同一套接口契约，功能会和桌面端一起更新。</p>
+        </div>
+        <div class="reveal">        <div class="grid" style="gap:18px;justify-items:center">
+          <div class="phone" role="img" aria-label="安卓端示意图：应用首页功能入口">
+            <div class="phone__screen">
+              <div class="phone__title"><span class="dot-live"></span>ShortCut</div>
+              <div class="phone__card is-accent"><span class="pc-dot"></span>我的电脑 · 已连接</div>
+              <div class="phone__card"><span class="pc-dot"></span>任务墙</div>
+              <div class="phone__card"><span class="pc-dot"></span>文件快传</div>
+              <div class="phone__card"><span class="pc-dot"></span>电脑控制</div>
+              <div class="phone__card"><span class="pc-dot"></span>检查更新</div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">能力细节</span>
+        <h2>与桌面端同一套契约，功能同步推进。</h2>
+      </div>
+      <div class="grid grid--2" style="gap:14px">
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="android"></span>
+            <div><b>原生 Kotlin 客户端</b><p>不是套壳网页，界面与交互按 Android 习惯实现。</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="cloud"></span>
+            <div><b>应用内更新</b><p>读取官网更新清单，检查到新版本直接引导安装，不用手动找 APK。</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="bolt"></span>
+            <div><b>局域网直连</b><p>同一 Wi-Fi 下直连桌面端，指令延迟更低。</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="phone"></span>
+            <div><b>设备绑定</b><p>用绑定码把手机与电脑配对一次，之后自动识别。</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="send"></span>
+            <div><b>任务墙 / 快传 / 控制</b><p>桌面端三大联动能力在手机上都能用。</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="shield"></span>
+            <div><b>同一份接口契约</b><p>所有接口与字段以《移动互联-协议契约》为准，不会出现两端行为不一致。</p></div>
+          </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt">
+    <div class="wrap">
+      <div class="android-card reveal">
+        <span class="ac-icon" data-icon="android"></span>
+        <div>
+          <b style="font-size:16px">下载安卓端</b>
+          <div style="color:var(--muted);font-size:13.5px;margin-top:4px" id="androidMeta">正在读取版本…</div>
+        </div>
+        <a class="btn btn--primary" id="androidDl" href="/download.html">获取安装包</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <nav class="pager" aria-label="功能翻页">
+        <a href="/features/transfer.html"><small>上一功能</small><b>← 文件快传</b></a>
+        <span></span>
+      </nav>
+    </div>
+  </section>
+
+  <!-- 结尾 CTA -->
+  <section class="cta">
+    <div class="wrap">
+      <h2>试试 <span class="grad">ShortCut</span></h2>
+      <p>Windows 10 / 11 · 免费下载 · 无需登录</p>
+      <div class="btn-row center">
+        <a class="btn btn--primary btn--lg" href="/download.html">下载最新版本</a>
+        <a class="btn btn--ghost btn--lg" href="/faq.html">先看看常见问题</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div id="site-footer"></div>
+
+  <script src="/assets/js/data.js"></script>
+  <script src="/assets/js/site.js"></script>
+  <script src="/assets/js/motion.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-icon]'), function (n) {
+      n.innerHTML = SC.icon(n.getAttribute('data-icon'), 20);
+    });
+  SC.loadAndroidVersion().then(function (a) {
+    if (!a) return;
+    var m = document.getElementById('androidMeta');
+    if (m) m.textContent = '版本 ' + a.version + ' · ' + SC.formatSize(a.size) + ' · APK';
+    var b = document.getElementById('androidDl');
+    if (b && a.url) { b.href = a.url; b.textContent = '下载 APK'; }
+  });
+  })();
+  </script>
+</body>
+</html>

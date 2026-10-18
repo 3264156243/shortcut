@@ -137,29 +137,62 @@
     });
   }
 
-  /* ═══ 6. 首屏示意图微倾斜（跟随鼠标）══════════════════════════════════ */
+  /* ═══ 6. 首屏示意图：鼠标移入后跟随光标 3D 倾斜 ═════════════════════════
+   行为：
+     - 常态平放（CSS 里只有 2°/-3° 的轻微静态倾斜）
+     - 鼠标移入容器 → 进入 is-tilting，倾斜角跟随光标在容器内的位置
+     - 鼠标移出 → 平滑复位
+   注：这是"用户主动触发"的交互反馈，不属于自动播放动画，
+   因此即使系统开启"减少动效"也保留（但幅度减半） */
   function initFigureTilt() {
     var fig = document.querySelector('.hero__figure');
-    if (!fig || reduce || !global.matchMedia('(hover: hover)').matches) return;
+    if (!fig) return;
 
-    var move = rafThrottle(function (e) {
+    var dev = fig.querySelector('.device');
+    if (!dev) return;
+
+    var canHover = global.matchMedia('(hover: hover)').matches;
+    if (!canHover) return;                       /* 触屏设备不做悬停倾斜 */
+
+    var MAX = reduce ? 4.5 : 9;                  /* 最大倾角（度） */
+    var SCALE = 1.03;
+
+    function onMove(e) {
       var r = fig.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      /* 光标在容器内的归一化位置：-0.5 ~ 0.5 */
       var px = (e.clientX - r.left) / r.width - .5;
       var py = (e.clientY - r.top) / r.height - .5;
-      var dev = fig.querySelector('.device');
-      if (!dev) return;
-      dev.style.transform =
-        'rotateX(' + (7 - py * 4.5).toFixed(2) + 'deg) ' +
-        'rotateY(' + (-14 + px * 6).toFixed(2) + 'deg) ' +
-        'translateY(' + (py * -8).toFixed(1) + 'px) scale(1.02)';
-    });
-    fig.addEventListener('mousemove', move, { passive: true });
-    fig.addEventListener('mouseleave', function () {
-      var dev = fig.querySelector('.device');
-      if (dev) dev.style.transform = '';
-    });
-  }
 
+      /* 鼠标在右侧 → 绕 Y 轴正向转，立体感与真实一致 */
+      var ry = px * 2 * MAX;
+      var rx = -py * 2 * MAX;
+
+      fig.classList.add('is-tilting');
+      fig.style.setProperty('--rx', rx.toFixed(2) + 'deg');
+      fig.style.setProperty('--ry', ry.toFixed(2) + 'deg');
+      fig.style.setProperty('--sc', SCALE);
+      /* 反光位移（像素，跟随光标） */
+      fig.style.setProperty('--gx', (px * 90).toFixed(1));
+      fig.style.setProperty('--gy', (py * 60).toFixed(1));
+    }
+
+    function reset() {
+      fig.classList.remove('is-tilting');
+      fig.style.setProperty('--rx', '2deg');
+      fig.style.setProperty('--ry', '-3deg');
+      fig.style.setProperty('--sc', '1');
+      fig.style.setProperty('--gx', '0');
+      fig.style.setProperty('--gy', '0');
+    }
+
+    var move = rafThrottle(function (e) { onMove(e); });
+    fig.addEventListener('mouseenter', function (e) { onMove(e); });
+    fig.addEventListener('mousemove', move, { passive: true });
+    fig.addEventListener('mouseleave', reset);
+    /* 键盘/触摸滚动离开视口时复位，避免停住不动 */
+    global.addEventListener('blur', reset);
+  }
   /* ═══ 7. 锚点平滑滚动（修正固定导航遮挡）═══════════════════════════════ */
   function initAnchors() {
     document.addEventListener('click', function (e) {

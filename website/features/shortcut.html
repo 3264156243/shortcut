@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>快捷启动 — 常用软件、文件夹、网页一键直达 | ShortCut</title>
+<meta name="description" content="把常用软件、文件、文件夹和网页集中到一处，用键盘快速选择并启动。支持图标自动提取、导入已安装软件、页签与分组管理。" />
+<meta name="theme-color" content="#0a0a0b" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="ShortCut" />
+<meta property="og:title" content="快捷启动 — 常用软件、文件夹、网页一键直达 | ShortCut" />
+<meta property="og:description" content="把常用软件、文件、文件夹和网页集中到一处，用键盘快速选择并启动。支持图标自动提取、导入已安装软件、页签与分组管理。" />
+<meta property="og:image" content="/assets/img/og.png" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<link rel="icon" href="/assets/img/favicon.ico" sizes="any" />
+<link rel="icon" type="image/png" href="/assets/img/logo-64.png" sizes="64x64" />
+<link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
+
+  <script>
+  /* 明暗模式：在样式生效前应用，避免刷新闪烁 */
+  (function () {
+    try {
+      var m = localStorage.getItem('sc-mode');
+      if (m !== 'light' && m !== 'dark') m = 'dark';
+      document.documentElement.setAttribute('data-mode', m);
+    } catch (e) {
+      document.documentElement.setAttribute('data-mode', 'dark');
+    }
+  })();
+  </script>
+<link rel="stylesheet" href="/assets/css/site.css" />
+<link rel="stylesheet" href="/assets/css/pages.css" />
+</head>
+
+<body data-page="features">
+
+<div id="site-nav"></div>
+
+<main>
+
+  <section class="page-head">
+    <div class="wrap">
+        <nav class="crumbs" aria-label="面包屑"><a href="/">首页</a><span>/</span><a href="/features/shortcut.html">功能</a><span>/</span><span>快捷启动</span></nav>
+      <h1>常用软件、文件夹、网页，<br />键盘一按直达</h1>
+    </div>
+  </section>
+
+  <section class="section section--flush">
+    <div class="wrap">
+<div class="feature-lead">
+        <div class="feature-lead__text reveal">
+          <p class="hero__lead" style="margin-bottom:0">不用再回头找桌面图标或在开始菜单里翻。所有常用入口集中在同一页，用方向键选中、回车即启动；图标自动从程序里提取，也可以自己指定。</p>
+        </div>
+        <div class="reveal">        <div class="device" role="img" aria-label="快捷启动界面示意图：左侧板块导航，右侧按分组排列的程序图标网格，其中一个为键盘选中态">
+          <div class="device__bar">
+            <span class="device__dots"><i></i><i></i><i></i></span>
+            <span class="device__title">ShortCut</span>
+            <span class="device__actions"><i></i><i></i></span>
+          </div>
+          <div class="pane">
+            <div class="pane__side">
+              <span class="pane__item is-active"><b></b>快捷方式</span>
+              <span class="pane__item"><b></b>任务墙</span>
+              <span class="pane__item"><b></b>驾驶舱</span>
+              <span class="pane__item"><b></b>翻译</span>
+              <span class="pane__item"><b></b>使用记录</span>
+              <span class="pane__item"><b></b>控制</span>
+            </div>
+            <div class="pane__main">
+              <div class="pane__search">搜索名称、路径或备注…</div>
+              <div class="pane__grid">
+                <span class="tile is-selected"></span><span class="tile"></span>
+                <span class="tile"></span><span class="tile"></span>
+                <span class="tile"></span><span class="tile"></span>
+                <span class="tile"></span><span class="tile"></span>
+                <span class="tile"></span><span class="tile"></span>
+              </div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">能力细节</span>
+        <h2>从「加进去」到「一按就开」，中间不需要额外操作。</h2>
+      </div>
+      <div class="grid grid--2" style="gap:14px">
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="bolt"></span>
+            <div><b>全局快捷键唤出</b><p>默认 Alt+Space，在任何程序里都能叫出面板，不用先切回桌面。</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="grid"></span>
+            <div><b>图标自动提取</b><p>从程序自身资源里提取原始图标；也支持手动指定图标文件与网站图标自动抓取。</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="check"></span>
+            <div><b>导入已安装软件</b><p>扫描系统已安装程序，一键批量加入，不必逐个找路径。</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="sticky"></span>
+            <div><b>页签与分组</b><p>支持页签与分组管理，拖拽排序、跨分组移动，常用的一眼就能看到。</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="send"></span>
+            <div><b>搜索与键盘导航</b><p>按名称、路径、备注搜索；方向键选中、回车启动，全程可以不碰鼠标。</p></div>
+          </div>
+          <div class="capability reveal">
+            <span class="cap-ico" data-icon="windows"></span>
+            <div><b>支持四种入口</b><p>应用、文件夹、普通文件、网页 URL，以及快捷方式组与 BAT 脚本。</p></div>
+          </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 快捷键 -->
+  <section class="section section--alt">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">快捷键</span>
+        <h2>常用的几个键</h2>
+      </div>
+      <div class="narrow">
+        <table class="hotkey-table"><tbody id="hotkeyRows"></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <nav class="pager" aria-label="功能翻页">
+        <span></span>
+        <a class="pager--next" href="/features/taskwall.html"><small>下一功能</small><b>任务墙 →</b></a>
+      </nav>
+    </div>
+  </section>
+
+  <!-- 结尾 CTA -->
+  <section class="cta">
+    <div class="wrap">
+      <h2>试试 <span class="grad">ShortCut</span></h2>
+      <p>Windows 10 / 11 · 免费下载 · 无需登录</p>
+      <div class="btn-row center">
+        <a class="btn btn--primary btn--lg" href="/download.html">下载最新版本</a>
+        <a class="btn btn--ghost btn--lg" href="/faq.html">先看看常见问题</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div id="site-footer"></div>
+
+  <script src="/assets/js/data.js"></script>
+  <script src="/assets/js/site.js"></script>
+  <script src="/assets/js/motion.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-icon]'), function (n) {
+      n.innerHTML = SC.icon(n.getAttribute('data-icon'), 20);
+    });
+  (function () {
+    var D = SC.getData();
+    var rows = document.getElementById('hotkeyRows');
+    if (!rows || !D.HOTKEYS) return;
+    D.HOTKEYS.forEach(function (h) {
+      var keysHtml = h.keys.map(function (k) {
+        return k === '/' ? '<span style="color:var(--muted-2)">/</span>' : '<span class="kbd">' + k + '</span>';
+      }).join(' ');
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + keysHtml + '</td><td>' + h.desc + '</td>';
+      rows.appendChild(tr);
+    });
+  })();
+  })();
+  </script>
+</body>
+</html>
