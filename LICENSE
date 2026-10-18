@@ -1,21 +1,35 @@
-MIT License
+ShortCut — 专有软件，保留所有权利
+================================
 
-Copyright (c) 2026 wanan
+Copyright (c) 2026 wanan. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+本项目为**私有项目**，当前**未开源**。仓库仅用于作者本人在多台设备 / 多人协作之间
+同步与管理代码。
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+未经作者书面许可，任何人不得：
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+  1. 复制、分发、公开传播本项目的源代码或其衍生作品；
+  2. 将本项目（含源代码或编译产物）用于商业用途；
+  3. 基于本项目创建并发布衍生作品；
+  4. 移除或修改本文件及代码中的版权声明。
+
+允许的行为：
+
+  - 阅读本仓库代码用于学习参考；
+  - 经作者授权后参与协作开发（授权范围以书面说明为准）。
+
+免责声明：
+
+  本软件按"现状"提供，不附带任何明示或暗示的担保，包括但不限于对适销性、
+  特定用途适用性和非侵权性的担保。在任何情况下，作者均不对因使用本软件或
+  与本软件相关的其他交易而产生的任何索赔、损害或其他责任负责。
+
+第三方组件：
+
+  本项目使用了若干第三方开源组件（Rust crates、npm 包、PHP/JS 库等），
+  这些组件各自遵循其原有许可证，详见各依赖的许可证声明。
+  桌面端硬件监控侧车的第三方声明见 resources/hardware-monitor/THIRD-PARTY-NOTICES.txt。
+
+---
+
+如需授权，请联系仓库作者：https://github.com/3264156243

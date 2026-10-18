@@ -19,7 +19,7 @@
                      "panel"
                  ],
     "author":  "wanan",
-    "license":  "MIT",
+    "license":  "UNLICENSED",
     "type":  "commonjs",
     "devDependencies":  {
                             "@tailwindcss/oxide-win32-x64-msvc":  "^4.3.1",

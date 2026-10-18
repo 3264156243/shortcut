@@ -86,7 +86,7 @@
 ## 五、移动推送实施计划（与桌面阶段并行推进）
 
 - **P0（现在）**：PWA manifest + 站内提醒轮询兜底
-- **P1（~1 周）**：Capacitor 壳（远程加载 shortcut.326415.xyz/mobile/，前端零改动）+ relay WS 前台实时（已有）+ APK 官网自分发
+- **P1（~1 周）**：Capacitor 壳（远程加载 `<你的服务器域名>`/mobile/，前端零改动）+ relay WS 前台实时（已有）+ APK 官网自分发
 - **P2（核心）**：OPPO Push 接入
   - 客户端：Capacitor 自定义插件桥接 OPush SDK（初始化 → regId 上报，挂到现有 bind 体系：一个绑定多设备 token）
   - 服务端：PHP push 网关（OPPO REST API：auth_token 鉴权 + 单推接口），桌面事件 → 云端 → 推送

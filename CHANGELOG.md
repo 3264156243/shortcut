@@ -3,8 +3,8 @@
 本项目从 v2.5.0 起改用「桌面端 Tauri 2 + 移动互联 + 安卓端」三线并行。
 更早版本的详细说明保留在 [`release-notes/`](./release-notes/) 目录。
 
-> 更新通道：`https://shortcut.326415.xyz/updates/latest.json`（桌面端，minisign 签名校验）
-> 　　　　　`https://shortcut.326415.xyz/updates/android/latest.json`（安卓端，按 `versionCode` 判定）
+> 更新通道：`<你的服务器域名>/updates/latest.json`（桌面端，minisign 签名校验）
+> 　　　　　`<你的服务器域名>/updates/android/latest.json`（安卓端，按 `versionCode` 判定）
 
 ---
 

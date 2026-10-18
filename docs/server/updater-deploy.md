@@ -1,8 +1,8 @@
-# Tauri updater 部署说明（shortcut.326415.xyz）
+# Tauri updater 部署说明（`<你的服务器域名>`）
 
 ## 服务器端点
 
-`https://shortcut.326415.xyz/updates/latest.json`（tauri.conf.json plugins.updater.endpoints 唯一项）。
+`<你的服务器域名>/updates/latest.json`（tauri.conf.json plugins.updater.endpoints 唯一项）。
 
 ## latest.json 格式（Tauri 2 静态 JSON）
 
@@ -14,7 +14,7 @@
   "platforms": {
     "windows-x86_64": {
       "signature": "<.sig 文件内容原文>",
-      "url": "https://shortcut.326415.xyz/updates/ShortCut_2.4.5_x64-setup.exe"
+      "url": "`<你的服务器域名>`/updates/ShortCut_2.4.5_x64-setup.exe"
     }
   }
 }

@@ -182,9 +182,9 @@ D:\wenjian\mima\服务器连接信息.md
 
 常用地址：
 
-- 更新检查：`https://shortcut.326415.xyz/updates/latest.yml`
-- 激活管理后台：`https://shortcut.326415.xyz/activation/index.php`
-- 项目介绍网站：`https://shortcut.326415.xyz/`
+- 更新检查：`<你的服务器域名>/updates/latest.yml`
+- 激活管理后台：`<你的服务器域名>/activation/index.php`
+- 项目介绍网站：`<你的服务器域名>/`
 
 翻译代理由 systemd 服务 `shortcut-translation.service` 运行 `translation-proxy.py`，监听 `127.0.0.1:32642`，Nginx 把 `/api/translate` 代理过去。百度翻译 APP_ID / SECRET 通过 `/etc/shortcut-translation.env` 注入，不在代码仓库里。
 
@@ -195,7 +195,7 @@ D:\wenjian\mima\服务器连接信息.md
 正式安装版使用 `electron-updater`，发布源是通用 HTTP 静态目录：
 
 ```text
-https://shortcut.326415.xyz/updates/
+`<你的服务器域名>`/updates/
 ```
 
 程序启动时只检查版本，发现新版本后先显示版本号和本次更新内容，用户确认后才下载，下载时展示速度和预计时间，完成后自动调用安装包更新，不需要用户卸载重装，属于“热更新”。
@@ -238,7 +238,7 @@ npm run release:update
 powershell -ExecutionPolicy Bypass -File scripts/publish-update.ps1 -SkipBuild
 
 # 7. 验证
-#    https://shortcut.326415.xyz/updates/latest.yml 显示新版本
+#    `<你的服务器域名>`/updates/latest.yml 显示新版本
 #    在安装版中点击“检查更新”能读到新版本和更新说明
 ```
 

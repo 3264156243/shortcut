@@ -17,7 +17,7 @@
 | `bind.claimToken` | 凭绑定码换 `deskToken`（会**轮换**该绑定的桌面凭证，会顶掉真桌面端，慎用） |
 
 ```bash
-curl -s -X POST https://shortcut.326415.xyz/sync/api.php \
+curl -s -X POST `<你的服务器域名>`/sync/api.php \
   -H 'Content-Type: application/json' \
   -d '{"action":"bind.create","deviceName":"mock-desk"}'
 ```
@@ -44,8 +44,8 @@ node tools/mock-desktop/relay-desktop.js --bind <bindId> --token <deskToken>
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `SC_API_BASE` | `https://shortcut.326415.xyz/sync/api.php` | 换测试环境时用 |
-| `SC_RELAY_URL` | `wss://shortcut.326415.xyz/relay-ws` | 换中继地址 |
+| `SC_API_BASE` | `<你的服务器域名>/sync/api.php` | 换测试环境时用 |
+| `SC_RELAY_URL` | `wss://`<你的服务器域名>`/relay-ws` | 换中继地址 |
 | `SC_LAN_ENTRY` | 无（回 `{"running":false}`） | 让 `/api/lan-entry` 假装"局域网直连已开启"，用于联调一键直连 |
 
 `SC_LAN_ENTRY` 示例（**用环境变量传，命令行传 JSON 要额外转义**）：

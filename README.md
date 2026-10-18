@@ -4,6 +4,10 @@ ShortCut 是一个**桌面 + 移动互联**的多功能效率工具：Windows �
 
 > **当前版本 v2.5.1** · 桌面端已完成 **Electron → Tauri 2** 技术栈重构（体积 -94%、内存 -30%）
 
+> ⚠️ **这是一个私有项目，未开源。** 仓库仅用于作者在多台设备与协作者之间同步代码。
+> 使用与分发限制见 [LICENSE](./LICENSE)。本文档中的服务器地址均为占位符（`<你的服务器域名>`），
+> 自建部署需替换为你自己的域名。
+
 ## 技术栈
 
 | 部分 | 技术 |
@@ -14,8 +18,7 @@ ShortCut 是一个**桌面 + 移动互联**的多功能效率工具：Windows �
 | **服务端** | PHP（同步与绑定 `server/sync/`）+ Node（实时中继 `server/control-relay/`）+ nginx |
 
 > ℹ️ **Electron 版已于 2026-10 退役**（`electron/` 与 `electron-builder` 已从仓库移除）。
-> 老用户（≤2.4.5 Electron 版）可通过应用内「检查更新」自动迁移到 Tauri 版；
-> 历史安装包仍归档在 `https://shortcut.326415.xyz/updates/`。
+> 老用户（≤2.4.5 Electron 版）可通过应用内「检查更新」自动迁移到 Tauri 版。
 
 ## 功能特性
 
@@ -98,9 +101,13 @@ ShortCut 是一个**桌面 + 移动互联**的多功能效率工具：Windows �
 
 ## 激活码
 
-- 新安装需输入有效激活码后才能使用，程序每次启动会向服务器核对激活码与机器码
-- 服务器端提供激活码管理后台，支持生成、禁用、启用、解除绑定、删除
-- 管理后台：[https://shortcut.326415.xyz/activation/index.php](https://shortcut.326415.xyz/activation/index.php)
+- 新安装需输入有效激活码后才能使用，程序每次启动会向**你自己的服务端**核对激活码与机器码
+- 服务端提供激活码管理后台（`server/activation/`），支持生成、禁用、启用、解除绑定、删除
+- 管理后台地址为你自己的部署地址，形如：`https://`<你的服务器域名>`/activation/index.php`
+  （部署后由你自己访问，**不在此公开**）
+
+> 📌 激活机制依赖自建服务端。若你要编译运行本项目，需自行部署 `server/` 并把客户端里的
+> 服务端地址改成你的域名 —— 见下方「服务端地址配置」。
 
 ## 环境要求
 
@@ -161,7 +168,7 @@ npx tauri build --features custom-protocol
 发布链路（详见 [docs/server/updater-deploy.md](./docs/server/updater-deploy.md)）：
 
 ```text
-https://shortcut.326415.xyz/updates/
+https://`<你的服务器域名>`/updates/
 ├── latest.json                       ← Tauri updater 读取（minisign 签名校验）
 ├── ShortCut_2.5.1_x64-setup.exe
 ├── ShortCut_2.5.1_x64-setup.exe.sig
@@ -171,7 +178,23 @@ https://shortcut.326415.xyz/updates/
     └── ShortCut-x.x.x.apk
 ```
 
-服务器静态目录为 `/www/wwwroot/ShortCut`：项目介绍网站放在根目录，更新文件放在 `updates` 子目录，激活码管理后台放在 `activation` 子目录。
+服务器静态目录约定为 `<站点根>`：项目介绍网站放在根目录，更新文件放在 `updates/` 子目录，
+激活码管理后台放在 `activation/` 子目录。
+
+## 服务端地址配置（自建时必读）
+
+本仓库的客户端代码里**内置了作者自己的服务端地址**。若你要部署到自己的服务器，需要替换以下位置
+（这些是**功能必需**的地址，不是文档引用）：
+
+| 位置 | 作用 |
+|---|---|
+| `src-tauri/tauri.conf.json` → `plugins.updater.endpoints` | 桌面端更新清单地址（`latest.json`） |
+| `src-tauri/src/lib.rs` / `sync.rs` / `cloud.rs` / `license.rs` / `transfer.rs` | 同步、中继、激活、文件快传的接口基址 |
+| `android/.../core/net/Endpoints.kt` | 安卓端所有网络地址的**唯一真源** |
+| `server/sync/modules.json`、`server/control-relay/relay.js` | 服务端下发给客户端的地址 |
+| `server/sync/api.php`、`server/sync/web/control/**` | 移动 Web 页面的接口地址 |
+
+搜索 `<你的服务器域名>` 即可定位全部位置（共 30+ 处）。作者自建的实例使用该域名，**与他人无关**。
 
 ## 配置存储
 
@@ -228,4 +251,7 @@ docs/             全部文档 → 先看 docs/README.md 的文档地图
 
 ## 许可证
 
-本项目基于 MIT License 开源。
+**专有软件，保留所有权利（未开源）。** 详见 [LICENSE](./LICENSE)。
+
+本项目仅用于作者自身的开发与使用。未经书面许可，不得复制、分发、用于商业用途或发布衍生作品。
+所使用的第三方开源组件各自遵循其原有许可证。
