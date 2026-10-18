@@ -87,3 +87,6 @@ docs/references/**/.git/
 
 # 发布过程中的临时产物（含签名，用完即弃）
 docs/server/_latest-*.pending.json
+
+# 官网预览构建产物（scripts/build-site-preview.mjs 生成）
+website/_preview*.html

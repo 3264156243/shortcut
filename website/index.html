@@ -1,808 +1,293 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>ShortCut — 快捷启动与桌面效率工具</title>
-<meta name="description" content="ShortCut 是一个集快捷启动、任务墙、翻译、驾驶舱和 SC球 灵动岛于一体的 Windows 桌面效率工具。集中管理常用软件、文件、文件夹和网页，通过键盘快速启动，并用任务墙记录待办、长文本和提醒事项。" />
-<style>
-  :root{
-    --bg:#0b0e14;
-    --bg-soft:#11151f;
-    --panel:#151a26;
-    --panel-2:#1b2130;
-    --line:#262d3f;
-    --text:#e6e9f2;
-    --muted:#9aa3b8;
-    --muted-2:#6b7488;
-    --accent:#4f8cff;
-    --accent-2:#7aa7ff;
-    --accent-soft:rgba(79,140,255,.14);
-    --accent-line:rgba(79,140,255,.45);
-    --good:#3dd68c;
-    --warn:#ffb454;
-    --radius:14px;
-    --shadow:0 18px 50px rgba(0,0,0,.45);
-    --maxw:1180px;
-  }
-  *{box-sizing:border-box}
-  html{scroll-behavior:smooth}
-  body{
-    margin:0;
-    font-family:"Segoe UI",-apple-system,"Microsoft YaHei",system-ui,sans-serif;
-    background:var(--bg);
-    color:var(--text);
-    line-height:1.7;
-    -webkit-font-smoothing:antialiased;
-  }
-  a{color:inherit;text-decoration:none}
-  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ShortCut — Windows 桌面效率工具｜快捷启动 · 任务墙 · SC球灵动岛</title>
+<meta name="description" content="ShortCut 是一款 Windows 桌面效率工具：快捷启动、任务墙、SC球灵动岛、文件转换、截图翻译，并可与手机联动——任务同步、文件快传、手机控电脑。无需登录，数据默认留在本机。" />
+<meta name="theme-color" content="#0b0e14" />
 
-  /* ---------- 顶部导航 ---------- */
-  header.nav{
-    position:sticky;top:0;z-index:50;
-    backdrop-filter:blur(14px);
-    background:rgba(11,14,20,.72);
-    border-bottom:1px solid var(--line);
-  }
-  .nav-inner{display:flex;align-items:center;justify-content:space-between;height:62px}
-  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.5px}
-  .brand .logo{
-    width:30px;height:30px;border-radius:8px;
-    background:linear-gradient(135deg,var(--accent),#9b6bff);
-    display:grid;place-items:center;font-size:15px;color:#fff;font-weight:800;
-    box-shadow:0 6px 18px rgba(79,140,255,.4);
-  }
-  .nav-links{display:flex;gap:6px;align-items:center}
-  .nav-links a{
-    padding:8px 12px;border-radius:8px;color:var(--muted);font-size:14px;
-    transition:.18s;
-  }
-  .nav-links a:hover{color:var(--text);background:var(--panel)}
-  .nav-cta{
-    padding:8px 16px;border-radius:9px;background:var(--accent);color:#fff;font-weight:600;font-size:14px;
-    transition:.18s;
-  }
-  .nav-cta:hover{filter:brightness(1.08);transform:translateY(-1px)}
-  @media(max-width:880px){.nav-links{display:none}}
+<!-- Open Graph -->
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="ShortCut" />
+<meta property="og:title" content="ShortCut — Windows 桌面效率工具" />
+<meta property="og:description" content="快捷启动、任务墙、SC球灵动岛，并可与手机联动。数据默认留在本机。" />
+<meta property="og:image" content="/assets/img/og.png" />
+<meta name="twitter:card" content="summary_large_image" />
 
-  /* ---------- 通用按钮 ---------- */
-  .btn{
-    display:inline-flex;align-items:center;gap:8px;
-    padding:13px 22px;border-radius:11px;font-weight:600;font-size:15px;
-    cursor:pointer;border:1px solid transparent;transition:.18s;
-  }
-  .btn.primary{background:var(--accent);color:#fff;box-shadow:0 10px 30px rgba(79,140,255,.35)}
-  .btn.primary:hover{filter:brightness(1.08);transform:translateY(-1px)}
-  .btn.ghost{background:var(--panel);border-color:var(--line);color:var(--text)}
-  .btn.ghost:hover{border-color:var(--accent-line);background:var(--panel-2)}
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23e85d04'/%3E%3Ctext x='16' y='22' font-family='Segoe UI,sans-serif' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3ESC%3C/text%3E%3C/svg%3E" />
 
-  /* ---------- 章节通用 ---------- */
-  section{padding:88px 0;border-top:1px solid rgba(255,255,255,.03)}
-  .eyebrow{
-    color:var(--accent-2);font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
-    display:inline-flex;align-items:center;gap:8px;margin-bottom:14px;
-  }
-  .eyebrow::before{content:"";width:22px;height:2px;background:var(--accent);border-radius:2px}
-  h2.title{font-size:34px;margin:0 0 14px;font-weight:800;letter-spacing:.5px}
-  h3.sub{font-size:21px;margin:0 0 10px;font-weight:700}
-  .lead{color:var(--muted);font-size:17px;max-width:680px}
-  .center{text-align:center}
-  .center .lead{margin-inline:auto}
-
-  /* ---------- 首屏 Hero ---------- */
-  .hero{position:relative;overflow:hidden;border-top:none;padding:120px 0 100px}
-  .hero::before{
-    content:"";position:absolute;inset:0;
-    background:
-      radial-gradient(700px 380px at 18% 0%,rgba(79,140,255,.20),transparent 60%),
-      radial-gradient(620px 360px at 85% 10%,rgba(155,107,255,.16),transparent 60%);
-    pointer-events:none;
-  }
-  .hero-grid{position:relative;z-index:1;display:grid;grid-template-columns:1.1fr .9fr;gap:56px;align-items:center}
-  @media(max-width:940px){.hero-grid{grid-template-columns:1fr;gap:40px}}
-  .hero h1{font-size:58px;line-height:1.08;margin:0 0 18px;font-weight:800;letter-spacing:1px}
-  .hero h1 .grad{
-    background:linear-gradient(120deg,var(--accent-2),#b89bff);
-    -webkit-background-clip:text;background-clip:text;color:transparent;
-  }
-  .hero p.lead{font-size:18px;margin-bottom:30px}
-  .hero-actions{display:flex;gap:14px;flex-wrap:wrap}
-  .hero-meta{margin-top:34px;display:flex;gap:26px;flex-wrap:wrap;color:var(--muted-2);font-size:13px}
-  .hero-meta b{color:var(--text);display:block;font-size:22px;font-weight:800;margin-bottom:2px}
-
-  /* 图片占位框（通用） */
-  .shot{
-    border:1px solid var(--line);border-radius:var(--radius);
-    background:
-      linear-gradient(var(--panel),var(--panel)) padding-box,
-      linear-gradient(135deg,rgba(79,140,255,.25),transparent 60%) border-box;
-    box-shadow:var(--shadow);
-    position:relative;overflow:hidden;
-    min-height:300px;display:grid;place-items:center;
-    background-color:var(--panel);
-  }
-  .shot .placeholder{
-    color:var(--muted-2);font-size:13px;text-align:center;padding:24px;
-  }
-  .shot .placeholder .ph-label{font-size:12px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:6px}
-  .shot::after{
-    content:"截图位置";position:absolute;top:12px;left:14px;font-size:11px;color:var(--muted-2);
-    background:rgba(0,0,0,.3);padding:3px 8px;border-radius:6px;letter-spacing:1px;
-  }
-  /* 使用方式：<div class="shot"><img src="..." alt="..."/></div> */
-
-  /* ---------- 产品简介 ---------- */
-  .intro-grid{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center}
-  @media(max-width:880px){.intro-grid{grid-template-columns:1fr}}
-  .intro-grid p{color:var(--muted);font-size:16px;margin:0 0 16px}
-
-  /* ---------- 核心功能 ---------- */
-  .feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:38px}
-  @media(max-width:880px){.feat-grid{grid-template-columns:1fr}}
-  .feat-card{
-    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
-    padding:24px 22px;transition:.2s;
-  }
-  .feat-card:hover{border-color:var(--accent-line);transform:translateY(-3px);box-shadow:var(--shadow)}
-  .feat-icon{
-    width:42px;height:42px;border-radius:11px;display:grid;place-items:center;margin-bottom:14px;
-    background:var(--accent-soft);color:var(--accent-2);font-size:20px;
-  }
-  .feat-card h3{font-size:17px;margin:0 0 8px}
-  .feat-card p{color:var(--muted);font-size:14px;margin:0}
-
-  /* ---------- 核心板块大区（快捷方式 / 任务墙） ---------- */
-  .core-block{
-    margin-top:40px;background:var(--bg-soft);border:1px solid var(--line);
-    border-radius:18px;padding:42px;display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;
-  }
-  @media(max-width:940px){.core-block{grid-template-columns:1fr;padding:28px}}
-  .core-block.reverse{direction:rtl}
-  .core-block.reverse>*{direction:ltr}
-  .core-block ul{list-style:none;padding:0;margin:18px 0 0;display:grid;gap:9px}
-  .core-block li{position:relative;padding-left:26px;color:var(--muted);font-size:14.5px}
-  .core-block li::before{
-    content:"";position:absolute;left:0;top:9px;width:8px;height:8px;border-radius:3px;
-    background:var(--accent);box-shadow:0 0 0 4px var(--accent-soft);
-  }
-  .badge{
-    display:inline-block;font-size:12px;font-weight:700;letter-spacing:1px;color:var(--accent-2);
-    background:var(--accent-soft);padding:4px 10px;border-radius:20px;margin-bottom:10px;text-transform:uppercase;
-  }
-
-  /* ---------- 快捷操作键位 ---------- */
-  .keys-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:38px}
-  @media(max-width:880px){.keys-grid{grid-template-columns:1fr}}
-  .key-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:24px 22px}
-  .key-card h3{font-size:16px;margin-bottom:16px;color:var(--accent-2)}
-  .key-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px dashed var(--line);font-size:14px}
-  .key-row:last-child{border-bottom:none}
-  .key-row .desc{color:var(--muted)}
-  kbd{
-    font-family:"Segoe UI",system-ui,sans-serif;font-size:12px;font-weight:600;
-    background:var(--panel-2);border:1px solid var(--line);border-bottom-width:2px;
-    border-radius:6px;padding:3px 9px;color:var(--text);white-space:nowrap;
-  }
-
-  /* ---------- 下载区 ---------- */
-  .download{
-    margin-top:40px;text-align:center;
-    background:linear-gradient(135deg,rgba(79,140,255,.10),rgba(124,92,255,.10));
-    border:1px solid var(--accent-line);border-radius:20px;padding:56px 32px;
-  }
-  .download h2{font-size:30px;margin:0 0 12px}
-  .download p.lead{margin:0 auto 28px}
-  .dl-tips{margin-top:26px;display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
-  .dl-tip{font-size:13px;color:var(--muted);background:rgba(0,0,0,.2);border:1px solid var(--line);padding:8px 14px;border-radius:9px}
-
-  /* ---------- 更新日志：整体时间线控件 + 右侧固定滚动内容 ---------- */
-  .tl-layout{margin-top:42px;display:grid;grid-template-columns:280px 1fr;gap:34px;align-items:start}
-  @media(max-width:820px){.tl-layout{grid-template-columns:1fr}}
-
-  /* ===== 时间线控件（自包含组件） ===== */
-  .tl-widget{
-    position:relative;border:1px solid var(--line);border-radius:14px;background:var(--bg-soft);
-    padding:10px 6px;overflow:hidden;
-  }
-  /* 主干线：已按需求移除，仅保留节点 */
-  .tl-track{
-    position:relative;max-height:520px;overflow-y:auto;overflow-x:hidden;
-    padding:8px 2px;
-  }
-  /* 节点：统一高度排列在主干线上 */
-  .tl-node{
-    position:relative;display:flex;align-items:flex-start;gap:14px;
-    min-height:46px;padding:5px 12px;border:0;background:transparent;
-    color:inherit;font:inherit;text-align:left;width:100%;cursor:pointer;
-    border-radius:10px;transition:background .15s;
-  }
-  .tl-node:hover{background:var(--panel)}
-  .tl-node.active{background:var(--panel)}
-  /* 圆点：固定在节点左侧列，中心对准主干线 */
-  .tl-node .nd{flex:none;width:18px;height:18px;margin-top:8px;position:relative}
-  .tl-node .nd::before{
-    content:"";position:absolute;left:4px;top:3px;width:10px;height:10px;border-radius:50%;
-    background:var(--panel-2);border:2px solid var(--line);transition:.2s;
-  }
-  .tl-node.active .nd::before{background:var(--accent);border-color:var(--accent-2);box-shadow:0 0 0 4px var(--accent-soft),0 0 14px rgba(79,140,255,.5)}
-  /* 节点右侧文本 */
-  .tl-node .tx{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px;padding-top:1px}
-  .tl-node .ver{font-size:14px;font-weight:700;color:var(--muted);transition:.2s;white-space:nowrap}
-  .tl-node:hover .ver,.tl-node.active .ver{color:var(--text)}
-  .tl-node .tag-latest{
-    align-self:flex-start;font-size:10px;color:var(--accent-2);background:var(--accent-soft);
-    border:1px solid var(--accent-line);padding:1px 7px;border-radius:20px;letter-spacing:1px;
-  }
-
-  /* 右侧固定高度内容框（长内容内部滚动，滑动条统一样式） */
-  .tl-panel{
-    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
-    padding:30px 30px 26px;box-shadow:var(--shadow);
-    height:520px;overflow-y:auto;
-  }
-  .tl-panel h3{font-size:24px;margin:0 0 6px;font-weight:800;display:flex;align-items:center;gap:12px}
-  .tl-panel .when{color:var(--muted-2);font-size:13px;margin-bottom:18px}
-  .tl-panel ul{margin:0;padding-left:20px;color:var(--muted);font-size:14.5px;display:grid;gap:7px}
-  .tl-panel .sec{color:var(--accent-2);font-weight:700;font-size:14.5px;margin:16px 0 6px}
-  .tl-panel .sec:first-child{margin-top:0}
-  .tl-panel .plain{color:var(--muted);font-size:14.5px;margin:4px 0}
-  .tl-empty{color:var(--muted-2);text-align:center;padding:30px 0}
-
-  /* 统一样式滚动条 */
-  .tl-track::-webkit-scrollbar,
-  .tl-panel::-webkit-scrollbar{width:10px;height:10px}
-  .tl-track::-webkit-scrollbar-track,
-  .tl-panel::-webkit-scrollbar-track{background:transparent;border-radius:10px}
-  .tl-track::-webkit-scrollbar-thumb,
-  .tl-panel::-webkit-scrollbar-thumb{
-    background:var(--panel-2);border:2px solid var(--bg-soft);border-radius:10px;
-  }
-  .tl-track::-webkit-scrollbar-thumb:hover,
-  .tl-panel::-webkit-scrollbar-thumb:hover{background:var(--muted-2);border-color:var(--bg-soft)}
-  .tl-track::-webkit-scrollbar-corner,
-  .tl-panel::-webkit-scrollbar-corner{background:transparent}
-  /* Firefox */
-  .tl-track,.tl-panel{scrollbar-width:thin;scrollbar-color:var(--panel-2) transparent}
-  @keyframes tlIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-
-  /* ---------- 仓库 / 页脚 ---------- */
-  .repo{text-align:center;padding-top:60px}
-  .repo .repo-link{
-    display:inline-flex;align-items:center;gap:12px;margin-top:18px;
-    background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 24px;
-    font-family:"Consolas",monospace;color:var(--accent-2);font-size:15px;transition:.2s;
-  }
-  .repo .repo-link:hover{border-color:var(--accent-line);transform:translateY(-2px)}
-  footer{border-top:1px solid var(--line);margin-top:80px;padding:34px 0;color:var(--muted-2);font-size:13px;text-align:center}
-  footer a{color:var(--muted)}
-
-  .pill-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
-  .pill{font-size:12px;color:var(--muted);background:var(--bg-soft);border:1px solid var(--line);padding:4px 11px;border-radius:20px}
-
-  /* ---------- 蓝奏云弹窗 ---------- */
-  .lz-overlay{
-    position:fixed;inset:0;z-index:999;display:grid;place-items:center;
-    background:rgba(8,10,16,.72);backdrop-filter:blur(6px);padding:20px;
-  }
-  .lz-overlay.hidden{display:none}
-  .lz-modal{
-    position:relative;width:min(100%,420px);background:var(--panel-2);
-    border:1px solid var(--line);border-radius:18px;padding:34px 30px 28px;text-align:center;
-    box-shadow:var(--shadow);animation:tlIn .2s ease;
-  }
-  .lz-close{
-    position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;
-    border:1px solid var(--line);background:transparent;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;
-  }
-  .lz-close:hover{border-color:var(--accent-line);color:var(--text)}
-  .lz-icon{font-size:40px;margin-bottom:8px}
-  .lz-modal h3{margin:0 0 8px;font-size:20px}
-  .lz-desc{color:var(--muted);font-size:14px;margin:0 0 18px}
-  .lz-code{
-    font-size:30px;font-weight:800;letter-spacing:8px;color:var(--accent-2);
-    background:var(--bg-soft);border:1px dashed var(--accent-line);border-radius:12px;
-    padding:12px 0;margin-bottom:22px;user-select:all;
-  }
-  .lz-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  .lz-actions .btn{justify-content:center;padding:13px 10px;font-size:14px}
-  @media(max-width:520px){.lz-actions{grid-template-columns:1fr}}
-</style>
+<link rel="stylesheet" href="/assets/css/site.css" />
+<link rel="stylesheet" href="/assets/css/pages.css" />
 </head>
-<body>
 
-<!-- ===================== 顶部导航 ===================== -->
-<header class="nav">
-  <div class="wrap nav-inner">
-    <a class="brand" href="#top">
-      <span class="logo">S</span>
-      <span>ShortCut</span>
-    </a>
-    <nav class="nav-links">
-      <a href="#product">产品简介</a>
-      <a href="#features">核心功能</a>
-      <a href="#shortcut">快捷方式</a>
-      <a href="#taskwall">任务墙</a>
-      <a href="#scball">SC球</a>
-      <a href="#keys">快捷操作</a>
-      <a href="#download">下载</a>
-      <a href="#mobile">移动联动</a>
-    </nav>
-    <a class="nav-cta" href="#download">下载 ShortCut</a>
-  </div>
-</header>
+<body data-page="home">
 
-<!-- ===================== 1. 首屏 ===================== -->
-<section class="hero" id="top">
-  <div class="wrap hero-grid">
-    <div>
-      <span class="eyebrow">Windows 桌面效率工具</span>
-      <h1>集中启动，<span class="grad">一键直达</span><br/>SC球常驻，效率升级</h1>
-      <p class="lead">一个集快捷启动、任务墙、翻译、电脑驾驶舱和 SC球 灵动岛于一体的 Windows 桌面工具。集中管理常用软件、文件、文件夹和网页，通过键盘快速选择并启动；用可自由排列的任务墙记录待办、长文本和提醒事项。</p>
-      <div class="hero-actions">
-        <a class="btn primary" href="#download">⬇ 下载 ShortCut</a>
-        <a class="btn ghost" href="#features">查看功能</a>
-      </div>
-      <div class="hero-meta">
-        <div><b id="heroVersion">—</b>当前版本</div>
-        <div><b>Windows</b>支持平台</div>
-        <div><b>本地保存</b>数据不上传</div>
-      </div>
-    </div>
-    <div>
-      <!-- 首屏主图：建议放软件主界面整体截图（含左侧导航 + 快捷方式/任务墙） -->
-      <div class="shot" style="min-height:360px">
-        <div class="placeholder">
-          <div class="ph-label">首屏主图</div>
-          放入 ShortCut 主界面整体截图<br/>（建议 1280×800 左右）
+<!-- 导航（由 site.js 注入） -->
+<div id="site-nav"></div>
+
+<main>
+
+  <!-- ══ 1. 首屏 ═══════════════════════════════════════════════════════ -->
+  <section class="hero">
+    <div class="wrap hero__inner">
+      <div class="hero__text">
+        <span class="eyebrow">Windows 10 / 11 桌面效率工具</span>
+        <h1>集中启动，<span class="grad">一键直达</span><br />SC球常驻，效率升级</h1>
+        <p class="hero__lead">
+          把常用软件、文件、文件夹、网页集中到一处，键盘一按直达；
+          任务用纸条贴在墙上，常驻桌面的 SC球 把音乐、任务、驾驶舱和余额收进一颗小球。
+          不用改变现有习惯，也不用登录账号。
+        </p>
+        <div class="btn-row">
+          <a class="btn btn--primary" id="heroDownload" href="/download.html">免费下载</a>
+          <a class="btn btn--ghost" href="/features/shortcut.html">看看能做什么</a>
+        </div>
+        <div class="hero__meta">
+          <div><b id="heroVersion">—</b><span>当前版本</span></div>
+          <div><b>7 MB</b><span>安装包体积</span></div>
+          <div><b>本地保存</b><span>数据不上传</span></div>
         </div>
       </div>
-    </div>
-  </div>
-</section>
 
-<!-- ===================== 2. 产品简介 ===================== -->
-<section id="product">
-  <div class="wrap intro-grid">
-    <div>
-      <span class="eyebrow">产品简介</span>
-      <h2 class="title">从一个启动面板，长成桌面效率中枢</h2>
-      <p>ShortCut 最初是一个桌面快捷方式管理工具，用于减少在桌面、开始菜单和文件夹之间反复查找内容的时间。</p>
-      <p>随着功能扩展，ShortCut 已加入任务墙、长文本便签、待办提醒、翻译、电脑驾驶舱和 SC球 灵动岛，并将继续扩展更多实用工具板块。</p>
-      <p>用户可以通过左侧导航在不同板块之间切换，同时保留统一的窗口、主题和快捷操作体验；SC球 常驻桌面，可显示音乐、任务提醒、驾驶舱数据和 DeepSeek 余额。</p>
-      <div class="pill-row">
-        <span class="pill">快捷启动</span>
-        <span class="pill">任务墙</span>
-        <span class="pill">长文本便签</span>
-        <span class="pill">待办提醒</span>
-        <span class="pill">翻译</span>
-        <span class="pill">驾驶舱</span>
-        <span class="pill">SC球 灵动岛</span>
-        <span class="pill">DeepSeek 余额</span>
-        <span class="pill">自动更新</span>
-        <span class="pill">更多板块扩展中</span>
-      </div>
-    </div>
-    <div>
-      <!-- 产品简介配图：建议放软件左侧导航 + 板块切换示意 -->
-      <div class="shot" style="min-height:320px">
-        <div class="placeholder">
-          <div class="ph-label">产品简介配图</div>
-          放入左侧导航 / 板块切换截图
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ===================== 3. 核心功能 ===================== -->
-<section id="features">
-  <div class="wrap">
-    <div class="center">
-      <span class="eyebrow">核心功能</span>
-      <h2 class="title">十二项核心能力，覆盖日常桌面效率</h2>
-      <p class="lead">围绕「快速启动」与「任务管理」两条主线，提供从添加、整理到键盘操作的完整体验。</p>
-    </div>
-    <div class="feat-grid">
-      <div class="feat-card"><div class="feat-icon">⚡</div><h3>快捷启动</h3><p>统一添加和管理应用程序、文件、文件夹及网页地址，减少桌面图标和文件夹层级带来的查找成本。</p></div>
-      <div class="feat-card"><div class="feat-icon">📥</div><h3>软件导入</h3><p>从 Windows 已安装软件列表中选择需要的程序，批量导入到快捷方式页面。</p></div>
-      <div class="feat-card"><div class="feat-icon">🎨</div><h3>图标提取</h3><p>自动提取应用程序和文件图标。提取失败时使用系统默认图标，保证快捷方式仍可正常识别和使用。</p></div>
-      <div class="feat-card"><div class="feat-icon">⌨️</div><h3>键盘操作</h3><p>方向键移动选择光标，Enter 启动快捷方式，支持跨行、跨列循环选择。</p></div>
-      <div class="feat-card"><div class="feat-icon">🔍</div><h3>搜索记录</h3><p>搜索框保留最近五条搜索记录，可快速再次使用，也可删除不再需要的记录。</p></div>
-      <div class="feat-card"><div class="feat-icon">🗂️</div><h3>多任务墙</h3><p>支持创建多个任务墙，每个任务墙可以单独命名并保存自己的任务内容和布局。</p></div>
-      <div class="feat-card"><div class="feat-icon">📝</div><h3>多种任务类型</h3><p>任务条支持普通文本、长文本和待办提醒，也可以同时启用长文本与提醒。</p></div>
-      <div class="feat-card"><div class="feat-icon">💾</div><h3>本地保存</h3><p>快捷方式、任务墙、设置和搜索记录保存在本地，关闭软件后再次打开仍可继续使用。</p></div>
-      <div class="feat-card"><div class="feat-icon">🔄</div><h3>应用更新</h3><p>可检查新版本。发现更新后先展示版本号和更新内容，由用户决定是否下载和安装。</p></div>
-      <div class="feat-card"><div class="feat-icon">✨</div><h3>SC球 灵动岛</h3><p>桌面常驻悬浮球，支持收起、迷你、展开三种状态，可显示音乐、任务、驾驶舱和 DeepSeek 余额。</p></div>
-      <div class="feat-card"><div class="feat-icon">🌐</div><h3>翻译</h3><p>Alt+E 划词翻译，任意程序选中文字即可弹出翻译纸条；翻译板块支持双语对照和语言互换。</p></div>
-      <div class="feat-card"><div class="feat-icon">📊</div><h3>电脑驾驶舱</h3><p>实时显示 CPU、GPU、内存占用与温度；DeepSeek 余额每分钟刷新，点击可直达平台。</p></div>
-    </div>
-  </div>
-</section>
-
-<!-- ===================== 4. 快捷方式管理（核心板块一） ===================== -->
-<section id="shortcut">
-  <div class="wrap">
-    <div class="core-block">
-      <div>
-        <span class="badge">核心板块一</span>
-        <h2 class="title">快捷方式管理</h2>
-        <p class="lead">集中管理你经常打开的内容。支持应用程序、文件、文件夹、网页地址四类，配以导入、图标提取与键盘启动。</p>
-        <ul>
-          <li>手动输入路径添加，或从已安装软件中导入。</li>
-          <li>自动识别网页地址并补全协议。</li>
-          <li>自动提取图标，失败时使用默认图标兜底。</li>
-          <li>创建多个快捷方式页面，自定义名称和分组。</li>
-          <li>方向键循环移动选择，Enter 启动。</li>
-          <li>搜索快捷方式并保留最近搜索记录。</li>
-          <li>删除快捷方式前进行二次确认。</li>
-        </ul>
-      </div>
-      <div>
-        <!-- 快捷方式板块截图：建议放快捷方式页面 + 键盘选中态 -->
-        <div class="shot" style="min-height:340px">
-          <div class="placeholder">
-            <div class="ph-label">快捷方式界面</div>
-            放入快捷方式页面截图<br/>（展示图标网格与键盘选中态）
+      <!-- 产品示意图（纯 CSS 绘制，非截图） -->
+      <div class="hero__figure">
+        <div class="mock-window" role="img" aria-label="ShortCut 主面板示意图：左侧板块导航，右侧快捷方式图标网格，顶部为 SC球 胶囊">
+          <div class="mock-titlebar">
+            <span class="mock-dots"><i></i><i></i><i></i></span>
+            <span class="mock-title">ShortCut</span>
+          </div>
+          <div class="mock-body">
+            <div class="mock-side">
+              <span class="mock-side-item is-active"><b></b>快捷方式</span>
+              <span class="mock-side-item"><b></b>任务墙</span>
+              <span class="mock-side-item"><b></b>驾驶舱</span>
+              <span class="mock-side-item"><b></b>翻译</span>
+              <span class="mock-side-item"><b></b>使用记录</span>
+              <span class="mock-side-item"><b></b>控制</span>
+            </div>
+            <div class="mock-main">
+              <div class="mock-search">搜索快捷方式…</div>
+              <div class="mock-grid">
+                <span class="mock-tile is-selected"></span><span class="mock-tile"></span>
+                <span class="mock-tile"></span><span class="mock-tile"></span>
+                <span class="mock-tile"></span><span class="mock-tile"></span>
+                <span class="mock-tile"></span><span class="mock-tile"></span>
+                <span class="mock-tile"></span><span class="mock-tile"></span>
+              </div>
+              <div class="mock-island">
+                <span class="mi-dot"></span>
+                <span>正在播放</span>
+                <span class="mi-bar"></span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- ===================== 5. 任务墙（核心板块二） ===================== -->
-<section id="taskwall">
-  <div class="wrap">
-    <div class="core-block reverse">
-      <div>
-        <!-- 任务墙截图：建议放任务墙 + 不同类型任务条 -->
-        <div class="shot" style="min-height:340px">
-          <div class="placeholder">
-            <div class="ph-label">任务墙界面</div>
-            放入任务墙截图<br/>（展示普通文本 / 长文本 / 待办提醒任务条）
+  <!-- ══ 2. 功能卡网格 ═════════════════════════════════════════════════ -->
+  <section class="section" id="features">
+    <div class="wrap">
+      <div class="section-head center reveal">
+        <span class="eyebrow">核心功能</span>
+        <h2>六件事，一个工具做完</h2>
+        <p>桌面端四块、移动互联两块。每一块都能单独用，也可以串起来用。</p>
+      </div>
+      <div class="grid grid--3" id="featureGrid"><!-- 由脚本渲染 --></div>
+    </div>
+  </section>
+
+  <!-- ══ 3. 移动互联 ═══════════════════════════════════════════════════ -->
+  <section class="section section--alt" id="mobile">
+    <div class="wrap">
+      <div class="section-head center reveal">
+        <span class="eyebrow">移动互联</span>
+        <h2>手机上做的事，电脑上接着完成</h2>
+        <p>任务墙双向同步、文件互传，还能把手机当电脑的键盘与触控板。所有数据走你自己的服务器。</p>
+      </div>
+
+      <div class="grid grid--2" style="align-items:center;gap:40px">
+        <div class="reveal">
+          <div class="mock-phone" role="img" aria-label="手机端示意图：绑定与功能入口">
+            <div class="mock-phone__screen">
+              <div class="mock-phone__title">ShortCut 联动</div>
+              <div class="mock-phone__card is-accent"><span class="pc-dot"></span>任务墙 · 钉一条任务</div>
+              <div class="mock-phone__card"><span class="pc-dot"></span>文件快传</div>
+              <div class="mock-phone__card"><span class="pc-dot"></span>电脑控制</div>
+              <div class="mock-phone__card"><span class="pc-dot"></span>设备与绑定</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="reveal">
+          <div class="link-diagram">
+            <div class="link-node">
+              <span class="ln-icon" data-icon="phone"></span>
+              <span>手机</span>
+            </div>
+            <div class="link-arrow">
+              <div class="la-line"></div>
+              <div style="margin-top:6px;font-size:11px">云端中继 / 局域网直连</div>
+            </div>
+            <div class="link-node">
+              <span class="ln-icon" data-icon="windows"></span>
+              <span>电脑</span>
+            </div>
+          </div>
+
+          <div class="grid" style="gap:12px;margin-top:26px">
+            <div class="capability">
+              <span class="cap-ico" data-icon="sticky"></span>
+              <div><b>任务墙同步</b><p>手机上钉一条任务，电脑任务墙立刻出现；桌面端离线也不会丢，上线自动接收。</p></div>
+            </div>
+            <div class="capability">
+              <span class="cap-ico" data-icon="send"></span>
+              <div><b>文件快传</b><p>手机与电脑互传文件与文本，分片上传大文件，按有效期自动清理。</p></div>
+            </div>
+            <div class="capability">
+              <span class="cap-ico" data-icon="phone"></span>
+              <div><b>手机控电脑</b><p>手机当键盘触控板：打字、组合键、剪贴板互传。4G 也能连，同 Wi-Fi 延迟更低。</p></div>
+            </div>
           </div>
         </div>
       </div>
-      <div>
-        <span class="badge">核心板块二</span>
-        <h2 class="title">任务墙</h2>
-        <p class="lead">记录临时事项、待办任务和较长的文本内容。任务条可自由拖动排列，多种类型自由组合。</p>
-        <ul>
-          <li>创建多个任务墙，每个可单独命名。</li>
-          <li>自由拖动任务条位置，拖动中的任务自动置顶。</li>
-          <li>创建普通文本任务、长文本便签、带时间的待办提醒。</li>
-          <li>可同时启用长文本与待办提醒。</li>
-          <li>双击任务条打开编辑弹窗，修改标题、正文、类型与提醒时间。</li>
-          <li>删除任务前二次确认；双击任务墙名称可重命名。</li>
-          <li>双击空格快速聚焦任务输入栏。</li>
-        </ul>
-      </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- ===================== 5.5 SC球 灵动岛 ===================== -->
-<section id="scball">
-  <div class="wrap">
-    <div class="core-block">
-      <div>
-        <span class="badge">核心板块三</span>
-        <h2 class="title">SC球 灵动岛</h2>
-        <p class="lead">常驻桌面的悬浮效率球，聚合音乐、任务、驾驶舱和 DeepSeek 余额，让关键信息随时可见。</p>
-        <ul>
-          <li>收起、迷你、展开三种固定状态，宽度随内容自适应。</li>
-          <li>网易云音乐：封面、歌词、进度与播放控制，支持逐字歌词和长歌词轮播。</li>
-          <li>任务到时自动弹出提醒球，任务清单球支持完成、移除与跳转定位。</li>
-          <li>驾驶舱数据：CPU、GPU、内存占用与温度。</li>
-          <li>DeepSeek 余额：每分钟刷新，播放音乐时分离为右侧小圆球。</li>
-          <li>全局快捷键：Alt+Z 上一首、Alt+X 播放暂停、Alt+C 下一首、Alt+U 切换任务清单。</li>
-        </ul>
+  <!-- ══ 4. 为什么选它 ═════════════════════════════════════════════════ -->
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head center reveal">
+        <span class="eyebrow">为什么用它</span>
+        <h2>轻、快、不打扰</h2>
       </div>
-      <div>
-        <!-- SC球 截图：建议放 SC球 展开状态与余额小球截图 -->
-        <div class="shot" style="min-height:340px">
-          <div class="placeholder">
-            <div class="ph-label">SC球 界面</div>
-            放入 SC球 展开状态截图<br/>（展示音乐 / 任务 / 驾驶舱 / DeepSeek）
-          </div>
+      <div class="home-values reveal">
+        <div class="value-item">
+          <span class="vi-icon" data-icon="bolt"></span>
+          <div><b>7 MB，启动即用</b><p>Tauri 2 重构后体积比旧版减少约 94%，内存占用下降约 30%。</p></div>
+        </div>
+        <div class="value-item">
+          <span class="vi-icon" data-icon="shield"></span>
+          <div><b>数据默认留在本机</b><p>快捷方式、任务墙、使用记录都存在你电脑里；只有你用移动互联时才走自建服务器。</p></div>
+        </div>
+        <div class="value-item">
+          <span class="vi-icon" data-icon="check"></span>
+          <div><b>不改变使用习惯</b><p>不开机常驻也能用；S球 可穿透、可隐藏，不挡桌面点击。</p></div>
         </div>
       </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- ===================== 6. 快捷操作 ===================== -->
-<section id="keys">
-  <div class="wrap">
-    <div class="center">
-      <span class="eyebrow">快捷操作</span>
-      <h2 class="title">键盘优先的桌面操作体验</h2>
-      <p class="lead">绝大多数操作都能用空格键和方向键完成，手不离键盘即可切换板块、搜索与启动。</p>
-    </div>
-    <div class="keys-grid">
-      <div class="key-card">
-        <h3>全局操作</h3>
-        <div class="key-row"><span class="desc">显示或隐藏主面板</span><kbd>Alt+Space</kbd></div>
-        <div class="key-row"><span class="desc">翻译当前选中的文字</span><kbd>Alt+E</kbd></div>
-        <div class="key-row"><span class="desc">截取整个屏幕到剪贴板</span><kbd>Alt+S</kbd></div>
-        <div class="key-row"><span class="desc">进入区域截屏模式</span><kbd>Alt+D</kbd></div>
-        <div class="key-row"><span class="desc">切换上一个 / 下一个板块</span><kbd>Z / X</kbd></div>
-      </div>
-      <div class="key-card">
-        <h3>快捷方式板块</h3>
-        <div class="key-row"><span class="desc">单击空格切换快捷方式页面</span><kbd>Space</kbd></div>
-        <div class="key-row"><span class="desc">双击空格聚焦搜索框</span><kbd>Space ×2</kbd></div>
-        <div class="key-row"><span class="desc">方向键移动快捷方式光标</span><kbd>↑ ↓ ← →</kbd></div>
-        <div class="key-row"><span class="desc">非输入状态 W/A/S/D 映射方向键</span><kbd>W A S D</kbd></div>
-        <div class="key-row"><span class="desc">启动选中的快捷方式</span><kbd>Enter</kbd></div>
-      </div>
-      <div class="key-card">
-        <h3>任务墙与 SC球</h3>
-        <div class="key-row"><span class="desc">单击空格切换任务墙</span><kbd>Space</kbd></div>
-        <div class="key-row"><span class="desc">双击空格聚焦底部任务输入栏</span><kbd>Space ×2</kbd></div>
-        <div class="key-row"><span class="desc">音乐上一首 / 播放暂停 / 下一首</span><kbd>Alt+Z/X/C</kbd></div>
-        <div class="key-row"><span class="desc">显示或隐藏 SC球</span><kbd>Alt+I</kbd></div>
-        <div class="key-row"><span class="desc">显示或隐藏任务清单球</span><kbd>Alt+U</kbd></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ===================== 7. 下载 ===================== -->
-<section id="download">
-  <div class="wrap">
-    <div class="download">
-      <span class="eyebrow">下载</span>
-      <h2>下载 ShortCut</h2>
-      <p class="lead">下载适用于 Windows 的 ShortCut 安装程序，安装后即可开始管理快捷方式和任务墙。</p>
-      <div class="hero-actions" style="justify-content:center">
-        <!-- 下载链接：自动获取更新服务器最新版本 -->
-        <a class="btn primary" id="dlDirect" href="https://shortcut.326415.xyz/updates/ShortCut-2.4.4-Setup.exe" target="_blank" rel="noopener">⬇ 下载最新版 (<span id="dlVersion">2.4.4</span>)</a>
-        <button class="btn ghost" id="dlLanzou" type="button">☁ 蓝奏云下载（推荐）</button>
-      </div>
-      <div class="dl-tips">
-        <span class="dl-tip">✓ 安装新版时会保留原有本地配置</span>
-        <span class="dl-tip">✓ 下载更新前可先查看该版本更新内容</span>
-        <span class="dl-tip">✓ 首次安装和后续升级均使用安装程序</span>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ===================== 蓝奏云密码弹窗 ===================== -->
-<div class="lz-overlay hidden" id="lzOverlay">
-  <div class="lz-modal">
-    <button class="lz-close" id="lzClose" type="button" title="关闭">×</button>
-    <div class="lz-icon">🔒</div>
-    <h3>蓝奏云下载</h3>
-    <p class="lz-desc">访问该分享链接需要访问密码，请复制后前往蓝奏云下载。</p>
-    <div class="lz-code" id="lzCode">9akr</div>
-    <div class="lz-actions">
-      <button class="btn ghost" id="lzCopy" type="button">📋 复制密码</button>
-      <a class="btn primary" id="lzGo" href="https://wwbac.lanzoue.com/ijE7j45ylf5a" target="_blank" rel="noopener">我已复制，前往下载 →</a>
-    </div>
-  </div>
-</div>
-
-<!-- ===================== 8.5 移动联动 ===================== -->
-<section id="mobile">
-  <div class="wrap">
-    <div class="core-block reverse">
-      <div>
-        <!-- 移动联动截图：建议放手机浏览器打开 /mobile/ 的绑定与功能入口 -->
-        <div class="shot" style="min-height:340px">
-          <div class="placeholder">
-            <div class="ph-label">移动联动</div>
-            放入手机打开联动门户的截图<br/>（绑定 / 任务墙 / 文件快传入口）
-          </div>
+  <!-- ══ 5. 最新更新 ═══════════════════════════════════════════════════ -->
+  <section class="section section--tight section--alt">
+    <div class="wrap">
+      <div class="update-strip reveal">
+        <div>
+          <span class="badge"><span class="dot"></span>最新版本</span>
         </div>
-      </div>
-      <div>
-        <span class="badge">核心板块四</span>
-        <h2 class="title">手机与桌面联动</h2>
-        <p class="lead">无需安装手机 App，手机浏览器打开联动门户，扫码或输入 6 位绑定码即可与桌面 ShortCut 互联，双向传文件、发文本、推送任务。</p>
-        <ul>
-          <li>手机访问 <b>shortcut.326415.xyz/mobile</b>，扫码或输入桌面端“验证绑定”页的 6 位绑定码完成绑定。</li>
-          <li>任务墙互通：手机查看 / 推送任务至桌面任务墙，桌面端同步显示。</li>
-          <li>文件快传：手机与桌面双向发送文件与文本消息，云端中转、两端同步。</li>
-          <li>临时共享：6 位接收密码领取共享文本或文件（可选加密密码与时长）。</li>
-          <li>绑定信息保存在手机本地，一次绑定持续有效，可随时更换或解除。</li>
-        </ul>
-        <div class="hero-actions" style="margin-top:26px">
-          <a class="btn primary" href="https://shortcut.326415.xyz/mobile/" target="_blank" rel="noopener">📱 打开移动联动门户</a>
-          <a class="btn ghost" href="https://shortcut.326415.xyz/transfer/" target="_blank" rel="noopener">文件快传页</a>
+        <div>
+          <h3 id="updateTitle">正在读取版本信息…</h3>
+          <ul id="updateList"></ul>
+        </div>
+        <div class="btn-row">
+          <a class="btn btn--sm" href="/changelog.html">全部更新</a>
         </div>
       </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- ===================== 9. 更新记录（时间线控件） ===================== -->
-<section id="changelog">
-  <div class="wrap">
-    <div class="center">
-      <span class="eyebrow">更新记录</span>
-      <h2 class="title">版本更新内容</h2>
-    </div>
-    <div class="tl-layout">
-      <!-- 左侧：整体时间线控件 -->
-      <div class="tl-widget">
-        <div class="tl-track" id="tlTrack">
-          <!-- 节点由 JS 注入，每个节点 = 圆点 + 标签，全部排列在一条主干线上 -->
-        </div>
+  <!-- ══ 6. 结尾 CTA ═══════════════════════════════════════════════════ -->
+  <section class="cta">
+    <div class="wrap">
+      <h2>试试 <span class="grad">ShortCut</span></h2>
+      <p id="ctaSub">Windows 10 / 11 · 免费下载 · 无需登录</p>
+      <div class="btn-row center">
+        <a class="btn btn--primary" id="ctaDownload" href="/download.html">下载最新版本</a>
+        <a class="btn btn--ghost" href="/faq.html">先看看常见问题</a>
       </div>
-      <!-- 右侧：更新内容查看框 -->
-      <div class="tl-panel" id="tlPanel"></div>
     </div>
-  </div>
-</section>
+  </section>
 
-<footer>
-  <div class="wrap">
-    <div>© ShortCut · MIT License · <a href="https://gitee.com/wanan6/short-cut" target="_blank" rel="noopener">Gitee 仓库</a></div>
-    <div style="margin-top:6px">面向 Windows 的桌面快捷启动与任务墙效率工具</div>
-  </div>
-</footer>
+</main>
 
+<!-- 页脚（由 site.js 注入） -->
+<div id="site-footer"></div>
+
+<script src="/assets/js/data.js"></script>
+<script src="/assets/js/site.js"></script>
 <script>
-/* 每次进入 / 刷新页面都定位到最顶部（阻止浏览器恢复上次滚动位置） */
 (function () {
-  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
-  window.scrollTo(0, 0);
-  document.addEventListener('DOMContentLoaded', function () { window.scrollTo(0, 0); });
-  window.addEventListener('load', function () { window.scrollTo(0, 0); });
-})();
+  'use strict';
+  var D = SC.getData();
 
-/* 自动获取最新版本：读取更新服务器 latest.yml，动态更新下载链接与版本号 */
-(function () {
-  var LATEST_URL = 'https://shortcut.326415.xyz/updates/latest.yml';
-  function apply(data) {
-    try {
-      var version = (String(data && data.version || '').trim()) || '';
-      var file = '';
-      var files = data && data.files;
-      if (files && files.length) file = String(files[0].url || '').trim();
-      if (!file && data && data.path) file = String(data.path).trim();
-      if (version) {
-        var vEl = document.getElementById('dlVersion');
-        if (vEl) vEl.textContent = version;
-        var heroEl = document.getElementById('heroVersion');
-        if (heroEl) heroEl.textContent = version;
-        var dl = document.getElementById('dlDirect');
-        if (dl) {
-          var base = 'https://shortcut.326415.xyz/updates/';
-          dl.href = file ? base + file : base + 'ShortCut-' + version + '-Setup.exe';
-        }
-      }
-    } catch (e) {}
-  }
-  fetch(LATEST_URL, { cache: 'no-store' })
-    .then(function (r) { return r.ok ? r.text() : Promise.reject(); })
-    .then(function (text) {
-      var yaml = {};
-      var lines = text.split(/\r?\n/);
-      for (var i = 0; i < lines.length; i++) {
-        var line = lines[i];
-        var m = line.match(/^\s*-\s*url:\s*(.+?)\s*$/);
-        if (m && !yaml.rawUrl) { yaml.rawUrl = m[1]; continue; }
-        m = line.match(/^version:\s*(.+?)\s*$/);
-        if (m && !yaml.version) { yaml.version = m[1]; continue; }
-        m = line.match(/^path:\s*(.+?)\s*$/);
-        if (m && !yaml.path) { yaml.path = m[1]; continue; }
-        m = line.match(/^url:\s*(.+?)\s*$/);
-        if (m && !yaml.rawUrl) { yaml.rawUrl = m[1]; }
-      }
-      if (yaml.version) {
-        yaml.files = [{ url: yaml.rawUrl || yaml.path || ('ShortCut-' + yaml.version + '-Setup.exe') }];
-        apply(yaml);
-      }
-    })
-    .catch(function () {});
-})();
-
-/* 蓝奏云弹窗：展示访问密码，复制密码与前往下载 */
-(function () {
-  var overlay = document.getElementById('lzOverlay');
-  var openBtn = document.getElementById('dlLanzou');
-  var closeBtn = document.getElementById('lzClose');
-  var copyBtn = document.getElementById('lzCopy');
-  var codeText = '9akr';
-  function open() { if (overlay) overlay.classList.remove('hidden'); }
-  function close() { if (overlay) overlay.classList.add('hidden'); }
-  if (openBtn) openBtn.addEventListener('click', open);
-  if (closeBtn) closeBtn.addEventListener('click', close);
-  if (overlay) overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
-  if (copyBtn) copyBtn.addEventListener('click', function () {
-    function done() {
-      copyBtn.textContent = '✅ 已复制';
-      setTimeout(function () { copyBtn.textContent = '📋 复制密码'; }, 2000);
+  /* ── 功能卡渲染（数据来自 data.js，改一处全站生效）── */
+  var grid = document.getElementById('featureGrid');
+  if (grid && D.FEATURES) {
+    D.FEATURES.forEach(function (f, i) {
+      var a = document.createElement('a');
+      a.className = 'card card--feature reveal';
+      a.href = f.href;
+      a.style.transitionDelay = (i * 40) + 'ms';
+      a.innerHTML =
+        '<span class="card__icon">' + SC.icon(f.icon, 21) + '</span>' +
+        '<h3>' + f.label + '</h3>' +
+        '<p class="tagline">' + f.tagline + '</p>' +
+        '<ul class="card__points">' +
+        f.points.map(function (p) { return '<li>' + p + '</li>'; }).join('') +
+        '</ul>' +
+        '<span class="card__more">了解更多 ' + SC.icon('arrow', 15) + '</span>';
+      grid.appendChild(a);
+    });
+    if ('IntersectionObserver' in window) {
+      var io = new IntersectionObserver(function (es) {
+        es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('is-in'); io.unobserve(e.target); } });
+      }, { threshold: 0.05 });
+      Array.prototype.forEach.call(grid.querySelectorAll('.reveal'), function (n) { io.observe(n); });
+    } else {
+      Array.prototype.forEach.call(grid.querySelectorAll('.reveal'), function (n) { n.classList.add('is-in'); });
     }
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(codeText).then(done, function () { fallbackCopy(); done(); });
-    } else { fallbackCopy(); done(); }
-    function fallbackCopy() {
-      if (!codeText) return;
-      var ta = document.createElement('textarea');
-      ta.value = codeText; ta.style.position = 'fixed'; ta.style.opacity = '0';
-      document.body.appendChild(ta); ta.select();
-      try { document.execCommand('copy'); } catch (e) {}
-      document.body.removeChild(ta);
+  }
+
+  /* ── data-icon 占位 → 内联 SVG ── */
+  Array.prototype.forEach.call(document.querySelectorAll('[data-icon]'), function (n) {
+    n.innerHTML = SC.icon(n.getAttribute('data-icon'), 20);
+  });
+
+  /* ── 版本信息（接口失败静默降级，不显示错误）── */
+  SC.loadDesktopVersion().then(function (v) {
+    var hv = document.getElementById('heroVersion');
+    if (hv) hv.textContent = 'v' + v.version;
+
+    var title = document.getElementById('updateTitle');
+    if (title) {
+      title.textContent = 'v' + v.version + (v.pubDate ? ' · ' + v.pubDate : '') +
+        (v.size ? ' · ' + SC.formatSize(v.size) : '');
+    }
+
+    var list = document.getElementById('updateList');
+    if (list) {
+      var notes = (v.notes || '').split(/\r?\n/).map(function (s) {
+        return s.replace(/^[#*\-\s]+/, '').trim();
+      }).filter(function (s) { return s && s.length > 3; }).slice(0, 3);
+
+      if (!notes.length && D.CHANGELOG && D.CHANGELOG[0]) {
+        notes = D.CHANGELOG[0].items.slice(0, 3);
+      }
+      list.innerHTML = notes.map(function (s) { return '<li>' + s + '</li>'; }).join('');
+    }
+
+    var sub = document.getElementById('ctaSub');
+    if (sub) sub.textContent = 'Windows 10 / 11 · v' + v.version + ' · 免费下载 · 无需登录';
+
+    /* 体积数据回填 */
+    if (v.size) {
+      var meta = document.querySelector('.hero__meta div:nth-child(2) b');
+      if (meta) meta.textContent = SC.formatSize(v.size);
     }
   });
 })();
-
-/* 更新日志：横向时间线，点击节点切换下方内容（数据来自 /updates/release-notes.json） */
-(function () {
-  var NOTES_URL = 'https://shortcut.326415.xyz/updates/release-notes.json';
-  var track = document.getElementById('tlTrack');
-  var panel = document.getElementById('tlPanel');
-  var versions = [];
-  function esc(s) { return String(s || '').replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
-  function renderNotesHtml(md) {
-    var out = '';
-    (String(md || '').split(/\r?\n/)).forEach(function (line) {
-      var l = line.replace(/\s+$/, '');
-      if (/^#\s/.test(l)) return;                          // 版本标题行由面板头展示
-      if (/^##\s/.test(l)) out += '<div class="sec">' + esc(l.replace(/^##\s+/, '')) + '</div>';
-      else if (/^-\s/.test(l)) out += '<li>' + esc(l.replace(/^-\s+/, '')) + '</li>';
-      else if (/^\*\s/.test(l)) out += '<li>' + esc(l.replace(/^\*\s+/, '')) + '</li>';
-      else if (l === '') { /* 空行忽略 */ }
-      else out += '<div class="plain">' + esc(l) + '</div>';
-    });
-    return out;
-  }
-  function build(list, latest) {
-    versions = list || [];
-    track.innerHTML = '';
-    versions.forEach(function (v, idx) {
-      var node = document.createElement('button');
-      node.type = 'button';
-      node.className = 'tl-node' + (idx === 0 ? ' active' : '');
-      var dot = document.createElement('span');
-      dot.className = 'nd';
-      var tx = document.createElement('span');
-      tx.className = 'tx';
-      var latestTag = document.createElement('span');
-      latestTag.className = 'tag-latest';
-      latestTag.textContent = '最新';
-      var vTag = document.createElement('span');
-      vTag.className = 'ver';
-      vTag.textContent = 'ShortCut ' + (v.version || '');
-      if (idx === 0) tx.appendChild(latestTag);
-      tx.appendChild(vTag);
-      node.appendChild(dot);
-      node.appendChild(tx);
-      node.addEventListener('click', function () { show(idx); });
-      track.appendChild(node);
-    });
-    if (versions.length) show(0);
-  }
-  function show(idx) {
-    if (!versions.length) return;
-    var v = versions[Math.max(0, Math.min(idx, versions.length - 1))];
-    Array.prototype.forEach.call(track.children, function (n, i) {
-      n.classList.toggle('active', i === idx);
-    });
-    panel.innerHTML =
-      '<h3>ShortCut ' + esc(v.version) + '</h3>' +
-      '<div class="when">' + (idx === 0 ? '最新版本' : '历史版本') + '</div>' +
-      (renderNotesHtml(v.notes) ? '<ul>' + renderNotesHtml(v.notes) + '</ul>' : '<div class="tl-empty">该版本暂无更新说明</div>');
-    // 让当前选中节点在时间线内滚动到可视区域
-    var active = track.querySelector('.tl-node.active');
-    if (active && active.scrollIntoView) {
-      active.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    }
-  }
-  if (!track || !panel) return;
-  fetch(NOTES_URL, { cache: 'no-store' })
-    .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
-    .then(function (data) { build(data.versions, data.latest); })
-    .catch(function () {
-      if (panel) panel.innerHTML = '<div class="tl-empty">更新记录加载失败，请稍后刷新查看。</div>';
-    });
-})();
 </script>
-
 </body>
 </html>

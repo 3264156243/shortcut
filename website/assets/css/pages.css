@@ -1,0 +1,401 @@
+/* =============================================================================
+   ShortCut 官网 · 页面级样式
+   -----------------------------------------------------------------------------
+   包含：
+     1. 产品示意图（纯 CSS 绘制，无需截图 —— 用于首屏与区块配图）
+     2. 首页专属排版
+     3. 功能页 / 下载页 / 更新日志 / FAQ 的专属部分
+   ========================================================================== */
+
+/* ═══ 1. 产品示意图：主面板窗口 ═══════════════════════════════════════════ */
+.mock-window {
+  position: relative;
+  border-radius: 16px;
+  border: 1px solid #2b3446;
+  border-color: #2d3549;
+  background: linear-gradient(180deg, #141a26, #0f131c);
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, .55),
+    0 0 0 1px rgba(255, 255, 255, .03) inset,
+    0 1px 0 rgba(255, 255, 255, .06) inset;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* 标题栏 */
+.mock-titlebar {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  background: linear-gradient(180deg, #1a2130, #151b27);
+  border-bottom: 1px solid #232b3d;
+}
+.mock-dots { display: flex; gap: 6px; }
+.mock-dots i {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #39435c;
+  display: block;
+}
+.mock-dots i:nth-child(1) { background: #ff5f57; }
+.mock-dots i:nth-child(2) { background: #febc2e; }
+.mock-dots i:nth-child(3) { background: #28c840; }
+.mock-title {
+  margin-left: 6px;
+  font-size: 11.5px;
+  color: #6b7488;
+  letter-spacing: .02em;
+}
+
+/* 主体：侧栏 + 内容 */
+.mock-body {
+  display: grid;
+  grid-template-columns: 118px 1fr;
+  min-height: 268px;
+}
+.mock-side {
+  padding: 12px 9px;
+  border-right: 1px solid #1e2534;
+  background: rgba(255, 255, 255, .012);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mock-side-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  color: #7d879b;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.mock-side-item b {
+  width: 14px; height: 14px;
+  border-radius: 4px;
+  background: #2b3446;
+  background-color: #2b3446;
+  flex: 0 0 auto;
+}
+.mock-side-item.is-active {
+  background: rgba(232, 93, 4, .14);
+  color: #ffb27a;
+  box-shadow: inset 0 0 0 1px rgba(232, 93, 4, .28);
+}
+.mock-side-item.is-active b { background: #e85d04; }
+
+.mock-main { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+
+.mock-search {
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid #262f42;
+  background: #121722;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 11px;
+  color: #55607a;
+}
+
+/* 图标网格 */
+.mock-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+}
+.mock-tile {
+  aspect-ratio: 1;
+  border-radius: 11px;
+  border: 1px solid #232b3d;
+  background: linear-gradient(180deg, #1a2130, #161c28);
+  display: grid;
+  place-items: center;
+  position: relative;
+  transition: transform .2s, border-color .2s;
+}
+.mock-tile::after {
+  content: "";
+  width: 44%;
+  height: 44%;
+  border-radius: 7px;
+  background: var(--tint, #4a5670);
+  opacity: .85;
+}
+.mock-tile:nth-child(1) { --tint: #2eb872; }
+.mock-tile:nth-child(2) { --tint: #3d8bff; }
+.mock-tile:nth-child(3) { --tint: #ff8a3d; }
+.mock-tile:nth-child(4) { --tint: #b25cff; }
+.mock-tile:nth-child(5) { --tint: #ffd23f; }
+.mock-tile:nth-child(6) { --tint: #29c2d6; }
+.mock-tile:nth-child(7) { --tint: #ff5f8f; }
+.mock-tile:nth-child(8) { --tint: #7c8aa8; }
+.mock-tile:nth-child(9) { --tint: #4dd0a5; }
+.mock-tile:nth-child(10) { --tint: #a0a8ff; }
+.mock-tile.is-selected {
+  border-color: #e85d04;
+  box-shadow: 0 0 0 2px rgba(232, 93, 4, .28), 0 8px 20px rgba(232, 93, 4, .18);
+  transform: translateY(-2px);
+}
+
+/* SC球 胶囊示意 */
+.mock-island {
+  position: absolute;
+  top: 12px; left: 50%;
+  transform: translateX(-50%);
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgba(18, 20, 26, .96);
+  border: 1px solid rgba(255, 255, 255, .14);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .5);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 10.5px;
+  color: #cfd6e6;
+  z-index: 3;
+  white-space: nowrap;
+}
+.mock-island .mi-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #3dd68c;
+  box-shadow: 0 0 8px #3dd68c;
+}
+.mock-island .mi-bar {
+  width: 54px; height: 3px; border-radius: 2px;
+  background: linear-gradient(90deg, #e85d04 46%, #2b3446 46%);
+}
+
+/* 首屏容器（略作倾斜与浮起） */
+.hero__figure {
+  position: relative;
+  perspective: 1200px;
+}
+.hero__figure .mock-window {
+  transform: rotateX(3deg) rotateY(-5deg) translateZ(0);
+  transition: transform .5s var(--ease);
+}
+.hero__figure:hover .mock-window { transform: rotateX(0) rotateY(0); }
+.hero__figure::after {
+  content: "";
+  position: absolute;
+  inset: 12% -6% -10% -6%;
+  background: radial-gradient(closest-side, rgba(232, 93, 4, .22), transparent 70%);
+  filter: blur(30px);
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* ═══ 2. 手机示意（移动互联段）═══════════════════════════════════════════ */
+.mock-phone {
+  width: 190px;
+  margin: 0 auto;
+  border-radius: 26px;
+  border: 1px solid #2d3549;
+  background: linear-gradient(180deg, #141a26, #0d1119);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .5), 0 0 0 4px rgba(255, 255, 255, .025);
+  padding: 9px;
+  position: relative;
+}
+.mock-phone::before {
+  content: "";
+  position: absolute;
+  top: 6px; left: 50%; transform: translateX(-50%);
+  width: 52px; height: 4px; border-radius: 2px;
+  background: #232b3d;
+}
+.mock-phone__screen {
+  border-radius: 19px;
+  background: #0b0e14;
+  padding: 18px 12px 14px;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.mock-phone__title { font-size: 11px; color: #8b95ab; margin-bottom: 2px; }
+.mock-phone__card {
+  border-radius: 10px;
+  border: 1px solid #232b3d;
+  background: #121722;
+  padding: 9px 10px;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 10.5px; color: #b9c2d4;
+}
+.mock-phone__card .pc-dot { width: 16px; height: 16px; border-radius: 5px; background: #2b3446; flex: 0 0 auto; }
+.mock-phone__card.is-accent { border-color: rgba(232, 93, 4, .45); background: rgba(232, 93, 4, .1); color: #ffb27a; }
+.mock-phone__card.is-accent .pc-dot { background: #e85d04; }
+
+/* 三段链路示意 */
+.link-diagram {
+  display: flex; align-items: center; justify-content: center;
+  gap: 14px; flex-wrap: wrap;
+  margin-top: 8px;
+}
+.link-node {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--muted);
+}
+.link-node .ln-icon {
+  width: 46px; height: 46px; border-radius: 13px;
+  border: 1px solid var(--line); background: var(--panel);
+  display: grid; place-items: center; color: var(--accent-hi);
+}
+.link-arrow { color: var(--muted-2); font-family: var(--font-mono); font-size: 12px; }
+.link-arrow .la-line {
+  width: 46px; height: 1px; background: linear-gradient(90deg, var(--accent-line), var(--line));
+  position: relative;
+}
+.link-arrow .la-line::after {
+  content: ""; position: absolute; right: 0; top: -2.5px;
+  border-left: 5px solid var(--line); border-top: 3px solid transparent; border-bottom: 3px solid transparent;
+}
+
+/* ═══ 3. 首页专属 ═══════════════════════════════════════════════════════ */
+.home-values { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap); }
+.value-item { display: flex; gap: 14px; align-items: flex-start; }
+.value-item .vi-icon {
+  width: 40px; height: 40px; border-radius: 11px; flex: 0 0 auto;
+  display: grid; place-items: center;
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid var(--line);
+  color: var(--accent-hi);
+}
+.value-item b { display: block; margin-bottom: 3px; font-size: 15.5px; }
+.value-item p { color: var(--muted); font-size: 13.5px; margin: 0; }
+
+/* 更新摘要 */
+.update-strip {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 22px;
+  align-items: center;
+  padding: 22px 26px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: linear-gradient(120deg, rgba(232, 93, 4, .07), var(--panel) 55%);
+}
+.update-strip ul { color: var(--muted); font-size: 14px; margin: 8px 0 0; padding-left: 1.1em; }
+.update-strip h3 { font-size: 17px; margin: 0; }
+
+/* ═══ 4. 功能页 ═════════════════════════════════════════════════════════ */
+.feature-lead { display: grid; grid-template-columns: 1fr 1fr; gap: 44px; align-items: center; padding: 20px 0 50px; }
+.feature-lead--flip .feature-lead__text { order: 2; }
+.capability {
+  display: flex; gap: 14px; align-items: flex-start;
+  padding: 18px 20px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  transition: border-color .18s, background .18s, transform .18s;
+}
+.capability:hover { border-color: var(--accent-line); background: var(--panel-2); transform: translateY(-2px); }
+.capability .cap-ico {
+  width: 36px; height: 36px; border-radius: 10px; flex: 0 0 auto;
+  display: grid; place-items: center;
+  background: var(--accent-soft); border: 1px solid var(--accent-line); color: var(--accent-hi);
+}
+.capability b { display: block; margin-bottom: 3px; font-size: 15px; }
+.capability p { color: var(--muted); font-size: 13.5px; margin: 0; }
+
+/* ═══ 5. 下载页 ═════════════════════════════════════════════════════════ */
+.dl-hero {
+  display: grid; grid-template-columns: 1.15fr .85fr; gap: 40px; align-items: center;
+  padding: 20px 0 46px;
+}
+.dl-meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 22px; }
+.dl-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.dl-fact {
+  padding: 14px 16px; border-radius: var(--radius);
+  border: 1px solid var(--line); background: var(--panel);
+}
+.dl-fact b { display: block; font-size: 17px; }
+.dl-fact span { font-size: 12px; color: var(--muted-2); }
+
+.channel-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.channel-icon {
+  width: 34px; height: 34px; border-radius: 10px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line); background: rgba(255, 255, 255, .03);
+  color: var(--muted);
+}
+.card--channel.is-recommend .channel-icon { border-color: rgba(212, 168, 83, .45); color: var(--gold-hi); background: var(--gold-soft); }
+.channel-note { font-size: 11.5px; color: var(--warn); margin-top: 8px; }
+
+/* 安卓卡 */
+.android-card {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 20px; align-items: center;
+  padding: 22px 24px; border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: linear-gradient(120deg, rgba(61, 214, 140, .06), var(--panel) 60%);
+}
+.android-card .ac-icon {
+  width: 46px; height: 46px; border-radius: 13px;
+  display: grid; place-items: center;
+  background: rgba(61, 214, 140, .1); border: 1px solid rgba(61, 214, 140, .35); color: var(--good);
+}
+
+/* 安装步骤 */
+.steps { counter-reset: step; display: grid; gap: 14px; }
+.step { display: grid; grid-template-columns: 30px 1fr; gap: 14px; align-items: start; }
+.step::before {
+  counter-increment: step; content: counter(step);
+  width: 30px; height: 30px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--accent-soft); border: 1px solid var(--accent-line);
+  color: var(--accent-hi); font-size: 13px; font-weight: 700;
+}
+.step b { display: block; font-size: 15px; }
+.step p { color: var(--muted); font-size: 13.5px; margin: 3px 0 0; }
+
+/* ═══ 6. 更新日志页 ═════════════════════════════════════════════════════ */
+.latest-release {
+  padding: 26px 28px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--accent-line);
+  background: linear-gradient(160deg, rgba(232, 93, 4, .1), var(--panel) 55%);
+  margin-bottom: 40px;
+}
+.latest-release__head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 14px; }
+.latest-release h2 { margin: 0; font-size: 24px; }
+.latest-release ul { color: var(--muted); font-size: 14.5px; }
+
+/* ═══ 7. FAQ 页 ═════════════════════════════════════════════════════════ */
+.faq-layout { display: grid; grid-template-columns: 200px 1fr; gap: 40px; align-items: start; }
+.faq-toc { position: sticky; top: calc(var(--nav-h) + 20px); }
+.faq-toc a {
+  display: block; padding: 8px 12px; border-radius: 8px;
+  color: var(--muted); font-size: 14px;
+}
+.faq-toc a:hover { background: rgba(255, 255, 255, .05); color: var(--text); }
+
+/* ═══ 8. 响应式 ═════════════════════════════════════════════════════════ */
+@media (max-width: 1024px) {
+  .home-values { grid-template-columns: 1fr; }
+  .feature-lead { grid-template-columns: 1fr; gap: 30px; }
+  .feature-lead--flip .feature-lead__text { order: 0; }
+  .dl-hero { grid-template-columns: 1fr; gap: 30px; }
+  .channel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .faq-layout { grid-template-columns: 1fr; gap: 20px; }
+  .faq-toc { position: static; display: flex; flex-wrap: wrap; gap: 6px; }
+  .mock-body { grid-template-columns: 96px 1fr; }
+  .mock-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+@media (max-width: 640px) {
+  .update-strip { grid-template-columns: 1fr; gap: 14px; }
+  .channel-grid { grid-template-columns: 1fr; }
+  .android-card { grid-template-columns: auto 1fr; }
+  .android-card .btn { grid-column: 1 / -1; width: 100%; }
+  .dl-facts { grid-template-columns: 1fr; }
+  .mock-body { grid-template-columns: 1fr; }
+  .mock-side { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid #1e2534; }
+  .mock-side-item { flex: 0 0 auto; }
+  .mock-grid { grid-template-columns: repeat(5, 1fr); gap: 7px; }
+  .mock-island { font-size: 9.5px; padding: 0 10px; height: 26px; }
+  .hero__figure .mock-window { transform: none; }
+}
