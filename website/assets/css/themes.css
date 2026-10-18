@@ -1,0 +1,270 @@
+/* =============================================================================
+   ShortCut 官网 · 配色方案对比（仅用于方案评审的预览页）
+   -----------------------------------------------------------------------------
+   用法：<html data-theme="a|c|d">
+     a = 石墨 + 铜（降饱和暖色，克制）
+     b = 纯中性 + 单点橙（最克制）
+     c = 浅色纸感（最像成熟商业官网）
+     d = 现状（深色 + 高饱和橙 + 渐变文字）
+
+   评审结束后，把选中的方案烘焙进 site.css 的 :root，本文件删除。
+   ========================================================================== */
+
+/* ═══ A. 石墨 + 铜 ═══════════════════════════════════════════════════════ */
+html[data-theme="a"] {
+  --bg: #0d0e11;
+  --bg-soft: #111216;
+  --panel: #15171b;
+  --panel-2: #191c21;
+  --panel-3: #1f2228;
+
+  --line: rgba(255, 255, 255, .065);
+  --line-strong: rgba(255, 255, 255, .11);
+  --line-soft: rgba(255, 255, 255, .04);
+
+  --text: #ecebe8;
+  --text-dim: #c5c2bd;
+  --muted: #938f89;
+  --muted-2: #6a6660;
+
+  --accent: #c26b3a;
+  --accent-hi: #d98359;
+  --accent-lo: #9a5028;
+  --accent-soft: rgba(194, 107, 58, .1);
+  --accent-line: rgba(194, 107, 58, .32);
+
+  --gold: #c9a86b;
+  --gold-hi: #e3ce9f;
+  --gold-soft: rgba(201, 168, 107, .08);
+  --violet: #6f7fa8;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, .32);
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, .3), 0 8px 22px rgba(0, 0, 0, .24);
+  --shadow: 0 4px 12px rgba(0, 0, 0, .32), 0 18px 50px rgba(0, 0, 0, .34);
+  --shadow-lg: 0 8px 22px rgba(0, 0, 0, .34), 0 34px 80px rgba(0, 0, 0, .4);
+  --shadow-accent: 0 4px 14px rgba(194, 107, 58, .18), 0 14px 36px rgba(194, 107, 58, .14);
+}
+
+/* A：去掉渐变文字（明显的"廉价"信号），改为柔和的暖白 → 铜色过渡 */
+html[data-theme="a"] .grad {
+  animation: none;
+  background: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  color: var(--accent-hi);
+}
+/* A：光球更弱、更灰 */
+html[data-theme="a"] .orb--a { background: radial-gradient(circle, rgba(194, 107, 58, .26), transparent 70%); }
+html[data-theme="a"] .orb--b { background: radial-gradient(circle, rgba(111, 127, 168, .18), transparent 72%); }
+html[data-theme="a"] .orb--c { background: radial-gradient(circle, rgba(201, 168, 107, .14), transparent 72%); }
+/* A：噪点减弱 */
+html[data-theme="a"] body::after { opacity: .018; }
+/* A：正文里的强调色更轻 */
+html[data-theme="a"] a { color: var(--accent-hi); }
+
+/* ═══ B. 纯中性 + 单点橙 ═════════════════════════════════════════════════ */
+html[data-theme="b"] {
+  --bg: #0a0a0b;
+  --bg-soft: #0e0e10;
+  --panel: #131315;
+  --panel-2: #171719;
+  --panel-3: #1c1c1f;
+
+  --line: rgba(255, 255, 255, .075);
+  --line-strong: rgba(255, 255, 255, .13);
+  --line-soft: rgba(255, 255, 255, .05);
+
+  --text: #f4f4f5;
+  --text-dim: #c8c8cb;
+  --muted: #8e8e94;
+  --muted-2: #66666c;
+
+  /* 唯一彩色：只给主按钮与当前导航项 */
+  --accent: #ff6b1a;
+  --accent-hi: #ff8642;
+  --accent-lo: #d4540f;
+  --accent-soft: rgba(255, 107, 26, .09);
+  --accent-line: rgba(255, 107, 26, .28);
+
+  --gold: #c9a86b;
+  --gold-hi: #e3ce9f;
+  --gold-soft: rgba(201, 168, 107, .07);
+  --violet: #8b8b93;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, .34);
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, .32), 0 8px 22px rgba(0, 0, 0, .26);
+  --shadow: 0 4px 12px rgba(0, 0, 0, .34), 0 18px 50px rgba(0, 0, 0, .36);
+  --shadow-lg: 0 8px 22px rgba(0, 0, 0, .36), 0 34px 80px rgba(0, 0, 0, .42);
+  --shadow-accent: 0 4px 14px rgba(255, 107, 26, .2), 0 14px 36px rgba(255, 107, 26, .16);
+}
+
+/* B：渐变文字 → 纯白 */
+html[data-theme="b"] .grad {
+  animation: none; background: none;
+  -webkit-background-clip: initial; background-clip: initial;
+  color: var(--text);
+}
+/* B：卡片图标去色（中性），让橙色只出现在按钮 */
+html[data-theme="b"] .card__icon,
+html[data-theme="b"] .capability .cap-ico,
+html[data-theme="b"] .link-node .ln-icon,
+html[data-theme="b"] .value-item .vi-icon {
+  background: linear-gradient(150deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .02));
+  border-color: var(--line-strong);
+  color: var(--text-dim);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+html[data-theme="b"] .pane__item.is-active {
+  background: rgba(255, 255, 255, .07);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .09);
+}
+html[data-theme="b"] .pane__item.is-active b { background: var(--text-dim); box-shadow: none; }
+html[data-theme="b"] .orb--a { background: radial-gradient(circle, rgba(255, 107, 26, .16), transparent 72%); }
+html[data-theme="b"] .orb--b { background: radial-gradient(circle, rgba(255, 255, 255, .05), transparent 74%); }
+html[data-theme="b"] .orb--c { display: none; }
+html[data-theme="b"] .hero__grid { opacity: .7; }
+html[data-theme="b"] .update-strip,
+html[data-theme="b"] .latest-release { border-color: var(--line-strong); background: linear-gradient(180deg, var(--panel-2), var(--panel)); }
+html[data-theme="b"] .tile.is-selected { animation: none; border-color: rgba(255, 255, 255, .5); box-shadow: 0 0 0 2px rgba(255, 255, 255, .12), 0 8px 22px rgba(0, 0, 0, .4); }
+html[data-theme="b"] .card__more { color: var(--text-dim); }
+html[data-theme="b"] .eyebrow::before,
+html[data-theme="b"] .section-head.center .eyebrow::after { background: linear-gradient(90deg, var(--muted-2), transparent); }
+
+/* ═══ C. 浅色纸感 ═══════════════════════════════════════════════════════ */
+html[data-theme="c"] {
+  --bg: #f7f6f3;
+  --bg-soft: #fbfaf8;
+  --panel: #ffffff;
+  --panel-2: #f4f3ef;
+  --panel-3: #eae8e2;
+
+  --line: rgba(24, 21, 16, .1);
+  --line-strong: rgba(24, 21, 16, .17);
+  --line-soft: rgba(24, 21, 16, .07);
+
+  --text: #17150f;
+  --text-dim: #3c3831;
+  --muted: #6b665d;
+  --muted-2: #918b81;
+
+  --accent: #c2550f;
+  --accent-hi: #d95f12;
+  --accent-lo: #9c440c;
+  --accent-soft: rgba(194, 85, 15, .08);
+  --accent-line: rgba(194, 85, 15, .28);
+
+  --gold: #a8842f;
+  --gold-hi: #8a6c26;
+  --gold-soft: rgba(168, 132, 47, .1);
+  --violet: #5c6b93;
+
+  --shadow-xs: 0 1px 2px rgba(24, 21, 16, .06);
+  --shadow-sm: 0 2px 6px rgba(24, 21, 16, .06), 0 10px 24px rgba(24, 21, 16, .06);
+  --shadow: 0 4px 14px rgba(24, 21, 16, .08), 0 20px 50px rgba(24, 21, 16, .08);
+  --shadow-lg: 0 10px 28px rgba(24, 21, 16, .1), 0 40px 90px rgba(24, 21, 16, .12);
+  --shadow-accent: 0 4px 14px rgba(194, 85, 15, .18), 0 14px 34px rgba(194, 85, 15, .16);
+
+  --inset-hi: inset 0 1px 0 rgba(255, 255, 255, .9);
+}
+
+/* C：背景换成暖白 + 极淡暖光斑 */
+html[data-theme="c"] body::before {
+  background:
+    radial-gradient(50% 40% at 50% -6%, rgba(194, 85, 15, .07), transparent 72%),
+    radial-gradient(38% 32% at 88% 10%, rgba(92, 107, 147, .06), transparent 74%),
+    var(--bg);
+}
+html[data-theme="c"] body::after { opacity: .022; mix-blend-mode: multiply; }
+/* C：渐变文字改为深橙 */
+html[data-theme="c"] .grad {
+  animation: none; background: none;
+  -webkit-background-clip: initial; background-clip: initial;
+  color: var(--accent);
+}
+/* C：导航/页脚换浅色 */
+html[data-theme="c"] .nav { background: rgba(247, 246, 243, .72); }
+html[data-theme="c"] .nav--scrolled {
+  background: rgba(247, 246, 243, .92);
+  box-shadow: 0 1px 0 rgba(24, 21, 16, .07), 0 10px 30px rgba(24, 21, 16, .07);
+}
+html[data-theme="c"] .footer { background: #f1efe9; }
+html[data-theme="c"] .cta {
+  background:
+    radial-gradient(56% 130% at 50% 0%, rgba(194, 85, 15, .12), transparent 68%),
+    var(--bg-soft);
+}
+/* C：按钮文字色 */
+html[data-theme="c"] .btn { background: #fff; border-color: var(--line-strong); box-shadow: var(--shadow-xs), inset 0 1px 0 rgba(255, 255, 255, .9); }
+html[data-theme="c"] .btn:hover { background: var(--panel-2); }
+html[data-theme="c"] .btn--ghost { background: transparent; }
+html[data-theme="c"] .btn--primary { background: linear-gradient(180deg, #e06a1a, var(--accent) 62%, var(--accent-lo)); border-color: transparent; }
+html[data-theme="c"] .btn--primary:hover { background: linear-gradient(180deg, #ec7a2c, var(--accent-hi) 58%, var(--accent)); }
+/* C：光球大幅减弱（浅底上会糊） */
+html[data-theme="c"] .orb--a { background: radial-gradient(circle, rgba(194, 85, 15, .14), transparent 72%); }
+html[data-theme="c"] .orb--b { background: radial-gradient(circle, rgba(92, 107, 147, .1), transparent 74%); }
+html[data-theme="c"] .orb--c { display: none; }
+/* C：网格线变深一点才可见 */
+html[data-theme="c"] .hero__grid {
+  background-image:
+    linear-gradient(rgba(24, 21, 16, .05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(24, 21, 16, .05) 1px, transparent 1px);
+}
+/* C：设备框保持深色（深色截图在浅底上更突出） */
+html[data-theme="c"] .device {
+  border-color: rgba(24, 21, 16, .16);
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(24, 21, 16, .06);
+}
+html[data-theme="c"] .hero__figure::before { background: radial-gradient(closest-side, rgba(194, 85, 15, .18), transparent 70%); }
+/* C：键帽与徽标 */
+html[data-theme="c"] .kbd { background: #fff; }
+html[data-theme="c"] .badge { color: var(--accent-lo); }
+html[data-theme="c"] .badge--gold { color: var(--gold-hi); }
+html[data-theme="c"] .footer a { color: var(--muted); }
+html[data-theme="c"] .pane__item.is-active { color: var(--accent-lo); }
+/* C：卡片/区块的玻璃感改为纸感阴影 */
+html[data-theme="c"] .card,
+html[data-theme="c"] .value-item,
+html[data-theme="c"] .capability,
+html[data-theme="c"] .pager a,
+html[data-theme="c"] .faq,
+html[data-theme="c"] .link-diagram { background: #fff; }
+html[data-theme="c"] .card::before { background: radial-gradient(240px circle at var(--mx, 50%) var(--my, 0%), rgba(194, 85, 15, .07), transparent 62%); }
+
+/* ═══ 切换器（仅预览页显示）═════════════════════════════════════════════ */
+.theme-picker {
+  position: fixed;
+  right: 18px; bottom: 18px;
+  z-index: 2000;
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  background: rgba(16, 17, 21, .92);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .5);
+  font-size: 12.5px;
+  color: #d7dae1;
+}
+.theme-picker b { font-weight: 650; margin-right: 2px; color: #fff; }
+.theme-picker button {
+  border: 1px solid rgba(255, 255, 255, .16);
+  background: rgba(255, 255, 255, .06);
+  color: #d7dae1;
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background .16s, border-color .16s, color .16s;
+}
+.theme-picker button:hover { background: rgba(255, 255, 255, .12); color: #fff; }
+.theme-picker button[aria-pressed="true"] {
+  background: #ff6b1a;
+  border-color: #ff6b1a;
+  color: #fff;
+  font-weight: 650;
+}
+@media (max-width: 640px) {
+  .theme-picker { right: 10px; left: 10px; bottom: 10px; justify-content: center; flex-wrap: wrap; }
+}

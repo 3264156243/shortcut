@@ -72,7 +72,7 @@
     /* Logo */
     var logo = el('a', 'logo');
     logo.href = '/';
-    logo.innerHTML = '<span class="logo__mark">SC</span><span>ShortCut</span>';
+    logo.innerHTML = '<img class="logo__img" src="/assets/img/logo-256.png" alt="" width="32" height="32" decoding="async" /><span>ShortCut</span>';
     inner.appendChild(logo);
 
     /* 桌面链接 */
@@ -179,7 +179,7 @@
     /* 品牌列 */
     var brand = el('div', 'footer__brand');
     brand.innerHTML =
-      '<a class="logo" href="/"><span class="logo__mark">SC</span><span>ShortCut</span></a>' +
+      '<a class="logo" href="/"><img class="logo__img" src="/assets/img/logo-256.png" alt="" width="32" height="32" loading="lazy" /><span>ShortCut</span></a>' +
       '<p>' + (D.SITE ? D.SITE.description : '') + '</p>';
     grid.appendChild(brand);
 

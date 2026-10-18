@@ -388,16 +388,14 @@ li { margin: .4em 0; }
   flex: 0 0 auto;
 }
 .logo:hover { color: var(--text); }
-.logo__mark {
-  width: 31px; height: 31px; border-radius: 9px;
-  background: linear-gradient(145deg, #ff9a5a, var(--accent) 58%, #8f3200);
-  box-shadow: 0 4px 14px rgba(232, 93, 4, .4), inset 0 1px 0 rgba(255, 255, 255, .35);
-  display: grid; place-items: center;
-  color: #fff; font-size: 13px; font-weight: 800;
-  letter-spacing: -.02em;
-  transition: transform .3s var(--ease-spring), box-shadow .3s;
+.logo__img {
+  width: 32px; height: 32px;
+  border-radius: 9px;
+  display: block;
+  filter: drop-shadow(0 4px 12px rgba(232, 93, 4, .28));
+  transition: transform .3s var(--ease-spring);
 }
-.logo:hover .logo__mark { transform: rotate(-6deg) scale(1.06); box-shadow: 0 6px 20px rgba(232, 93, 4, .5); }
+.logo:hover .logo__img { transform: scale(1.08) rotate(-3deg); }
 
 .nav__links { display: flex; align-items: center; gap: 3px; flex: 1 1 auto; }
 .nav__item { position: relative; }
