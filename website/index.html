@@ -19,6 +19,18 @@
 <link rel="icon" type="image/png" href="/assets/img/logo-64.png" sizes="64x64" />
 <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
 
+<script>
+/* 明暗模式：在样式生效前应用，避免刷新闪烁 */
+(function () {
+  try {
+    var m = localStorage.getItem('sc-mode');
+    if (m !== 'light' && m !== 'dark') m = 'dark';
+    document.documentElement.setAttribute('data-mode', m);
+  } catch (e) {
+    document.documentElement.setAttribute('data-mode', 'dark');
+  }
+})();
+</script>
 <link rel="stylesheet" href="/assets/css/site.css" />
 <link rel="stylesheet" href="/assets/css/pages.css" />
 </head>
@@ -59,6 +71,7 @@
 
       <!-- 产品示意图（纯 CSS 绘制 + 动画，非截图） -->
       <div class="hero__figure">
+        <div class="figure-float">
         <div class="device" role="img" aria-label="ShortCut 主面板示意图：左侧板块导航，右侧快捷方式图标网格，顶部悬浮 SC球 胶囊（正在播放）">
           <div class="device__bar">
             <span class="device__dots"><i></i><i></i><i></i></span>
@@ -95,6 +108,7 @@
             </div>
           </div>
         </div>
+        </div><!-- /.figure-float -->
       </div>
     </div>
   </section>
@@ -199,7 +213,7 @@
     <div class="wrap">
       <div class="update-strip reveal">
         <div>
-          <span class="badge badge--gold"><span class="dot-live" style="background:var(--gold);box-shadow:0 0 8px var(--gold)"></span>最新版本</span>
+          <span class="badge"><span class="dot-live" ></span>最新版本</span>
         </div>
         <div>
           <h3 id="updateTitle">正在读取版本信息…</h3>

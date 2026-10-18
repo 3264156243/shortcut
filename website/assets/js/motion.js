@@ -149,9 +149,9 @@
       var dev = fig.querySelector('.device');
       if (!dev) return;
       dev.style.transform =
-        'rotateX(' + (3.2 - py * 3).toFixed(2) + 'deg) ' +
-        'rotateY(' + (-4.5 + px * 4).toFixed(2) + 'deg) ' +
-        'translateY(' + (py * -6).toFixed(1) + 'px)';
+        'rotateX(' + (7 - py * 4.5).toFixed(2) + 'deg) ' +
+        'rotateY(' + (-14 + px * 6).toFixed(2) + 'deg) ' +
+        'translateY(' + (py * -8).toFixed(1) + 'px) scale(1.02)';
     });
     fig.addEventListener('mousemove', move, { passive: true });
     fig.addEventListener('mouseleave', function () {

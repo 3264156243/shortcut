@@ -127,6 +127,22 @@
 
     /* 右侧操作 */
     var actions = el('div', 'nav__actions');
+
+    /* 明暗切换 */
+    var mode = el('button', 'nav__mode');
+    mode.type = 'button';
+    mode.setAttribute('aria-label', '切换明暗主题');
+    mode.title = '切换明暗主题';
+    mode.innerHTML =
+      '<span class="mode-icon mode-icon--moon" aria-hidden="true">' +
+        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>' +
+      '</span>' +
+      '<span class="mode-icon mode-icon--sun" aria-hidden="true">' +
+        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/></svg>' +
+      '</span>';
+    mode.addEventListener('click', function () { SC.toggleMode(); });
+    actions.appendChild(mode);
+
     var cta = el('a', 'btn btn--primary btn--sm btn--nav-cta', '下载');
     cta.href = '/download.html';
     actions.appendChild(cta);
@@ -418,8 +434,25 @@
   }
 
   /* 导出给页面脚本用 */
+  /* ── 明暗模式 ── */
+  function currentMode() {
+    return document.documentElement.getAttribute('data-mode') === 'light' ? 'light' : 'dark';
+  }
+  function applyMode(m) {
+    document.documentElement.setAttribute('data-mode', m);
+    try { global.localStorage.setItem('sc-mode', m); } catch (e) {}
+    /* 通知页面脚本（图表等可据此重绘） */
+    document.dispatchEvent(new CustomEvent('sc:mode', { detail: { mode: m } }));
+  }
+  function toggleMode() {
+    applyMode(currentMode() === 'light' ? 'dark' : 'light');
+  }
+
   global.SC = {
     icon: icon,
+    currentMode: currentMode,
+    applyMode: applyMode,
+    toggleMode: toggleMode,
     el: el,
     openModal: openModal,
     closeModal: closeModal,
