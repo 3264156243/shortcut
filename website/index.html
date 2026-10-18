@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>ShortCut — Windows 桌面效率工具｜快捷启动 · 任务墙 · SC球灵动岛</title>
 <meta name="description" content="ShortCut 是一款 Windows 桌面效率工具：快捷启动、任务墙、SC球灵动岛、文件转换、截图翻译，并可与手机联动——任务同步、文件快传、手机控电脑。无需登录，数据默认留在本机。" />
-<meta name="theme-color" content="#0b0e14" />
+<meta name="theme-color" content="#080a0f" />
 
 <!-- Open Graph -->
 <meta property="og:type" content="website" />
@@ -15,7 +15,7 @@
 <meta property="og:image" content="/assets/img/og.png" />
 <meta name="twitter:card" content="summary_large_image" />
 
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23e85d04'/%3E%3Ctext x='16' y='22' font-family='Segoe UI,sans-serif' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3ESC%3C/text%3E%3C/svg%3E" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23ff9a5a'/%3E%3Cstop offset='1' stop-color='%23b84300'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Ctext x='16' y='22' font-family='Segoe UI,sans-serif' font-size='14' font-weight='700' fill='%23fff' text-anchor='middle'%3ESC%3C/text%3E%3C/svg%3E" />
 
 <link rel="stylesheet" href="/assets/css/site.css" />
 <link rel="stylesheet" href="/assets/css/pages.css" />
@@ -30,55 +30,65 @@
 
   <!-- ══ 1. 首屏 ═══════════════════════════════════════════════════════ -->
   <section class="hero">
+    <span class="hero__grid" aria-hidden="true"></span>
+    <span class="orb orb--a" aria-hidden="true"></span>
+    <span class="orb orb--b" aria-hidden="true"></span>
+    <span class="orb orb--c" aria-hidden="true"></span>
+
     <div class="wrap hero__inner">
       <div class="hero__text">
-        <span class="eyebrow">Windows 10 / 11 桌面效率工具</span>
+        <span class="badge"><span class="dot-live"></span>v<span id="heroVersionInline">2.5.1</span> · Windows 10 / 11</span>
         <h1>集中启动，<span class="grad">一键直达</span><br />SC球常驻，效率升级</h1>
         <p class="hero__lead">
           把常用软件、文件、文件夹、网页集中到一处，键盘一按直达；
           任务用纸条贴在墙上，常驻桌面的 SC球 把音乐、任务、驾驶舱和余额收进一颗小球。
-          不用改变现有习惯，也不用登录账号。
+          <strong>不用改变现有习惯，也不用登录账号。</strong>
         </p>
         <div class="btn-row">
-          <a class="btn btn--primary" id="heroDownload" href="/download.html">免费下载</a>
-          <a class="btn btn--ghost" href="/features/shortcut.html">看看能做什么</a>
+          <a class="btn btn--primary btn--lg" id="heroDownload" href="/download.html">免费下载</a>
+          <a class="btn btn--ghost btn--lg" href="/features/shortcut.html">看看能做什么</a>
         </div>
         <div class="hero__meta">
           <div><b id="heroVersion">—</b><span>当前版本</span></div>
-          <div><b>7 MB</b><span>安装包体积</span></div>
+          <div><b id="heroSize">7.3 MB</b><span>安装包体积</span></div>
           <div><b>本地保存</b><span>数据不上传</span></div>
         </div>
       </div>
 
-      <!-- 产品示意图（纯 CSS 绘制，非截图） -->
+      <!-- 产品示意图（纯 CSS 绘制 + 动画，非截图） -->
       <div class="hero__figure">
-        <div class="mock-window" role="img" aria-label="ShortCut 主面板示意图：左侧板块导航，右侧快捷方式图标网格，顶部为 SC球 胶囊">
-          <div class="mock-titlebar">
-            <span class="mock-dots"><i></i><i></i><i></i></span>
-            <span class="mock-title">ShortCut</span>
+        <div class="device" role="img" aria-label="ShortCut 主面板示意图：左侧板块导航，右侧快捷方式图标网格，顶部悬浮 SC球 胶囊（正在播放）">
+          <div class="device__bar">
+            <span class="device__dots"><i></i><i></i><i></i></span>
+            <span class="device__title">ShortCut</span>
+            <span class="device__actions"><i></i><i></i></span>
           </div>
-          <div class="mock-body">
-            <div class="mock-side">
-              <span class="mock-side-item is-active"><b></b>快捷方式</span>
-              <span class="mock-side-item"><b></b>任务墙</span>
-              <span class="mock-side-item"><b></b>驾驶舱</span>
-              <span class="mock-side-item"><b></b>翻译</span>
-              <span class="mock-side-item"><b></b>使用记录</span>
-              <span class="mock-side-item"><b></b>控制</span>
+
+          <!-- 悬浮 SC球（会呼吸 / 进度 / 波形） -->
+          <div class="island-live">
+            <span class="il-dot"></span>
+            <span class="il-text">正在播放</span>
+            <span class="il-track"><span class="il-fill"></span></span>
+            <span class="il-wave"><i></i><i></i><i></i><i></i><i></i></span>
+          </div>
+
+          <div class="pane">
+            <div class="pane__side">
+              <span class="pane__item is-active"><b></b>快捷方式</span>
+              <span class="pane__item"><b></b>任务墙</span>
+              <span class="pane__item"><b></b>驾驶舱</span>
+              <span class="pane__item"><b></b>翻译</span>
+              <span class="pane__item"><b></b>使用记录</span>
+              <span class="pane__item"><b></b>控制</span>
             </div>
-            <div class="mock-main">
-              <div class="mock-search">搜索快捷方式…</div>
-              <div class="mock-grid">
-                <span class="mock-tile is-selected"></span><span class="mock-tile"></span>
-                <span class="mock-tile"></span><span class="mock-tile"></span>
-                <span class="mock-tile"></span><span class="mock-tile"></span>
-                <span class="mock-tile"></span><span class="mock-tile"></span>
-                <span class="mock-tile"></span><span class="mock-tile"></span>
-              </div>
-              <div class="mock-island">
-                <span class="mi-dot"></span>
-                <span>正在播放</span>
-                <span class="mi-bar"></span>
+            <div class="pane__main">
+              <div class="pane__search">搜索快捷方式…</div>
+              <div class="pane__grid">
+                <span class="tile is-selected"></span><span class="tile"></span>
+                <span class="tile"></span><span class="tile"></span>
+                <span class="tile"></span><span class="tile"></span>
+                <span class="tile"></span><span class="tile"></span>
+                <span class="tile"></span><span class="tile"></span>
               </div>
             </div>
           </div>
@@ -87,7 +97,31 @@
     </div>
   </section>
 
-  <!-- ══ 2. 功能卡网格 ═════════════════════════════════════════════════ -->
+  <!-- ══ 2. 数据条（数字滚动）══════════════════════════════════════════ -->
+  <section class="section section--tight section--flush">
+    <div class="wrap">
+      <div class="stats reveal">
+        <div class="stat">
+          <b><span data-count="7.3" data-decimals="1" data-suffix=" MB">7.3 MB</span></b>
+          <span>安装包体积</span>
+        </div>
+        <div class="stat">
+          <b><span data-count="94" data-prefix="-" data-suffix="%">-94%</span></b>
+          <span>重构后体积变化</span>
+        </div>
+        <div class="stat">
+          <b><span data-count="30" data-prefix="-" data-suffix="%">-30%</span></b>
+          <span>内存占用变化</span>
+        </div>
+        <div class="stat">
+          <b><span data-count="12">12</span></b>
+          <span>全局快捷键</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 3. 功能卡网格 ═════════════════════════════════════════════════ -->
   <section class="section" id="features">
     <div class="wrap">
       <div class="section-head center reveal">
@@ -99,7 +133,7 @@
     </div>
   </section>
 
-  <!-- ══ 3. 移动互联 ═══════════════════════════════════════════════════ -->
+  <!-- ══ 4. 移动互联 ═══════════════════════════════════════════════════ -->
   <section class="section section--alt" id="mobile">
     <div class="wrap">
       <div class="section-head center reveal">
@@ -108,15 +142,16 @@
         <p>任务墙双向同步、文件互传，还能把手机当电脑的键盘与触控板。所有数据走你自己的服务器。</p>
       </div>
 
-      <div class="grid grid--2" style="align-items:center;gap:40px">
+      <div class="grid grid--2" style="align-items:center;gap:48px">
         <div class="reveal">
-          <div class="mock-phone" role="img" aria-label="手机端示意图：绑定与功能入口">
-            <div class="mock-phone__screen">
-              <div class="mock-phone__title">ShortCut 联动</div>
-              <div class="mock-phone__card is-accent"><span class="pc-dot"></span>任务墙 · 钉一条任务</div>
-              <div class="mock-phone__card"><span class="pc-dot"></span>文件快传</div>
-              <div class="mock-phone__card"><span class="pc-dot"></span>电脑控制</div>
-              <div class="mock-phone__card"><span class="pc-dot"></span>设备与绑定</div>
+          <div class="phone" role="img" aria-label="手机端示意图：绑定与功能入口">
+            <div class="phone__screen">
+              <div class="phone__title"><span class="dot-live"></span>ShortCut 联动</div>
+              <div class="phone__card is-accent"><span class="pc-dot"></span>任务墙 · 钉一条任务</div>
+              <div class="phone__card"><span class="pc-dot"></span>文件快传</div>
+              <div class="phone__card"><span class="pc-dot"></span>电脑控制</div>
+              <div class="phone__card"><span class="pc-dot"></span>设备与绑定</div>
+              <div class="phone__typing">在这输入，电脑上直接出现<span class="caret-line"></span></div>
             </div>
           </div>
         </div>
@@ -129,7 +164,7 @@
             </div>
             <div class="link-arrow">
               <div class="la-line"></div>
-              <div style="margin-top:6px;font-size:11px">云端中继 / 局域网直连</div>
+              <span>云端中继 · 局域网直连</span>
             </div>
             <div class="link-node">
               <span class="ln-icon" data-icon="windows"></span>
@@ -137,7 +172,7 @@
             </div>
           </div>
 
-          <div class="grid" style="gap:12px;margin-top:26px">
+          <div class="grid" style="gap:13px;margin-top:22px">
             <div class="capability">
               <span class="cap-ico" data-icon="sticky"></span>
               <div><b>任务墙同步</b><p>手机上钉一条任务，电脑任务墙立刻出现；桌面端离线也不会丢，上线自动接收。</p></div>
@@ -156,56 +191,57 @@
     </div>
   </section>
 
-  <!-- ══ 4. 为什么选它 ═════════════════════════════════════════════════ -->
+  <!-- ══ 5. 为什么选它 ═════════════════════════════════════════════════ -->
   <section class="section">
     <div class="wrap">
       <div class="section-head center reveal">
         <span class="eyebrow">为什么用它</span>
         <h2>轻、快、不打扰</h2>
+        <p>不改变你现在的使用习惯，也不会在后台偷偷做事。</p>
       </div>
-      <div class="home-values reveal">
-        <div class="value-item">
+      <div class="home-values">
+        <div class="value-item reveal">
           <span class="vi-icon" data-icon="bolt"></span>
           <div><b>7 MB，启动即用</b><p>Tauri 2 重构后体积比旧版减少约 94%，内存占用下降约 30%。</p></div>
         </div>
-        <div class="value-item">
+        <div class="value-item reveal">
           <span class="vi-icon" data-icon="shield"></span>
           <div><b>数据默认留在本机</b><p>快捷方式、任务墙、使用记录都存在你电脑里；只有你用移动互联时才走自建服务器。</p></div>
         </div>
-        <div class="value-item">
+        <div class="value-item reveal">
           <span class="vi-icon" data-icon="check"></span>
-          <div><b>不改变使用习惯</b><p>不开机常驻也能用；S球 可穿透、可隐藏，不挡桌面点击。</p></div>
+          <div><b>不改变使用习惯</b><p>SC球 可穿透、可隐藏，不挡桌面点击；不想用时按 Alt+I 直接收起。</p></div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ══ 5. 最新更新 ═══════════════════════════════════════════════════ -->
+  <!-- ══ 6. 最新更新 ═══════════════════════════════════════════════════ -->
   <section class="section section--tight section--alt">
     <div class="wrap">
       <div class="update-strip reveal">
         <div>
-          <span class="badge"><span class="dot"></span>最新版本</span>
+          <span class="badge badge--gold"><span class="dot-live" style="background:var(--gold);box-shadow:0 0 8px var(--gold)"></span>最新版本</span>
         </div>
         <div>
           <h3 id="updateTitle">正在读取版本信息…</h3>
           <ul id="updateList"></ul>
         </div>
         <div class="btn-row">
-          <a class="btn btn--sm" href="/changelog.html">全部更新</a>
+          <a class="btn" href="/changelog.html">全部更新</a>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ══ 6. 结尾 CTA ═══════════════════════════════════════════════════ -->
+  <!-- ══ 7. 结尾 CTA ═══════════════════════════════════════════════════ -->
   <section class="cta">
     <div class="wrap">
       <h2>试试 <span class="grad">ShortCut</span></h2>
       <p id="ctaSub">Windows 10 / 11 · 免费下载 · 无需登录</p>
       <div class="btn-row center">
-        <a class="btn btn--primary" id="ctaDownload" href="/download.html">下载最新版本</a>
-        <a class="btn btn--ghost" href="/faq.html">先看看常见问题</a>
+        <a class="btn btn--primary btn--lg" id="ctaDownload" href="/download.html">下载最新版本</a>
+        <a class="btn btn--ghost btn--lg" href="/faq.html">先看看常见问题</a>
       </div>
     </div>
   </section>
@@ -217,21 +253,22 @@
 
 <script src="/assets/js/data.js"></script>
 <script src="/assets/js/site.js"></script>
+<script src="/assets/js/motion.js"></script>
 <script>
 (function () {
   'use strict';
   var D = SC.getData();
 
-  /* ── 功能卡渲染（数据来自 data.js，改一处全站生效）── */
+  /* ── 功能卡渲染 ── */
   var grid = document.getElementById('featureGrid');
   if (grid && D.FEATURES) {
     D.FEATURES.forEach(function (f, i) {
       var a = document.createElement('a');
       a.className = 'card card--feature reveal';
       a.href = f.href;
-      a.style.transitionDelay = (i * 40) + 'ms';
+      a.style.setProperty('--d', (i * 70) + 'ms');
       a.innerHTML =
-        '<span class="card__icon">' + SC.icon(f.icon, 21) + '</span>' +
+        '<span class="card__icon">' + SC.icon(f.icon, 22) + '</span>' +
         '<h3>' + f.label + '</h3>' +
         '<p class="tagline">' + f.tagline + '</p>' +
         '<ul class="card__points">' +
@@ -250,15 +287,22 @@
     }
   }
 
-  /* ── data-icon 占位 → 内联 SVG ── */
+  /* ── data-icon → 内联 SVG ── */
   Array.prototype.forEach.call(document.querySelectorAll('[data-icon]'), function (n) {
-    n.innerHTML = SC.icon(n.getAttribute('data-icon'), 20);
+    n.innerHTML = SC.icon(n.getAttribute('data-icon'), 21);
   });
 
-  /* ── 版本信息（接口失败静默降级，不显示错误）── */
+  /* ── 版本信息（失败静默降级）── */
   SC.loadDesktopVersion().then(function (v) {
     var hv = document.getElementById('heroVersion');
     if (hv) hv.textContent = 'v' + v.version;
+    var hvi = document.getElementById('heroVersionInline');
+    if (hvi) hvi.textContent = v.version;
+
+    if (v.size) {
+      var hs = document.getElementById('heroSize');
+      if (hs) hs.textContent = SC.formatSize(v.size);
+    }
 
     var title = document.getElementById('updateTitle');
     if (title) {
@@ -280,12 +324,6 @@
 
     var sub = document.getElementById('ctaSub');
     if (sub) sub.textContent = 'Windows 10 / 11 · v' + v.version + ' · 免费下载 · 无需登录';
-
-    /* 体积数据回填 */
-    if (v.size) {
-      var meta = document.querySelector('.hero__meta div:nth-child(2) b');
-      if (meta) meta.textContent = SC.formatSize(v.size);
-    }
   });
 })();
 </script>
