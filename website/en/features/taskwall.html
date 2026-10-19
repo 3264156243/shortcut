@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Task Wall — sticky notes for your to-dos | ShortCut</title>
 <meta name="description" content="A sticky-note task wall: multiple walls, long-form tasks, reminders. Pin a task from your phone and it shows up on the desktop, with two-way completion sync." />
-<meta name="theme-color" content="#0a0a0b" />
+<meta name="theme-color" content="#f3eee4" />
 
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="ShortCut" />
@@ -23,15 +23,16 @@
   (function () {
     try {
       var m = localStorage.getItem('sc-mode');
-      if (m !== 'light' && m !== 'dark') m = 'dark';
+      if (m !== 'light' && m !== 'dark') m = 'light';
       document.documentElement.setAttribute('data-mode', m);
     } catch (e) {
-      document.documentElement.setAttribute('data-mode', 'dark');
+      document.documentElement.setAttribute('data-mode', 'light');
     }
   })();
   </script>
 <link rel="stylesheet" href="/assets/css/site.css" />
 <link rel="stylesheet" href="/assets/css/pages.css" />
+<link rel="stylesheet" href="/assets/css/product-v3.css" />
 </head>
 
 <body data-page="features">
@@ -53,10 +54,10 @@
 <div class="feature-lead feature-lead--flip">
         <div class="feature-lead__text reveal"><p class="hero__lead" style="margin-bottom:0">Instead of building a dozen nested folders in a notes app, write the task on a sticky note and pin it to the wall. Reminders pop up through the SC ball; pin a task on your phone and it is already there when you sit back down.</p></div>
         <div class="reveal">        <div class="sticky-mock" role="img" aria-label="ShortCut interface illustration">
-          <div class="sticky"><b>Design draft by Friday</b>把首页的第二版改完，同步给客户确认<span class="sticky__meta"><span class="sticky__dot"></span>Reminder today 18:00</span></div>
-          <div class="sticky"><b>Buy a router</b>家里那台老断流，换一个支持 Wi-Fi 6 的<span class="sticky__meta"><span class="sticky__dot"></span>Plain to-do</span></div>
-          <div class="sticky"><b>Back up photos</b>把手机里这两个月的照片导到移动硬盘<span class="sticky__meta"><span class="sticky__dot"></span>Tomorrow 09:30</span></div>
-          <div class="sticky"><b>Write the weekly report</b>本周完成：官网重构、三处 bug 修复<span class="sticky__meta"><span class="sticky__dot"></span>Pinned from phone</span></div>
+          <div class="sticky"><b>Design draft by Friday</b>Finish the second homepage draft and send it for client review<span class="sticky__meta"><span class="sticky__dot"></span>Reminder today 18:00</span></div>
+          <div class="sticky"><b>Buy a router</b>The old one keeps dropping; get a Wi-Fi 6 model<span class="sticky__meta"><span class="sticky__dot"></span>Plain to-do</span></div>
+          <div class="sticky"><b>Back up photos</b>Move the last two months of photos to the external drive<span class="sticky__meta"><span class="sticky__dot"></span>Tomorrow 09:30</span></div>
+          <div class="sticky"><b>Write the weekly report</b>This week: website rewrite and three bug fixes<span class="sticky__meta"><span class="sticky__dot"></span>Pinned from phone</span></div>
         </div></div>
       </div>
     </div>
@@ -126,6 +127,7 @@
   <script src="/assets/js/data.js"></script>
   <script src="/assets/js/site.js"></script>
   <script src="/assets/js/motion.js"></script>
+
   <script>
   (function () {
     'use strict';

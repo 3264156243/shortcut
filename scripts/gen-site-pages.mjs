@@ -26,10 +26,10 @@ const BOOT_SCRIPT = `  <script>
   (function () {
     try {
       var m = localStorage.getItem('sc-mode');
-      if (m !== 'light' && m !== 'dark') m = 'dark';
+      if (m !== 'light' && m !== 'dark') m = 'light';
       document.documentElement.setAttribute('data-mode', m);
     } catch (e) {
-      document.documentElement.setAttribute('data-mode', 'dark');
+      document.documentElement.setAttribute('data-mode', 'light');
     }
   })();
   <\/script>`;
@@ -42,7 +42,7 @@ function head({ title, desc, canonical }) {
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${title}</title>
 <meta name="description" content="${desc}" />
-<meta name="theme-color" content="#0a0a0b" />
+<meta name="theme-color" content="#f3eee4" />
 
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="ShortCut" />
@@ -58,6 +58,7 @@ ${canonical ? `<link rel="canonical" href="${canonical}" />\n` : ''}
 ${BOOT_SCRIPT}
 <link rel="stylesheet" href="/assets/css/site.css" />
 <link rel="stylesheet" href="/assets/css/pages.css" />
+<link rel="stylesheet" href="/assets/css/product-v3.css" />
 </head>`;
 }
 
@@ -253,7 +254,7 @@ const PAGES = [
     sectionDesc: '它常驻桌面，所以每一处都考虑「不打扰」。',
     caps: [
       ['island', '收起 / 迷你 / 展开三态', '收起时宽度随内容自适应，播放音乐时保持固定宽度，不会来回跳。'],
-      ['send', '音乐封面与歌词', '内置网易云音乐桥：封面、进度、歌词逐字跳动、长歌词轮播，还能提前半句显示。'],
+      ['send', '音乐封面与歌词', '正在播放时显示封面、歌名、歌手和逐字歌词；当前一句过长时会自动轮播。'],
       ['check', '任务提醒球', '任务到时弹出提醒，可直接查看跳转或标记完成。'],
       ['bolt', '驾驶舱与余额', 'CPU/GPU/内存占用与温度随时可见；DeepSeek 余额每分钟刷新，播放音乐时分离成右侧小球。'],
       ['shield', '鼠标穿透', '打开后完全不挡桌面点击；窗口仍可被快捷快捷键唤起。默认 Alt+B 切换。'],
@@ -304,8 +305,8 @@ const PAGES = [
     sectionTitle: '能力细节',
     sectionDesc: '两种连接方式，按场景自动选择。',
     caps: [
-      ['cloud', '云端中继（4G 可用）', '不在同一网络也能连：手机与电脑各自连到你的服务器，经中继转发指令。'],
-      ['bolt', '局域网直连', '同一 Wi-Fi 下直连桌面 9823 端口，不绕服务器，延迟最低。'],
+      ['cloud', '云端中继（4G 可用）', '不在同一网络也能连：手机与电脑通过 ShortCut 的安全中转连接。'],
+      ['bolt', '局域网直连', '同一 Wi-Fi 下手机与电脑直接连接，不经过云端中继，响应更快。'],
       ['grid', '键盘输入', '手机输入法打的中文、符号直接注入电脑当前焦点窗口。'],
       ['phone', '触控板与组合键', '相对移动的光标、单击双击、常用组合键一键触发。'],
       ['send', '剪贴板互传', '把手机上的文本发到电脑剪贴板，也能反过来取。'],
@@ -321,11 +322,11 @@ const PAGES = [
       <div class="narrow">
         <div class="capability reveal" style="margin-bottom:12px">
           <span class="cap-ico" data-icon="shield"></span>
-          <div><b>局域网模式会监听本机端口</b><p>开启后桌面端监听 <code>0.0.0.0:9823</code>，仅接受通过配对码鉴权的连接。<strong>不要在公共 Wi-Fi 下开启</strong>；用完即关最安全。</p></div>
+          <div><b>只在可信网络里开启</b><p>局域网模式需要手机与电脑处在同一网络。只接受已配对的设备连接，<strong>不建议在公共 Wi-Fi 下开启</strong>，用完关闭最安全。</p></div>
         </div>
         <div class="capability reveal">
           <span class="cap-ico" data-icon="check"></span>
-          <div><b>云端通道需要绑定关系</b><p>中继只接受已绑定的手机与桌面，指令走一次性 ticket；服务器不保存你的输入内容。</p></div>
+          <div><b>云端通道需要先完成绑定</b><p>只有绑定过的手机与电脑才能互相连接；中转过程不会保存你输入的文字内容。</p></div>
         </div>
       </div>
     </div>
@@ -338,11 +339,11 @@ const PAGES = [
     file: 'features/transfer.html',
     nav: 'features',
     title: '文件快传 — 手机与电脑互传文件 | ShortCut',
-    desc: '手机与电脑互传文件与文本：分片上传大文件、按有效期自动清理、生成分享链接、哈希校验，不经过第三方网盘。',
+    desc: '手机与电脑互传文件与文本：可生成带密码的分享内容，自定义分享时长，到期自动清理，不经过第三方网盘。',
     crumbs: [{ label: '功能', href: '/features/shortcut.html' }, { label: '文件快传' }],
     h1: '手机电脑互传文件，<br />不用再折腾数据线',
     lead:
-      '把文件丢上去，另一头就能取。文件存在你自己的服务器上，按有效期自动清理，不经过任何第三方网盘；大文件走分片上传，中断了也能续。',
+      '把文件或文本发出去，另一头用密码领取。分享时长最多 24 小时，到期后自动清理，不经过第三方网盘。',
     flip: true,
     figure: `        <div class="file-mock" role="img" aria-label="文件快传示意图：三个文件条目，其中一个正在上传并显示进度">
           <div class="file-mock__bar"><span class="dot-live"></span>我的传输 · 3 个文件</div>
@@ -353,7 +354,7 @@ const PAGES = [
           </div>
           <div class="file-row">
             <span class="file-row__ico">ZIP</span>
-            <div><div class="file-row__name">项目备份-20261018.zip</div><div class="file-row__meta">86.1 MB · 分片上传中</div></div>
+            <div><div class="file-row__name">项目备份-20261018.zip</div><div class="file-row__meta">86.1 MB · 上传中</div></div>
             <span class="file-row__pct">64%</span>
           </div>
           <div class="file-row">
@@ -365,11 +366,11 @@ const PAGES = [
     sectionTitle: '能力细节',
     sectionDesc: '传完就忘，剩下的交给有效期。',
     caps: [
-      ['send', '分片上传大文件', '大文件切片上传，网络中断可续传，不要求一次传完。'],
+      ['send', '文件与文本都能发', '分享链接可以携带文件，也可以只发送一段文本；手机和电脑都能领取。'],
       ['clock', '有效期自动清理', '每个文件可设有效期，到期自动删除，不用手动维护空间。'],
-      ['check', '哈希校验', '上传与下载都做完整性校验，避免传出一个损坏的文件。'],
+      ['check', '领取密码', '接收方输入密码后才能打开共享内容；密码可以自行生成和修改。'],
       ['grid', '文本也能传', '一段文字、一个链接，直接发到另一端剪贴板，比复制粘贴跨设备省事。'],
-      ['shield', '不经第三方网盘', '文件存放在你自己部署的服务器，链接可控、可随时撤销。'],
+      ['shield', '不经第三方网盘', '分享有效期由你控制，链接可随时撤销，到期后自动清理。'],
       ['windows', '分享链接', '生成一个带有效期的下载链接，发给别人也不需要对方装客户端。']
     ],
     pager: { prev: { href: '/features/control.html', label: '手机控电脑' }, next: { href: '/features/android.html', label: '安卓端' } }
@@ -380,11 +381,11 @@ const PAGES = [
     file: 'features/android.html',
     nav: 'features',
     title: '安卓端 — 原生 Android 客户端 | ShortCut',
-    desc: 'ShortCut 安卓端：原生 Kotlin 客户端，与桌面端使用同一套接口契约。支持应用内更新、局域网直连与设备绑定。',
+    desc: 'ShortCut 安卓端：在手机上接任务、领取文件和查看联动状态，也支持直接用浏览器打开移动页。',
     crumbs: [{ label: '功能', href: '/features/shortcut.html' }, { label: '安卓端' }],
     h1: '安卓端：<br />把联动装进口袋',
     lead:
-      '手机网页用浏览器打开就能用，而安卓端是原生 App —— 界面更跟手，支持应用内更新，同一 Wi-Fi 下还有局域网直连。它与桌面端用同一套接口契约，功能会和桌面端一起更新。',
+      '手机网页用浏览器打开就能用；安装安卓端后，入口更固定、操作更跟手。扫码绑定电脑后，可以在手机上接任务、传文件，也能继续使用手机控电脑。',
     figure: `        <div class="grid" style="gap:18px;justify-items:center">
           <div class="phone" role="img" aria-label="安卓端示意图：应用首页功能入口">
             <div class="phone__screen">
@@ -398,14 +399,14 @@ const PAGES = [
           </div>
         </div>`,
     sectionTitle: '能力细节',
-    sectionDesc: '与桌面端同一套契约，功能同步推进。',
+    sectionDesc: '手机上接着用，常用能力保持同步。',
     caps: [
-      ['android', '原生 Kotlin 客户端', '不是套壳网页，界面与交互按 Android 习惯实现。'],
+      ['android', '为 Android 打造', '界面与交互贴合手机习惯，日常联动操作更顺手。'],
       ['cloud', '应用内更新', '读取官网更新清单，检查到新版本直接引导安装，不用手动找 APK。'],
       ['bolt', '局域网直连', '同一 Wi-Fi 下直连桌面端，指令延迟更低。'],
       ['phone', '设备绑定', '用绑定码把手机与电脑配对一次，之后自动识别。'],
       ['send', '任务墙 / 快传 / 控制', '桌面端三大联动能力在手机上都能用。'],
-      ['shield', '同一份接口契约', '所有接口与字段以《移动互联-协议契约》为准，不会出现两端行为不一致。']
+      ['shield', '同一个绑定关系', '扫码绑定一次后，手机就能按权限使用任务、快传和控制等功能，不需要重复登录。']
     ],
     extra: `  <section class="section section--alt">
     <div class="wrap">
@@ -459,7 +460,7 @@ const PAGES = [
     file: 'feedback.html',
     nav: 'feedback',
     title: '问题反馈 — ShortCut',
-    desc: '提交 ShortCut 的问题反馈、功能建议或使用疑问。填写内容会直接记录到服务端，无需注册账号。',
+    desc: '提交 ShortCut 的问题反馈、功能建议或使用疑问。填写内容会直接记录到反馈系统，无需注册账号。',
     crumbs: [{ label: '问题反馈' }],
     h1: '问题反馈',
     lead: '遇到问题、想要某个功能、或者只是想说点什么，都可以写在这里。不需要注册，也不用留联系方式（留了更方便回你）。',

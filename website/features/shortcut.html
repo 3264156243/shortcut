@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>快捷启动 — 常用软件、文件夹、网页一键直达 | ShortCut</title>
 <meta name="description" content="把常用软件、文件、文件夹和网页集中到一处，用键盘快速选择并启动。支持图标自动提取、导入已安装软件、页签与分组管理。" />
-<meta name="theme-color" content="#0a0a0b" />
+<meta name="theme-color" content="#f3eee4" />
 
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="ShortCut" />
@@ -23,15 +23,16 @@
   (function () {
     try {
       var m = localStorage.getItem('sc-mode');
-      if (m !== 'light' && m !== 'dark') m = 'dark';
+      if (m !== 'light' && m !== 'dark') m = 'light';
       document.documentElement.setAttribute('data-mode', m);
     } catch (e) {
-      document.documentElement.setAttribute('data-mode', 'dark');
+      document.documentElement.setAttribute('data-mode', 'light');
     }
   })();
   </script>
 <link rel="stylesheet" href="/assets/css/site.css" />
 <link rel="stylesheet" href="/assets/css/pages.css" />
+<link rel="stylesheet" href="/assets/css/product-v3.css" />
 </head>
 
 <body data-page="features">

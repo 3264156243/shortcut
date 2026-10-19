@@ -3,15 +3,14 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ShortCut — desktop efficiency tool for Windows | Quick Launch · Task Wall · SC Ball</title>
-<meta name="description" content="ShortCut is a Windows desktop efficiency tool: quick launch, task wall, SC Ball island, file conversion and screenshot translation — plus phone interconnect (task sync, file transfer, phone control). No account, data stays local by default." />
-<meta name="theme-color" content="#080a0f" />
+<title>ShortCut — the things you use, all within reach</title>
+<meta name="description" content="ShortCut is a Windows desktop tool for quick launch, a sticky-note task wall, the always-present SC Ball, and a simple handoff between your phone and computer." />
+<meta name="theme-color" content="#f3eee4" />
 
-<!-- Open Graph -->
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="ShortCut" />
-<meta property="og:title" content="ShortCut — desktop efficiency tool for Windows" />
-<meta property="og:description" content="Quick launch, task wall and the SC Ball island, plus phone interconnect. Data stays local by default." />
+<meta property="og:title" content="ShortCut — the things you use, all within reach" />
+<meta property="og:description" content="Quick launch, a sticky-note task wall, SC Ball and phone handoff, in one calmer Windows workspace." />
 <meta property="og:image" content="/assets/img/og.png" />
 <meta name="twitter:card" content="summary_large_image" />
 
@@ -20,301 +19,233 @@
 <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
 
 <script>
-/* 明暗模式：在样式生效前应用，避免刷新闪烁 */
 (function () {
   try {
     var m = localStorage.getItem('sc-mode');
-    if (m !== 'light' && m !== 'dark') m = 'dark';
+    if (m !== 'light' && m !== 'dark') m = 'light';
     document.documentElement.setAttribute('data-mode', m);
   } catch (e) {
-    document.documentElement.setAttribute('data-mode', 'dark');
+    document.documentElement.setAttribute('data-mode', 'light');
   }
 })();
 </script>
 <link rel="stylesheet" href="/assets/css/site.css" />
 <link rel="stylesheet" href="/assets/css/pages.css" />
+<link rel="stylesheet" href="/assets/css/product-v3.css" />
 </head>
 
-<body data-page="home">
-
-<!-- 导航（由 site.js 注入） -->
+<body data-page="home" class="home-v3">
 <div id="site-nav"></div>
 
 <main>
-
-  <!-- ══ 1. 首屏 ═══════════════════════════════════════════════════════ -->
-  <section class="hero">
-    <span class="hero__grid" aria-hidden="true"></span>
-    <span class="orb orb--a" aria-hidden="true"></span>
-    <span class="orb orb--b" aria-hidden="true"></span>
-    <span class="orb orb--c" aria-hidden="true"></span>
-
-    <div class="wrap hero__inner">
-      <div class="hero__text">
-        <span class="badge"><span class="dot-live"></span>v<span id="heroVersionInline">2.5.1</span> · Windows 10 / 11</span>
-        <h1>Everything in one place, <span class="grad">one keystroke away</span><br />with SC Ball on your desktop</h1>
-        <p class="hero__lead">
-          Keep your frequently used apps, files, folders and links in one place and open them with a keystroke. Tasks live on a sticky-note wall, and the always-on-screen SC Ball folds music, tasks, system stats and balance into one little pill. <strong>Nothing about your habits has to change, and there is no account to create.</strong>
-        </p>
-        <div class="btn-row">
-          <a class="btn btn--primary btn--lg" id="heroDownload" href="/en/download.html">Download free</a>
-          <a class="btn btn--ghost btn--lg" href="/en/features/shortcut.html">See what it does</a>
+  <section class="home-hero">
+    <div class="home-shell home-hero__grid">
+      <div class="home-hero__copy">
+        <div class="home-kicker"><span class="home-kicker__dot"></span>ShortCut · A Windows desktop workspace</div>
+        <h1>The things you use,<br /><span>all within reach.</span></h1>
+        <p class="home-lead">Apps, files, links and tasks should not be scattered across your desktop, Start menu and a pile of windows. ShortCut keeps everyday actions close, so a keypress is often all it takes to keep moving.</p>
+        <div class="home-actions">
+          <a class="home-button home-button--primary" id="heroDownload" href="/en/download.html">Download for Windows</a>
+          <a class="home-button home-button--quiet" href="#core-scenes">See what it does</a>
         </div>
-        <div class="hero__meta">
-          <div><b id="heroVersion">—</b><span>Current version</span></div>
-          <div><b id="heroSize">7.3 MB</b><span>Installer size</span></div>
-          <div><b>Stored locally</b><span>Data stays local</span></div>
+        <div class="home-trust" aria-label="ShortCut interface illustration">
+          <span>Windows 10 / 11</span>
+          <span><b id="heroVersion">v2.5.1</b> Current version</span>
+          <span>No account required</span>
         </div>
       </div>
 
-      <!-- 产品示意图（纯 CSS 绘制 + 动画，非截图） -->
-      <div class="hero__figure">
-        <div class="figure-float">
-        <div class="device" role="img" aria-label="ShortCut interface illustration">
-          <div class="device__bar">
-            <span class="device__dots"><i></i><i></i><i></i></span>
-            <span class="device__title">ShortCut</span>
-            <span class="device__actions"><i></i><i></i></span>
+      <div class="home-hero__visual">
+        <div class="home-shot-note home-shot-note--shortcut"><span>01</span>Select with keys, press Enter</div>
+        <figure class="home-shot">
+          <div class="home-shot__top">
+            <span>ShortCut main panel</span>
+            <small>Real interface</small>
           </div>
-
-          <!-- 悬浮 SC球（会呼吸 / 进度 / 波形） -->
-          <div class="island-live">
-            <span class="il-dot"></span>
-            <span class="il-text">Now playing</span>
-            <span class="il-track"><span class="il-fill"></span></span>
-            <span class="il-wave"><i></i><i></i><i></i><i></i><i></i></span>
-          </div>
-
-          <div class="pane">
-            <div class="pane__side">
-              <span class="pane__item is-active"><b></b>Shortcuts</span>
-              <span class="pane__item"><b></b>Task Wall</span>
-              <span class="pane__item"><b></b>Dashboard</span>
-              <span class="pane__item"><b></b>Translate</span>
-              <span class="pane__item"><b></b>Usage log</span>
-              <span class="pane__item"><b></b>Control</span>
-            </div>
-            <div class="pane__main">
-              <div class="pane__search">Search shortcuts…</div>
-              <div class="pane__grid">
-                <span class="tile is-selected"></span><span class="tile"></span>
-                <span class="tile"></span><span class="tile"></span>
-                <span class="tile"></span><span class="tile"></span>
-                <span class="tile"></span><span class="tile"></span>
-                <span class="tile"></span><span class="tile"></span>
-              </div>
-            </div>
-          </div>
-        </div>
-        </div><!-- /.figure-float -->
+          <img src="/assets/img/screens/shortcut-panel.png" width="1180" height="710" alt="ShortCut Quick Launch page with the navigation rail on the left and shortcut groups on the right" fetchpriority="high" />
+        </figure>
+        <div class="home-shot-note home-shot-note--keys"><kbd>Alt</kbd><span>+</span><kbd>Space</kbd><small>anywhere</small></div>
       </div>
+    </div>
+    <div class="home-shell home-hero__foot">
+      <span>From opening an app to remembering a small task</span>
+      <i></i>
+      <span>One place to keep moving</span>
+      <i></i>
+      <span>Your phone can pick up the thread</span>
     </div>
   </section>
 
-  <!-- ══ 2. 功能卡网格 ══ 功能卡网格 ═════════════════════════════════════════════════ -->
-  <section class="section" id="features">
-    <div class="wrap">
-      <div class="section-head center reveal">
-        <span class="eyebrow">Core features</span>
-        <h2>Six things, one tool</h2>
-        <p>Four on the desktop and two across devices. Each works on its own, and they work together.</p>
-      </div>
-      <div class="grid grid--3" id="featureGrid"><!-- 由脚本渲染 --></div>
+  <section class="home-statement">
+    <div class="home-shell">
+      <p>A little less friction, <strong>every day.</strong></p>
     </div>
   </section>
 
-  <!-- ══ 3. Interconnect ═══════════════════════════════════════════════════ -->
-  <section class="section section--alt" id="mobile">
-    <div class="wrap">
-      <div class="section-head center reveal">
-        <span class="eyebrow">Interconnect</span>
-        <h2>Start on your phone, finish on your computer</h2>
-        <p>Two-way task sync, file transfer, and your phone acting as the keyboard and trackpad. All of it goes through your own server.</p>
-      </div>
+  <section class="home-scenes" id="core-scenes">
+    <div class="home-shell">
+      <header class="home-section-head">
+        <span class="home-eyebrow">Three everyday actions</span>
+        <h2>Launch. Remember. Carry on.</h2>
+        <p>The home page is not a feature inventory. These three actions matter most; everything else is there when you need it.</p>
+      </header>
 
-      <div class="grid grid--2" style="align-items:center;gap:48px">
-        <div class="reveal">
-          <div class="phone" role="img" aria-label="ShortCut interface illustration">
-            <div class="phone__screen">
-              <div class="phone__title"><span class="dot-live"></span>ShortCut Connect</div>
-              <div class="phone__card is-accent"><span class="pc-dot"></span>Task Wall · pin a task</div>
-              <div class="phone__card"><span class="pc-dot"></span>File transfer</div>
-              <div class="phone__card"><span class="pc-dot"></span>PC control</div>
-              <div class="phone__card"><span class="pc-dot"></span>Devices & pairing</div>
-              <div class="phone__typing">Type here — it appears on the PC<span class="caret-line"></span></div>
+      <article class="scene scene--launch">
+        <div class="scene__copy">
+          <span class="scene__index">01 / Quick Launch</span>
+          <h3>Stop hunting for icons.<br />Pick one with the keyboard.</h3>
+          <p>Keep apps, folders, files and links on one page. Move with the arrow keys, press Enter to launch, and organise the things you use most.</p>
+          <ul class="scene__list">
+            <li><span>Find</span>By name, path or note</li>
+            <li><span>Move</span>Arrow keys select; holding one wraps around</li>
+            <li><span>Launch</span>Apps, links, scripts and groups</li>
+          </ul>
+          <a class="home-text-link" href="/en/features/shortcut.html">Explore Quick Launch <span>→</span></a>
+        </div>
+        <div class="scene__visual scene__visual--keys" aria-label="ShortCut interface illustration">
+          <div class="launch-board">
+            <div class="launch-board__top"><span>Daily</span><span>Work</span><span>Tools</span><b>+</b></div>
+            <div class="launch-grid">
+              <div class="launch-item launch-item--active"><i class="launch-icon launch-icon--blue">S</i><b>Editor</b><small>Enter</small></div>
+              <div class="launch-item"><i class="launch-icon launch-icon--orange">F</i><b>Files</b></div>
+              <div class="launch-item"><i class="launch-icon launch-icon--green">W</i><b>Workspace</b></div>
+              <div class="launch-item"><i class="launch-icon launch-icon--ink">T</i><b>Terminal</b></div>
+            </div>
+            <div class="launch-search"><span>Search shortcuts</span><kbd>/</kbd></div>
+          </div>
+          <div class="key-hint"><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd><span>move</span><kbd>Enter</kbd><span>open</span></div>
+        </div>
+      </article>
+
+      <article class="scene scene--tasks">
+        <div class="scene__visual scene__visual--task">
+          <figure class="task-shot">
+            <img src="/assets/img/screens/task-wall-panel.png" width="1180" height="710" alt="ShortCut Task Wall with coloured sticky notes arranged freely" decoding="async" />
+          </figure>
+          <div class="task-note task-note--one">Long notes expand</div>
+          <div class="task-note task-note--two">Reminders stay visible</div>
+        </div>
+        <div class="scene__copy">
+          <span class="scene__index">02 / Task Wall</span>
+          <h3>Not another to-do app.<br />Put the work in front of you.</h3>
+          <p>Each task is a note. Add a title, write the details, set a reminder. Separate walls keep work, life and quick thoughts apart without letting them disappear.</p>
+          <ul class="scene__list">
+            <li><span>Write</span>A short line or a full long-form note</li>
+            <li><span>Remind</span>SC Ball brings it back when the time comes</li>
+            <li><span>Sync</span>Pin it on your phone, continue at your desk</li>
+          </ul>
+          <a class="home-text-link" href="/en/features/taskwall.html">Explore Task Wall <span>→</span></a>
+        </div>
+      </article>
+
+      <article class="scene scene--island">
+        <div class="scene__copy">
+          <span class="scene__index">03 / SC Ball + phone handoff</span>
+          <h3>A small presence on your desktop.<br />Important things stay visible.</h3>
+          <p>SC Ball tucks into a small strip and opens when needed. Music, reminders, system stats and balance are always within a glance; pair your phone to hand tasks over from mobile.</p>
+          <ul class="scene__list">
+            <li><span>Desktop</span>Compact, mini and expanded states</li>
+            <li><span>Music</span>Cover art, lyrics and playback in one place</li>
+            <li><span>Phone</span>Tasks, files and control for the same computer</li>
+          </ul>
+          <a class="home-text-link" href="/en/features/scball.html">Meet SC Ball <span>→</span></a>
+        </div>
+        <div class="scene__visual scene__visual--island">
+          <div class="island-demo">
+            <div class="island-pill">
+              <div class="island-cover"><span>♪</span></div>
+              <div class="island-track"><b>Now playing</b><small>Artist · next lyric</small><i><em></em></i></div>
+              <div class="island-wave"><i></i><i></i><i></i><i></i></div>
+            </div>
+            <div class="island-task"><span>18:00</span><div><b>Sort through today’s notes</b><small>Task reminder</small></div><strong>View</strong></div>
+            <div class="phone-echo">
+              <div class="phone-echo__top"><span></span><b>ShortCut Connect</b><small>Connected</small></div>
+              <div class="phone-echo__card"><span>Pinned on your phone</span><b>Continue on your computer</b></div>
+              <div class="phone-echo__action">Send from phone</div>
             </div>
           </div>
         </div>
-
-        <div class="reveal">
-          <div class="link-diagram">
-            <div class="link-node">
-              <span class="ln-icon" data-icon="phone"></span>
-              <span>Phone</span>
-            </div>
-            <div class="link-arrow">
-              <div class="la-line"></div>
-              <span>Cloud relay · direct LAN</span>
-            </div>
-            <div class="link-node">
-              <span class="ln-icon" data-icon="windows"></span>
-              <span>Computer</span>
-            </div>
-          </div>
-
-          <div class="grid" style="gap:13px;margin-top:22px">
-            <div class="capability">
-              <span class="cap-ico" data-icon="sticky"></span>
-              <div><b>Task sync</b><p>Pin a task on your phone and it shows up on the desktop at once — offline desktops queue it and receive it once back online.</p></div>
-            </div>
-            <div class="capability">
-              <span class="cap-ico" data-icon="send"></span>
-              <div><b>File transfer</b><p>Move files and text between phone and computer, chunked uploads for big files, cleaned up by expiry.</p></div>
-            </div>
-            <div class="capability">
-              <span class="cap-ico" data-icon="phone"></span>
-              <div><b>Phone control</b><p>Turn your phone into a keyboard and trackpad: typing, key combos, clipboard sync. Works on 4G, faster on the same Wi-Fi.</p></div>
-            </div>
-          </div>
-        </div>
-      </div>
+      </article>
     </div>
   </section>
 
-  <!-- ══ 4. Why ShortCut ═════════════════════════════════════════════════ -->
-  <section class="section">
-    <div class="wrap">
-      <div class="section-head center reveal">
-        <span class="eyebrow">Why use it</span>
-        <h2>Light, fast, unobtrusive</h2>
-        <p>Your habits stay as they are, and nothing happens behind your back.</p>
-      </div>
-      <div class="home-values">
-        <div class="value-item reveal">
-          <span class="vi-icon" data-icon="bolt"></span>
-          <div><b>7 MB, ready on launch</b><p>After the Tauri 2 rewrite the installer is about 94% smaller and memory use is down about 30%.</p></div>
-        </div>
-        <div class="value-item reveal">
-          <span class="vi-icon" data-icon="shield"></span>
-          <div><b>Data stays on your machine</b><p>Shortcuts, tasks and usage records live on your computer; only the interconnect features talk to your own server.</p></div>
-        </div>
-        <div class="value-item reveal">
-          <span class="vi-icon" data-icon="check"></span>
-          <div><b>No change to your habits</b><p>SC Ball can be click-through or hidden and never blocks desktop clicks; press Alt+I to tuck it away.</p></div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ══ 5. 最新更新 ═══════════════════════════════════════════════════ -->
-  <section class="section section--tight section--alt">
-    <div class="wrap">
-      <div class="update-strip reveal">
+  <section class="home-more">
+    <div class="home-shell">
+      <header class="home-section-head home-section-head--inline">
         <div>
-          <span class="badge"><span class="dot-live" ></span>Latest release</span>
+          <span class="home-eyebrow">When you need them</span>
+          <h2>A few more useful things.</h2>
         </div>
-        <div>
-          <h3 id="updateTitle">Reading version…</h3>
-          <ul id="updateList"></ul>
-        </div>
-        <div class="btn-row">
-          <a class="btn" href="/en/changelog.html">View all changes</a>
-        </div>
+        <a class="home-text-link" href="/en/features/control.html">View all features <span>→</span></a>
+      </header>
+
+      <div class="more-grid">
+        <a class="more-item" href="/en/features/control.html"><span class="more-item__num">01</span><h3>Phone control</h3><p>Use your phone as a keyboard and trackpad. Connect directly on the same Wi-Fi or operate the computer remotely through the cloud.</p><b>Keyboard, trackpad and clipboard →</b></a>
+        <a class="more-item" href="/en/features/transfer.html"><span class="more-item__num">02</span><h3>File transfer</h3><p>Send files or text between phone and computer without a third-party drive. You choose the share window; expired items are cleaned up automatically.</p><b>Send and receive →</b></a>
+        <a class="more-item" href="/en/features/android.html"><span class="more-item__num">03</span><h3>Android app</h3><p>Pick up tasks, transfer files and check the connection from your phone, or use the mobile site in a browser without installing anything.</p><b>View the Android app →</b></a>
+        <a class="more-item" href="/en/features/shortcut.html#hotkeys"><span class="more-item__num">04</span><h3>Screenshots and translation</h3><p>Alt+S copies the whole screen to the clipboard; Alt+E translates selected text in a note that stays above other windows.</p><b>View shortcuts →</b></a>
+        <a class="more-item" href="/en/features/scball.html"><span class="more-item__num">05</span><h3>System dashboard</h3><p>CPU, GPU and memory usage and temperature live in SC Ball; open the dashboard when you want the full picture.</p><b>View system status →</b></a>
+        <a class="more-item" href="/en/faq.html"><span class="more-item__num">06</span><h3>Local-first</h3><p>Shortcuts, tasks and usage history stay on your computer by default. Data only moves through the secure ShortCut link when you actively use phone handoff.</p><b>Read the FAQ →</b></a>
       </div>
     </div>
   </section>
 
-  <!-- ══ 6. 结尾 CTA ═══════════════════════════════════════════════════ -->
-  <section class="cta">
-    <div class="wrap">
-      <h2>Try <span class="grad">ShortCut</span></h2>
-      <p id="ctaSub">Windows 10 / 11 · free download · no account needed</p>
-      <div class="btn-row center">
-        <a class="btn btn--primary btn--lg" id="ctaDownload" href="/en/download.html">Download the latest</a>
-        <a class="btn btn--ghost btn--lg" href="/en/faq.html">Read the FAQ first</a>
+  <section class="home-update">
+    <div class="home-shell home-update__inner">
+      <div class="home-update__label"><span class="home-kicker__dot"></span>Latest release</div>
+      <div class="home-update__body">
+        <h2 id="updateTitle">Reading the latest version…</h2>
+        <ul id="updateList"></ul>
       </div>
+      <a class="home-button home-button--outline" href="/en/changelog.html">View release notes</a>
     </div>
   </section>
 
+  <section class="home-cta">
+    <div class="home-shell home-cta__inner">
+      <div>
+        <span class="home-eyebrow">Windows 10 / 11 · free download</span>
+        <h2>Make your desktop<br />feel a little more natural.</h2>
+      </div>
+      <div class="home-cta__side">
+        <p>Ready after download. Installing over an older version keeps your shortcuts and tasks.</p>
+        <a class="home-button home-button--primary home-button--large" id="ctaDownload" href="/en/download.html">Download the latest version</a>
+      </div>
+    </div>
+  </section>
 </main>
 
-<!-- 页脚（由 site.js 注入） -->
 <div id="site-footer"></div>
 
 <script src="/assets/js/data-en.js"></script>
 <script src="/assets/js/data.js"></script>
 <script src="/assets/js/site.js"></script>
-<script src="/assets/js/motion.js"></script>
 <script>
 (function () {
   'use strict';
   var D = SC.getData();
-
-  /* ── 功能卡渲染 ── */
-  var grid = document.getElementById('featureGrid');
-  if (grid && D.FEATURES) {
-    D.FEATURES.forEach(function (f, i) {
-      var a = document.createElement('a');
-      a.className = 'card card--feature reveal';
-      a.href = f.href;
-      a.style.setProperty('--d', (i * 70) + 'ms');
-      a.innerHTML =
-        '<span class="card__icon">' + SC.icon(f.icon, 22) + '</span>' +
-        '<h3>' + f.label + '</h3>' +
-        '<p class="tagline">' + f.tagline + '</p>' +
-        '<ul class="card__points">' +
-        f.points.map(function (p) { return '<li>' + p + '</li>'; }).join('') +
-        '</ul>' +
-        '<span class="card__more">Learn more ' + SC.icon('arrow', 15) + '</span>';
-      grid.appendChild(a);
-    });
-    if ('IntersectionObserver' in window) {
-      var io = new IntersectionObserver(function (es) {
-        es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('is-in'); io.unobserve(e.target); } });
-      }, { threshold: 0.05 });
-      Array.prototype.forEach.call(grid.querySelectorAll('.reveal'), function (n) { io.observe(n); });
-    } else {
-      Array.prototype.forEach.call(grid.querySelectorAll('.reveal'), function (n) { n.classList.add('is-in'); });
-    }
-  }
-
-  /* ── data-icon → 内联 SVG ── */
-  Array.prototype.forEach.call(document.querySelectorAll('[data-icon]'), function (n) {
-    n.innerHTML = SC.icon(n.getAttribute('data-icon'), 21);
-  });
-
-  /* ── 版本信息（失败静默降级）── */
+  var isEN = (document.documentElement.getAttribute('lang') || 'zh-CN').toLowerCase().indexOf('en') === 0;
   SC.loadDesktopVersion().then(function (v) {
-    var hv = document.getElementById('heroVersion');
-    if (hv) hv.textContent = 'v' + v.version;
-    var hvi = document.getElementById('heroVersionInline');
-    if (hvi) hvi.textContent = v.version;
-
-    if (v.size) {
-      var hs = document.getElementById('heroSize');
-      if (hs) hs.textContent = SC.formatSize(v.size);
-    }
+    var inline = document.getElementById('heroVersion');
+    if (inline) inline.textContent = 'v' + v.version;
 
     var title = document.getElementById('updateTitle');
     if (title) {
-      title.textContent = 'v' + v.version + (v.pubDate ? ' · ' + v.pubDate : '') +
-        (v.size ? ' · ' + SC.formatSize(v.size) : '');
+      title.textContent = 'v' + v.version + (v.pubDate ? ' · ' + v.pubDate : '') + (v.size ? ' · ' + SC.formatSize(v.size) : '');
     }
 
     var list = document.getElementById('updateList');
     if (list) {
-      var notes = (v.notes || '').split(/\r?\n/).map(function (s) {
-        return s.replace(/^[#*\-\s]+/, '').trim();
-      }).filter(function (s) { return s && s.length > 3; }).slice(0, 3);
-
-      if (!notes.length && D.CHANGELOG && D.CHANGELOG[0]) {
-        notes = D.CHANGELOG[0].items.slice(0, 3);
+      if (isEN) {
+        list.innerHTML = '<li>Detailed release notes are currently maintained in Chinese.</li>';
+      } else {
+        var notes = (v.notes || '').split(/\r?\n/).map(function (s) {
+          return s.replace(/^[#*\-\s]+/, '').trim();
+        }).filter(function (s) { return s && s.length > 3; }).slice(0, 3);
+        if (!notes.length && D.CHANGELOG && D.CHANGELOG[0]) notes = D.CHANGELOG[0].items.slice(0, 3);
+        list.innerHTML = notes.map(function (s) { return '<li>' + s + '</li>'; }).join('');
       }
-      list.innerHTML = notes.map(function (s) { return '<li>' + s + '</li>'; }).join('');
     }
-
-    var sub = document.getElementById('ctaSub');
-    if (sub) sub.textContent = 'Windows 10 / 11 · v' + v.version + ' · Download free · No account needed';
   });
 })();
 </script>

@@ -1,0 +1,118 @@
+  <!-- Latest release -->
+  <section class="section section--flush">
+    <div class="wrap">
+      <div class="dl-hero">
+        <div class="reveal">
+          <span class="badge"><span class="dot-live"></span>Windows 10 / 11 · 64-bit</span>
+          <div class="dl-meta">
+            <span class="tag" id="dlVersion">Reading version...</span>
+            <span class="tag" id="dlDate">—</span>
+            <span class="tag" id="dlSize">—</span>
+          </div>
+          <div class="btn-row">
+            <a class="btn btn--primary btn--lg" id="dlMain" href="/updates/">Download from ShortCut</a>
+            <a class="btn btn--ghost btn--lg" href="#channels">Other download options</a>
+          </div>
+          <div class="dl-facts" style="margin-top:26px">
+            <div class="dl-fact"><b id="factVersion">—</b><span>Current version</span></div>
+            <div class="dl-fact"><b id="factSize">—</b><span>Installer size</span></div>
+            <div class="dl-fact"><b>Local-first</b><span>Your data stays on this PC</span></div>
+          </div>
+        </div>
+        <div class="reveal">
+          <div class="device" role="img" aria-label="ShortCut installer overview">
+            <div class="device__bar">
+              <span class="device__dots"><i></i><i></i><i></i></span>
+              <span class="device__title">ShortCut installer</span>
+            </div>
+            <div class="pane" style="grid-template-columns:1fr;min-height:auto;padding:22px;gap:14px">
+              <div class="setting-row"><div>Platform<small>Windows 10 / 11 (64-bit)</small></div><span class="tag">x64</span></div>
+              <div class="setting-row"><div>Install location<small>Managed by the installer; uninstall from Windows Settings</small></div><span class="tag">Custom</span></div>
+              <div class="setting-row"><div>Update integrity<small>Every update is checked before installation</small></div><span class="tag">Verified</span></div>
+              <div class="setting-row"><div>Your data<small>Shortcuts, tasks and settings survive upgrades</small></div><span class="tag">Kept</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Download channels -->
+  <section class="section section--alt" id="channels">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">Download channels</span>
+        <h2>Choose the route that works best for you</h2>
+        <p>The official link always has the newest build. Lanzou is available as an alternative in mainland China and may take a little longer to update.</p>
+      </div>
+      <div class="channel-grid" id="channelGrid"><!-- Rendered by download.js --></div>
+    </div>
+  </section>
+
+  <!-- Android -->
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">Android</span>
+        <h2>ShortCut goes with you</h2>
+      </div>
+      <div class="android-card reveal">
+        <span class="ac-icon" data-icon="android"></span>
+        <div>
+          <b style="font-size:16px">ShortCut for Android</b>
+          <div style="color:var(--muted);font-size:13.5px;margin-top:4px" id="androidMeta">Reading version...</div>
+        </div>
+        <a class="btn btn--primary" id="androidDl" href="#">Download APK</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Setup -->
+  <section class="section section--alt">
+    <div class="wrap">
+      <div class="grid grid--2" style="gap:44px;align-items:start">
+        <div class="reveal">
+          <div class="section-head" style="margin-bottom:26px">
+            <span class="eyebrow">Setup</span>
+            <h2>Ready in three steps</h2>
+          </div>
+          <div class="steps">
+            <div class="step"><div><b>Download the installer</b><p>Choose any route above and download <code>ShortCut_x.y.z_x64-setup.exe</code>.</p></div></div>
+            <div class="step"><div><b>Run the installer</b><p>If Windows shows an unknown publisher warning, choose “More info → Run anyway”. The installer does not have a Windows digital signature yet.</p></div></div>
+            <div class="step"><div><b>Launch normally</b><p><strong>No administrator access is needed.</strong> Running elevated can prevent files from being dragged from Explorer onto SC Ball.</p></div></div>
+          </div>
+        </div>
+        <div class="reveal">
+          <div class="section-head" style="margin-bottom:26px">
+            <span class="eyebrow">System requirements</span>
+            <h2>What you need</h2>
+          </div>
+          <div class="narrow">
+            <table class="hotkey-table"><tbody>
+              <tr><td>Operating system</td><td>Windows 10 / 11 (64-bit)</td></tr>
+              <tr><td>Required components</td><td>The installer checks automatically and prompts if anything is missing</td></tr>
+              <tr><td>Disk space</td><td>About 40 MB after installation</td></tr>
+              <tr><td>Permissions</td><td>A standard user account is enough; detailed hardware readings can be enabled separately</td></tr>
+              <tr><td>Network</td><td>Core features work offline; phone interconnect needs a connection</td></tr>
+            </tbody></table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Installation FAQ -->
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">Installation</span>
+        <h2>Common questions</h2>
+      </div>
+      <div class="narrow">
+        <details class="faq"><summary>What about the “unknown publisher” warning?</summary><div class="faq__body"><p>The installer does not have a Windows digital signature yet, so SmartScreen may show an unknown publisher. Choose “More info → Run anyway”. Updates are still checked before they are installed.</p></div></details>
+        <details class="faq"><summary>Will upgrading remove my shortcuts or tasks?</summary><div class="faq__body"><p>No. Shortcuts, tasks and settings are preserved. ShortCut also keeps the three most recent local backups.</p></div></details>
+        <details class="faq"><summary>What if a very old version cannot check for updates?</summary><div class="faq__body"><p>Download 2.5.1 or a newer build once and install it over the old version. Your data will be preserved and in-app updates will work again.</p></div></details>
+        <details class="faq"><summary>Is there a portable build?</summary><div class="faq__body"><p>ShortCut is currently distributed as a Windows installer, which also sets up startup and Start menu entries. A portable build is not available yet.</p></div></details>
+      </div>
+    </div>
+  </section>

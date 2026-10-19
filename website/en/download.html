@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Download ShortCut — desktop efficiency tool for Windows</title>
 <meta name="description" content="Download the latest ShortCut: official direct link, Lanzou cloud, Gitee and GitHub, plus the Android APK. Windows 10 / 11 64-bit." />
-<meta name="theme-color" content="#0a0a0b" />
+<meta name="theme-color" content="#f3eee4" />
 
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="ShortCut" />
@@ -23,15 +23,16 @@
   (function () {
     try {
       var m = localStorage.getItem('sc-mode');
-      if (m !== 'light' && m !== 'dark') m = 'dark';
+      if (m !== 'light' && m !== 'dark') m = 'light';
       document.documentElement.setAttribute('data-mode', m);
     } catch (e) {
-      document.documentElement.setAttribute('data-mode', 'dark');
+      document.documentElement.setAttribute('data-mode', 'light');
     }
   })();
   </script>
 <link rel="stylesheet" href="/assets/css/site.css" />
 <link rel="stylesheet" href="/assets/css/pages.css" />
+<link rel="stylesheet" href="/assets/css/product-v3.css" />
 </head>
 
 <body data-page="download">
@@ -48,38 +49,38 @@
     </div>
   </section>
 
-  <!-- 最新版 -->
+  <!-- Latest release -->
   <section class="section section--flush">
     <div class="wrap">
       <div class="dl-hero">
         <div class="reveal">
           <span class="badge"><span class="dot-live"></span>Windows 10 / 11 · 64-bit</span>
           <div class="dl-meta">
-            <span class="tag" id="dlVersion">Reading version…</span>
+            <span class="tag" id="dlVersion">Reading version...</span>
             <span class="tag" id="dlDate">—</span>
             <span class="tag" id="dlSize">—</span>
           </div>
           <div class="btn-row">
-            <a class="btn btn--primary btn--lg" id="dlMain" href="/updates/">Official direct download</a>
-            <a class="btn btn--ghost btn--lg" href="#channels">Other download channels</a>
+            <a class="btn btn--primary btn--lg" id="dlMain" href="/updates/">Download from ShortCut</a>
+            <a class="btn btn--ghost btn--lg" href="#channels">Other download options</a>
           </div>
           <div class="dl-facts" style="margin-top:26px">
             <div class="dl-fact"><b id="factVersion">—</b><span>Current version</span></div>
             <div class="dl-fact"><b id="factSize">—</b><span>Installer size</span></div>
-            <div class="dl-fact"><b>Tauri 2</b><span>Stack</span></div>
+            <div class="dl-fact"><b>Local-first</b><span>Your data stays on this PC</span></div>
           </div>
         </div>
         <div class="reveal">
-          <div class="device" role="img" aria-label="installer信息示意图">
+          <div class="device" role="img" aria-label="ShortCut installer overview">
             <div class="device__bar">
               <span class="device__dots"><i></i><i></i><i></i></span>
-              <span class="device__title">ShortCut Installer</span>
+              <span class="device__title">ShortCut installer</span>
             </div>
             <div class="pane" style="grid-template-columns:1fr;min-height:auto;padding:22px;gap:14px">
-              <div class="setting-row"><div>Target platform<small>Windows 10 / 11 (64-bit)</small></div><span class="tag">x64</span></div>
-              <div class="setting-row"><div>Install location<small>Managed by the installer; uninstall from Settings</small></div><span class="tag">Custom</span></div>
-              <div class="setting-row"><div>Update signature<small>Update packages are signature-checked and cannot be swapped</small></div><span class="tag">Verified</span></div>
-              <div class="setting-row"><div>User data<small>Stored in %APPDATA%\\ShortCut, kept across upgrades</small></div><span class="tag">Kept</span></div>
+              <div class="setting-row"><div>Platform<small>Windows 10 / 11 (64-bit)</small></div><span class="tag">x64</span></div>
+              <div class="setting-row"><div>Install location<small>Managed by the installer; uninstall from Windows Settings</small></div><span class="tag">Custom</span></div>
+              <div class="setting-row"><div>Update integrity<small>Every update is checked before installation</small></div><span class="tag">Verified</span></div>
+              <div class="setting-row"><div>Your data<small>Shortcuts, tasks and settings survive upgrades</small></div><span class="tag">Kept</span></div>
             </div>
           </div>
         </div>
@@ -87,49 +88,49 @@
     </div>
   </section>
 
-  <!-- 四渠道 -->
+  <!-- Download channels -->
   <section class="section section--alt" id="channels">
     <div class="wrap">
       <div class="section-head reveal">
         <span class="eyebrow">Download channels</span>
-        <h2>Four channels, pick one</h2>
-        <p>The official link always has the newest build; Lanzou is faster in mainland China but uploaded by hand, so it may lag. Gitee / GitHub are source repositories.</p>
+        <h2>Choose the route that works best for you</h2>
+        <p>The official link always has the newest build. Lanzou is available as an alternative in mainland China and may take a little longer to update.</p>
       </div>
-      <div class="channel-grid" id="channelGrid"><!-- 由 download.js 渲染 --></div>
+      <div class="channel-grid" id="channelGrid"><!-- Rendered by download.js --></div>
     </div>
   </section>
 
-  <!-- Android App -->
+  <!-- Android -->
   <section class="section">
     <div class="wrap">
       <div class="section-head reveal">
-        <span class="eyebrow">Android App</span>
-        <h2>Also available on your phone</h2>
+        <span class="eyebrow">Android</span>
+        <h2>ShortCut goes with you</h2>
       </div>
       <div class="android-card reveal">
         <span class="ac-icon" data-icon="android"></span>
         <div>
-          <b style="font-size:16px">ShortCut Android App</b>
-          <div style="color:var(--muted);font-size:13.5px;margin-top:4px" id="androidMeta">Reading version…</div>
+          <b style="font-size:16px">ShortCut for Android</b>
+          <div style="color:var(--muted);font-size:13.5px;margin-top:4px" id="androidMeta">Reading version...</div>
         </div>
         <a class="btn btn--primary" id="androidDl" href="#">Download APK</a>
       </div>
     </div>
   </section>
 
-  <!-- Installation -->
+  <!-- Setup -->
   <section class="section section--alt">
     <div class="wrap">
       <div class="grid grid--2" style="gap:44px;align-items:start">
         <div class="reveal">
           <div class="section-head" style="margin-bottom:26px">
-            <span class="eyebrow">Installation</span>
-            <h2>Three steps</h2>
+            <span class="eyebrow">Setup</span>
+            <h2>Ready in three steps</h2>
           </div>
           <div class="steps">
-            <div class="step"><div><b>下载installer</b><p>从上面任一渠道下载 <code>ShortCut_x.y.z_x64-setup.exe</code>。</p></div></div>
-            <div class="step"><div><b>Run the installer</b><p>若出现 SmartScreen「未知发布者」提示，点「更多信息 → 仍要运行」。installer当前未做代码签名。</p></div></div>
-            <div class="step"><div><b>Launch with normal privileges</b><p><strong>Do not run as administrator</strong>: elevated processes trigger Windows UIPI, which breaks dragging files from Explorer onto the SC Ball.</p></div></div>
+            <div class="step"><div><b>Download the installer</b><p>Choose any route above and download <code>ShortCut_x.y.z_x64-setup.exe</code>.</p></div></div>
+            <div class="step"><div><b>Run the installer</b><p>If Windows shows an unknown publisher warning, choose “More info → Run anyway”. The installer does not have a Windows digital signature yet.</p></div></div>
+            <div class="step"><div><b>Launch normally</b><p><strong>No administrator access is needed.</strong> Running elevated can prevent files from being dragged from Explorer onto SC Ball.</p></div></div>
           </div>
         </div>
         <div class="reveal">
@@ -139,11 +140,11 @@
           </div>
           <div class="narrow">
             <table class="hotkey-table"><tbody>
-              <tr><td>OS</td><td>Windows 10 / 11 (64-bit)</td></tr>
-              <tr><td>Runtime</td><td>WebView2 (bundled with Windows 11; the installer prompts on Windows 10 if missing)</td></tr>
-              <tr><td>Disk</td><td>About 40 MB installed</td></tr>
-              <tr><td>Privileges</td><td>普通用户Privileges即可；驾驶舱温度如需更精确可单独授权</td></tr>
-              <tr><td>Network</td><td>Works offline; interconnect features need your own server</td></tr>
+              <tr><td>Operating system</td><td>Windows 10 / 11 (64-bit)</td></tr>
+              <tr><td>Required components</td><td>The installer checks automatically and prompts if anything is missing</td></tr>
+              <tr><td>Disk space</td><td>About 40 MB after installation</td></tr>
+              <tr><td>Permissions</td><td>A standard user account is enough; detailed hardware readings can be enabled separately</td></tr>
+              <tr><td>Network</td><td>Core features work offline; phone interconnect needs a connection</td></tr>
             </tbody></table>
           </div>
         </div>
@@ -151,18 +152,18 @@
     </div>
   </section>
 
-  <!-- 安装常见问题 -->
+  <!-- Installation FAQ -->
   <section class="section">
     <div class="wrap">
       <div class="section-head reveal">
-        <span class="eyebrow">Installation issues</span>
-        <h2>Things you may run into</h2>
+        <span class="eyebrow">Installation</span>
+        <h2>Common questions</h2>
       </div>
       <div class="narrow">
-        <details class="faq"><summary>What about the "unknown publisher" warning?</summary><div class="faq__body"><p>installer未做代码签名（Authenticode），Windows SmartScreen 会提示未知发布者。点「更多信息 → 仍要运行」即可。更新包本身有签名校验，不会被替换。</p></div></details>
-        <details class="faq"><summary>Will upgrading lose my settings and tasks?</summary><div class="faq__body"><p>不会。配置与任务存放在 <code>%APPDATA%\\ShortCut\\shortcut</code>，与安装目录分离；每次写入还会Kept最近 3 份备份。</p></div></details>
-        <details class="faq"><summary>Old versions (2.4.x and earlier) fail to update in-app?</summary><div class="faq__body"><p>是的。旧版的「检查更新」读取的是 Electron 时期留下的清单格式，该问题在 2.5.1 修复。手动下载一次 2.5.1 之后即可正常自动更新。</p></div></details>
-        <details class="faq"><summary>Is there a portable build?</summary><div class="faq__body"><p>目前只提供 NSIS installer。它会把自启与快捷方式一并配置好；解压即用的便携版可能后续提供。</p></div></details>
+        <details class="faq"><summary>What about the “unknown publisher” warning?</summary><div class="faq__body"><p>The installer does not have a Windows digital signature yet, so SmartScreen may show an unknown publisher. Choose “More info → Run anyway”. Updates are still checked before they are installed.</p></div></details>
+        <details class="faq"><summary>Will upgrading remove my shortcuts or tasks?</summary><div class="faq__body"><p>No. Shortcuts, tasks and settings are preserved. ShortCut also keeps the three most recent local backups.</p></div></details>
+        <details class="faq"><summary>What if a very old version cannot check for updates?</summary><div class="faq__body"><p>Download 2.5.1 or a newer build once and install it over the old version. Your data will be preserved and in-app updates will work again.</p></div></details>
+        <details class="faq"><summary>Is there a portable build?</summary><div class="faq__body"><p>ShortCut is currently distributed as a Windows installer, which also sets up startup and Start menu entries. A portable build is not available yet.</p></div></details>
       </div>
     </div>
   </section>
@@ -188,6 +189,7 @@
   <script src="/assets/js/data.js"></script>
   <script src="/assets/js/site.js"></script>
   <script src="/assets/js/motion.js"></script>
+  <script src="/assets/js/download.js"></script>
   <script>
   (function () {
     'use strict';

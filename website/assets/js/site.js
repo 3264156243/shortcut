@@ -68,10 +68,11 @@
     nav.setAttribute('aria-label', '主导航');
 
     var inner = el('div', 'nav__inner');
+    var isEN = (document.documentElement.getAttribute('lang') || 'zh-CN').toLowerCase().indexOf('en') === 0;
 
     /* Logo */
     var logo = el('a', 'logo');
-    logo.href = '/';
+    logo.href = isEN ? '/en/' : '/';
     logo.innerHTML = '<img class="logo__img" src="/assets/img/logo-256.png" alt="" width="32" height="32" decoding="async" /><span>ShortCut</span>';
     inner.appendChild(logo);
 
@@ -129,7 +130,6 @@
     var actions = el('div', 'nav__actions');
 
     /* 语言切换：中文 ↔ English */
-    var isEN = (document.documentElement.getAttribute('lang') || 'zh-CN').toLowerCase().indexOf('en') === 0;
     var langBtn = el('a', 'nav__lang');
     if (isEN) {
       var zhPath = location.pathname.replace(/^\/en(\/|$)/, '/');
@@ -158,8 +158,8 @@
     mode.addEventListener('click', function () { SC.toggleMode(); });
     actions.appendChild(mode);
 
-    var cta = el('a', 'btn btn--primary btn--sm btn--nav-cta', '下载');
-    cta.href = '/download.html';
+    var cta = el('a', 'btn btn--primary btn--sm btn--nav-cta', isEN ? 'Download' : '下载');
+    cta.href = isEN ? '/en/download.html' : '/download.html';
     actions.appendChild(cta);
 
     var burger = el('button', 'nav__burger');
@@ -177,6 +177,7 @@
   function buildDrawer() {
     var drawer = el('div', 'drawer');
     drawer.setAttribute('data-open', 'false');
+    var isEN = (document.documentElement.getAttribute('lang') || 'zh-CN').toLowerCase().indexOf('en') === 0;
 
     (D.NAV || []).forEach(function (item) {
       var a = el('a', null, item.label);
@@ -193,8 +194,8 @@
       }
     });
 
-    var cta = el('a', 'btn btn--primary btn--block', '下载最新版本');
-    cta.href = '/download.html';
+    var cta = el('a', 'btn btn--primary btn--block', isEN ? 'Download for Windows' : '下载最新版本');
+    cta.href = isEN ? '/en/download.html' : '/download.html';
     drawer.appendChild(cta);
     return drawer;
   }
@@ -209,8 +210,9 @@
 
     /* 品牌列 */
     var brand = el('div', 'footer__brand');
+    var isEN = (document.documentElement.getAttribute('lang') || 'zh-CN').toLowerCase().indexOf('en') === 0;
     brand.innerHTML =
-      '<a class="logo" href="/"><img class="logo__img" src="/assets/img/logo-256.png" alt="" width="32" height="32" loading="lazy" /><span>ShortCut</span></a>' +
+      '<a class="logo" href="' + (isEN ? '/en/' : '/') + '"><img class="logo__img" src="/assets/img/logo-256.png" alt="" width="32" height="32" loading="lazy" /><span>ShortCut</span></a>' +
       '<p>' + (D.SITE ? D.SITE.description : '') + '</p>';
     grid.appendChild(brand);
 
@@ -238,7 +240,7 @@
     var bottom = el('div', 'footer__bottom');
     bottom.innerHTML =
       '<span>' + (F.copyright || '') + ' · ' + (F.legal || '') + '</span>' +
-      '<span>Windows 10 / 11 · Tauri 2</span>';
+      '<span>Windows 10 / 11 · ' + (isEN ? 'Local-first' : '本地优先') + '</span>';
     wrap.appendChild(bottom);
 
     f.appendChild(wrap);

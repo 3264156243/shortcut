@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>SC Ball — a tiny island living on your desktop | ShortCut</title>
 <meta name="description" content="SC Ball is a floating island for your desktop: collapsed, mini and expanded states; music cover and lyrics, task reminders, hardware stats and balance — all click-through so it never blocks your work." />
-<meta name="theme-color" content="#0a0a0b" />
+<meta name="theme-color" content="#f3eee4" />
 
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="ShortCut" />
@@ -23,15 +23,16 @@
   (function () {
     try {
       var m = localStorage.getItem('sc-mode');
-      if (m !== 'light' && m !== 'dark') m = 'dark';
+      if (m !== 'light' && m !== 'dark') m = 'light';
       document.documentElement.setAttribute('data-mode', m);
     } catch (e) {
-      document.documentElement.setAttribute('data-mode', 'dark');
+      document.documentElement.setAttribute('data-mode', 'light');
     }
   })();
   </script>
 <link rel="stylesheet" href="/assets/css/site.css" />
 <link rel="stylesheet" href="/assets/css/pages.css" />
+<link rel="stylesheet" href="/assets/css/product-v3.css" />
 </head>
 
 <body data-page="features">
@@ -65,8 +66,8 @@
                 <span class="il-track"><span class="il-fill"></span></span>
                 <span class="il-wave"><i></i><i></i><i></i><i></i><i></i></span>
               </div>
-              <div class="setting-row"><div>Music module<small>封面、歌词、播放Control</small></div><span class="switch is-on"></span></div>
-              <div class="setting-row"><div>显示Dashboard<small>CPU / GPU / memory temperature</small></div><span class="switch is-on"></span></div>
+              <div class="setting-row"><div>Music module<small>Cover, lyrics, playback</small></div><span class="switch is-on"></span></div>
+              <div class="setting-row"><div>System stats<small>CPU / GPU / memory temperature</small></div><span class="switch is-on"></span></div>
               <div class="setting-row"><div>Click-through<small>Never blocks desktop clicks (Alt+B)</small></div><span class="switch"></span></div>
             </div>
           </div>
@@ -139,6 +140,7 @@
   <script src="/assets/js/data.js"></script>
   <script src="/assets/js/site.js"></script>
   <script src="/assets/js/motion.js"></script>
+
   <script>
   (function () {
     'use strict';

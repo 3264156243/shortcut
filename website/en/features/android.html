@@ -4,13 +4,13 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Android App — native Android client | ShortCut</title>
-<meta name="description" content="The ShortCut Android app: a native Kotlin client speaking the same contract as the desktop app. In-app updates, direct LAN connection and device pairing." />
-<meta name="theme-color" content="#0a0a0b" />
+<meta name="description" content="The ShortCut Android app: tasks, file transfer and phone control in one mobile companion. In-app updates, direct LAN connection and device pairing." />
+<meta name="theme-color" content="#f3eee4" />
 
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="ShortCut" />
 <meta property="og:title" content="Android App — native Android client | ShortCut" />
-<meta property="og:description" content="The ShortCut Android app: a native Kotlin client speaking the same contract as the desktop app. In-app updates, direct LAN connection and device pairing." />
+<meta property="og:description" content="The ShortCut Android app: tasks, file transfer and phone control in one mobile companion. In-app updates, direct LAN connection and device pairing." />
 <meta property="og:image" content="/assets/img/og.png" />
 <meta name="twitter:card" content="summary_large_image" />
 
@@ -23,15 +23,16 @@
   (function () {
     try {
       var m = localStorage.getItem('sc-mode');
-      if (m !== 'light' && m !== 'dark') m = 'dark';
+      if (m !== 'light' && m !== 'dark') m = 'light';
       document.documentElement.setAttribute('data-mode', m);
     } catch (e) {
-      document.documentElement.setAttribute('data-mode', 'dark');
+      document.documentElement.setAttribute('data-mode', 'light');
     }
   })();
   </script>
 <link rel="stylesheet" href="/assets/css/site.css" />
 <link rel="stylesheet" href="/assets/css/pages.css" />
+<link rel="stylesheet" href="/assets/css/product-v3.css" />
 </head>
 
 <body data-page="features">
@@ -44,14 +45,14 @@
     <div class="wrap">
         <nav class="crumbs" aria-label="Breadcrumb"><a href="/en/">Home</a><span>/</span><a href="/en/features/shortcut.html">Features</a><span>/</span><span>Android App</span></nav>
       <h1>The Android app:<br />the interconnect, in your pocket</h1>
-      <p>The mobile web pages work in any browser, while the Android app is native — smoother, with in-app updates and a direct LAN connection on the same Wi-Fi. It speaks the same API contract as the desktop app, so features ship together.</p>
+      <p>The mobile site works in any browser, while the Android app keeps everything one tap away, with in-app updates and a faster direct connection on the same Wi-Fi.</p>
     </div>
   </section>
 
   <section class="section section--flush">
     <div class="wrap">
 <div class="feature-lead">
-        <div class="feature-lead__text reveal"><p class="hero__lead" style="margin-bottom:0">The mobile web pages work in any browser, while the Android app is native — smoother, with in-app updates and a direct LAN connection on the same Wi-Fi. It speaks the same API contract as the desktop app, so features ship together.</p></div>
+        <div class="feature-lead__text reveal"><p class="hero__lead" style="margin-bottom:0">The mobile site works in any browser, while the Android app keeps everything one tap away, with in-app updates and a faster direct connection on the same Wi-Fi.</p></div>
         <div class="reveal">        <div class="grid" style="gap:18px;justify-items:center">
           <div class="phone" role="img" aria-label="ShortCut interface illustration">
             <div class="phone__screen">
@@ -59,7 +60,7 @@
               <div class="phone__card is-accent"><span class="pc-dot"></span>My PC · connected</div>
               <div class="phone__card"><span class="pc-dot"></span>Task Wall</div>
               <div class="phone__card"><span class="pc-dot"></span>File transfer</div>
-              <div class="phone__card"><span class="pc-dot"></span>电脑Control</div>
+              <div class="phone__card"><span class="pc-dot"></span>PC control</div>
               <div class="phone__card"><span class="pc-dot"></span>Check for updates</div>
             </div>
           </div>
@@ -72,12 +73,12 @@
     <div class="wrap">
       <div class="section-head reveal">
         <span class="eyebrow">Details</span>
-        <h2>One contract with the desktop, features moving forward together.</h2>
+        <h2>Pick up on your phone without losing the flow from your desktop.</h2>
       </div>
       <div class="grid grid--2" style="gap:14px">
           <div class="capability reveal">
             <span class="cap-ico" data-icon="android"></span>
-            <div><b>Native Kotlin client</b><p>Not a wrapped web view — the UI and interactions follow Android conventions.</p></div>
+            <div><b>Made for Android</b><p>The interface and interactions are designed around the way you use your phone.</p></div>
           </div>
           <div class="capability reveal">
             <span class="cap-ico" data-icon="cloud"></span>
@@ -97,7 +98,7 @@
           </div>
           <div class="capability reveal">
             <span class="cap-ico" data-icon="shield"></span>
-            <div><b>A single API contract</b><p>Every endpoint and field follows the interconnect contract, so the two ends never disagree.</p></div>
+            <div><b>One pairing, everything ready</b><p>Pair once and use tasks, file transfer and phone control without signing in again.</p></div>
           </div>
       </div>
     </div>
@@ -132,6 +133,7 @@
   <script src="/assets/js/data.js"></script>
   <script src="/assets/js/site.js"></script>
   <script src="/assets/js/motion.js"></script>
+
   <script>
   (function () {
     'use strict';

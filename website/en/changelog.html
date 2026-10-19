@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Changelog — ShortCut release history</title>
 <meta name="description" content="ShortCut release history: what changed and what was fixed in every version." />
-<meta name="theme-color" content="#0a0a0b" />
+<meta name="theme-color" content="#f3eee4" />
 
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="ShortCut" />
@@ -23,15 +23,16 @@
   (function () {
     try {
       var m = localStorage.getItem('sc-mode');
-      if (m !== 'light' && m !== 'dark') m = 'dark';
+      if (m !== 'light' && m !== 'dark') m = 'light';
       document.documentElement.setAttribute('data-mode', m);
     } catch (e) {
-      document.documentElement.setAttribute('data-mode', 'dark');
+      document.documentElement.setAttribute('data-mode', 'light');
     }
   })();
   </script>
 <link rel="stylesheet" href="/assets/css/site.css" />
 <link rel="stylesheet" href="/assets/css/pages.css" />
+<link rel="stylesheet" href="/assets/css/product-v3.css" />
 </head>
 
 <body data-page="changelog">
@@ -44,7 +45,7 @@
     <div class="wrap">
         <nav class="crumbs" aria-label="Breadcrumb"><a href="/en/">Home</a><span>/</span><span>Changelog</span></nav>
       <h1>Changelog</h1>
-      <p>The latest release is read live from the update manifest. Every version on record is listed below — click one to expand its notes.</p>
+      <p>The latest release is read live from the update service. Detailed historical release notes are currently maintained in Chinese; every version on record is listed below.</p>
     </div>
   </section>
 
@@ -60,7 +61,7 @@
         </div>
         <ul id="latestNotes"></ul>
         <div class="btn-row" style="margin-top:20px">
-          <a class="btn btn--primary btn--sm" id="latestDownload" href="/download.html">Download this version</a>
+          <a class="btn btn--primary btn--sm" id="latestDownload" href="/en/download.html">Download this version</a>
           <button class="btn btn--sm" id="expandAll" type="button">Expand all versions</button>
         </div>
       </div>
@@ -103,6 +104,8 @@
   <script src="/assets/js/data.js"></script>
   <script src="/assets/js/site.js"></script>
   <script src="/assets/js/motion.js"></script>
+  <script src="/assets/js/changelog-data.js"></script>
+  <script src="/assets/js/changelog.js"></script>
   <script>
   (function () {
     'use strict';

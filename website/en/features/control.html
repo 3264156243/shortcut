@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Phone Control — use your phone as a keyboard and trackpad | ShortCut</title>
 <meta name="description" content="Control your computer from your phone: typing, trackpad, modifier combos and clipboard. Works over a relay on 4G, or directly over LAN for the lowest latency." />
-<meta name="theme-color" content="#0a0a0b" />
+<meta name="theme-color" content="#f3eee4" />
 
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="ShortCut" />
@@ -23,15 +23,16 @@
   (function () {
     try {
       var m = localStorage.getItem('sc-mode');
-      if (m !== 'light' && m !== 'dark') m = 'dark';
+      if (m !== 'light' && m !== 'dark') m = 'light';
       document.documentElement.setAttribute('data-mode', m);
     } catch (e) {
-      document.documentElement.setAttribute('data-mode', 'dark');
+      document.documentElement.setAttribute('data-mode', 'light');
     }
   })();
   </script>
 <link rel="stylesheet" href="/assets/css/site.css" />
 <link rel="stylesheet" href="/assets/css/pages.css" />
+<link rel="stylesheet" href="/assets/css/product-v3.css" />
 </head>
 
 <body data-page="features">
@@ -55,7 +56,7 @@
         <div class="reveal">        <div class="grid" style="gap:18px;justify-items:center">
           <div class="phone" role="img" aria-label="ShortCut interface illustration">
             <div class="phone__screen">
-              <div class="phone__title"><span class="dot-live"></span>电脑Control · 已连接</div>
+              <div class="phone__title"><span class="dot-live"></span>PC control · connected</div>
               <div class="phone__card is-accent"><span class="pc-dot"></span>Keyboard</div>
               <div class="phone__card"><span class="pc-dot"></span>Trackpad</div>
               <div class="phone__card"><span class="pc-dot"></span>Ctrl+C / Ctrl+V</div>
@@ -77,11 +78,11 @@
       <div class="grid grid--2" style="gap:14px">
           <div class="capability reveal">
             <span class="cap-ico" data-icon="cloud"></span>
-            <div><b>Cloud relay (works on 4G)</b><p>Not on the same network: phone and desktop each connect to your own server and commands are relayed.</p></div>
+            <div><b>Cloud relay (works on 4G)</b><p>Not on the same network: the phone and desktop connect securely and commands are relayed.</p></div>
           </div>
           <div class="capability reveal">
             <span class="cap-ico" data-icon="bolt"></span>
-            <div><b>Direct LAN connection</b><p>On the same Wi-Fi it talks straight to port 9823 on the desktop — no server in between, lowest latency.</p></div>
+            <div><b>Direct LAN connection</b><p>On the same Wi-Fi the phone talks directly to the desktop for the lowest latency.</p></div>
           </div>
           <div class="capability reveal">
             <span class="cap-ico" data-icon="grid"></span>
@@ -132,6 +133,7 @@
   <script src="/assets/js/data.js"></script>
   <script src="/assets/js/site.js"></script>
   <script src="/assets/js/motion.js"></script>
+
   <script>
   (function () {
     'use strict';

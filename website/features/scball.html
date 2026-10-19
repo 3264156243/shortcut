@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>SC球 灵动岛 — 常驻桌面的小岛 | ShortCut</title>
 <meta name="description" content="SC球是常驻桌面的悬浮小岛：收起 / 迷你 / 展开三态，显示音乐封面歌词、任务提醒、驾驶舱温度与余额，可鼠标穿透，不挡桌面操作。" />
-<meta name="theme-color" content="#0a0a0b" />
+<meta name="theme-color" content="#f3eee4" />
 
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="ShortCut" />
@@ -23,15 +23,16 @@
   (function () {
     try {
       var m = localStorage.getItem('sc-mode');
-      if (m !== 'light' && m !== 'dark') m = 'dark';
+      if (m !== 'light' && m !== 'dark') m = 'light';
       document.documentElement.setAttribute('data-mode', m);
     } catch (e) {
-      document.documentElement.setAttribute('data-mode', 'dark');
+      document.documentElement.setAttribute('data-mode', 'light');
     }
   })();
   </script>
 <link rel="stylesheet" href="/assets/css/site.css" />
 <link rel="stylesheet" href="/assets/css/pages.css" />
+<link rel="stylesheet" href="/assets/css/product-v3.css" />
 </head>
 
 <body data-page="features">
@@ -89,7 +90,7 @@
           </div>
           <div class="capability reveal">
             <span class="cap-ico" data-icon="send"></span>
-            <div><b>音乐封面与歌词</b><p>内置网易云音乐桥：封面、进度、歌词逐字跳动、长歌词轮播，还能提前半句显示。</p></div>
+            <div><b>音乐封面与歌词</b><p>正在播放时显示封面、歌名、歌手和逐字歌词；当前一句过长时会自动轮播。</p></div>
           </div>
           <div class="capability reveal">
             <span class="cap-ico" data-icon="check"></span>

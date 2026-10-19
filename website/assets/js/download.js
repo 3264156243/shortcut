@@ -11,6 +11,34 @@
 
   var D = global.SC_DATA || {};
   var doc = document;
+  var isEN = (doc.documentElement.getAttribute('lang') || 'zh-CN').toLowerCase().indexOf('en') === 0;
+  var L = isEN ? {
+    recommended: 'Recommended',
+    stale: 'Synced manually; the version may lag behind',
+    getCode: 'Get access code',
+    download: 'Download installer',
+    open: 'Open',
+    codeTitle: ' access code',
+    codeHint: 'Copy it, then enter it on the share page to download.',
+    copyCode: 'Copy access code',
+    copied: 'Copied',
+    openShare: 'Open share page',
+    main: 'Download installer',
+    androidVersion: 'Version '
+  } : {
+    recommended: '推荐',
+    stale: '需手动同步，版本可能滞后',
+    getCode: '获取提取码',
+    download: '下载安装包',
+    open: '打开',
+    codeTitle: ' 提取码',
+    codeHint: '复制后在分享页输入即可下载',
+    copyCode: '复制提取码',
+    copied: '已复制',
+    openShare: '打开分享页',
+    main: '下载安装包',
+    androidVersion: '版本 '
+  };
 
   function $(id) { return doc.getElementById(id); }
 
@@ -33,22 +61,22 @@
         '<div class="channel__head">' +
           '<span class="channel-icon">' + global.SC.icon(ch.icon, 18) + '</span>' +
           '<span class="channel__name">' + ch.label + '</span>' +
-          (ch.recommend ? '<span class="tag">推荐</span>' : '') +
+          (ch.recommend ? '<span class="tag">' + L.recommended + '</span>' : '') +
         '</div>' +
         '<div class="channel__desc">' + ch.desc + '</div>';
 
       var noteHtml = ch.note ? '<div class="channel-note">' + ch.note + '</div>' : '';
       var staleHtml = ch.mayBeStale
-        ? '<div class="channel-note" style="color:var(--muted-2)">需手动同步，版本可能滞后</div>'
+        ? '<div class="channel-note" style="color:var(--muted-2)">' + L.stale + '</div>'
         : '';
 
       var btnHtml;
       if (ch.id === 'lanzou') {
-        btnHtml = '<button class="btn btn--block" type="button">获取提取码</button>';
+        btnHtml = '<button class="btn btn--block" type="button">' + L.getCode + '</button>';
       } else {
         btnHtml = '<a class="btn btn--block' + (ch.recommend ? ' btn--primary' : '') + '" href="' + url +
           '"' + (isFile ? ' download' : ' target="_blank" rel="noopener"') + '>' +
-          (isFile ? '下载安装包' : '打开') + '</a>';
+          (isFile ? L.download : L.open) + '</a>';
       }
 
       card.innerHTML = headHtml + btnHtml + staleHtml + noteHtml;
@@ -57,20 +85,20 @@
       if (ch.id === 'lanzou') {
         card.querySelector('button').addEventListener('click', function () {
           global.SC.openModal(
-            '<h3 style="margin-bottom:6px">' + ch.label + ' 提取码</h3>' +
-            '<p style="color:var(--muted);font-size:13.5px;margin-bottom:0">复制后在分享页输入即可下载</p>' +
+            '<h3 style="margin-bottom:6px">' + ch.label + L.codeTitle + '</h3>' +
+            '<p style="color:var(--muted);font-size:13.5px;margin-bottom:0">' + L.codeHint + '</p>' +
             '<div class="modal__code">' + ch.code + '</div>' +
             '<div class="btn-row" style="justify-content:center">' +
-              '<button class="btn btn--primary btn--sm" id="copyCode" type="button">复制提取码</button>' +
-              '<a class="btn btn--ghost btn--sm" href="' + ch.url + '" target="_blank" rel="noopener">打开分享页</a>' +
+              '<button class="btn btn--primary btn--sm" id="copyCode" type="button">' + L.copyCode + '</button>' +
+              '<a class="btn btn--ghost btn--sm" href="' + ch.url + '" target="_blank" rel="noopener">' + L.openShare + '</a>' +
             '</div>'
           );
           var copyBtn = $('copyCode');
           if (copyBtn) {
             copyBtn.addEventListener('click', function () {
               copyText(ch.code).then(function (ok) {
-                copyBtn.textContent = ok ? '已复制' : ch.code;
-                setTimeout(function () { copyBtn.textContent = '复制提取码'; }, 1800);
+                copyBtn.textContent = ok ? L.copied : ch.code;
+                setTimeout(function () { copyBtn.textContent = L.copyCode; }, 1800);
               });
             });
           }
@@ -137,7 +165,7 @@
     if (main && v.url) {
       main.href = v.url;
       main.setAttribute('download', '');
-      main.textContent = '下载安装包' + (v.size ? '（' + global.SC.formatSize(v.size) + '）' : '');
+      main.textContent = L.main + (v.size ? (isEN ? ' (' : '（') + global.SC.formatSize(v.size) + (isEN ? ')' : '）') : '');
     }
 
     renderChannels(v);
@@ -146,7 +174,7 @@
   /* ═══ 3. 安卓端 ═══════════════════════════════════════════════════════ */
   global.SC.loadAndroidVersion().then(function (a) {
     if (!a) return;
-    setText('androidMeta', '版本 ' + a.version + (a.versionCode ? '（versionCode ' + a.versionCode + '）' : '') +
+    setText('androidMeta', L.androidVersion + a.version + (a.versionCode ? (isEN ? ' (versionCode ' : '（versionCode ') + a.versionCode + (isEN ? ')' : '）') : '') +
       ' · ' + global.SC.formatSize(a.size) + ' · Android');
     var btn = $('androidDl');
     if (btn && a.url) btn.href = a.url;

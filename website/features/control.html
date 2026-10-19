@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>手机控电脑 — 手机当键盘触控板 | ShortCut</title>
 <meta name="description" content="用手机远程操作电脑：键盘输入、触控板、常用组合键、剪贴板互传。云端中继 4G 可连，同一 Wi-Fi 下可局域网直连，延迟更低。" />
-<meta name="theme-color" content="#0a0a0b" />
+<meta name="theme-color" content="#f3eee4" />
 
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="ShortCut" />
@@ -23,15 +23,16 @@
   (function () {
     try {
       var m = localStorage.getItem('sc-mode');
-      if (m !== 'light' && m !== 'dark') m = 'dark';
+      if (m !== 'light' && m !== 'dark') m = 'light';
       document.documentElement.setAttribute('data-mode', m);
     } catch (e) {
-      document.documentElement.setAttribute('data-mode', 'dark');
+      document.documentElement.setAttribute('data-mode', 'light');
     }
   })();
   </script>
 <link rel="stylesheet" href="/assets/css/site.css" />
 <link rel="stylesheet" href="/assets/css/pages.css" />
+<link rel="stylesheet" href="/assets/css/product-v3.css" />
 </head>
 
 <body data-page="features">
@@ -78,11 +79,11 @@
       <div class="grid grid--2" style="gap:14px">
           <div class="capability reveal">
             <span class="cap-ico" data-icon="cloud"></span>
-            <div><b>云端中继（4G 可用）</b><p>不在同一网络也能连：手机与电脑各自连到你的服务器，经中继转发指令。</p></div>
+            <div><b>云端中继（4G 可用）</b><p>不在同一网络也能连：手机与电脑通过 ShortCut 的安全中转连接。</p></div>
           </div>
           <div class="capability reveal">
             <span class="cap-ico" data-icon="bolt"></span>
-            <div><b>局域网直连</b><p>同一 Wi-Fi 下直连桌面 9823 端口，不绕服务器，延迟最低。</p></div>
+            <div><b>局域网直连</b><p>同一 Wi-Fi 下手机与电脑直接连接，不经过云端中继，响应更快。</p></div>
           </div>
           <div class="capability reveal">
             <span class="cap-ico" data-icon="grid"></span>
@@ -114,11 +115,11 @@
       <div class="narrow">
         <div class="capability reveal" style="margin-bottom:12px">
           <span class="cap-ico" data-icon="shield"></span>
-          <div><b>局域网模式会监听本机端口</b><p>开启后桌面端监听 <code>0.0.0.0:9823</code>，仅接受通过配对码鉴权的连接。<strong>不要在公共 Wi-Fi 下开启</strong>；用完即关最安全。</p></div>
+          <div><b>只在可信网络里开启</b><p>局域网模式需要手机与电脑处在同一网络。只接受已配对的设备连接，<strong>不建议在公共 Wi-Fi 下开启</strong>，用完关闭最安全。</p></div>
         </div>
         <div class="capability reveal">
           <span class="cap-ico" data-icon="check"></span>
-          <div><b>云端通道需要绑定关系</b><p>中继只接受已绑定的手机与桌面，指令走一次性 ticket；服务器不保存你的输入内容。</p></div>
+          <div><b>云端通道需要先完成绑定</b><p>只有绑定过的手机与电脑才能互相连接；中转过程不会保存你输入的文字内容。</p></div>
         </div>
       </div>
     </div>

@@ -15,12 +15,10 @@
   var SITE = {
     name: 'ShortCut',
     nameZh: 'SC',
-    tagline: '集中启动，一键直达；SC球常驻，效率升级',
-    description: 'Windows 桌面效率工具：快捷启动、任务墙、SC球灵动岛、文件转换、截图翻译，' +
-      '并可与手机联动（任务同步、文件快传、手机控电脑）。',
-    // 与桌面产品主色一致（src/index.css: --color-accent）
-    themeColor: '#0b0e14',
-    accent: '#e85d04',
+    tagline: '把常用的事，收进一页',
+    description: '快捷启动、纸条任务墙、SC球与手机联动，把每天重复的小动作收进一个顺手的 Windows 工具。',
+    themeColor: '#f3eee4',
+    accent: '#e45b25',
     // 更新清单（同域，无 CORS）
     latestJson: '/updates/latest.json',
     androidLatestJson: '/updates/android/latest.json',
@@ -77,15 +75,15 @@
     },
     {
       id: 'transfer', label: '文件快传', icon: 'send',
-      tagline: '手机与电脑互传文件文本，不登录不上传第三方',
+      tagline: '手机与电脑之间发送文件或文本，分享时间由你决定',
       href: '/features/transfer.html',
-      points: ['分片上传大文件', '有效期自动清理', '生成分享链接', '哈希校验']
+      points: ['手机与电脑互传', '自定义分享时长', '文本与文件都能发', '到期自动清理']
     },
     {
       id: 'android', label: '安卓端', icon: 'android',
-      tagline: '原生 Kotlin 客户端，与桌面端同一套账号与契约',
+      tagline: '在手机上接任务、传文件，也能直接用浏览器打开移动页',
       href: '/features/android.html',
-      points: ['原生界面', '应用内更新', '局域网直连', '设备绑定']
+      points: ['手机接任务', '文件快传入口', '局域网联动', '设备绑定']
     }
   ];
 
@@ -106,16 +104,9 @@
       mayBeStale: true
     },
     {
-      id: 'gitee', label: 'Gitee', icon: 'gitee',
-      desc: '源码仓库 · Release 归档',
-      url: 'https://gitee.com/wanan6/short-cut'
-    },
-    {
-      id: 'github', label: 'GitHub', icon: 'github',
-      desc: '源码仓库',
-      url: 'https://github.com/3264156243/shortcut',
-      // 仓库当前为私有；后期转公开后把 note 置空即可
-      note: '私有仓库，暂不开放'
+      id: 'android', label: '安卓端 APK', icon: 'android',
+      desc: '手机安装包 · 与桌面端扫码绑定',
+      url: '/download.html#android'
     }
   ];
 
@@ -130,27 +121,27 @@
     {
       version: '2.5.1', date: '2026-10-18',
       items: [
-        '修复「检查更新」永远失败（旧实现读取 Electron 期清单且缺少成功标记）',
-        '修复更新进度条不动（事件字段名与前端不一致）',
-        '检查更新改用 Tauri 官方更新器，按 available / not-available 返回'
+        '修复部分情况下检查更新一直失败的问题',
+        '修复下载时进度条不更新的问题',
+        '更新检查会更清楚地告诉你是否有新版本'
       ]
     },
     {
       version: '2.5.0', date: '2026-10-17',
       items: [
-        'Tauri 2 重构后首个正式版，Electron 版正式退役',
-        '支持从旧版应用内自动迁移到 Tauri 版',
-        '修复发版级问题：实例守卫误判自身、侧车资源依赖构建机路径',
-        '穿透快捷键改为 Alt+B'
+        '完成桌面端体验升级，启动更快、占用更低',
+        '已有快捷方式和任务可以继续使用',
+        '修复重复启动和资源路径相关的问题',
+        'SC球鼠标穿透快捷键调整为 Alt+B'
       ]
     },
     {
       version: '2.4.6', date: '2026-09-30',
-      items: ['Tauri 2 重构版首个对外版本，体积 -94%、内存 -30%', '岛设置全面生效，功能全量对齐']
+      items: ['桌面端运行更轻量，安装包体积进一步减小', 'SC球设置完整生效，常用能力保持一致']
     },
     {
       version: '2.4.5', date: '2026-09-29',
-      items: ['新增「控制」板块：手机远程控制电脑（云端 + 局域网）', '文件快传哈希校验与过期清理']
+      items: ['新增手机控电脑：支持云端与局域网连接', '文件快传增加完整性检查与到期清理']
     }
   ];
 
@@ -175,11 +166,11 @@
     {
       group: '安装与更新',
       items: [
-        { q: '支持哪些系统？', a: 'Windows 10 / 11（64 位）。需要 WebView2 运行时，Windows 11 已自带。' },
+        { q: '支持哪些系统？', a: '支持 Windows 10 / 11 64 位。Windows 11 可以直接运行；部分 Windows 10 电脑会由安装程序提示补齐系统组件。' },
         { q: '安装时提示「未知发布者」怎么办？', a: '当前安装包未做代码签名，Windows SmartScreen 会提示未知发布者。点击「更多信息 → 仍要运行」即可。更新包本身有签名校验，不会被替换。' },
-        { q: '安装新版本会丢失任务和快捷方式吗？', a: '不会。配置存放在 %APPDATA%\\ShortCut\\shortcut\\config.json，与安装目录分离，覆盖安装不会影响数据；每次写入还会保留最近 3 份备份。' },
+        { q: '安装新版本会丢失任务和快捷方式吗？', a: '不会。快捷方式、任务和设置在覆盖安装时会保留，并且软件会保留最近三份本地备份。' },
         { q: '如何检查更新？', a: '打开主面板进入「更新」页，点击检查更新。发现新版本后会展示版本号与更新说明，由你确认后才下载。' },
-        { q: '为什么旧版本（2.4.x 及更早）的检查更新会失败？', a: '旧实现读取的是 Electron 时期留下的清单文件，且缺少成功标记，导致无论有没有新版本都显示失败。该问题已在 2.5.1 修复；旧版本需要手动下载一次 2.5.1 安装包，之后即可正常自动更新。' }
+        { q: '很旧的版本无法检查更新怎么办？', a: '2.4.x 及更早版本可能无法在软件里完成更新。手动下载一次 2.5.1 或更新版本覆盖安装即可，原有数据会保留。' }
       ]
     },
     {
@@ -194,14 +185,14 @@
       group: '移动互联',
       items: [
         { q: '手机控电脑需要什么条件？', a: '云端模式：桌面端保持运行即可，手机在任意网络（4G / 异地 Wi-Fi）都能连。局域网模式：手机与电脑连同一 Wi-Fi，延迟更低。' },
-        { q: '手机钉的任务桌面端离线了会丢吗？', a: '不会。任务先存放在你自己的服务器队列里，桌面端上线后自动接收。桌面端离线时手机端会提示「已排队」。' },
-        { q: '文件快传的文件存在哪？', a: '存在你自己部署的服务端，按有效期自动清理；不经过任何第三方网盘。' }
+        { q: '手机钉的任务桌面端离线了会丢吗？', a: '不会。任务会先进入安全中转队列，桌面端上线后自动接收。桌面端离线时手机端会提示「已排队」。' },
+        { q: '文件快传的文件存在哪？', a: '文件只在分享有效期内保留，到期后自动清理，不经过任何第三方网盘。' }
       ]
     },
     {
       group: '隐私与数据',
       items: [
-        { q: '数据会上传到网络吗？', a: '快捷方式、任务墙、使用记录等桌面数据全部保存在本机。只有你主动使用移动互联功能（任务同步、文件快传、手机控电脑）时，数据才会经你自己的服务器传输。' },
+        { q: '数据会上传到网络吗？', a: '快捷方式、任务墙、使用记录等桌面数据全部保存在本机。只有你主动使用移动互联功能（任务同步、文件快传、手机控电脑）时，数据才会通过 ShortCut 的加密联动通道传输。' },
         { q: '需要登录账号吗？', a: '桌面端使用激活码激活；移动互联使用绑定码把手机与电脑配对，不需要注册账号。' }
       ]
     },
@@ -295,7 +286,12 @@
           return {
             title: EN.footer[col.key] || col.title,
             links: col.links.map(function (l) {
-              return { label: EN.footer[l.key] || l.label, href: enHref(l.href), external: l.external };
+              var feature = EN.features && EN.features[l.key];
+              return {
+                label: (feature && feature.label) || EN.footer[l.key] || l.label,
+                href: enHref(l.href),
+                external: l.external
+              };
             })
           };
         }),
@@ -303,6 +299,21 @@
         copyright: FOOTER.copyright
       };
     }
+
+    if (EN.channels) {
+      CHANNELS = CHANNELS.map(function (ch) {
+        var t = EN.channels[ch.id];
+        if (!t) return ch;
+        var copy = {};
+        Object.keys(ch).forEach(function (k) { copy[k] = ch[k]; });
+        copy.label = t.label || ch.label;
+        copy.desc = t.desc || ch.desc;
+        if (ch.id === 'android') copy.url = '/en/download.html#android';
+        return copy;
+      });
+    }
+
+    if (EN.faq) FAQ = EN.faq;
 
     SITE.description =
       'ShortCut is a Windows desktop efficiency tool: quick launch, task wall and the SC Ball island,' +

@@ -14,6 +14,38 @@
   var doc = document;
   var form = doc.getElementById('fbForm');
   if (!form) return;
+  var isEN = (doc.documentElement.getAttribute('lang') || 'zh-CN').toLowerCase().indexOf('en') === 0;
+  var T = isEN ? {
+    noReply: 'There is no reply from the team yet. Please check again later.',
+    lookupInvalid: 'Enter the 12-character feedback ID and 32-character lookup token you received after submitting.',
+    lookingUp: 'Checking…',
+    lookupOk: 'Found',
+    lookupNotFound: 'Feedback not found',
+    lookupFailed: 'Lookup failed',
+    submitting: 'Submitting…',
+    submit: 'Submit feedback',
+    tooShort: 'Please write at least 5 characters.',
+    tooLong: 'Please keep the message under 4,000 characters.',
+    sending: 'Sending…',
+    submitFailed: 'Submission failed. Please try again later.',
+    network: 'Network error. Check your connection and try again.',
+    received: 'Received. Feedback ID: '
+  } : {
+    noReply: '暂时还没有管理员回复，请稍后再查。',
+    lookupInvalid: '请填写提交成功后得到的 12 位编号与 32 位查询凭据。',
+    lookingUp: '查询中…',
+    lookupOk: '查询成功',
+    lookupNotFound: '没有找到这条反馈',
+    lookupFailed: '查询失败',
+    submitting: '提交中…',
+    submit: '提交反馈',
+    tooShort: '内容太短了，请至少写 5 个字。',
+    tooLong: '内容过长，请控制在 4000 字以内。',
+    sending: '正在提交…',
+    submitFailed: '提交失败，请稍后再试。',
+    network: '网络异常，提交失败。请检查网络后再试。',
+    received: '已收到，编号 '
+  };
 
   var elType = doc.getElementById('fbType');
   var elContent = doc.getElementById('fbContent');
@@ -42,7 +74,7 @@
     if (!repliesBox) return;
     var replies = data.replies || [];
     if (!replies.length) {
-      repliesBox.innerHTML = '<div class="reply" style="margin-top:12px"><small>当前状态</small>暂时还没有管理员回复，请稍后再查。</div>';
+      repliesBox.innerHTML = '<div class="reply" style="margin-top:12px"><small>' + (isEN ? 'Status' : '当前状态') + '</small>' + T.noReply + '</div>';
       return;
     }
     repliesBox.innerHTML = replies.map(function (r) {
@@ -55,20 +87,20 @@
       var id = (lookupId && lookupId.value || '').trim();
       var token = (lookupToken && lookupToken.value || '').trim();
       if (!/^[a-f0-9]{12}$/.test(id) || !/^[a-f0-9]{32}$/.test(token)) {
-        if (lookupStatus) { lookupStatus.textContent = '请填写提交成功后得到的 12 位编号与 32 位查询凭据。'; lookupStatus.className = 'fb-status is-err'; }
+        if (lookupStatus) { lookupStatus.textContent = T.lookupInvalid; lookupStatus.className = 'fb-status is-err'; }
         return;
       }
-      if (lookupStatus) { lookupStatus.textContent = '查询中…'; lookupStatus.className = 'fb-status'; }
+      if (lookupStatus) { lookupStatus.textContent = T.lookingUp; lookupStatus.className = 'fb-status'; }
       fetch(ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'lookup', id: id, token: token })
       }).then(function (r) { return r.json(); }).then(function (res) {
-        if (!res.ok) throw new Error(res.message || '没有找到这条反馈');
-        if (lookupStatus) { lookupStatus.textContent = '查询成功'; lookupStatus.className = 'fb-status is-ok'; }
+        if (!res.ok) throw new Error(isEN ? T.lookupNotFound : (res.message || T.lookupNotFound));
+        if (lookupStatus) { lookupStatus.textContent = T.lookupOk; lookupStatus.className = 'fb-status is-ok'; }
         showReplies(res);
       }).catch(function (err) {
-        if (lookupStatus) { lookupStatus.textContent = err.message || '查询失败'; lookupStatus.className = 'fb-status is-err'; }
+        if (lookupStatus) { lookupStatus.textContent = isEN ? T.lookupFailed : (err.message || T.lookupFailed); lookupStatus.className = 'fb-status is-err'; }
         if (repliesBox) repliesBox.innerHTML = '';
       });
     });
@@ -98,7 +130,7 @@
   function setBusy(busy) {
     if (!elSubmit) return;
     elSubmit.disabled = busy;
-    elSubmit.textContent = busy ? '提交中…' : '提交反馈';
+    elSubmit.textContent = busy ? T.submitting : T.submit;
   }
 
   /* ── 提交 ── */
@@ -107,12 +139,12 @@
 
     var content = (elContent.value || '').trim();
     if (content.length < 5) {
-      setStatus('内容太短了，请至少写 5 个字。', 'err');
+      setStatus(T.tooShort, 'err');
       elContent.focus();
       return;
     }
     if (content.length > 4000) {
-      setStatus('内容过长，请控制在 4000 字以内。', 'err');
+      setStatus(T.tooLong, 'err');
       return;
     }
 
@@ -126,7 +158,7 @@
     };
 
     setBusy(true);
-    setStatus('正在提交…', null);
+    setStatus(T.sending, null);
 
     fetch(ENDPOINT, {
       method: 'POST',
@@ -138,7 +170,7 @@
       })
       .then(function (res) {
         if (res && res.ok) {
-          var successText = '已收到，编号 ' + (res.id || '—') + '。请保存查询凭据：' + (res.token || '—');
+          var successText = T.received + (res.id || '—') + (isEN ? '. Keep this lookup token: ' : '。请保存查询凭据：') + (res.token || '—');
           setStatus(successText, 'ok');
           if (lookupId && res.id) lookupId.value = res.id;
           if (lookupToken && res.token) lookupToken.value = res.token;
@@ -146,11 +178,11 @@
           updateCount();
           if (elContact) elContact.value = '';
         } else {
-          setStatus((res && res.message) || '提交失败，请稍后再试。', 'err');
+          setStatus(isEN ? T.submitFailed : ((res && res.message) || T.submitFailed), 'err');
         }
       })
       .catch(function () {
-        setStatus('网络异常，提交失败。请检查网络后再试。', 'err');
+        setStatus(T.network, 'err');
       })
       .then(function () {
         setBusy(false);

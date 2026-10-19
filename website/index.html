@@ -3,15 +3,14 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ShortCut — Windows 桌面效率工具｜快捷启动 · 任务墙 · SC球灵动岛</title>
-<meta name="description" content="ShortCut 是一款 Windows 桌面效率工具：快捷启动、任务墙、SC球灵动岛、文件转换、截图翻译，并可与手机联动——任务同步、文件快传、手机控电脑。无需登录，数据默认留在本机。" />
-<meta name="theme-color" content="#080a0f" />
+<title>ShortCut — 把常用的事，收进一页</title>
+<meta name="description" content="ShortCut 是一款 Windows 桌面效率工具。快捷启动常用软件、文件和网页，用纸条任务墙安排事情，让 SC球 常驻桌面，并通过手机联动随手同步任务与文件。" />
+<meta name="theme-color" content="#f3eee4" />
 
-<!-- Open Graph -->
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="ShortCut" />
-<meta property="og:title" content="ShortCut — Windows 桌面效率工具" />
-<meta property="og:description" content="快捷启动、任务墙、SC球灵动岛，并可与手机联动。数据默认留在本机。" />
+<meta property="og:title" content="ShortCut — 把常用的事，收进一页" />
+<meta property="og:description" content="快捷启动、纸条任务墙、SC球与手机联动。Windows 上更顺手的一页。" />
 <meta property="og:image" content="/assets/img/og.png" />
 <meta name="twitter:card" content="summary_large_image" />
 
@@ -20,302 +19,232 @@
 <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
 
 <script>
-/* 明暗模式：在样式生效前应用，避免刷新闪烁 */
 (function () {
   try {
     var m = localStorage.getItem('sc-mode');
-    if (m !== 'light' && m !== 'dark') m = 'dark';
+    if (m !== 'light' && m !== 'dark') m = 'light';
     document.documentElement.setAttribute('data-mode', m);
   } catch (e) {
-    document.documentElement.setAttribute('data-mode', 'dark');
+    document.documentElement.setAttribute('data-mode', 'light');
   }
 })();
 </script>
 <link rel="stylesheet" href="/assets/css/site.css" />
 <link rel="stylesheet" href="/assets/css/pages.css" />
+<link rel="stylesheet" href="/assets/css/product-v3.css" />
 </head>
 
-<body data-page="home">
-
-<!-- 导航（由 site.js 注入） -->
+<body data-page="home" class="home-v3">
 <div id="site-nav"></div>
 
 <main>
-
-  <!-- ══ 1. 首屏 ═══════════════════════════════════════════════════════ -->
-  <section class="hero">
-    <span class="hero__grid" aria-hidden="true"></span>
-    <span class="orb orb--a" aria-hidden="true"></span>
-    <span class="orb orb--b" aria-hidden="true"></span>
-    <span class="orb orb--c" aria-hidden="true"></span>
-
-    <div class="wrap hero__inner">
-      <div class="hero__text">
-        <span class="badge"><span class="dot-live"></span>v<span id="heroVersionInline">2.5.1</span> · Windows 10 / 11</span>
-        <h1>集中启动，<span class="grad">一键直达</span><br />SC球常驻，效率升级</h1>
-        <p class="hero__lead">
-          把常用软件、文件、文件夹、网页集中到一处，键盘一按直达；
-          任务用纸条贴在墙上，常驻桌面的 SC球 把音乐、任务、驾驶舱和余额收进一颗小球。
-          <strong>不用改变现有习惯，也不用登录账号。</strong>
-        </p>
-        <div class="btn-row">
-          <a class="btn btn--primary btn--lg" id="heroDownload" href="/download.html">免费下载</a>
-          <a class="btn btn--ghost btn--lg" href="/features/shortcut.html">看看能做什么</a>
+  <section class="home-hero">
+    <div class="home-shell home-hero__grid">
+      <div class="home-hero__copy">
+        <div class="home-kicker"><span class="home-kicker__dot"></span>ShortCut · Windows 桌面效率工具</div>
+        <h1>把常用的事，<br /><span>收进一页。</span></h1>
+        <p class="home-lead">软件、文件、网页和待办，不必散落在桌面、开始菜单和各种窗口里。ShortCut 把每天会用到的东西放到手边，键盘一按就能继续手上的事。</p>
+        <div class="home-actions">
+          <a class="home-button home-button--primary" id="heroDownload" href="/download.html">免费下载 Windows 版</a>
+          <a class="home-button home-button--quiet" href="#core-scenes">看看它能做什么</a>
         </div>
-        <div class="hero__meta">
-          <div><b id="heroVersion">—</b><span>当前版本</span></div>
-          <div><b id="heroSize">7.3 MB</b><span>安装包体积</span></div>
-          <div><b>本地保存</b><span>数据不上传</span></div>
+        <div class="home-trust" aria-label="产品信息">
+          <span>Windows 10 / 11</span>
+          <span><b id="heroVersion">v2.5.1</b> 当前版本</span>
+          <span>无需登录</span>
         </div>
       </div>
 
-      <!-- 产品示意图（纯 CSS 绘制 + 动画，非截图） -->
-      <div class="hero__figure">
-        <div class="figure-float">
-        <div class="device" role="img" aria-label="ShortCut 主面板示意图：左侧板块导航，右侧快捷方式图标网格，顶部悬浮 SC球 胶囊（正在播放）">
-          <div class="device__bar">
-            <span class="device__dots"><i></i><i></i><i></i></span>
-            <span class="device__title">ShortCut</span>
-            <span class="device__actions"><i></i><i></i></span>
+      <div class="home-hero__visual">
+        <div class="home-shot-note home-shot-note--shortcut"><span>01</span>快捷键选中，回车即启动</div>
+        <figure class="home-shot">
+          <div class="home-shot__top">
+            <span>ShortCut 主界面</span>
+            <small>真实截图</small>
           </div>
-
-          <!-- 悬浮 SC球（会呼吸 / 进度 / 波形） -->
-          <div class="island-live">
-            <span class="il-dot"></span>
-            <span class="il-text">正在播放</span>
-            <span class="il-track"><span class="il-fill"></span></span>
-            <span class="il-wave"><i></i><i></i><i></i><i></i><i></i></span>
-          </div>
-
-          <div class="pane">
-            <div class="pane__side">
-              <span class="pane__item is-active"><b></b>快捷方式</span>
-              <span class="pane__item"><b></b>任务墙</span>
-              <span class="pane__item"><b></b>驾驶舱</span>
-              <span class="pane__item"><b></b>翻译</span>
-              <span class="pane__item"><b></b>使用记录</span>
-              <span class="pane__item"><b></b>控制</span>
-            </div>
-            <div class="pane__main">
-              <div class="pane__search">搜索快捷方式…</div>
-              <div class="pane__grid">
-                <span class="tile is-selected"></span><span class="tile"></span>
-                <span class="tile"></span><span class="tile"></span>
-                <span class="tile"></span><span class="tile"></span>
-                <span class="tile"></span><span class="tile"></span>
-                <span class="tile"></span><span class="tile"></span>
-              </div>
-            </div>
-          </div>
-        </div>
-        </div><!-- /.figure-float -->
+          <img src="/assets/img/screens/shortcut-panel.png" width="1180" height="710" alt="ShortCut 快捷启动页面，左侧为功能导航，右侧为快捷方式分组与图标" fetchpriority="high" />
+        </figure>
+        <div class="home-shot-note home-shot-note--keys"><kbd>Alt</kbd><span>+</span><kbd>Space</kbd><small>随时唤出</small></div>
       </div>
+    </div>
+    <div class="home-shell home-hero__foot">
+      <span>从打开软件，到记住一件小事</span>
+      <i></i>
+      <span>一个窗口，接着做</span>
+      <i></i>
+      <span>手机也能顺手接上</span>
     </div>
   </section>
 
-  <!-- ══ 2. 功能卡网格 ══ 功能卡网格 ═════════════════════════════════════════════════ -->
-  <section class="section" id="features">
-    <div class="wrap">
-      <div class="section-head center reveal">
-        <span class="eyebrow">核心功能</span>
-        <h2>六件事，一个工具做完</h2>
-        <p>桌面端四块、移动互联两块。每一块都能单独用，也可以串起来用。</p>
-      </div>
-      <div class="grid grid--3" id="featureGrid"><!-- 由脚本渲染 --></div>
+  <section class="home-statement">
+    <div class="home-shell">
+      <p>让每天重复的小动作，<strong>少绕几步。</strong></p>
     </div>
   </section>
 
-  <!-- ══ 3. 移动互联 ═══════════════════════════════════════════════════ -->
-  <section class="section section--alt" id="mobile">
-    <div class="wrap">
-      <div class="section-head center reveal">
-        <span class="eyebrow">移动互联</span>
-        <h2>手机上做的事，电脑上接着完成</h2>
-        <p>任务墙双向同步、文件互传，还能把手机当电脑的键盘与触控板。所有数据走你自己的服务器。</p>
-      </div>
+  <section class="home-scenes" id="core-scenes">
+    <div class="home-shell">
+      <header class="home-section-head">
+        <span class="home-eyebrow">三件最常用的事</span>
+        <h2>打开、记住、随手接上。</h2>
+        <p>首页不负责展示全部功能。先从最常发生的三个动作开始，其他能力都在需要时出现。</p>
+      </header>
 
-      <div class="grid grid--2" style="align-items:center;gap:48px">
-        <div class="reveal">
-          <div class="phone" role="img" aria-label="手机端示意图：绑定与功能入口">
-            <div class="phone__screen">
-              <div class="phone__title"><span class="dot-live"></span>ShortCut 联动</div>
-              <div class="phone__card is-accent"><span class="pc-dot"></span>任务墙 · 钉一条任务</div>
-              <div class="phone__card"><span class="pc-dot"></span>文件快传</div>
-              <div class="phone__card"><span class="pc-dot"></span>电脑控制</div>
-              <div class="phone__card"><span class="pc-dot"></span>设备与绑定</div>
-              <div class="phone__typing">在这输入，电脑上直接出现<span class="caret-line"></span></div>
+      <article class="scene scene--launch">
+        <div class="scene__copy">
+          <span class="scene__index">01 / 快捷启动</span>
+          <h3>不用再找图标，<br />键盘选中就打开。</h3>
+          <p>把软件、文件夹、文件和网页放进同一个页面。方向键移动，回车启动；常用的东西还能分组、排序、搜索。</p>
+          <ul class="scene__list">
+            <li><span>输入</span>名称、路径或备注都能找到</li>
+            <li><span>移动</span>方向键选中，长按也能循环切换</li>
+            <li><span>启动</span>应用、网页、脚本和一组入口</li>
+          </ul>
+          <a class="home-text-link" href="/features/shortcut.html">了解快捷启动 <span>→</span></a>
+        </div>
+        <div class="scene__visual scene__visual--keys" aria-label="快捷启动的键盘操作演示">
+          <div class="launch-board">
+            <div class="launch-board__top"><span>常用</span><span>工作</span><span>工具</span><b>+</b></div>
+            <div class="launch-grid">
+              <div class="launch-item launch-item--active"><i class="launch-icon launch-icon--blue">S</i><b>编辑器</b><small>Enter</small></div>
+              <div class="launch-item"><i class="launch-icon launch-icon--orange">F</i><b>资料</b></div>
+              <div class="launch-item"><i class="launch-icon launch-icon--green">W</i><b>工作台</b></div>
+              <div class="launch-item"><i class="launch-icon launch-icon--ink">T</i><b>终端</b></div>
+            </div>
+            <div class="launch-search"><span>搜索快捷方式</span><kbd>/</kbd></div>
+          </div>
+          <div class="key-hint"><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd><span>移动</span><kbd>Enter</kbd><span>打开</span></div>
+        </div>
+      </article>
+
+      <article class="scene scene--tasks">
+        <div class="scene__visual scene__visual--task">
+          <figure class="task-shot">
+            <img src="/assets/img/screens/task-wall-panel.png" width="1180" height="710" alt="ShortCut 任务墙，不同颜色的纸条任务按自由位置贴在墙上" decoding="async" />
+          </figure>
+          <div class="task-note task-note--one">长文本可以展开写</div>
+          <div class="task-note task-note--two">到点提醒，不忘</div>
+        </div>
+        <div class="scene__copy">
+          <span class="scene__index">02 / 任务墙</span>
+          <h3>不是再开一个待办软件，<br />是把事情贴在眼前。</h3>
+          <p>每件事就是一张纸条，写标题、补充正文、定时提醒。多面任务墙把工作、生活和临时想法分开，移开视线也不会从脑子里消失。</p>
+          <ul class="scene__list">
+            <li><span>写法</span>一句话，或者展开成一张长纸条</li>
+            <li><span>提醒</span>到时间由 SC球 把任务递到你面前</li>
+            <li><span>同步</span>手机上钉入，回到电脑继续处理</li>
+          </ul>
+          <a class="home-text-link" href="/features/taskwall.html">看看任务墙 <span>→</span></a>
+        </div>
+      </article>
+
+      <article class="scene scene--island">
+        <div class="scene__copy">
+          <span class="scene__index">03 / SC球与手机联动</span>
+          <h3>桌面上留一颗小球，<br />重要的事不藏进后台。</h3>
+          <p>SC球 收起时只占很小一块，需要时再展开。音乐、待办提醒、电脑状态和余额都能在这里看一眼；手机与电脑绑定后，任务也能从手机递过来。</p>
+          <ul class="scene__list">
+            <li><span>桌面</span>收起、迷你、展开三种状态</li>
+            <li><span>音乐</span>封面、歌词和播放控制都在球里</li>
+            <li><span>手机</span>任务、文件和控制，接着用同一台电脑</li>
+          </ul>
+          <a class="home-text-link" href="/features/scball.html">了解 SC球 <span>→</span></a>
+        </div>
+        <div class="scene__visual scene__visual--island">
+          <div class="island-demo">
+            <div class="island-pill">
+              <div class="island-cover"><span>♪</span></div>
+              <div class="island-track"><b>正在播放的一首歌</b><small>歌手名 · 下一句歌词</small><i><em></em></i></div>
+              <div class="island-wave"><i></i><i></i><i></i><i></i></div>
+            </div>
+            <div class="island-task"><span>18:00</span><div><b>把今天的记录整理好</b><small>任务提醒</small></div><strong>查看</strong></div>
+            <div class="phone-echo">
+              <div class="phone-echo__top"><span></span><b>ShortCut 联动</b><small>已连接</small></div>
+              <div class="phone-echo__card"><span>手机钉入的任务</span><b>回到电脑上继续</b></div>
+              <div class="phone-echo__action">从手机发送</div>
             </div>
           </div>
         </div>
-
-        <div class="reveal">
-          <div class="link-diagram">
-            <div class="link-node">
-              <span class="ln-icon" data-icon="phone"></span>
-              <span>手机</span>
-            </div>
-            <div class="link-arrow">
-              <div class="la-line"></div>
-              <span>云端中继 · 局域网直连</span>
-            </div>
-            <div class="link-node">
-              <span class="ln-icon" data-icon="windows"></span>
-              <span>电脑</span>
-            </div>
-          </div>
-
-          <div class="grid" style="gap:13px;margin-top:22px">
-            <div class="capability">
-              <span class="cap-ico" data-icon="sticky"></span>
-              <div><b>任务墙同步</b><p>手机上钉一条任务，电脑任务墙立刻出现；桌面端离线也不会丢，上线自动接收。</p></div>
-            </div>
-            <div class="capability">
-              <span class="cap-ico" data-icon="send"></span>
-              <div><b>文件快传</b><p>手机与电脑互传文件与文本，分片上传大文件，按有效期自动清理。</p></div>
-            </div>
-            <div class="capability">
-              <span class="cap-ico" data-icon="phone"></span>
-              <div><b>手机控电脑</b><p>手机当键盘触控板：打字、组合键、剪贴板互传。4G 也能连，同 Wi-Fi 延迟更低。</p></div>
-            </div>
-          </div>
-        </div>
-      </div>
+      </article>
     </div>
   </section>
 
-  <!-- ══ 4. 为什么选它 ═════════════════════════════════════════════════ -->
-  <section class="section">
-    <div class="wrap">
-      <div class="section-head center reveal">
-        <span class="eyebrow">为什么用它</span>
-        <h2>轻、快、不打扰</h2>
-        <p>不改变你现在的使用习惯，也不会在后台偷偷做事。</p>
-      </div>
-      <div class="home-values">
-        <div class="value-item reveal">
-          <span class="vi-icon" data-icon="bolt"></span>
-          <div><b>7 MB，启动即用</b><p>Tauri 2 重构后体积比旧版减少约 94%，内存占用下降约 30%。</p></div>
-        </div>
-        <div class="value-item reveal">
-          <span class="vi-icon" data-icon="shield"></span>
-          <div><b>数据默认留在本机</b><p>快捷方式、任务墙、使用记录都存在你电脑里；只有你用移动互联时才走自建服务器。</p></div>
-        </div>
-        <div class="value-item reveal">
-          <span class="vi-icon" data-icon="check"></span>
-          <div><b>不改变使用习惯</b><p>SC球 可穿透、可隐藏，不挡桌面点击；不想用时按 Alt+I 直接收起。</p></div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ══ 5. 最新更新 ═══════════════════════════════════════════════════ -->
-  <section class="section section--tight section--alt">
-    <div class="wrap">
-      <div class="update-strip reveal">
+  <section class="home-more">
+    <div class="home-shell">
+      <header class="home-section-head home-section-head--inline">
         <div>
-          <span class="badge"><span class="dot-live" ></span>最新版本</span>
+          <span class="home-eyebrow">需要时再打开</span>
+          <h2>还有这些顺手的能力。</h2>
         </div>
-        <div>
-          <h3 id="updateTitle">正在读取版本信息…</h3>
-          <ul id="updateList"></ul>
-        </div>
-        <div class="btn-row">
-          <a class="btn" href="/changelog.html">全部更新</a>
-        </div>
+        <a class="home-text-link" href="/features/control.html">查看全部功能 <span>→</span></a>
+      </header>
+
+      <div class="more-grid">
+        <a class="more-item" href="/features/control.html"><span class="more-item__num">01</span><h3>手机控电脑</h3><p>把手机当键盘和触控板。同一 Wi-Fi 下直连，出门在外也能通过云端中继操作电脑。</p><b>键盘、触控板、剪贴板 →</b></a>
+        <a class="more-item" href="/features/transfer.html"><span class="more-item__num">02</span><h3>文件快传</h3><p>手机与电脑之间发送文件或文本，不必登录第三方网盘。分享时间由你决定，过期后自动清理。</p><b>发送与领取 →</b></a>
+        <a class="more-item" href="/features/android.html"><span class="more-item__num">03</span><h3>安卓端</h3><p>在手机上接任务、传文件、查看联动状态；也可以直接用浏览器打开移动页，无需安装。</p><b>查看安卓端 →</b></a>
+        <a class="more-item" href="/features/shortcut.html#hotkeys"><span class="more-item__num">04</span><h3>屏幕与翻译</h3><p>Alt+S 截取整个屏幕到剪贴板，Alt+E 翻译选中的文字，结果用一张纸条浮在最上层。</p><b>查看快捷键 →</b></a>
+        <a class="more-item" href="/features/scball.html"><span class="more-item__num">05</span><h3>电脑驾驶舱</h3><p>CPU、GPU、内存的使用率和温度收进 SC球；需要看细节时再进驾驶舱页面。</p><b>查看系统状态 →</b></a>
+        <a class="more-item" href="/faq.html"><span class="more-item__num">06</span><h3>本地优先</h3><p>快捷方式、任务和使用记录默认留在本机。只有你主动使用手机联动时，数据才会经过 ShortCut 的安全联动通道。</p><b>查看常见问题 →</b></a>
       </div>
     </div>
   </section>
 
-  <!-- ══ 6. 结尾 CTA ═══════════════════════════════════════════════════ -->
-  <section class="cta">
-    <div class="wrap">
-      <h2>试试 <span class="grad">ShortCut</span></h2>
-      <p id="ctaSub">Windows 10 / 11 · 免费下载 · 无需登录</p>
-      <div class="btn-row center">
-        <a class="btn btn--primary btn--lg" id="ctaDownload" href="/download.html">下载最新版本</a>
-        <a class="btn btn--ghost btn--lg" href="/faq.html">先看看常见问题</a>
+  <section class="home-update">
+    <div class="home-shell home-update__inner">
+      <div class="home-update__label"><span class="home-kicker__dot"></span>最近更新</div>
+      <div class="home-update__body">
+        <h2 id="updateTitle">正在读取最新版本…</h2>
+        <ul id="updateList"></ul>
       </div>
+      <a class="home-button home-button--outline" href="/changelog.html">查看更新记录</a>
     </div>
   </section>
 
+  <section class="home-cta">
+    <div class="home-shell home-cta__inner">
+      <div>
+        <span class="home-eyebrow">Windows 10 / 11 · 免费下载</span>
+        <h2>把电脑桌面，<br />换成更顺手的样子。</h2>
+      </div>
+      <div class="home-cta__side">
+        <p>下载后即可使用。覆盖安装会保留已有快捷方式和任务。</p>
+        <a class="home-button home-button--primary home-button--large" id="ctaDownload" href="/download.html">下载最新版本</a>
+      </div>
+    </div>
+  </section>
 </main>
 
-<!-- 页脚（由 site.js 注入） -->
 <div id="site-footer"></div>
 
 <script src="/assets/js/data.js"></script>
 <script src="/assets/js/site.js"></script>
-<script src="/assets/js/motion.js"></script>
 <script>
 (function () {
   'use strict';
   var D = SC.getData();
-
-  /* ── 功能卡渲染 ── */
-  var grid = document.getElementById('featureGrid');
-  if (grid && D.FEATURES) {
-    D.FEATURES.forEach(function (f, i) {
-      var a = document.createElement('a');
-      a.className = 'card card--feature reveal';
-      a.href = f.href;
-      a.style.setProperty('--d', (i * 70) + 'ms');
-      a.innerHTML =
-        '<span class="card__icon">' + SC.icon(f.icon, 22) + '</span>' +
-        '<h3>' + f.label + '</h3>' +
-        '<p class="tagline">' + f.tagline + '</p>' +
-        '<ul class="card__points">' +
-        f.points.map(function (p) { return '<li>' + p + '</li>'; }).join('') +
-        '</ul>' +
-        '<span class="card__more">了解更多 ' + SC.icon('arrow', 15) + '</span>';
-      grid.appendChild(a);
-    });
-    if ('IntersectionObserver' in window) {
-      var io = new IntersectionObserver(function (es) {
-        es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('is-in'); io.unobserve(e.target); } });
-      }, { threshold: 0.05 });
-      Array.prototype.forEach.call(grid.querySelectorAll('.reveal'), function (n) { io.observe(n); });
-    } else {
-      Array.prototype.forEach.call(grid.querySelectorAll('.reveal'), function (n) { n.classList.add('is-in'); });
-    }
-  }
-
-  /* ── data-icon → 内联 SVG ── */
-  Array.prototype.forEach.call(document.querySelectorAll('[data-icon]'), function (n) {
-    n.innerHTML = SC.icon(n.getAttribute('data-icon'), 21);
-  });
-
-  /* ── 版本信息（失败静默降级）── */
+  var isEN = (document.documentElement.getAttribute('lang') || 'zh-CN').toLowerCase().indexOf('en') === 0;
   SC.loadDesktopVersion().then(function (v) {
-    var hv = document.getElementById('heroVersion');
-    if (hv) hv.textContent = 'v' + v.version;
-    var hvi = document.getElementById('heroVersionInline');
-    if (hvi) hvi.textContent = v.version;
-
-    if (v.size) {
-      var hs = document.getElementById('heroSize');
-      if (hs) hs.textContent = SC.formatSize(v.size);
-    }
+    var inline = document.getElementById('heroVersion');
+    if (inline) inline.textContent = 'v' + v.version;
 
     var title = document.getElementById('updateTitle');
     if (title) {
-      title.textContent = 'v' + v.version + (v.pubDate ? ' · ' + v.pubDate : '') +
-        (v.size ? ' · ' + SC.formatSize(v.size) : '');
+      title.textContent = 'v' + v.version + (v.pubDate ? ' · ' + v.pubDate : '') + (v.size ? ' · ' + SC.formatSize(v.size) : '');
     }
 
     var list = document.getElementById('updateList');
     if (list) {
-      var notes = (v.notes || '').split(/\r?\n/).map(function (s) {
-        return s.replace(/^[#*\-\s]+/, '').trim();
-      }).filter(function (s) { return s && s.length > 3; }).slice(0, 3);
-
-      if (!notes.length && D.CHANGELOG && D.CHANGELOG[0]) {
-        notes = D.CHANGELOG[0].items.slice(0, 3);
+      if (isEN) {
+        list.innerHTML = '<li>Detailed release notes are currently maintained in Chinese.</li>';
+      } else {
+        var notes = (v.notes || '').split(/\r?\n/).map(function (s) {
+          return s.replace(/^[#*\-\s]+/, '').trim();
+        }).filter(function (s) { return s && s.length > 3; }).slice(0, 3);
+        if (!notes.length && D.CHANGELOG && D.CHANGELOG[0]) notes = D.CHANGELOG[0].items.slice(0, 3);
+        list.innerHTML = notes.map(function (s) { return '<li>' + s + '</li>'; }).join('');
       }
-      list.innerHTML = notes.map(function (s) { return '<li>' + s + '</li>'; }).join('');
     }
-
-    var sub = document.getElementById('ctaSub');
-    if (sub) sub.textContent = 'Windows 10 / 11 · v' + v.version + ' · 免费下载 · 无需登录';
   });
 })();
 </script>

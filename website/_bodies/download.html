@@ -16,7 +16,7 @@
           <div class="dl-facts" style="margin-top:26px">
             <div class="dl-fact"><b id="factVersion">—</b><span>当前版本</span></div>
             <div class="dl-fact"><b id="factSize">—</b><span>安装包体积</span></div>
-            <div class="dl-fact"><b>Tauri 2</b><span>技术栈</span></div>
+            <div class="dl-fact"><b>本地优先</b><span>数据默认留在本机</span></div>
           </div>
         </div>
         <div class="reveal">
@@ -29,7 +29,7 @@
               <div class="setting-row"><div>目标平台<small>Windows 10 / 11（64 位）</small></div><span class="tag">x64</span></div>
               <div class="setting-row"><div>安装位置<small>由安装程序管理，卸载可从设置里完成</small></div><span class="tag">自定义</span></div>
               <div class="setting-row"><div>更新签名<small>更新包带签名校验，不会被替换</small></div><span class="tag">已校验</span></div>
-              <div class="setting-row"><div>用户数据<small>配置存放在 %APPDATA%\\ShortCut，覆盖安装不丢</small></div><span class="tag">保留</span></div>
+              <div class="setting-row"><div>用户数据<small>快捷方式、任务和设置，覆盖安装不丢</small></div><span class="tag">保留</span></div>
             </div>
           </div>
         </div>
@@ -42,8 +42,8 @@
     <div class="wrap">
       <div class="section-head reveal">
         <span class="eyebrow">下载渠道</span>
-        <h2>四个渠道，任选其一</h2>
-        <p>官网直链始终是最新版本；蓝奏云在国内较快但需人工同步，版本可能滞后；Gitee / GitHub 为源码仓库。</p>
+        <h2>选择离你更快的下载方式</h2>
+        <p>官网直链始终提供最新版本；蓝奏云作为国内备用渠道，更新可能稍晚一些。</p>
       </div>
       <div class="channel-grid" id="channelGrid"><!-- 由 download.js 渲染 --></div>
     </div>
@@ -90,10 +90,10 @@
           <div class="narrow">
             <table class="hotkey-table"><tbody>
               <tr><td>操作系统</td><td>Windows 10 / 11（64 位）</td></tr>
-              <tr><td>运行时</td><td>WebView2（Windows 11 已自带；Win10 若无，安装器会提示）</td></tr>
+              <tr><td>必要组件</td><td>安装程序会自动检查；缺少时会在安装过程中提示</td></tr>
               <tr><td>磁盘</td><td>约 40 MB（安装后）</td></tr>
-              <tr><td>权限</td><td>普通用户权限即可；驾驶舱温度如需更精确可单独授权</td></tr>
-              <tr><td>网络</td><td>离线可用；移动互联功能需你的自建服务端</td></tr>
+              <tr><td>权限</td><td>普通用户权限即可；查看更完整硬件温度时可单独授权</td></tr>
+              <tr><td>网络</td><td>主要功能可离线使用；手机联动需要联网</td></tr>
             </tbody></table>
           </div>
         </div>
@@ -110,9 +110,9 @@
       </div>
       <div class="narrow">
         <details class="faq"><summary>提示「未知发布者」怎么办？</summary><div class="faq__body"><p>安装包未做代码签名（Authenticode），Windows SmartScreen 会提示未知发布者。点「更多信息 → 仍要运行」即可。更新包本身有签名校验，不会被替换。</p></div></details>
-        <details class="faq"><summary>覆盖安装会不会丢配置和任务？</summary><div class="faq__body"><p>不会。配置与任务存放在 <code>%APPDATA%\\ShortCut\\shortcut</code>，与安装目录分离；每次写入还会保留最近 3 份备份。</p></div></details>
-        <details class="faq"><summary>旧版本（2.4.x 及更早）的自带更新会失败？</summary><div class="faq__body"><p>是的。旧版的「检查更新」读取的是 Electron 时期留下的清单格式，该问题在 2.5.1 修复。手动下载一次 2.5.1 之后即可正常自动更新。</p></div></details>
-        <details class="faq"><summary>能不能绿色版 / 便携版？</summary><div class="faq__body"><p>目前只提供 NSIS 安装包。它会把自启与快捷方式一并配置好；解压即用的便携版可能后续提供。</p></div></details>
+        <details class="faq"><summary>覆盖安装会不会丢快捷方式和任务？</summary><div class="faq__body"><p>不会。快捷方式、任务和设置会保留，软件还会维护最近三份本地备份。</p></div></details>
+        <details class="faq"><summary>很旧的版本无法检查更新怎么办？</summary><div class="faq__body"><p>手动下载一次 2.5.1 或更新版本覆盖安装即可。原有数据会保留，之后可以继续使用软件内的更新检查。</p></div></details>
+        <details class="faq"><summary>有没有免安装版？</summary><div class="faq__body"><p>当前提供 Windows 安装版，会将开机自启和开始菜单入口一并配置好。免安装版暂未提供。</p></div></details>
       </div>
     </div>
   </section>

@@ -4,13 +4,13 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>文件快传 — 手机与电脑互传文件 | ShortCut</title>
-<meta name="description" content="手机与电脑互传文件与文本：分片上传大文件、按有效期自动清理、生成分享链接、哈希校验，不经过第三方网盘。" />
-<meta name="theme-color" content="#0a0a0b" />
+<meta name="description" content="手机与电脑互传文件与文本：可生成带密码的分享内容，自定义分享时长，到期自动清理，不经过第三方网盘。" />
+<meta name="theme-color" content="#f3eee4" />
 
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="ShortCut" />
 <meta property="og:title" content="文件快传 — 手机与电脑互传文件 | ShortCut" />
-<meta property="og:description" content="手机与电脑互传文件与文本：分片上传大文件、按有效期自动清理、生成分享链接、哈希校验，不经过第三方网盘。" />
+<meta property="og:description" content="手机与电脑互传文件与文本：可生成带密码的分享内容，自定义分享时长，到期自动清理，不经过第三方网盘。" />
 <meta property="og:image" content="/assets/img/og.png" />
 <meta name="twitter:card" content="summary_large_image" />
 
@@ -23,15 +23,16 @@
   (function () {
     try {
       var m = localStorage.getItem('sc-mode');
-      if (m !== 'light' && m !== 'dark') m = 'dark';
+      if (m !== 'light' && m !== 'dark') m = 'light';
       document.documentElement.setAttribute('data-mode', m);
     } catch (e) {
-      document.documentElement.setAttribute('data-mode', 'dark');
+      document.documentElement.setAttribute('data-mode', 'light');
     }
   })();
   </script>
 <link rel="stylesheet" href="/assets/css/site.css" />
 <link rel="stylesheet" href="/assets/css/pages.css" />
+<link rel="stylesheet" href="/assets/css/product-v3.css" />
 </head>
 
 <body data-page="features">
@@ -51,7 +52,7 @@
     <div class="wrap">
 <div class="feature-lead feature-lead--flip">
         <div class="feature-lead__text reveal">
-          <p class="hero__lead" style="margin-bottom:0">把文件丢上去，另一头就能取。文件存在你自己的服务器上，按有效期自动清理，不经过任何第三方网盘；大文件走分片上传，中断了也能续。</p>
+          <p class="hero__lead" style="margin-bottom:0">把文件或文本发出去，另一头用密码领取。分享时长最多 24 小时，到期后自动清理，不经过第三方网盘。</p>
         </div>
         <div class="reveal">        <div class="file-mock" role="img" aria-label="文件快传示意图：三个文件条目，其中一个正在上传并显示进度">
           <div class="file-mock__bar"><span class="dot-live"></span>我的传输 · 3 个文件</div>
@@ -62,7 +63,7 @@
           </div>
           <div class="file-row">
             <span class="file-row__ico">ZIP</span>
-            <div><div class="file-row__name">项目备份-20261018.zip</div><div class="file-row__meta">86.1 MB · 分片上传中</div></div>
+            <div><div class="file-row__name">项目备份-20261018.zip</div><div class="file-row__meta">86.1 MB · 上传中</div></div>
             <span class="file-row__pct">64%</span>
           </div>
           <div class="file-row">
@@ -84,7 +85,7 @@
       <div class="grid grid--2" style="gap:14px">
           <div class="capability reveal">
             <span class="cap-ico" data-icon="send"></span>
-            <div><b>分片上传大文件</b><p>大文件切片上传，网络中断可续传，不要求一次传完。</p></div>
+            <div><b>文件与文本都能发</b><p>分享链接可以携带文件，也可以只发送一段文本；手机和电脑都能领取。</p></div>
           </div>
           <div class="capability reveal">
             <span class="cap-ico" data-icon="clock"></span>
@@ -92,7 +93,7 @@
           </div>
           <div class="capability reveal">
             <span class="cap-ico" data-icon="check"></span>
-            <div><b>哈希校验</b><p>上传与下载都做完整性校验，避免传出一个损坏的文件。</p></div>
+            <div><b>领取密码</b><p>接收方输入密码后才能打开共享内容；密码可以自行生成和修改。</p></div>
           </div>
           <div class="capability reveal">
             <span class="cap-ico" data-icon="grid"></span>
@@ -100,7 +101,7 @@
           </div>
           <div class="capability reveal">
             <span class="cap-ico" data-icon="shield"></span>
-            <div><b>不经第三方网盘</b><p>文件存放在你自己部署的服务器，链接可控、可随时撤销。</p></div>
+            <div><b>不经第三方网盘</b><p>分享有效期由你控制，链接可随时撤销，到期后自动清理。</p></div>
           </div>
           <div class="capability reveal">
             <span class="cap-ico" data-icon="windows"></span>
