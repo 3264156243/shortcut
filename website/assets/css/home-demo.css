@@ -1,0 +1,551 @@
+/* =============================================================================
+   ShortCut 官网首页 · 动效层
+   自动演示 + 3D交互 + SC球交互
+   ========================================================================== */
+
+/* ── 基础变量 ─────────────────────────────────────────────────────────── */
+:root {
+  --demo-accent: #e45b25;
+  --demo-accent-glow: rgba(228, 91, 37, 0.35);
+  --demo-radius: 10px;
+  --demo-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── 首屏 3D 倾斜容器 ──────────────────────────────────────────────────── */
+.home-shot {
+  perspective: 1400px;
+  transform-style: preserve-3d;
+}
+.home-shot img {
+  transform-origin: center center;
+  transition: transform 0.8s var(--demo-ease), box-shadow 0.4s ease;
+  will-change: transform;
+  border-radius: inherit;
+}
+.home-shot.is-tilting img {
+  transition: transform 0.1s linear, box-shadow 0.3s ease;
+}
+.home-shot__top {
+  transform: translateZ(20px);
+  position: relative;
+  z-index: 2;
+}
+
+/* 首屏截图边框光效 */
+.home-shot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s;
+  background:
+    radial-gradient(
+      600px circle at var(--gx, 50%) var(--gy, 50%),
+      rgba(228, 91, 37, 0.12),
+      transparent 40%
+    );
+}
+.home-shot.is-tilting::after { opacity: 1; }
+
+/* ── 首屏演示遮罩 ─────────────────────────────────────────────────────── */
+.hero-demo {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  perspective: 1400px;
+  transform-style: preserve-3d;
+  z-index: 3;
+}
+.hero-demo__inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+}
+
+/* 演示焦点框 */
+.demo-focus {
+  position: absolute;
+  width: 130px;
+  height: 120px;
+  border: 2px solid var(--demo-accent);
+  border-radius: var(--demo-radius);
+  box-shadow:
+    0 0 0 3px rgba(228, 91, 37, 0.1),
+    0 8px 24px rgba(228, 91, 37, 0.25),
+    inset 0 0 20px rgba(228, 91, 37, 0.08);
+  opacity: 0;
+  transition:
+    top 0.35s var(--demo-ease),
+    left 0.35s var(--demo-ease),
+    opacity 0.25s ease,
+    box-shadow 0.3s ease;
+  transform: translateZ(30px);
+  pointer-events: none;
+}
+.demo-focus.is-visible { opacity: 1; }
+.demo-focus.is-enter {
+  box-shadow:
+    0 0 0 6px rgba(228, 91, 37, 0.15),
+    0 12px 40px rgba(228, 91, 37, 0.4),
+    inset 0 0 30px rgba(228, 91, 37, 0.15);
+}
+
+/* 演示键帽提示 */
+.demo-keys {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateZ(40px);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(20, 20, 18, 0.72);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: 11px;
+  font-family: var(--font-mono, "Consolas", monospace);
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.3s var(--demo-ease);
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 5;
+}
+.demo-keys.is-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0) translateZ(40px);
+}
+.demo-keys kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 10px;
+  font-family: inherit;
+  font-weight: 500;
+}
+.demo-keys kbd.is-lit {
+  background: var(--demo-accent);
+  border-color: var(--demo-accent);
+  color: #fff;
+  box-shadow: 0 0 10px var(--demo-accent-glow);
+}
+.demo-keys span {
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0 2px;
+}
+
+/* 演示状态标签 */
+.demo-status {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: rgba(228, 91, 37, 0.12);
+  color: var(--demo-accent);
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: all 0.3s var(--demo-ease);
+  transform: translateZ(25px);
+  pointer-events: none;
+}
+.demo-status.is-visible { opacity: 1; transform: translateY(0) translateZ(25px); }
+.demo-status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: demoPulse 1.2s ease-in-out infinite;
+}
+@keyframes demoPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+
+/* 重新演示按钮 */
+.demo-replay {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(20, 20, 18, 0.6);
+  backdrop-filter: blur(6px);
+  color: #fff;
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateZ(25px);
+  transition: opacity 0.3s, background 0.2s, border-color 0.2s;
+  pointer-events: auto;
+  z-index: 6;
+}
+.demo-replay.is-visible { opacity: 1; }
+.demo-replay:hover {
+  background: rgba(228, 91, 37, 0.2);
+  border-color: var(--demo-accent);
+}
+.demo-replay svg { width: 12px; height: 12px; }
+
+/* ── 快捷启动场景：动画 ────────────────────────────────────────────────── */
+.scene--launch .launch-item {
+  transition:
+    border-color 0.3s ease,
+    box-shadow 0.3s ease,
+    transform 0.4s var(--demo-ease),
+    background 0.3s ease;
+}
+.scene--launch.is-active .launch-item {
+  animation: launchItemIn 0.6s var(--demo-ease) both;
+}
+.scene--launch.is-active .launch-item:nth-child(1) { animation-delay: 0.1s; }
+.scene--launch.is-active .launch-item:nth-child(2) { animation-delay: 0.18s; }
+.scene--launch.is-active .launch-item:nth-child(3) { animation-delay: 0.26s; }
+.scene--launch.is-active .launch-item:nth-child(4) { animation-delay: 0.34s; }
+
+@keyframes launchItemIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 激活中的图标发光 */
+.launch-item--active .launch-icon {
+  animation: iconGlow 2s ease-in-out infinite;
+}
+@keyframes iconGlow {
+  0%, 100% { filter: brightness(1); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); }
+  50% { filter: brightness(1.15); box-shadow: 0 6px 20px rgba(228, 91, 37, 0.3); }
+}
+
+/* 启动时的下沉动画 */
+.launch-item.is-launching {
+  transform: scale(0.96) translateY(2px);
+  box-shadow:
+    0 0 0 2px var(--demo-accent-glow),
+    0 4px 12px rgba(228, 91, 37, 0.25);
+}
+
+/* 场景3D视差容器 */
+.scene__visual {
+  perspective: 1200px;
+  transform-style: preserve-3d;
+}
+.scene__visual > * {
+  transform-style: preserve-3d;
+  transition: transform 0.8s var(--demo-ease);
+}
+.scene__visual.is-tilting > * {
+  transition: transform 0.12s linear;
+}
+
+/* ── 任务墙场景：纸条动画 ─────────────────────────────────────────────── */
+.scene--tasks .task-shot {
+  position: relative;
+  transform-style: preserve-3d;
+}
+.scene--tasks.is-active .task-shot {
+  animation: taskShotFloat 6s ease-in-out infinite;
+}
+@keyframes taskShotFloat {
+  0%, 100% { transform: rotateX(2deg) rotateY(-2deg) translateY(0); }
+  50% { transform: rotateX(2deg) rotateY(-2deg) translateY(-8px); }
+}
+
+.task-note {
+  transform: translateZ(30px);
+  opacity: 0;
+  transition: all 0.6s var(--demo-ease);
+}
+.scene--tasks.is-active .task-note--one {
+  opacity: 1;
+  animation: noteDrop 0.7s var(--demo-ease) 0.3s both, noteFloat 4s ease-in-out 1s infinite;
+}
+.scene--tasks.is-active .task-note--two {
+  opacity: 1;
+  animation: noteDrop 0.7s var(--demo-ease) 0.6s both, noteFloat 4s ease-in-out 1.3s infinite;
+}
+@keyframes noteDrop {
+  from {
+    opacity: 0;
+    transform: translateZ(30px) translateY(-30px) rotate(-5deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateZ(30px) translateY(0) rotate(-1deg);
+  }
+}
+@keyframes noteFloat {
+  0%, 100% { transform: translateZ(30px) translateY(0) rotate(-1deg); }
+  50% { transform: translateZ(30px) translateY(-4px) rotate(-0.5deg); }
+}
+
+/* ── SC球场景：交互动画 ────────────────────────────────────────────────── */
+.scene--island .island-demo {
+  perspective: 1200px;
+}
+.scene--island .island-pill {
+  cursor: pointer;
+  transition:
+    all 0.5s var(--demo-ease);
+  transform-origin: center top;
+}
+.scene--island.is-active .island-pill {
+  animation: pillFloat 5s ease-in-out infinite;
+}
+@keyframes pillFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* 展开状态 */
+.island-pill.is-expanded {
+  min-height: 110px;
+  border-radius: 24px;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(228, 91, 37, 0.2);
+}
+
+/* 波形跳动 */
+.island-wave i {
+  animation: waveBounce 1s ease-in-out infinite;
+}
+.island-wave i:nth-child(1) { animation-delay: 0s; }
+.island-wave i:nth-child(2) { animation-delay: 0.15s; }
+.island-wave i:nth-child(3) { animation-delay: 0.3s; }
+.island-wave i:nth-child(4) { animation-delay: 0.45s; }
+@keyframes waveBounce {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.6); }
+}
+
+/* 进度条推进动画 */
+.scene--island.is-active .island-track em {
+  animation: progressAdvance 8s linear infinite;
+}
+@keyframes progressAdvance {
+  0% { width: 5%; }
+  100% { width: 95%; }
+}
+
+/* 任务提醒滑入 */
+.island-task {
+  opacity: 0;
+  transform: translateY(-20px) rotate(-3deg);
+  transition: all 0.6s var(--demo-ease);
+}
+.scene--island.is-active .island-task {
+  animation: taskSlideIn 0.8s var(--demo-ease) 1.5s both;
+}
+@keyframes taskSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-30px) rotate(-5deg) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(-1deg) scale(1);
+  }
+}
+
+/* 手机联动滑入 */
+.phone-echo {
+  opacity: 0;
+  transform: translateX(30px);
+  transition: all 0.7s var(--demo-ease);
+}
+.scene--island.is-active .phone-echo {
+  animation: phoneSlideIn 0.9s var(--demo-ease) 2s both;
+}
+@keyframes phoneSlideIn {
+  from { opacity: 0; transform: translateX(40px) translateY(10px); }
+  to { opacity: 1; transform: translateX(0) translateY(0); }
+}
+
+/* SC球流光效果 */
+.island-pill::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0%,
+    rgba(228, 91, 37, 0.5) 20%,
+    rgba(128, 188, 161, 0.5) 40%,
+    transparent 60%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+  animation: borderFlow 3s linear infinite;
+}
+.scene--island.is-active .island-pill::before { opacity: 1; }
+@keyframes borderFlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ── 下载按钮状态动画 ──────────────────────────────────────────────────── */
+.home-button--primary.is-loading {
+  position: relative;
+  pointer-events: none;
+}
+.home-button--primary.is-loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.2) 50%,
+      transparent 100%
+    );
+  background-size: 200% 100%;
+  animation: btnShimmer 1.5s ease-in-out infinite;
+}
+@keyframes btnShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.home-button--primary.is-done {
+  background: var(--good) !important;
+  border-color: var(--good) !important;
+}
+
+/* ── 导航活动项指示线 ──────────────────────────────────────────────────── */
+.nav__links { position: relative; }
+.nav__indicator {
+  position: absolute;
+  bottom: 3px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0;
+  transition:
+    left 0.4s var(--demo-ease),
+    width 0.4s var(--demo-ease),
+    opacity 0.3s ease;
+  pointer-events: none;
+}
+.nav__indicator.is-visible { opacity: 1; }
+
+/* ── 更多卡片：入场错峰 + 悬浮3D ───────────────────────────────────────── */
+.home-more.is-active .more-item {
+  animation: moreCardIn 0.7s var(--demo-ease) both;
+}
+.home-more.is-active .more-item:nth-child(1) { animation-delay: 0.05s; }
+.home-more.is-active .more-item:nth-child(2) { animation-delay: 0.12s; }
+.home-more.is-active .more-item:nth-child(3) { animation-delay: 0.19s; }
+.home-more.is-active .more-item:nth-child(4) { animation-delay: 0.26s; }
+.home-more.is-active .more-item:nth-child(5) { animation-delay: 0.33s; }
+.home-more.is-active .more-item:nth-child(6) { animation-delay: 0.4s; }
+
+@keyframes moreCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.more-item {
+  transition: transform 0.3s var(--demo-ease), box-shadow 0.3s ease;
+  transform-style: preserve-3d;
+  perspective: 800px;
+}
+.more-item:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+
+/* ── 滚动触发：初始隐藏状态避免闪烁 ───────────────────────────────────── */
+.scene:not(.is-active) .launch-item,
+.scene:not(.is-active) .task-note,
+.scene:not(.is-active) .island-task,
+.scene:not(.is-active) .phone-echo {
+  opacity: 1; /* 降级：始终可见，进入后再播动画 */
+}
+
+/* ── CTA 入场 ─────────────────────────────────────────────────────────── */
+.home-cta.is-active .home-cta__inner > * {
+  animation: ctaFadeIn 0.8s var(--demo-ease) both;
+}
+.home-cta.is-active .home-cta__inner > div:first-child { animation-delay: 0.1s; }
+.home-cta.is-active .home-cta__side { animation-delay: 0.3s; }
+
+@keyframes ctaFadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── 响应式：移动端降级 ─────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .demo-focus { display: none; }
+  .demo-keys { font-size: 10px; padding: 6px 10px; }
+  .demo-replay { display: none; }
+}
+
+/* ── 减少动效：静态展示 ───────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .demo-focus,
+  .demo-keys,
+  .demo-status,
+  .demo-replay { display: none !important; }
+
+  .home-shot img { transform: none !important; transition: none !important; }
+  .home-shot.is-tilting::after { display: none; }
+
+  .scene--launch.is-active .launch-item,
+  .scene--tasks.is-active .task-shot,
+  .scene--tasks.is-active .task-note,
+  .scene--island.is-active .island-pill,
+  .scene--island.is-active .island-track em,
+  .scene--island.is-active .island-task,
+  .scene--island.is-active .phone-echo,
+  .island-wave i,
+  .home-more.is-active .more-item,
+  .home-cta.is-active .home-cta__inner > * {
+    animation: none !important;
+  }
+
+  .task-note,
+  .island-task,
+  .phone-echo {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .island-pill::before { display: none; }
+}
