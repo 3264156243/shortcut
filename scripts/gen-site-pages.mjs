@@ -34,7 +34,7 @@ const BOOT_SCRIPT = `  <script>
   })();
   <\/script>`;
 
-function head({ title, desc, canonical }) {
+function head({ title, desc, canonical, styles }) {
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -59,7 +59,13 @@ ${BOOT_SCRIPT}
 <link rel="stylesheet" href="/assets/css/site.css" />
 <link rel="stylesheet" href="/assets/css/pages.css" />
 <link rel="stylesheet" href="/assets/css/product-v3.css" />
-</head>`;
+${styles ? styles + '\n' : ''}</head>`;
+}
+
+function pageStyles(file) {
+  return ['changelog.html', 'feedback.html'].includes(file)
+    ? '<link rel="stylesheet" href="/assets/css/workbench.css" />'
+    : '';
 }
 
 const CTA = `  <!-- 结尾 CTA -->
@@ -451,20 +457,22 @@ const PAGES = [
     desc: 'ShortCut 的版本更新记录：每个版本修复了什么、新增了什么。最新版本信息实时读取更新清单。',
     crumbs: [{ label: '更新日志' }],
     h1: '更新日志',
-    lead: '最新版本信息从更新清单实时读取，历史版本记录在站点数据里维护。',
-    customBody: true
+    lead: '从最新版本到最早版本，按版本、类型或关键词快速找到一次变化。',
+    customBody: true,
+    showCta: false
   },
 
   /* ═══════════ 10. 问题反馈 ═══════════ */
   {
     file: 'feedback.html',
     nav: 'feedback',
-    title: '问题反馈 — ShortCut',
-    desc: '提交 ShortCut 的问题反馈、功能建议或使用疑问。填写内容会直接记录到反馈系统，无需注册账号。',
+    title: '问题反馈与公开留言 — ShortCut',
+    desc: '提交 ShortCut 的问题故障、功能建议或界面反馈，并查看公开留言、处理状态和管理员回复。无需注册账号。',
     crumbs: [{ label: '问题反馈' }],
     h1: '问题反馈',
-    lead: '遇到问题、想要某个功能、或者只是想说点什么，都可以写在这里。不需要注册，也不用留联系方式（留了更方便回你）。',
-    customBody: true
+    lead: '发布一条匿名留言，跟踪处理状态和管理员回复。联系方式仅后台可见。',
+    customBody: true,
+    showCta: false
   },
 
   /* ═══════════ 9. FAQ ═══════════ */
@@ -580,7 +588,7 @@ for (const p of PAGES) {
       continue;
     }
     const body = readFileSync(bodyPath, 'utf8');
-    html = `${head({ title: p.title, desc: p.desc })}
+    html = `${head({ title: p.title, desc: p.desc, styles: pageStyles(p.file) })}
 
 <body data-page="${p.nav}">
 
@@ -598,7 +606,7 @@ ${crumbs(p.crumbs)}
 
 ${body}
 
-${CTA}
+${p.showCta === false ? '' : CTA}
 
 </main>
 
@@ -628,4 +636,4 @@ ${EXTRA_SCRIPTS[p.file] || ''}
 
 console.log('\n共生成 ' + written + ' 个页面。');
 
-export { PAGES, head, crumbs, pager, caps, CTA };
+export { PAGES, head, pageStyles, crumbs, pager, caps, CTA };

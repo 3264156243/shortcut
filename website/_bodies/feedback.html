@@ -1,93 +1,54 @@
-  <!-- 反馈表单 -->
-  <section class="section section--flush">
+  <section class="workbench-page workbench-page--feedback" aria-labelledby="feedbackBoardTitle">
     <div class="wrap">
-      <div class="grid grid--2" style="gap:44px;align-items:start">
+      <div class="feedback-board-head reveal">
+        <div><span class="eyebrow">Public board</span><h2 id="feedbackBoardTitle">公开留言与处理进度</h2><p>问题和管理员回复会公开展示。联系方式仅提交给后台，不会出现在留言中。</p></div>
+        <div class="feedback-board-head__note"><span data-icon="shield" aria-hidden="true"></span><p>匿名发布，无需注册。请勿在正文中填写密码、激活码或其他敏感信息。</p></div>
+      </div>
 
-        <form class="fb-form reveal" id="fbForm" novalidate>
-          <div class="fb-field">
-            <label for="fbType">反馈类型</label>
-            <select class="fb-select" id="fbType" name="type">
-              <option value="bug">问题 / Bug</option>
-              <option value="feature">功能建议</option>
-              <option value="ui">界面与体验</option>
-              <option value="update">更新与安装</option>
-              <option value="other" selected>其它</option>
-            </select>
-          </div>
-
-          <div class="fb-field">
-            <label for="fbContent">内容 <small>必填，至少 5 个字</small></label>
-            <textarea class="fb-textarea" id="fbContent" name="content" required
-              placeholder="遇到什么问题、在哪个板块、复现步骤是什么？&#10;&#10;如果是 Bug，建议写上：&#10;1. 你做了什么&#10;2. 期望看到什么&#10;3. 实际发生了什么"></textarea>
-            <div class="fb-hint"><span id="fbCount">0</span> / 4000</div>
-          </div>
-
-          <div class="fb-row">
-            <div class="fb-field">
-              <label for="fbContact">联系方式 <small>选填</small></label>
-              <input class="fb-input" id="fbContact" name="contact" type="text"
-                placeholder="邮箱 / QQ / 微信，方便回你" maxlength="120" />
+      <div class="feedback-compose-grid reveal">
+        <form class="feedback-compose" id="fbForm" novalidate>
+          <div class="feedback-compose__head"><div><span class="eyebrow">New message</span><h3>提交一条留言</h3></div><span class="feedback-private">联系方式不公开</span></div>
+          <fieldset class="feedback-type-field">
+            <legend>留言类型</legend>
+            <div class="feedback-type-row" role="radiogroup" aria-label="留言类型">
+              <label><input type="radio" name="fbType" value="bug" checked /><span data-icon="bug" aria-hidden="true"></span>问题故障</label>
+              <label><input type="radio" name="fbType" value="feature" /><span data-icon="bolt" aria-hidden="true"></span>功能建议</label>
+              <label><input type="radio" name="fbType" value="ui" /><span data-icon="grid" aria-hidden="true"></span>界面体验</label>
+              <label><input type="radio" name="fbType" value="update" /><span data-icon="download" aria-hidden="true"></span>安装更新</label>
+              <label><input type="radio" name="fbType" value="other" /><span data-icon="send" aria-hidden="true"></span>其他</label>
             </div>
-            <div class="fb-field">
-              <label for="fbVersion">你的版本 <small>选填，可自动填</small></label>
-              <input class="fb-input" id="fbVersion" name="version" type="text" placeholder="例如 2.5.1" maxlength="40" />
-            </div>
+          </fieldset>
+          <div class="feedback-field-grid">
+            <label class="feedback-field feedback-field--wide" for="fbTitle"><span>标题 <small>必填</small></span><input id="fbTitle" name="title" maxlength="120" required placeholder="用一句话说清问题或建议" /></label>
+            <label class="feedback-field" for="fbArea"><span>相关板块</span><span class="feedback-select"><select id="fbArea" name="area"><option value="">不确定 / 其他</option><option value="快捷方式">快捷方式</option><option value="任务墙">任务墙</option><option value="SC球">SC球</option><option value="翻译">翻译</option><option value="驾驶舱">驾驶舱</option><option value="应用使用记录">应用使用记录</option><option value="文件快传与手机联动">文件快传与手机联动</option><option value="安装与更新">安装与更新</option></select></span></label>
+            <label class="feedback-field" for="fbVersion"><span>软件版本 <small>自动填写</small></span><input id="fbVersion" name="version" maxlength="40" placeholder="例如 2.5.1" /></label>
+            <label class="feedback-field feedback-field--wide" for="fbDetails"><span>详细说明 <small>必填</small></span><textarea id="fbDetails" name="details" maxlength="4000" required placeholder="写清发生条件、复现步骤、期望结果和实际现象。"></textarea></label>
+            <label class="feedback-field feedback-field--wide" for="fbContact"><span>联系方式 <small>选填，仅后台可见</small></span><input id="fbContact" name="contact" maxlength="120" placeholder="邮箱、QQ 或微信，方便管理员进一步确认" /></label>
           </div>
-
-          <!-- 蜜罐：人类看不到，机器人会填 -->
-          <div class="fb-hp" aria-hidden="true">
-            <label for="fbHp">请勿填写</label>
-            <input id="fbHp" name="hp" type="text" tabindex="-1" autocomplete="off" />
-          </div>
-
-          <div class="btn-row">
-            <button class="btn btn--primary" id="fbSubmit" type="submit">提交反馈</button>
-            <a class="btn btn--ghost" href="/faq.html">先看常见问题</a>
-          </div>
-          <div class="fb-status" id="fbStatus" role="status" aria-live="polite"></div>
+          <div class="feedback-hp" aria-hidden="true"><label for="fbHp">请勿填写</label><input id="fbHp" name="hp" type="text" tabindex="-1" autocomplete="off" /></div>
+          <div class="feedback-submit-row"><p>提交后会立即显示在下方公开留言中，状态由管理员更新。</p><button class="btn btn--primary" id="fbSubmit" type="submit">发布留言</button></div>
+          <div class="feedback-inline-status" id="fbStatus" role="status" aria-live="polite"></div>
         </form>
 
-        <div class="reveal">
-          <div class="section-head" style="margin-bottom:20px">
-            <span class="eyebrow">说明</span>
-            <h2>反馈会怎么处理</h2>
-          </div>
-          <div class="grid" style="gap:12px">
-            <div class="capability">
-              <span class="cap-ico" data-icon="check"></span>
-              <div><b>直接交给项目维护者</b><p>不经过第三方反馈平台，也不需要注册账号；提交后会生成反馈编号，方便之后查询处理结果。</p></div>
-            </div>
-            <div class="capability">
-              <span class="cap-ico" data-icon="shield"></span>
-              <div><b>尽量少收集信息</b><p>反馈服务只保留处理问题所需的内容，并使用匿名标识限制重复刷屏。</p></div>
-            </div>
-            <div class="capability">
-              <span class="cap-ico" data-icon="clock"></span>
-              <div><b>不一定逐条回复</b><p>缺少联系方式时只做记录。如果是能复现的 Bug，会优先修。</p></div>
-            </div>
-          </div>
-          <div class="hint-box" id="fbLookupBox">
-            <b>已有反馈？查询回复</b>
-            <p style="margin:6px 0 10px;color:var(--muted)">提交成功后会得到反馈编号和查询凭据；两项一起填写才能查看回复。</p>
-            <div class="fb-row">
-              <input class="fb-input" id="fbLookupId" placeholder="反馈编号" maxlength="12" />
-              <input class="fb-input" id="fbLookupToken" placeholder="查询凭据" maxlength="32" />
-            </div>
-            <button class="btn" id="fbLookupBtn" type="button" style="margin-top:10px">查询回复</button>
-            <div class="fb-status" id="fbLookupStatus" role="status" aria-live="polite"></div>
-            <div id="fbReplies"></div>
-          </div>
+        <aside class="feedback-guide">
+          <div class="feedback-guide__block"><span class="feedback-guide__num">01</span><h3>写清可复现的步骤</h3><p>如果问题只在特定操作下出现，请按顺序写出来，不要只写一句“用不了”。</p></div>
+          <div class="feedback-guide__block"><span class="feedback-guide__num">02</span><h3>一条留言只讨论一个问题</h3><p>不同问题请分别发布，管理员回复会作为该留言的唯一公开答复。</p></div>
+          <div class="feedback-guide__block"><span class="feedback-guide__num">03</span><h3>先查看历史留言</h3><p>下方留言和回复长期保留。搜索关键词可能已经有人遇到并解决了相同问题。</p></div>
+          <a class="feedback-guide__link" href="/faq.html">打开常见问题 <span data-icon="arrow" aria-hidden="true"></span></a>
+        </aside>
+      </div>
 
-          <div class="hint-box">
-            <b>下面这些不用发反馈</b>
-            <ul>
-              <li>「安装时提示未知发布者」——安装包未做代码签名，点「更多信息 → 仍要运行」即可</li>
-              <li>「旧版本检查更新失败」——2.4.x 及更早的已知问题，手动装一次 2.5.1 后正常</li>
-              <li>「局域网控制连不上」——先确认手机与电脑在同一 Wi-Fi，且没开 AP 隔离</li>
-            </ul>
+      <section class="feedback-history reveal" aria-labelledby="feedbackHistoryTitle">
+        <div class="feedback-history__head">
+          <div><span class="eyebrow">Open archive</span><h2 id="feedbackHistoryTitle">全部留言</h2><p id="feedbackListStatus" aria-live="polite">正在读取留言…</p></div>
+          <div class="feedback-history__controls">
+            <label class="feedback-history__search" for="fbSearch"><span data-icon="search" aria-hidden="true"></span><input id="fbSearch" type="search" placeholder="搜索留言…" autocomplete="off" /></label>
+            <span class="feedback-select feedback-select--compact"><select id="fbStatusFilter" aria-label="按状态筛选"><option value="all">全部状态</option><option value="pending">待处理</option><option value="confirmed">已确认</option><option value="processing">处理中</option><option value="needs_info">需要补充</option><option value="resolved">已解决</option><option value="closed">已关闭</option></select></span>
+            <span class="feedback-select feedback-select--compact"><select id="fbTypeFilter" aria-label="按类型筛选"><option value="all">全部类型</option><option value="bug">问题故障</option><option value="feature">功能建议</option><option value="ui">界面体验</option><option value="update">安装更新</option><option value="other">其他</option></select></span>
+            <span class="feedback-select feedback-select--compact"><select id="fbSort" aria-label="排序方式"><option value="latest">最新发布</option><option value="replied">最新回复</option></select></span>
           </div>
         </div>
-
-      </div>
+        <div class="feedback-message-list" id="fbList"><div class="feedback-message-empty">正在读取留言…</div></div>
+      </section>
     </div>
   </section>

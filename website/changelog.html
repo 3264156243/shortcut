@@ -33,6 +33,7 @@
 <link rel="stylesheet" href="/assets/css/site.css" />
 <link rel="stylesheet" href="/assets/css/pages.css" />
 <link rel="stylesheet" href="/assets/css/product-v3.css" />
+<link rel="stylesheet" href="/assets/css/workbench.css" />
 </head>
 
 <body data-page="changelog">
@@ -45,56 +46,100 @@
     <div class="wrap">
         <nav class="crumbs" aria-label="面包屑"><a href="/">首页</a><span>/</span><span>更新日志</span></nav>
       <h1>更新日志</h1>
-      <p>最新版本信息从更新清单实时读取，历史版本记录在站点数据里维护。</p>
+      <p>从最新版本到最早版本，按版本、类型或关键词快速找到一次变化。</p>
     </div>
   </section>
 
-  <!-- 最新版本 + 版本总览 -->
-  <section class="section section--flush">
+  <section class="workbench-page workbench-page--release" aria-labelledby="releaseHistoryTitle">
     <div class="wrap">
-      <div class="latest-release reveal" id="latestRelease">
-        <div class="latest-release__head">
-          <span class="badge"><span class="dot-live"></span>最新版本</span>
-          <h2 id="latestVersion">读取中…</h2>
-          <span class="tag" id="latestDate">—</span>
-          <span class="tag" id="latestSize">—</span>
+      <div class="release-console reveal">
+        <div class="release-console__lead">
+          <span class="release-console__flag"><i></i>最新发布</span>
+          <div class="release-console__version">
+            <span>当前版本</span>
+            <strong id="latestVersion">读取中…</strong>
+          </div>
+          <div class="release-console__meta">
+            <span id="latestDate">—</span>
+            <span id="latestSize">—</span>
+          </div>
+          <p>每次发布都按用户能感知的变化整理。下载前可以先看清这个版本新增、优化和修复了什么。</p>
+          <div class="release-console__actions">
+            <a class="btn btn--primary" id="latestDownload" href="/download.html">下载此版本</a>
+            <a class="btn btn--ghost" href="/faq.html">安装与更新说明</a>
+          </div>
         </div>
-        <ul id="latestNotes"></ul>
-        <div class="btn-row" style="margin-top:20px">
-          <a class="btn btn--primary btn--sm" id="latestDownload" href="/download.html">下载此版本</a>
-          <button class="btn btn--sm" id="expandAll" type="button">展开全部版本</button>
+        <div class="release-console__notes">
+          <div class="release-console__notes-head">
+            <span>本次更新</span>
+            <span class="release-live"><i></i>实时读取</span>
+          </div>
+          <ul id="latestNotes">
+            <li>正在读取最新版本信息…</li>
+          </ul>
         </div>
       </div>
 
-      <!-- 版本索引（快速跳转） -->
-      <nav class="version-index reveal" id="versionIndex" aria-label="版本索引"></nav>
-    </div>
-  </section>
-
-  <!-- 完整时间轴 -->
-  <section class="section section--tight">
-    <div class="wrap">
-      <div class="section-head reveal">
-        <span class="eyebrow">完整历史</span>
-        <h2>所有版本，点开看详情</h2>
-        <p id="timelineStats">—</p>
+      <div class="release-command reveal">
+        <div class="release-command__title">
+          <span class="eyebrow">版本档案</span>
+          <h2 id="releaseHistoryTitle">找到你需要的那次变化</h2>
+          <p>按版本号或关键词搜索，也可以只看新增、优化和修复。</p>
+        </div>
+        <div class="release-command__tools">
+          <label class="release-search" for="releaseSearch">
+            <span data-icon="search" aria-hidden="true"></span>
+            <input id="releaseSearch" type="search" placeholder="搜索版本、功能或问题…" autocomplete="off" />
+            <kbd>/</kbd>
+          </label>
+          <div class="release-filters" id="releaseFilters" aria-label="按更新类型筛选">
+            <button class="release-filter is-active" type="button" data-release-filter="all">全部 <b data-filter-count="all">0</b></button>
+            <button class="release-filter" type="button" data-release-filter="new">新增 <b data-filter-count="new">0</b></button>
+            <button class="release-filter" type="button" data-release-filter="improve">优化 <b data-filter-count="improve">0</b></button>
+            <button class="release-filter" type="button" data-release-filter="fix">修复 <b data-filter-count="fix">0</b></button>
+          </div>
+        </div>
       </div>
-      <div class="timeline" id="timeline"><!-- 由 changelog.js 渲染 --></div>
-    </div>
-  </section>
 
+      <div class="release-layout">
+        <aside class="release-rail reveal" aria-label="版本概览">
+          <div class="release-digest">
+            <div><strong id="releaseVersionCount">—</strong><span>个版本</span></div>
+            <div><strong id="releaseChangeCount">—</strong><span>条变化</span></div>
+          </div>
+          <div class="release-rail__head">
+            <span>快速定位</span>
+            <button class="release-expand" id="expandAll" type="button">展开全部</button>
+          </div>
+          <nav class="release-jump" id="versionIndex" aria-label="版本索引"></nav>
+          <a class="release-rail__help" href="/faq.html">
+            <span data-icon="shield" aria-hidden="true"></span>
+            <span><b>更新遇到问题？</b><small>查看安装、覆盖升级与版本兼容说明</small></span>
+          </a>
+        </aside>
 
-  <!-- 结尾 CTA -->
-  <section class="cta">
-    <div class="wrap">
-      <h2>试试 <span class="grad">ShortCut</span></h2>
-      <p>Windows 10 / 11 · 免费下载 · 无需登录</p>
-      <div class="btn-row center">
-        <a class="btn btn--primary btn--lg" href="/download.html">下载最新版本</a>
-        <a class="btn btn--ghost btn--lg" href="/faq.html">先看看常见问题</a>
+        <section class="release-feed-wrap reveal" aria-live="polite">
+          <div class="release-feed-head">
+            <div>
+              <span class="release-feed-head__label">Release notes</span>
+              <h3>版本记录</h3>
+            </div>
+            <p id="releaseResultCount">正在整理版本记录…</p>
+          </div>
+          <div class="release-feed" id="timeline"></div>
+          <div class="release-empty" id="releaseEmpty" hidden>
+            <span data-icon="search" aria-hidden="true"></span>
+            <h3>没有找到匹配的更新</h3>
+            <p>换一个关键词，或切回“全部”查看完整记录。</p>
+            <button class="btn btn--sm" id="releaseReset" type="button">清除筛选</button>
+          </div>
+        </section>
       </div>
     </div>
   </section>
+
+
+
 
 </main>
 

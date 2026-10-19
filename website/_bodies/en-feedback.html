@@ -1,94 +1,54 @@
-  <!-- Feedback form -->
-  <section class="section section--flush">
+  <section class="workbench-page workbench-page--feedback" aria-labelledby="feedbackBoardTitle">
     <div class="wrap">
-      <div class="grid grid--2" style="gap:44px;align-items:start">
+      <div class="feedback-board-head reveal">
+        <div><span class="eyebrow">Public board</span><h2 id="feedbackBoardTitle">Messages and progress</h2><p>Questions and administrator replies are public. Contact details go only to the moderation console and never appear in a message.</p></div>
+        <div class="feedback-board-head__note"><span data-icon="shield" aria-hidden="true"></span><p>No account is needed. Do not include passwords, activation codes or other sensitive information in the public message.</p></div>
+      </div>
 
-        <form class="fb-form reveal" id="fbForm" novalidate>
-          <div class="fb-field">
-            <label for="fbType">Type</label>
-            <select class="fb-select" id="fbType" name="type">
-              <option value="bug">Bug report</option>
-              <option value="feature">Feature request</option>
-              <option value="ui">UI and UX</option>
-              <option value="update">Updates and install</option>
-              <option value="other" selected>Something else</option>
-            </select>
-          </div>
-
-          <div class="fb-field">
-            <label for="fbContent">Details <small>required, at least 5 characters</small></label>
-            <textarea class="fb-textarea" id="fbContent" name="content" required
-              placeholder="What happened, in which module, and how can it be reproduced?&#10;&#10;For a bug it helps to include:&#10;1. what you did&#10;2. what you expected&#10;3. what actually happened"></textarea>
-            <div class="fb-hint"><span id="fbCount">0</span> / 4000</div>
-          </div>
-
-          <div class="fb-row">
-            <div class="fb-field">
-              <label for="fbContact">Contact <small>optional</small></label>
-              <input class="fb-input" id="fbContact" name="contact" type="text"
-                placeholder="Email / QQ / WeChat so I can reply" maxlength="120" />
+      <div class="feedback-compose-grid reveal">
+        <form class="feedback-compose" id="fbForm" novalidate>
+          <div class="feedback-compose__head"><div><span class="eyebrow">New message</span><h3>Send feedback</h3></div><span class="feedback-private">Contact stays private</span></div>
+          <fieldset class="feedback-type-field">
+            <legend>Feedback type</legend>
+            <div class="feedback-type-row" role="radiogroup" aria-label="Feedback type">
+              <label><input type="radio" name="fbType" value="bug" checked /><span data-icon="bug" aria-hidden="true"></span>Bug</label>
+              <label><input type="radio" name="fbType" value="feature" /><span data-icon="bolt" aria-hidden="true"></span>Feature</label>
+              <label><input type="radio" name="fbType" value="ui" /><span data-icon="grid" aria-hidden="true"></span>Interface</label>
+              <label><input type="radio" name="fbType" value="update" /><span data-icon="download" aria-hidden="true"></span>Updates</label>
+              <label><input type="radio" name="fbType" value="other" /><span data-icon="send" aria-hidden="true"></span>Other</label>
             </div>
-            <div class="fb-field">
-              <label for="fbVersion">Your version <small>optional, filled automatically</small></label>
-              <input class="fb-input" id="fbVersion" name="version" type="text" placeholder="e.g. 2.5.1" maxlength="40" />
-            </div>
+          </fieldset>
+          <div class="feedback-field-grid">
+            <label class="feedback-field feedback-field--wide" for="fbTitle"><span>Title <small>required</small></span><input id="fbTitle" name="title" maxlength="120" required placeholder="Summarise the problem or suggestion in one line" /></label>
+            <label class="feedback-field" for="fbArea"><span>Product area</span><span class="feedback-select"><select id="fbArea" name="area"><option value="">Not sure / other</option><option value="Quick Launch">Quick Launch</option><option value="Task Wall">Task Wall</option><option value="SC Ball">SC Ball</option><option value="Translation">Translation</option><option value="System cockpit">System cockpit</option><option value="App usage history">App usage history</option><option value="File transfer and phone link">File transfer and phone link</option><option value="Install and update">Install and update</option></select></span></label>
+            <label class="feedback-field" for="fbVersion"><span>Version <small>filled automatically</small></span><input id="fbVersion" name="version" maxlength="40" placeholder="For example 2.5.1" /></label>
+            <label class="feedback-field feedback-field--wide" for="fbDetails"><span>Details <small>required</small></span><textarea id="fbDetails" name="details" maxlength="4000" required placeholder="Include the steps, expected result and what happened instead."></textarea></label>
+            <label class="feedback-field feedback-field--wide" for="fbContact"><span>Contact <small>optional, private</small></span><input id="fbContact" name="contact" maxlength="120" placeholder="Email or another way for the administrator to follow up" /></label>
           </div>
-
-          <!-- honeypot: hidden from humans, bots fill it -->
-          <div class="fb-hp" aria-hidden="true">
-            <label for="fbHp">Leave empty</label>
-            <input id="fbHp" name="hp" type="text" tabindex="-1" autocomplete="off" />
-          </div>
-
-          <div class="btn-row">
-            <button class="btn btn--primary" id="fbSubmit" type="submit">Submit feedback</button>
-            <a class="btn btn--ghost" href="/en/faq.html">Read the FAQ first</a>
-          </div>
-          <div class="fb-status" id="fbStatus" role="status" aria-live="polite"></div>
+          <div class="feedback-hp" aria-hidden="true"><label for="fbHp">Leave this field empty</label><input id="fbHp" name="hp" type="text" tabindex="-1" autocomplete="off" /></div>
+          <div class="feedback-submit-row"><p>The message appears in the public archive below. An administrator can update its status and post one reply.</p><button class="btn btn--primary" id="fbSubmit" type="submit">Publish message</button></div>
+          <div class="feedback-inline-status" id="fbStatus" role="status" aria-live="polite"></div>
         </form>
 
-        <div class="reveal">
-          <div class="section-head" style="margin-bottom:20px">
-            <span class="eyebrow">About</span>
-            <h2>How feedback is handled</h2>
-          </div>
-          <div class="grid" style="gap:12px">
-            <div class="capability">
-              <span class="cap-ico" data-icon="check"></span>
-              <div><b>Sent directly to the project maintainer</b><p>No third-party feedback platform and no account required. Each submission receives an ID so you can check its status later.</p></div>
-            </div>
-            <div class="capability">
-              <span class="cap-ico" data-icon="shield"></span>
-              <div><b>Collects only what is needed</b><p>The feedback service keeps the content needed to investigate the issue and uses an anonymous identifier to prevent spam.</p></div>
-            </div>
-            <div class="capability">
-              <span class="cap-ico" data-icon="clock"></span>
-              <div><b>Replies are not guaranteed</b><p>Without contact details an entry is only recorded. Reproducible bugs are fixed first.</p></div>
-            </div>
-          </div>
+        <aside class="feedback-guide">
+          <div class="feedback-guide__block"><span class="feedback-guide__num">01</span><h3>Make it reproducible</h3><p>If the issue only happens in a particular sequence, list the steps in order.</p></div>
+          <div class="feedback-guide__block"><span class="feedback-guide__num">02</span><h3>One topic per message</h3><p>Start separate messages for unrelated issues. Each message receives one public administrator reply.</p></div>
+          <div class="feedback-guide__block"><span class="feedback-guide__num">03</span><h3>Search the archive first</h3><p>The same problem may already have an answer. Existing messages and replies remain public.</p></div>
+          <a class="feedback-guide__link" href="/en/faq.html">Read the FAQ <span data-icon="arrow" aria-hidden="true"></span></a>
+        </aside>
+      </div>
 
-          <div class="hint-box" id="fbLookupBox">
-            <b>Already sent feedback? Check for replies</b>
-            <p style="margin:6px 0 10px;color:var(--muted)">After submitting you receive a feedback ID and a lookup token. Both are required to view replies.</p>
-            <div class="fb-row">
-              <input class="fb-input" id="fbLookupId" placeholder="Feedback ID" maxlength="12" />
-              <input class="fb-input" id="fbLookupToken" placeholder="Lookup token" maxlength="32" />
-            </div>
-            <button class="btn" id="fbLookupBtn" type="button" style="margin-top:10px">Check replies</button>
-            <div class="fb-status" id="fbLookupStatus" role="status" aria-live="polite"></div>
-            <div id="fbReplies"></div>
-          </div>
-
-          <div class="hint-box">
-            <b>You do not need to send these</b>
-            <ul>
-              <li>"Unknown publisher" during install — the installer is not code-signed yet; choose "More info → Run anyway"</li>
-              <li>Old versions fail to check for updates — a known 2.4.x issue; install 2.5.1 once manually and it works afterwards</li>
-              <li>LAN control cannot connect — make sure phone and PC are on the same Wi-Fi and AP isolation is off</li>
-            </ul>
+      <section class="feedback-history reveal" aria-labelledby="feedbackHistoryTitle">
+        <div class="feedback-history__head">
+          <div><span class="eyebrow">Open archive</span><h2 id="feedbackHistoryTitle">All messages</h2><p id="feedbackListStatus" aria-live="polite">Loading messages...</p></div>
+          <div class="feedback-history__controls">
+            <label class="feedback-history__search" for="fbSearch"><span data-icon="search" aria-hidden="true"></span><input id="fbSearch" type="search" placeholder="Search messages..." autocomplete="off" /></label>
+            <span class="feedback-select feedback-select--compact"><select id="fbStatusFilter" aria-label="Filter by status"><option value="all">All statuses</option><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="processing">In progress</option><option value="needs_info">Needs info</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select></span>
+            <span class="feedback-select feedback-select--compact"><select id="fbTypeFilter" aria-label="Filter by type"><option value="all">All types</option><option value="bug">Bug</option><option value="feature">Feature</option><option value="ui">Interface</option><option value="update">Updates</option><option value="other">Other</option></select></span>
+            <span class="feedback-select feedback-select--compact"><select id="fbSort" aria-label="Sort messages"><option value="latest">Newest message</option><option value="replied">Newest reply</option></select></span>
           </div>
         </div>
-
-      </div>
+        <div class="feedback-message-list" id="fbList"><div class="feedback-message-empty">Loading messages...</div></div>
+      </section>
     </div>
   </section>

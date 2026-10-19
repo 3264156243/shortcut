@@ -33,6 +33,9 @@
     clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
     shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
     bolt: '<path d="M13 2L4 14h6l-1 8 9-12h-6z"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
+    bug: '<rect x="7" y="7" width="10" height="13" rx="4"/><path d="M9 4l1.5 3M15 4l-1.5 3M3 11h4M17 11h4M4 17h3M17 17h3M8 20l-1 2M16 20l1 2"/>',
+    inbox: '<path d="M4 5h16l1 10v4H3v-4z"/><path d="M3 15h5l1.5 2h5L16 15h5"/>',
     windows: '<path d="M3 5.5l7.5-1v7H3zM12 4.2l9-1.2v8.5h-9zM3 13h7.5v7L3 18.5zM12 13h9v8l-9-1.2z"/>'
   };
 

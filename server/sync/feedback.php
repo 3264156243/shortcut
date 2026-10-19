@@ -30,6 +30,80 @@ function fb_reply(array $data, int $status = 200): void
     exit;
 }
 
+function fb_clean_text(string $value, int $limit): string
+{
+    $value = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', trim($value)) ?? trim($value);
+    if (function_exists('mb_substr')) {
+        return mb_substr($value, 0, $limit, 'UTF-8');
+    }
+    return substr($value, 0, $limit);
+}
+
+function fb_read_public_items(string $dataDir): array
+{
+    $rows = [];
+    foreach (glob(rtrim($dataDir, '/') . '/feedback/feedback-*.jsonl') ?: [] as $file) {
+        foreach (@file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
+            $row = json_decode($line, true);
+            if (!is_array($row) || empty($row['id'])) continue;
+            $id = (string)$row['id'];
+            $title = trim((string)($row['title'] ?? ''));
+            $area = trim((string)($row['area'] ?? ''));
+            $details = trim((string)($row['details'] ?? ''));
+            $content = trim((string)($row['content'] ?? ''));
+            if ($title === '' && preg_match('/\[(?:标题|Summary)\]\s*(.+)/u', $content, $match)) {
+                $title = trim($match[1]);
+            }
+            if ($title === '') {
+                $title = preg_split('/\R/u', $content)[0] ?? '未命名反馈';
+                $title = preg_replace('/^\[[^\]]+\]\s*/u', '', $title) ?? $title;
+            }
+            if ($details === '') $details = $content;
+            $rows[$id] = [
+                'id' => $id,
+                'time' => (string)($row['time'] ?? ''),
+                'type' => (string)($row['type'] ?? 'other'),
+                'title' => fb_clean_text($title, 120),
+                'area' => fb_clean_text($area, 60),
+                'details' => fb_clean_text($details, 4000),
+                'version' => (string)($row['version'] ?? ''),
+            ];
+        }
+    }
+
+    $byId = [];
+    $replyFile = rtrim($dataDir, '/') . '/feedback/feedback-replies.jsonl';
+    foreach (@file($replyFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
+        $reply = json_decode($line, true);
+        if (is_array($reply) && !empty($reply['feedback_id'])) {
+            $byId[(string)$reply['feedback_id']][] = $reply;
+        }
+    }
+
+    $items = [];
+    foreach ($rows as $id => $row) {
+        $status = 'pending';
+        $publicReply = null;
+        foreach ($byId[$id] ?? [] as $entry) {
+            if (!empty($entry['status'])) $status = (string)$entry['status'];
+            $body = trim((string)($entry['body'] ?? ''));
+            if ($body !== '') {
+                $publicReply = [
+                    'time' => (string)($entry['time'] ?? ''),
+                    'body' => fb_clean_text($body, 4000),
+                    'status' => (string)($entry['status'] ?? ''),
+                ];
+            }
+        }
+        if ($status === 'hidden') continue;
+        $row['status'] = $status === 'open' ? 'pending' : $status;
+        $row['reply'] = $publicReply;
+        $row['replyTime'] = $publicReply['time'] ?? '';
+        $items[] = $row;
+    }
+    return $items;
+}
+
 /* ── 1. 只接受 POST ───────────────────────────────────────────────────── */
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     fb_reply(['ok' => false, 'error' => 'method_not_allowed'], 405);
@@ -43,6 +117,37 @@ if (strlen((string)$raw) > 65536) {
 $in = json_decode((string)$raw, true);
 if (!is_array($in)) {
     $in = $_POST;
+}
+
+/* ── 2.2. 公开留言列表 ─────────────────────────────────────────────────── */
+if (($in['action'] ?? '') === 'publicList') {
+    $items = fb_read_public_items($DATA_DIR);
+    $statusFilter = trim((string)($in['status'] ?? 'all'));
+    $typeFilter = trim((string)($in['type'] ?? 'all'));
+    $query = mb_strtolower(trim((string)($in['query'] ?? '')), 'UTF-8');
+    $sort = (string)($in['sort'] ?? 'latest');
+
+    $items = array_values(array_filter($items, static function ($item) use ($statusFilter, $typeFilter, $query) {
+        if ($statusFilter !== 'all' && ($item['status'] ?? '') !== $statusFilter) return false;
+        if ($typeFilter !== 'all' && ($item['type'] ?? '') !== $typeFilter) return false;
+        if ($query === '') return true;
+        $haystack = mb_strtolower(($item['title'] ?? '') . "\n" . ($item['area'] ?? '') . "\n" . ($item['details'] ?? ''), 'UTF-8');
+        return strpos($haystack, $query) !== false;
+    }));
+
+    usort($items, static function ($a, $b) use ($sort) {
+        if ($sort === 'replied') {
+            $aTime = (string)($a['replyTime'] ?? '');
+            $bTime = (string)($b['replyTime'] ?? '');
+            if ($aTime !== '' && $bTime !== '') return strcmp($bTime, $aTime);
+            if ($aTime !== '') return -1;
+            if ($bTime !== '') return 1;
+            return strcmp((string)($b['time'] ?? ''), (string)($a['time'] ?? ''));
+        }
+        return strcmp((string)($b['time'] ?? ''), (string)($a['time'] ?? ''));
+    });
+
+    fb_reply(['ok' => true, 'items' => array_slice($items, 0, 100)]);
 }
 if (!is_array($in)) {
     fb_reply(['ok' => false, 'error' => 'bad_request'], 400);
@@ -112,14 +217,26 @@ if (!in_array($type, $allowedTypes, true)) {
 }
 
 $content = trim((string)($in['content'] ?? ''));
+$title = trim((string)($in['title'] ?? ''));
+$area = trim((string)($in['area'] ?? ''));
+$details = trim((string)($in['details'] ?? ''));
 $contact = trim((string)($in['contact'] ?? ''));
 $version = trim((string)($in['version'] ?? ''));
 $pageUrl = trim((string)($in['page'] ?? ''));
 
+if ($details === '') $details = $content;
+if ($content === '') {
+    $content = trim('[' . ($area !== '' ? $area : '反馈') . '] ' . $title . "\n\n" . $details);
+}
+if ($title === '') {
+    $firstLine = preg_split('/\R/u', $details)[0] ?? '未命名反馈';
+    $title = preg_replace('/^\[[^\]]+\]\s*/u', '', $firstLine) ?? $firstLine;
+}
+
 if (function_exists('mb_strlen')) {
-    $len = mb_strlen($content, 'UTF-8');
+    $len = mb_strlen($details, 'UTF-8');
 } else {
-    $len = strlen($content);
+    $len = strlen($details);
 }
 
 if ($len < 5) {
@@ -130,10 +247,16 @@ if ($len > 4000) {
 }
 
 if (function_exists('mb_substr')) {
+    $title = fb_clean_text($title, 120);
+    $area = fb_clean_text($area, 60);
+    $details = fb_clean_text($details, 4000);
     $contact = mb_substr($contact, 0, 120, 'UTF-8');
     $version = mb_substr($version, 0, 40, 'UTF-8');
     $pageUrl = mb_substr($pageUrl, 0, 300, 'UTF-8');
 } else {
+    $title = fb_clean_text($title, 120);
+    $area = fb_clean_text($area, 60);
+    $details = fb_clean_text($details, 4000);
     $contact = substr($contact, 0, 120);
     $version = substr($version, 0, 40);
     $pageUrl = substr($pageUrl, 0, 300);
@@ -186,6 +309,9 @@ $entry = [
     'token_hash' => $tokenHash,
     'time' => gmdate('c'),
     'type' => $type,
+    'title' => $title,
+    'area' => $area,
+    'details' => $details,
     'content' => $content,
     'contact' => $contact,
     'version' => $version,

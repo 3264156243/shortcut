@@ -33,6 +33,7 @@
 <link rel="stylesheet" href="/assets/css/site.css" />
 <link rel="stylesheet" href="/assets/css/pages.css" />
 <link rel="stylesheet" href="/assets/css/product-v3.css" />
+<link rel="stylesheet" href="/assets/css/workbench.css" />
 </head>
 
 <body data-page="changelog">
@@ -49,52 +50,58 @@
     </div>
   </section>
 
-  <!-- Latest release + 版本总览 -->
-  <section class="section section--flush">
+  <section class="workbench-page workbench-page--release" aria-labelledby="releaseHistoryTitle">
     <div class="wrap">
-      <div class="latest-release reveal" id="latestRelease">
-        <div class="latest-release__head">
-          <span class="badge"><span class="dot-live"></span>Latest release</span>
-          <h2 id="latestVersion">Loading…</h2>
-          <span class="tag" id="latestDate">—</span>
-          <span class="tag" id="latestSize">—</span>
+      <div class="release-console reveal">
+        <div class="release-console__lead">
+          <span class="release-console__flag"><i></i>Latest release</span>
+          <div class="release-console__version"><span>Current version</span><strong id="latestVersion">Loading…</strong></div>
+          <div class="release-console__meta"><span id="latestDate">—</span><span id="latestSize">—</span></div>
+          <p>Every release is grouped by the changes people can actually notice. See what was added, improved or fixed before downloading.</p>
+          <div class="release-console__actions"><a class="btn btn--primary" id="latestDownload" href="/en/download.html">Download this version</a><a class="btn btn--ghost" href="/en/faq.html">Install and update notes</a></div>
         </div>
-        <ul id="latestNotes"></ul>
-        <div class="btn-row" style="margin-top:20px">
-          <a class="btn btn--primary btn--sm" id="latestDownload" href="/en/download.html">Download this version</a>
-          <button class="btn btn--sm" id="expandAll" type="button">Expand all versions</button>
+        <div class="release-console__notes">
+          <div class="release-console__notes-head"><span>What changed</span><span class="release-live"><i></i>Live</span></div>
+          <ul id="latestNotes"><li>Reading the latest release…</li></ul>
         </div>
       </div>
 
-      <!-- Version index（快速跳转） -->
-      <nav class="version-index reveal" id="versionIndex" aria-label="Version index"></nav>
-    </div>
-  </section>
-
-  <!-- 完整时间轴 -->
-  <section class="section section--tight">
-    <div class="wrap">
-      <div class="section-head reveal">
-        <span class="eyebrow">Full history</span>
-        <h2>Every version, expand for details</h2>
-        <p id="timelineStats">—</p>
+      <div class="release-command reveal">
+        <div class="release-command__title">
+          <span class="eyebrow">Release archive</span>
+          <h2 id="releaseHistoryTitle">Find the change you need</h2>
+          <p>Search by version or keyword, or narrow the list to additions, improvements and fixes.</p>
+        </div>
+        <div class="release-command__tools">
+          <label class="release-search" for="releaseSearch"><span data-icon="search" aria-hidden="true"></span><input id="releaseSearch" type="search" placeholder="Search versions, features or issues…" autocomplete="off" /><kbd>/</kbd></label>
+          <div class="release-filters" id="releaseFilters" aria-label="Filter release notes">
+            <button class="release-filter is-active" type="button" data-release-filter="all">All <b data-filter-count="all">0</b></button>
+            <button class="release-filter" type="button" data-release-filter="new">Added <b data-filter-count="new">0</b></button>
+            <button class="release-filter" type="button" data-release-filter="improve">Improved <b data-filter-count="improve">0</b></button>
+            <button class="release-filter" type="button" data-release-filter="fix">Fixed <b data-filter-count="fix">0</b></button>
+          </div>
+        </div>
       </div>
-      <div class="timeline" id="timeline"><!-- 由 changelog.js 渲染 --></div>
-    </div>
-  </section>
 
+      <div class="release-layout">
+        <aside class="release-rail reveal" aria-label="Release overview">
+          <div class="release-digest"><div><strong id="releaseVersionCount">—</strong><span>versions</span></div><div><strong id="releaseChangeCount">—</strong><span>changes</span></div></div>
+          <div class="release-rail__head"><span>Jump to version</span><button class="release-expand" id="expandAll" type="button">Expand all</button></div>
+          <nav class="release-jump" id="versionIndex" aria-label="Version index"></nav>
+          <a class="release-rail__help" href="/en/faq.html"><span data-icon="shield" aria-hidden="true"></span><span><b>Update problem?</b><small>Installation, upgrade and compatibility help</small></span></a>
+        </aside>
 
-  <!-- Call to action -->
-  <section class="cta">
-    <div class="wrap">
-      <h2>Try <span class="grad">ShortCut</span></h2>
-      <p id="ctaSub">Windows 10 / 11 · free download · no account needed</p>
-      <div class="btn-row center">
-        <a class="btn btn--primary btn--lg" href="/en/download.html">Download the latest</a>
-        <a class="btn btn--ghost btn--lg" href="/en/faq.html">Read the FAQ first</a>
+        <section class="release-feed-wrap reveal" aria-live="polite">
+          <div class="release-feed-head"><div><span class="release-feed-head__label">Release notes</span><h3>Version history</h3></div><p id="releaseResultCount">Organising release history…</p></div>
+          <div class="release-feed" id="timeline"></div>
+          <div class="release-empty" id="releaseEmpty" hidden><span data-icon="search" aria-hidden="true"></span><h3>No matching update</h3><p>Try another keyword or switch back to All.</p><button class="btn btn--sm" id="releaseReset" type="button">Clear filters</button></div>
+        </section>
       </div>
     </div>
   </section>
+
+
+
 
 </main>
 

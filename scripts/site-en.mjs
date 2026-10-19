@@ -161,10 +161,10 @@ export const EN_PAGES = {
   },
 
   'feedback.html': {
-    title: 'Feedback — ShortCut',
-    desc: 'Report a problem, suggest a feature or ask a question about ShortCut. No account needed.',
-    h1: 'Feedback',
-    lead: 'Found a bug, want a feature, or just want to say something? Write it here. No account, no contact details required (but leaving one makes a reply possible).',
+    title: 'Feedback board — ShortCut',
+    desc: 'Report a problem, suggest a feature or share interface feedback. Browse public messages, status updates and administrator replies without an account.',
+    h1: 'Feedback board',
+    lead: 'Publish an anonymous message and follow its status and administrator reply. Contact details are visible only to the moderation console.',
     crumb: 'Feedback'
   }
 };

@@ -19,7 +19,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { PAGES, head as zhHead, CTA } from './gen-site-pages.mjs';
+import { PAGES, pageStyles } from './gen-site-pages.mjs';
 import { EN_PAGES, EN_UI, EN_INDEX_REPLACE, EN_CTA, EN_LABELS } from './site-en.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -41,7 +41,7 @@ const BOOT = `  <script>
   })();
   <\/script>`;
 
-function head({ title, desc }) {
+function head({ title, desc, styles }) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -66,7 +66,7 @@ ${BOOT}
 <link rel="stylesheet" href="/assets/css/site.css" />
 <link rel="stylesheet" href="/assets/css/pages.css" />
 <link rel="stylesheet" href="/assets/css/product-v3.css" />
-</head>`;
+${styles ? styles + '\n' : ''}</head>`;
 }
 
 const EN_CTA_HTML = `  <!-- Call to action -->
@@ -247,7 +247,7 @@ ${enPager(en.pagerPrev, en.pagerNext)}
     }
   }
 
-  const html = `${head({ title: en.title, desc: en.desc })}
+  const html = `${head({ title: en.title, desc: en.desc, styles: pageStyles(p.file) })}
 
 <body data-page="${pageIdOf(p.file)}">
 
@@ -265,7 +265,7 @@ ${enCrumbs(p.file)}
 
 ${body}
 
-${EN_CTA_HTML}
+${p.showCta === false ? '' : EN_CTA_HTML}
 
 </main>
 

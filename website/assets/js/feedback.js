@@ -1,12 +1,5 @@
 /**
- * 问题反馈页
- * ---------------------------------------------------------------------------
- * 提交到 /sync/feedback.php（自建服务端，JSONL 追加存储）
- *   要点：
- *     - 前端只做"必填 + 长度"的即时校验，服务端才是权威
- *     - 带蜜罐字段 hp（人类不可见），被填即视为机器人
- *     - 自动带上当前站点版本与来源页面，便于定位
- *     - 提交中禁用按钮，避免重复提交；成功后清空内容并提示编号
+ * Public feedback board: structured submission, archive filters and replies.
  */
 (function (global) {
   'use strict';
@@ -14,178 +7,261 @@
   var doc = document;
   var form = doc.getElementById('fbForm');
   if (!form) return;
+
   var isEN = (doc.documentElement.getAttribute('lang') || 'zh-CN').toLowerCase().indexOf('en') === 0;
-  var T = isEN ? {
-    noReply: 'There is no reply from the team yet. Please check again later.',
-    lookupInvalid: 'Enter the 12-character feedback ID and 32-character lookup token you received after submitting.',
-    lookingUp: 'Checking…',
-    lookupOk: 'Found',
-    lookupNotFound: 'Feedback not found',
-    lookupFailed: 'Lookup failed',
-    submitting: 'Submitting…',
-    submit: 'Submit feedback',
-    tooShort: 'Please write at least 5 characters.',
-    tooLong: 'Please keep the message under 4,000 characters.',
-    sending: 'Sending…',
-    submitFailed: 'Submission failed. Please try again later.',
-    network: 'Network error. Check your connection and try again.',
-    received: 'Received. Feedback ID: '
+  var ENDPOINT = '/sync/feedback.php';
+  var requestSequence = 0;
+  var searchTimer = 0;
+
+  var TYPES = isEN ? {
+    bug: 'Bug', feature: 'Feature', ui: 'Interface', update: 'Updates', other: 'Other'
   } : {
-    noReply: '暂时还没有管理员回复，请稍后再查。',
-    lookupInvalid: '请填写提交成功后得到的 12 位编号与 32 位查询凭据。',
-    lookingUp: '查询中…',
-    lookupOk: '查询成功',
-    lookupNotFound: '没有找到这条反馈',
-    lookupFailed: '查询失败',
-    submitting: '提交中…',
-    submit: '提交反馈',
-    tooShort: '内容太短了，请至少写 5 个字。',
-    tooLong: '内容过长，请控制在 4000 字以内。',
-    sending: '正在提交…',
-    submitFailed: '提交失败，请稍后再试。',
-    network: '网络异常，提交失败。请检查网络后再试。',
-    received: '已收到，编号 '
+    bug: '问题故障', feature: '功能建议', ui: '界面体验', update: '安装更新', other: '其他'
   };
 
-  var elType = doc.getElementById('fbType');
-  var elContent = doc.getElementById('fbContent');
-  var elContact = doc.getElementById('fbContact');
-  var elVersion = doc.getElementById('fbVersion');
-  var elHp = doc.getElementById('fbHp');
-  var elCount = doc.getElementById('fbCount');
-  var elStatus = doc.getElementById('fbStatus');
-  var elSubmit = doc.getElementById('fbSubmit');
+  var STATUSES = isEN ? {
+    pending: 'Pending', confirmed: 'Confirmed', processing: 'In progress',
+    needs_info: 'Needs info', resolved: 'Resolved', closed: 'Closed'
+  } : {
+    pending: '待处理', confirmed: '已确认', processing: '处理中',
+    needs_info: '需要补充', resolved: '已解决', closed: '已关闭'
+  };
 
-  var ENDPOINT = '/sync/feedback.php';
+  var L = isEN ? {
+    titleShort: 'Write a title of at least 4 characters.',
+    detailsShort: 'Add a little more detail so the message can be investigated.',
+    submitting: 'Publishing...', submit: 'Publish message',
+    success: 'Published. The message is now in the public archive.',
+    failure: 'Could not publish the message. Please try again later.',
+    network: 'Network error. Check your connection and try again.',
+    loading: 'Loading messages...',
+    count: function (count) { return count + ' public messages'; },
+    noMatches: 'No messages match these filters.', noMessages: 'No public messages yet.',
+    loadFailure: 'The archive could not be loaded. Please try again later.',
+    reply: 'Administrator reply', noReply: 'Waiting for an administrator reply.',
+    version: 'Version', unknownArea: 'Not specified', message: 'Message', timeUnknown: 'Date unavailable'
+  } : {
+    titleShort: '请写一个至少 4 个字的清楚标题。',
+    detailsShort: '请再补充一些信息，方便定位问题。',
+    submitting: '正在发布…', submit: '发布留言',
+    success: '已发布，留言现在可以在下方公开记录中查看。',
+    failure: '发布失败，请稍后再试。',
+    network: '网络异常，请检查网络后再试。',
+    loading: '正在读取留言…',
+    count: function (count) { return '共 ' + count + ' 条公开留言'; },
+    noMatches: '没有符合当前筛选条件的留言。', noMessages: '暂时还没有公开留言。',
+    loadFailure: '留言档案读取失败，请稍后再试。',
+    reply: '管理员回复', noReply: '等待管理员处理。',
+    version: '版本', unknownArea: '未指定', message: '留言', timeUnknown: '时间未知'
+  };
 
-  var lookupId = doc.getElementById('fbLookupId');
-  var lookupToken = doc.getElementById('fbLookupToken');
-  var lookupBtn = doc.getElementById('fbLookupBtn');
-  var lookupStatus = doc.getElementById('fbLookupStatus');
-  var repliesBox = doc.getElementById('fbReplies');
-
-  function esc(s) {
-    return String(s || '').replace(/[&<>"']/g, function (c) {
+  function $(id) { return doc.getElementById(id); }
+  function esc(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
       return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
     });
   }
-
-  function showReplies(data) {
-    if (!repliesBox) return;
-    var replies = data.replies || [];
-    if (!replies.length) {
-      repliesBox.innerHTML = '<div class="reply" style="margin-top:12px"><small>' + (isEN ? 'Status' : '当前状态') + '</small>' + T.noReply + '</div>';
-      return;
-    }
-    repliesBox.innerHTML = replies.map(function (r) {
-      return '<div class="reply" style="margin-top:12px"><small>' + esc(r.time) + ' · ' + esc(r.status) + '</small>' + esc(r.body) + '</div>';
-    }).join('');
-  }
-
-  if (lookupBtn) {
-    lookupBtn.addEventListener('click', function () {
-      var id = (lookupId && lookupId.value || '').trim();
-      var token = (lookupToken && lookupToken.value || '').trim();
-      if (!/^[a-f0-9]{12}$/.test(id) || !/^[a-f0-9]{32}$/.test(token)) {
-        if (lookupStatus) { lookupStatus.textContent = T.lookupInvalid; lookupStatus.className = 'fb-status is-err'; }
-        return;
-      }
-      if (lookupStatus) { lookupStatus.textContent = T.lookingUp; lookupStatus.className = 'fb-status'; }
-      fetch(ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'lookup', id: id, token: token })
-      }).then(function (r) { return r.json(); }).then(function (res) {
-        if (!res.ok) throw new Error(isEN ? T.lookupNotFound : (res.message || T.lookupNotFound));
-        if (lookupStatus) { lookupStatus.textContent = T.lookupOk; lookupStatus.className = 'fb-status is-ok'; }
-        showReplies(res);
-      }).catch(function (err) {
-        if (lookupStatus) { lookupStatus.textContent = isEN ? T.lookupFailed : (err.message || T.lookupFailed); lookupStatus.className = 'fb-status is-err'; }
-        if (repliesBox) repliesBox.innerHTML = '';
-      });
-    });
-  }
-
-
-  function updateCount() {
-    if (elCount && elContent) elCount.textContent = elContent.value.length;
-  }
-  elContent.addEventListener('input', updateCount);
-  updateCount();
-
-  /* ── 自动填入当前版本 ── */
-  if (global.SC && global.SC.loadDesktopVersion) {
-    global.SC.loadDesktopVersion().then(function (v) {
-      if (elVersion && v && v.version && !elVersion.value) elVersion.value = v.version;
-    });
-  }
-
-  /* ── 状态提示 ── */
   function setStatus(text, kind) {
-    if (!elStatus) return;
-    elStatus.textContent = text || '';
-    elStatus.className = 'fb-status' + (kind ? ' is-' + kind : '');
+    var node = $('fbStatus');
+    if (!node) return;
+    node.textContent = text || '';
+    node.className = 'feedback-inline-status' + (kind ? ' is-' + kind : '');
+  }
+  function selectedType() {
+    var checked = form.querySelector('input[name="fbType"]:checked');
+    return checked ? checked.value : 'bug';
+  }
+  function formatTime(value) {
+    if (!value) return L.timeUnknown;
+    var date = new Date(value);
+    if (isNaN(date.getTime())) return String(value).replace('T', ' ').slice(0, 16);
+    try {
+      return new Intl.DateTimeFormat(isEN ? 'en-US' : 'zh-CN', {
+        year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+      }).format(date);
+    } catch (error) {
+      return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' +
+        String(date.getDate()).padStart(2, '0') + ' ' + String(date.getHours()).padStart(2, '0') + ':' +
+        String(date.getMinutes()).padStart(2, '0');
+    }
+  }
+  function statusLabel(value) { return STATUSES[value] || value || STATUSES.pending; }
+  function typeLabel(value) { return TYPES[value] || value || TYPES.other; }
+
+  var list = $('fbList');
+  var listStatus = $('feedbackListStatus');
+  var search = $('fbSearch');
+  var statusFilter = $('fbStatusFilter');
+  var typeFilter = $('fbTypeFilter');
+  var sort = $('fbSort');
+
+  function renderMessage(item, index, total) {
+    var status = item.status || 'pending';
+    var reply = item.reply && item.reply.body ? item.reply : null;
+    var details = String(item.details || '').trim();
+    var area = String(item.area || '').trim() || L.unknownArea;
+    var version = String(item.version || '').trim();
+    return '<article class="feedback-message" data-status="' + esc(status) + '">' +
+      '<div class="feedback-message__rail" aria-hidden="true"><span>' + String(total - index).padStart(2, '0') + '</span></div>' +
+      '<div class="feedback-message__content">' +
+        '<header class="feedback-message__head">' +
+          '<div class="feedback-message__identity">' +
+            '<div class="feedback-message__meta">' +
+              '<span class="feedback-type">' + esc(typeLabel(item.type)) + '</span>' +
+              '<span>' + esc(area) + '</span>' +
+              (version ? '<span>' + L.version + ' ' + esc(version) + '</span>' : '') +
+              '<time datetime="' + esc(item.time || '') + '">' + esc(formatTime(item.time)) + '</time>' +
+            '</div>' +
+            '<h3>' + esc(item.title || L.message) + '</h3>' +
+          '</div>' +
+          '<span class="feedback-status feedback-status--' + esc(status) + '"><i></i>' + esc(statusLabel(status)) + '</span>' +
+        '</header>' +
+        '<p class="feedback-message__details">' + esc(details) + '</p>' +
+        (reply
+          ? '<section class="feedback-reply"><span class="feedback-reply__label">' + L.reply + '<time>' + esc(formatTime(reply.time)) + '</time></span><p>' + esc(reply.body) + '</p></section>'
+          : '<p class="feedback-message__waiting"><i></i>' + L.noReply + '</p>') +
+      '</div>' +
+    '</article>';
   }
 
-  function setBusy(busy) {
-    if (!elSubmit) return;
-    elSubmit.disabled = busy;
-    elSubmit.textContent = busy ? T.submitting : T.submit;
+  function decorateIcons(root) {
+    if (!global.SC || !global.SC.icon || !root) return;
+    Array.prototype.forEach.call(root.querySelectorAll('[data-icon]'), function (node) {
+      node.innerHTML = global.SC.icon(node.getAttribute('data-icon'), 20);
+    });
   }
 
-  /* ── 提交 ── */
-  form.addEventListener('submit', function (e) {
-    e.preventDefault();
-
-    var content = (elContent.value || '').trim();
-    if (content.length < 5) {
-      setStatus(T.tooShort, 'err');
-      elContent.focus();
+  function renderItems(items) {
+    if (!list) return;
+    if (!Array.isArray(items) || !items.length) {
+      var query = search ? search.value.trim() : '';
+      var filtered = query || (statusFilter && statusFilter.value !== 'all') || (typeFilter && typeFilter.value !== 'all');
+      list.innerHTML = '<div class="feedback-message-empty"><span data-icon="inbox" aria-hidden="true"></span><h3>' +
+        (filtered ? L.noMatches : L.noMessages) + '</h3></div>';
+      decorateIcons(list);
+      if (listStatus) listStatus.textContent = L.count(0);
       return;
     }
-    if (content.length > 4000) {
-      setStatus(T.tooLong, 'err');
+    list.innerHTML = items.map(function (item, index) { return renderMessage(item, index, items.length); }).join('');
+    if (listStatus) listStatus.textContent = L.count(items.length);
+  }
+
+  function loadMessages() {
+    if (!list) return;
+    var sequence = ++requestSequence;
+    if (listStatus) listStatus.textContent = L.loading;
+    list.setAttribute('aria-busy', 'true');
+    global.fetch(ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      body: JSON.stringify({
+        action: 'publicList',
+        query: search ? search.value.trim() : '',
+        status: statusFilter ? statusFilter.value : 'all',
+        type: typeFilter ? typeFilter.value : 'all',
+        sort: sort ? sort.value : 'latest'
+      })
+    }).then(function (response) {
+      return response.json().catch(function () { return { ok: false, error: 'bad_response' }; });
+    }).then(function (result) {
+      if (sequence !== requestSequence) return;
+      if (!result || !result.ok) throw new Error((result && result.error) || 'load_failed');
+      renderItems(result.items || []);
+    }).catch(function () {
+      if (sequence !== requestSequence) return;
+      if (listStatus) listStatus.textContent = L.loadFailure;
+      list.innerHTML = '<div class="feedback-message-empty"><span data-icon="inbox" aria-hidden="true"></span><h3>' + L.loadFailure + '</h3></div>';
+      decorateIcons(list);
+    }).then(function () {
+      if (sequence === requestSequence) list.removeAttribute('aria-busy');
+    });
+  }
+
+  function scheduleLoad() {
+    global.clearTimeout(searchTimer);
+    searchTimer = global.setTimeout(loadMessages, 220);
+  }
+
+  if (search) search.addEventListener('input', scheduleLoad);
+  [statusFilter, typeFilter, sort].forEach(function (node) {
+    if (node) node.addEventListener('change', loadMessages);
+  });
+
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();
+    var titleField = $('fbTitle');
+    var detailsField = $('fbDetails');
+    var title = (titleField && titleField.value || '').trim();
+    var details = (detailsField && detailsField.value || '').trim();
+    var button = $('fbSubmit');
+
+    if (title.length < 4) {
+      setStatus(L.titleShort, 'error');
+      if (titleField) titleField.focus();
+      return;
+    }
+    if (details.length < 5) {
+      setStatus(L.detailsShort, 'error');
+      if (detailsField) detailsField.focus();
       return;
     }
 
     var payload = {
-      type: elType ? elType.value : 'other',
-      content: content,
-      contact: elContact ? elContact.value.trim() : '',
-      version: elVersion ? elVersion.value.trim() : '',
-      page: location.pathname,
-      hp: elHp ? elHp.value : ''
+      type: selectedType(),
+      title: title,
+      area: ($('fbArea') && $('fbArea').value || '').trim(),
+      details: details,
+      contact: ($('fbContact') && $('fbContact').value || '').trim(),
+      version: ($('fbVersion') && $('fbVersion').value || '').trim(),
+      page: global.location.pathname,
+      hp: ($('fbHp') && $('fbHp').value || '')
     };
 
-    setBusy(true);
-    setStatus(T.sending, null);
+    if (button) {
+      button.disabled = true;
+      button.textContent = L.submitting;
+    }
+    setStatus(L.submitting, 'loading');
 
-    fetch(ENDPOINT, {
+    global.fetch(ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
-    })
-      .then(function (r) {
-        return r.json().catch(function () { return { ok: false, error: 'bad_response' }; });
-      })
-      .then(function (res) {
-        if (res && res.ok) {
-          var successText = T.received + (res.id || '—') + (isEN ? '. Keep this lookup token: ' : '。请保存查询凭据：') + (res.token || '—');
-          setStatus(successText, 'ok');
-          if (lookupId && res.id) lookupId.value = res.id;
-          if (lookupToken && res.token) lookupToken.value = res.token;
-          elContent.value = '';
-          updateCount();
-          if (elContact) elContact.value = '';
-        } else {
-          setStatus(isEN ? T.submitFailed : ((res && res.message) || T.submitFailed), 'err');
-        }
-      })
-      .catch(function () {
-        setStatus(T.network, 'err');
-      })
-      .then(function () {
-        setBusy(false);
-      });
+    }).then(function (response) {
+      return response.json().catch(function () { return { ok: false, error: 'bad_response' }; });
+    }).then(function (result) {
+      if (!result || !result.ok) throw new Error((result && (result.message || result.error)) || 'submit_failed');
+      form.reset();
+      var versionField = $('fbVersion');
+      if (versionField && global._scFeedbackVersion) versionField.value = global._scFeedbackVersion;
+      setStatus(L.success, 'success');
+      if (search) search.value = '';
+      if (statusFilter) statusFilter.value = 'all';
+      if (typeFilter) typeFilter.value = 'all';
+      if (sort) sort.value = 'latest';
+      loadMessages();
+      if (list) list.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }).catch(function (error) {
+      var network = error && /fetch|network/i.test(error.message || '');
+      var technical = !error || !error.message || /bad_response|submit_failed/i.test(error.message);
+      setStatus(network ? L.network : (technical ? L.failure : error.message), 'error');
+    }).then(function () {
+      if (button) {
+        button.disabled = false;
+        button.textContent = L.submit;
+      }
+    });
   });
+
+  if (global.SC && global.SC.loadDesktopVersion) {
+    global.SC.loadDesktopVersion().then(function (release) {
+      var version = String(release && release.version || '').trim();
+      global._scFeedbackVersion = version;
+      var field = $('fbVersion');
+      if (field && version && !field.value) field.value = version;
+    }).catch(function () {});
+  }
+
+  loadMessages();
 })(window);
