@@ -240,6 +240,7 @@
       if (statusFilter) statusFilter.value = 'all';
       if (typeFilter) typeFilter.value = 'all';
       if (sort) sort.value = 'latest';
+      document.dispatchEvent(new Event('sc:select-sync'));
       loadMessages();
       if (list) list.scrollIntoView({ behavior: global.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
     }).catch(function (error) {

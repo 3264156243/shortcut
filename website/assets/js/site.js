@@ -457,12 +457,19 @@
   /* ═══ 9. 启动 ═════════════════════════════════════════════════════════ */
   /* ═══ 回到顶部 ════════════════════════════════════════════════════════ */
   function initToTop() {
+    var progress = el('div', 'reading-progress');
+    progress.setAttribute('role', 'progressbar');
+    progress.setAttribute('aria-label', document.documentElement.lang === 'en' ? 'Reading progress' : '页面阅读进度');
+    progress.setAttribute('aria-valuemin', '0');
+    progress.setAttribute('aria-valuemax', '100');
+    progress.innerHTML = '<span></span>';
+    document.body.appendChild(progress);
     var btn = el('button', 'to-top');
     btn.type = 'button';
     btn.setAttribute('aria-label', document.documentElement.lang === 'en' ? 'Back to top' : '回到顶部');
     btn.title = document.documentElement.lang === 'en' ? 'Back to top' : '回到顶部';
     btn.innerHTML =
-      '<span class="to-top__ring" aria-hidden="true"></span>' +
+      '<span class="to-top__ring" aria-hidden="true"></span><span class="to-top__percent" aria-hidden="true">0%</span>' +
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
       'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
       '<path d="M12 19V6"/><path d="M5 12l7-7 7 7"/></svg>';
@@ -472,15 +479,18 @@
       var doc = document.documentElement;
       var y = global.pageYOffset;
       var max = (doc.scrollHeight - global.innerHeight) || 1;
-      /* 下滑超过 1.2 屏才出现 */
-      if (y > global.innerHeight * 1.2) btn.classList.add('is-on');
-      else btn.classList.remove('is-on');
-      btn.style.setProperty('--p', Math.min(100, Math.max(0, (y / max) * 100)).toFixed(1));
+      btn.classList.add('is-on');
+      var percent = Math.min(100, Math.max(0, (y / max) * 100));
+      progress.firstChild.style.width = percent + '%';
+      progress.setAttribute('aria-valuenow', Math.round(percent));
+      btn.querySelector('.to-top__percent').textContent = Math.round(percent) + '%';
+      btn.style.setProperty('--p', percent + '%');
     }
 
     var onScroll = function () { update(); };
     global.addEventListener('scroll', onScroll, { passive: true });
     global.addEventListener('resize', update);
+    if (global.ResizeObserver) new ResizeObserver(update).observe(document.body);
     update();
 
     btn.addEventListener('click', function () {
@@ -489,9 +499,68 @@
       global.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
     });
   }
+  function initSelects() {
+    document.querySelectorAll('.community-layout select').forEach(function (select) {
+      var wrap = el('div', 'custom-select');
+      select.parentNode.insertBefore(wrap, select);
+      wrap.appendChild(select);
+      select.classList.add('sr-only');
+      select.tabIndex = -1;
+      select.setAttribute('aria-hidden', 'true');
+      var button = el('button', 'custom-select__trigger');
+      button.type = 'button';
+      button.id = select.id + '-trigger';
+      button.setAttribute('aria-haspopup', 'listbox');
+      button.setAttribute('aria-expanded', 'false');
+      var list = el('div', 'custom-select__list');
+      list.id = select.id + '-options';
+      list.setAttribute('role', 'listbox');
+      var labelNode = select.labels[0] && select.labels[0].cloneNode(true);
+      if (labelNode) labelNode.querySelectorAll('select,.custom-select').forEach(function (node) { node.remove(); });
+      var label = select.getAttribute('aria-label') || (labelNode && labelNode.textContent.trim()) || select.id;
+      list.setAttribute('aria-label', label);
+      button.setAttribute('aria-controls', list.id);
+      list.hidden = true;
+      var choices = [];
+      function sync() {
+        var current = select.options[select.selectedIndex];
+        button.textContent = current ? current.textContent : '';
+        button.setAttribute('aria-label', label + ': ' + button.textContent);
+        choices.forEach(function (choice, i) { choice.setAttribute('aria-selected', String(i === select.selectedIndex)); });
+      }
+      function close(focus) { list.hidden = true; button.setAttribute('aria-expanded', 'false'); if (focus) button.focus(); }
+      function open() { list.hidden = false; button.setAttribute('aria-expanded', 'true'); (choices[select.selectedIndex] || choices[0]).focus(); }
+      Array.from(select.options).forEach(function (option, i) {
+        var choice = el('button', 'custom-select__option');
+        choice.type = 'button'; choice.tabIndex = -1;
+        choice.setAttribute('role', 'option'); choice.textContent = option.textContent;
+        choice.disabled = option.disabled;
+        choice.addEventListener('click', function () { select.selectedIndex = i; select.dispatchEvent(new Event('change', { bubbles: true })); close(true); });
+        choices.push(choice); list.appendChild(choice);
+      });
+      button.addEventListener('click', function () { if (list.hidden) open(); else close(false); });
+      wrap.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') { close(true); event.preventDefault(); }
+        if (event.key === 'Tab') close(false);
+        if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+          event.preventDefault();
+          if (list.hidden) { open(); return; }
+          var i = choices.indexOf(document.activeElement);
+          i = event.key === 'Home' ? 0 : event.key === 'End' ? choices.length - 1 : (i + (event.key === 'ArrowDown' ? 1 : -1) + choices.length) % choices.length;
+          choices[i].focus();
+        }
+      });
+      document.addEventListener('click', function (event) { if (!wrap.contains(event.target)) close(false); });
+      wrap.addEventListener('focusout', function () { setTimeout(function () { if (!wrap.contains(document.activeElement)) close(false); }, 0); });
+      select.addEventListener('change', sync);
+      document.addEventListener('sc:select-sync', sync);
+      if (select.form) select.form.addEventListener('reset', function () { setTimeout(sync, 0); });
+      wrap.appendChild(button); wrap.appendChild(list); sync();
+    });
+  }
   function boot() {
     /* 每个初始化互相隔离：任何一项抛错都不能连带其它功能失效 */
-    var tasks = [initNav, initToTop, initReveal];
+    var tasks = [initNav, initToTop, initReveal, initSelects];
     for (var i = 0; i < tasks.length; i++) {
       try {
         tasks[i]();
