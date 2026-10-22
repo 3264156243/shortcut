@@ -68,7 +68,7 @@
   /* ═══ 3. 导航 ═════════════════════════════════════════════════════════ */
   function buildNav() {
     var nav = el('nav', 'nav');
-    nav.setAttribute('aria-label', '主导航');
+    nav.setAttribute('aria-label', document.documentElement.lang === 'en' ? 'Main navigation' : '主导航');
 
     var inner = el('div', 'nav__inner');
     var isEN = (document.documentElement.getAttribute('lang') || 'zh-CN').toLowerCase().indexOf('en') === 0;
@@ -149,8 +149,8 @@
     /* 明暗切换 */
     var mode = el('button', 'nav__mode');
     mode.type = 'button';
-    mode.setAttribute('aria-label', '切换明暗主题');
-    mode.title = '切换明暗主题';
+    mode.setAttribute('aria-label', isEN ? 'Switch colour theme' : '切换明暗主题');
+    mode.title = isEN ? 'Switch colour theme' : '切换明暗主题';
     mode.innerHTML =
       '<span class="mode-icon mode-icon--moon" aria-hidden="true">' +
         '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>' +
@@ -167,7 +167,7 @@
 
     var burger = el('button', 'nav__burger');
     burger.type = 'button';
-    burger.setAttribute('aria-label', '打开导航菜单');
+    burger.setAttribute('aria-label', isEN ? 'Open navigation' : '打开导航菜单');
     burger.setAttribute('aria-expanded', 'false');
     burger.appendChild(el('span'));
     actions.appendChild(burger);
@@ -255,6 +255,7 @@
 
   function openModal(boxHtml) {
     closeModal();
+    var returnFocus = document.activeElement;
     var m = el('div', 'modal');
     m.setAttribute('data-open', 'true');
     m.setAttribute('role', 'dialog');
@@ -262,18 +263,27 @@
     var box = el('div', 'modal__box', boxHtml);
     var x = el('button', 'modal__close', '&times;');
     x.type = 'button';
-    x.setAttribute('aria-label', '关闭');
+    x.setAttribute('aria-label', document.documentElement.lang === 'en' ? 'Close' : '关闭');
     box.appendChild(x);
     m.appendChild(box);
 
-    function onKey(e) { if (e.key === 'Escape') closeModal(); }
+    var heading = box.querySelector('h2, h3');
+    if (heading) { heading.id = 'sc-modal-title'; m.setAttribute('aria-labelledby', heading.id); }
+    function onKey(e) {
+      if (e.key === 'Escape') { closeModal(); return; }
+      if (e.key !== 'Tab') return;
+      var nodes = box.querySelectorAll('button:not(:disabled), a[href], input, [tabindex="0"]');
+      var first = nodes[0], last = nodes[nodes.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
     m.addEventListener('click', function (e) { if (e.target === m) closeModal(); });
     x.addEventListener('click', closeModal);
     document.addEventListener('keydown', onKey);
 
     document.body.appendChild(m);
     document.body.style.overflow = 'hidden';
-    activeModal = { node: m, onKey: onKey };
+    activeModal = { node: m, onKey: onKey, returnFocus: returnFocus };
     var focusable = box.querySelector('button, a');
     if (focusable) focusable.focus();
     return m;
@@ -284,6 +294,7 @@
     document.removeEventListener('keydown', activeModal.onKey);
     if (activeModal.node.parentNode) activeModal.node.parentNode.removeChild(activeModal.node);
     document.body.style.overflow = '';
+    if (activeModal.returnFocus && activeModal.returnFocus.isConnected) activeModal.returnFocus.focus();
     activeModal = null;
   }
 
@@ -378,7 +389,7 @@
     var base = (D.SITE && D.SITE.androidBase) || '/updates/android/';
     return fetchJson((D.SITE && D.SITE.androidLatestJson) || '/updates/android/latest.json')
       .then(function (j) {
-        if (!j) return null;
+        if (!j) return { version: F.version, versionCode: F.versionCode || 0, size: F.size || 0, url: base + 'ShortCut-' + F.version + '.apk', notes: '' };
         return {
           version: j.versionName || F.version,
           versionCode: j.versionCode || F.versionCode || 0,
@@ -410,8 +421,10 @@
       var setDrawer = function (open) {
         drawer.setAttribute('data-open', open ? 'true' : 'false');
         burger.setAttribute('aria-expanded', open ? 'true' : 'false');
-        burger.setAttribute('aria-label', open ? '关闭导航菜单' : '打开导航菜单');
+        var english = document.documentElement.lang === 'en';
+        burger.setAttribute('aria-label', open ? (english ? 'Close navigation' : '关闭导航菜单') : (english ? 'Open navigation' : '打开导航菜单'));
         document.body.style.overflow = open ? 'hidden' : '';
+        if (open) { var first = drawer.querySelector('a'); if (first) first.focus(); }
       };
       burger.addEventListener('click', function () {
         setDrawer(drawer.getAttribute('data-open') !== 'true');
@@ -420,7 +433,7 @@
         if (e.target.tagName === 'A') setDrawer(false);
       });
       document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape' && drawer.getAttribute('data-open') === 'true') setDrawer(false);
+        if (e.key === 'Escape' && drawer.getAttribute('data-open') === 'true') { setDrawer(false); burger.focus(); }
       });
       global.addEventListener('resize', function () {
         if (global.innerWidth > 860 && drawer.getAttribute('data-open') === 'true') setDrawer(false);
@@ -446,8 +459,8 @@
   function initToTop() {
     var btn = el('button', 'to-top');
     btn.type = 'button';
-    btn.setAttribute('aria-label', '回到顶部');
-    btn.title = '回到顶部';
+    btn.setAttribute('aria-label', document.documentElement.lang === 'en' ? 'Back to top' : '回到顶部');
+    btn.title = document.documentElement.lang === 'en' ? 'Back to top' : '回到顶部';
     btn.innerHTML =
       '<span class="to-top__ring" aria-hidden="true"></span>' +
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +

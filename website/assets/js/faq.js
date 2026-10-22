@@ -1,52 +1,27 @@
-/**
- * FAQ 页逻辑
- * ---------------------------------------------------------------------------
- * 数据来自 data.js 的 FAQ（按分组），单一真源：
- *   - 左侧目录按分组生成锚点
- *   - 右侧用原生 <details>，无 JS 也能展开
- */
-(function (global) {
+(function () {
   'use strict';
-
-  var D = global.SC_DATA || {};
-  var doc = document;
-
-  var groups = D.FAQ || [];
-  if (!groups.length) return;
-
-  var toc = doc.getElementById('faqToc');
-  var host = doc.getElementById('faqGroups');
-
-  function slug(s, i) { return 'faq-' + i; }
-
-  if (toc) {
-    toc.innerHTML = groups.map(function (g, i) {
-      return '<a href="#' + slug(g.group, i) + '">' + g.group + '</a>';
-    }).join('');
-  }
-
-  if (host) {
+  var groups = SC.getData().FAQ || [];
+  var en = document.documentElement.lang === 'en';
+  var toc = document.getElementById('faqToc'), host = document.getElementById('faqGroups');
+  var input = document.getElementById('faqSearch'), result = document.getElementById('faqResult');
+  if (!host) return;
+  function esc(s) { return String(s).replace(/[&<>"']/g, function(c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function render() {
+    var q = input ? input.value.trim().toLocaleLowerCase() : '';
+    var count = 0, links = [];
     host.innerHTML = groups.map(function (g, i) {
-      var items = (g.items || []).map(function (it) {
-        return '<details class="faq">' +
-          '<summary>' + it.q + '</summary>' +
-          '<div class="faq__body"><p>' + it.a + '</p></div>' +
-        '</details>';
-      }).join('');
-      return '<div class="faq-group reveal" id="' + slug(g.group, i) + '">' +
-        '<h3>' + g.group + '</h3>' + items +
-      '</div>';
+      var items = g.items.filter(function (it) { return (it.q + ' ' + it.a).toLocaleLowerCase().includes(q); });
+      count += items.length;
+      if (!items.length) return '';
+      links.push('<a href="#faq-' + i + '">' + esc(g.group) + '</a>');
+      return '<section class="faq-group" id="faq-' + i + '"><h3>' + esc(g.group) + '</h3>' + items.map(function (it) {
+        return '<details class="faq"' + (q ? ' open' : '') + '><summary>' + esc(it.q) + '</summary><div class="faq__body"><p>' + esc(it.a) + '</p></div></details>';
+      }).join('') + '</section>';
     }).join('');
-
-    if ('IntersectionObserver' in global) {
-      var io = new IntersectionObserver(function (es) {
-        es.forEach(function (e) {
-          if (e.isIntersecting) { e.target.classList.add('is-in'); io.unobserve(e.target); }
-        });
-      }, { threshold: 0.03 });
-      Array.prototype.forEach.call(host.querySelectorAll('.reveal'), function (n) { io.observe(n); });
-    } else {
-      Array.prototype.forEach.call(host.querySelectorAll('.reveal'), function (n) { n.classList.add('is-in'); });
-    }
+    if (toc) toc.innerHTML = links.join('');
+    if (!count) host.innerHTML = '<div class="faq-empty">' + (en ? 'No matching answers. Try another word or leave feedback.' : '没有找到匹配的问题。换一个关键词，或到反馈页告诉我们。') + '</div>';
+    if (result) result.textContent = q ? (en ? count + ' matching questions' : '找到 ' + count + ' 个相关问题') : '';
   }
-})(window);
+  if (input) input.addEventListener('input', render);
+  render();
+})();

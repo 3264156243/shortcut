@@ -174,8 +174,7 @@
   /* ═══ 3. 安卓端 ═══════════════════════════════════════════════════════ */
   global.SC.loadAndroidVersion().then(function (a) {
     if (!a) return;
-    setText('androidMeta', L.androidVersion + a.version + (a.versionCode ? (isEN ? ' (versionCode ' : '（versionCode ') + a.versionCode + (isEN ? ')' : '）') : '') +
-      ' · ' + global.SC.formatSize(a.size) + ' · Android');
+    setText('androidMeta', L.androidVersion + a.version + ' · ' + global.SC.formatSize(a.size) + ' · Android');
     var btn = $('androidDl');
     if (btn && a.url) btn.href = a.url;
   });

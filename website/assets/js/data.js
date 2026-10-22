@@ -17,8 +17,8 @@
     nameZh: 'SC',
     tagline: '把常用的事，收进一页',
     description: '快捷启动、纸条任务墙、SC球与手机联动，把每天重复的小动作收进一个顺手的 Windows 工具。',
-    themeColor: '#f3eee4',
-    accent: '#e45b25',
+    themeColor: '#f6f6f3',
+    accent: '#ed5b23',
     // 更新清单（同域，无 CORS）
     latestJson: '/updates/latest.json',
     androidLatestJson: '/updates/android/latest.json',
@@ -35,13 +35,12 @@
       children: [
         { label: '快捷启动', href: '/features/shortcut.html' },
         { label: '任务墙', href: '/features/taskwall.html' },
-        { label: 'SC球 灵动岛', href: '/features/scball.html' },
+        { label: 'SC球', href: '/features/scball.html' },
         { label: '手机控电脑', href: '/features/control.html' },
         { label: '文件快传', href: '/features/transfer.html' },
         { label: '安卓端', href: '/features/android.html' }
       ]
     },
-    { id: 'download', label: '下载', href: '/download.html' },
     { id: 'changelog', label: '更新日志', href: '/changelog.html' },
     { id: 'faq', label: '常见问题', href: '/faq.html' },
     { id: 'feedback', label: '问题反馈', href: '/feedback.html' }
@@ -167,7 +166,7 @@
       group: '安装与更新',
       items: [
         { q: '支持哪些系统？', a: '支持 Windows 10 / 11 64 位。Windows 11 可以直接运行；部分 Windows 10 电脑会由安装程序提示补齐系统组件。' },
-        { q: '安装时提示「未知发布者」怎么办？', a: '当前安装包未做代码签名，Windows SmartScreen 会提示未知发布者。点击「更多信息 → 仍要运行」即可。更新包本身有签名校验，不会被替换。' },
+        { q: '安装时提示「未知发布者」怎么办？', a: '当前安装包未做代码签名。请确认来自本站的可信下载渠道，再根据 Windows 提示操作。' },
         { q: '安装新版本会丢失任务和快捷方式吗？', a: '不会。快捷方式、任务和设置在覆盖安装时会保留，并且软件会保留最近三份本地备份。' },
         { q: '如何检查更新？', a: '打开主面板进入「更新」页，点击检查更新。发现新版本后会展示版本号与更新说明，由你确认后才下载。' },
         { q: '很旧的版本无法检查更新怎么办？', a: '2.4.x 及更早版本可能无法在软件里完成更新。手动下载一次 2.5.1 或更新版本覆盖安装即可，原有数据会保留。' }
@@ -192,7 +191,7 @@
     {
       group: '隐私与数据',
       items: [
-        { q: '数据会上传到网络吗？', a: '快捷方式、任务墙、使用记录等桌面数据全部保存在本机。只有你主动使用移动互联功能（任务同步、文件快传、手机控电脑）时，数据才会通过 ShortCut 的加密联动通道传输。' },
+        { q: '数据会上传到网络吗？', a: '快捷方式、任务与使用记录默认保存在本机。使用手机联动、文件快传、翻译等联网功能时，会传输该功能需要的数据。' },
         { q: '需要登录账号吗？', a: '桌面端使用激活码激活；移动互联使用绑定码把手机与电脑配对，不需要注册账号。' }
       ]
     },
@@ -210,7 +209,7 @@
     columns: [
       {
         key: 'product', title: '产品', links: [
-          { key: 'overview', label: '功能总览', href: '/features/shortcut.html' },
+          { key: 'overview', label: '快捷启动', href: '/features/shortcut.html' },
           { key: 'download', label: '下载', href: '/download.html' },
           { key: 'changelog', label: '更新日志', href: '/changelog.html' },
           { key: 'faq', label: '常见问题', href: '/faq.html' },

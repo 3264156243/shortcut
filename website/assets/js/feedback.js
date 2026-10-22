@@ -241,7 +241,7 @@
       if (typeFilter) typeFilter.value = 'all';
       if (sort) sort.value = 'latest';
       loadMessages();
-      if (list) list.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (list) list.scrollIntoView({ behavior: global.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
     }).catch(function (error) {
       var network = error && /fetch|network/i.test(error.message || '');
       var technical = !error || !error.message || /bad_response|submit_failed/i.test(error.message);

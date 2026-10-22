@@ -58,7 +58,7 @@ for (const file of files) {
 
   /* 同时匹配带/不带已有 ?v= 的引用 */
   after = after.replace(
-    /(\/assets\/(?:css|js)\/[A-Za-z0-9._-]+\.(?:css|js))(\?v=[a-f0-9]{8})?/g,
+    /(\/assets\/(?:css|js|img)\/[A-Za-z0-9._/-]+\.(?:css|js|png|webp|svg|jpg|ico))(\?v=[a-f0-9]{8})?/g,
     (match, pathAndFile) => {
       const hash = hashOf(pathAndFile);
       if (!hash) return match;

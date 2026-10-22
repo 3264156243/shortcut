@@ -1,6 +1,6 @@
 ﻿# 官网部署脚本
 # ---------------------------------------------------------------------------
-# 把 website/ 下的纯静态站点发布到服务器站点根，并在发布前备份旧首页。
+# 把 website/ 下的纯静态站点发布到服务器站点根，并在发布前备份全部覆盖内容。
 #
 # 用法：
 #   powershell -ExecutionPolicy Bypass -File scripts\deploy-site.ps1
@@ -9,7 +9,7 @@
 # 安全约定：
 #   - 只上传白名单文件/目录，绝不上传 _bodies/ _preview*.html
 #   - 不触碰既有目录：mobile/ taskwall/ transfer/ control/ sync/ updates/ activation/
-#   - 发布前把线上 index.html 备份成 index.html.bak-<时间戳>，回滚即 cp 回来
+#   - 发布前生成 /www/wwwroot/ShortCut-site-backup-<时间戳>.tar.gz
 #
 # 依赖：Posh-SSH（Install-Module Posh-SSH -Scope CurrentUser）
 
@@ -40,6 +40,8 @@ $dirs      = @('features', 'en', 'assets')
 
 $stage = Join-Path $env:TEMP ('sc-site-' + [guid]::NewGuid().ToString('N').Substring(0, 6))
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
+$stage = [IO.Path]::GetFullPath($stage)
+if (-not $stage.StartsWith(([IO.Path]::GetFullPath($env:TEMP).TrimEnd('\') + '\'), [StringComparison]::OrdinalIgnoreCase)) { throw '暂存目录不在 TEMP 内' }
 
 try {
     foreach ($f in $rootFiles) {
@@ -69,7 +71,15 @@ try {
 
     $zip = Join-Path $env:TEMP 'sc-site.zip'
     Remove-Item $zip -Force -ErrorAction SilentlyContinue
-    Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [IO.Compression.ZipFile]::Open($zip, [IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($entry in (Get-ChildItem -LiteralPath $stage -Recurse -File)) {
+            $relative = $entry.FullName.Substring($stage.Length + 1).Replace('\', '/')
+            [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $entry.FullName, $relative, [IO.Compression.CompressionLevel]::Optimal) | Out-Null
+        }
+    } finally { $archive.Dispose() }
 
     $files = (Get-ChildItem $stage -Recurse -File).Count
     $kb = [math]::Round((Get-Item $zip).Length / 1KB, 1)
@@ -95,23 +105,26 @@ try {
 
         $ts = Get-Date -Format 'yyyyMMdd-HHmmss'
         $cmd = @"
+set -e
 cd $remoteRoot
-[ -f index.html ] && cp -p index.html index.html.bak-$ts
+tar -czf /www/wwwroot/ShortCut-site-backup-$ts.tar.gz index.html download.html changelog.html faq.html feedback.html features en assets
 unzip -o -q /tmp/sc-site.zip
-chown -R www:www index.html download.html changelog.html faq.html features assets
-chmod -R 644 features en assets/js assets/css assets/img 2>/dev/null; chmod 644 *.html; find features en -type d -exec chmod 755 {} \;
-chmod 755 features en assets assets/css assets/js assets/img
+chown -R www:www index.html download.html changelog.html faq.html feedback.html features en assets
+chmod 644 index.html download.html changelog.html faq.html feedback.html
+find features en assets -type d -exec chmod 755 {} \;
+find features en assets -type f -exec chmod 644 {} \;
 rm -f /tmp/sc-site.zip
-echo "OK backup=index.html.bak-$ts"
+echo "OK backup=/www/wwwroot/ShortCut-site-backup-$ts.tar.gz"
 "@
-        $out = (Invoke-SSHCommand -SessionId $sid -Command $cmd -TimeOut 180).Output
-        $out | ForEach-Object { Write-Host ('  ' + $_) }
+        $result = Invoke-SSHCommand -SessionId $sid -Command $cmd -TimeOut 180
+        $result.Output | ForEach-Object { Write-Host ('  ' + $_) }
+        if ($result.ExitStatus -ne 0) { throw ('远程部署失败：' + ($result.Error -join ' ')) }
     }
     finally {
         Remove-SSHSession -SessionId $sid | Out-Null
     }
 
-    Write-Host "`n部署完成。回滚：cp -p $remoteRoot/index.html.bak-<时间戳> $remoteRoot/index.html" -ForegroundColor Green
+    Write-Host "`n部署完成。静态站点完整备份：/www/wwwroot/ShortCut-site-backup-$ts.tar.gz" -ForegroundColor Green
 }
 finally {
     Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
