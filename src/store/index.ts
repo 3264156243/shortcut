@@ -226,8 +226,10 @@ declare global {
       fileTransferSendText: (text: string) => Promise<any>;
       fileTransferSendFile: (filePath: string) => Promise<any>;
       fileTransferDownload: (fileId: string, name: string) => Promise<any>;
+      fileTransferDownloadShared: (token: string, name: string) => Promise<any>;
       fileTransferDelete: (messageId: string) => Promise<any>;
       fileTransferShareText: (text: string, code: string, hours: number) => Promise<any>;
+      fileTransferShareFile: (messageId: string, code: string, hours: number) => Promise<any>;
       fileTransferShareList: () => Promise<any>;
       fileTransferShareDelete: (id: string) => Promise<any>;
       fileTransferClaim: (code: string) => Promise<any>;
@@ -1253,4 +1255,3 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 }));
-

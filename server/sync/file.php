@@ -35,7 +35,8 @@ $fileId = safe_file_id(file_input('fileId'));
 // 1) token 方式：他人通过共享领取的一次性下载令牌，无需绑定身份
 if ($action === 'download' && trim((string)file_input('token')) !== '') {
     $token = trim((string)file_input('token'));
-    $shared = consume_share_download_token($token);
+    // 先校验但不消费；完整输出成功后再消费，网络在首字节前失败时用户仍可重试。
+    $shared = peek_share_download_token($token);
     if (!$shared || $shared['fileId'] === '') file_fail('下载令牌无效或已过期', 403);
     $bindId = $shared['bindId'];
     $fileId = $shared['fileId'];
@@ -53,7 +54,9 @@ if ($action === 'download' && trim((string)file_input('token')) !== '') {
         $part = $dir . '/chunk-' . $i . '.part';
         if (!is_file($part)) { http_response_code(500); exit; }
         readfile($part);
+        if (connection_aborted()) exit;
     }
+    consume_share_download_token($token);
     exit;
 }
 
@@ -72,6 +75,16 @@ if ($action === 'uploadChunk') {
     if ($index < 0 || $index >= (int)$meta['chunkCount']) file_fail('分片序号无效');
     if (!isset($_FILES['chunk']) || $_FILES['chunk']['error'] !== UPLOAD_ERR_OK) file_fail('分片接收失败');
     $tmp = $_FILES['chunk']['tmp_name'];
+    $chunkSize = (int)($meta['chunkSize'] ?? 0);
+    $declaredSize = (int)($meta['size'] ?? 0);
+    $expectedSize = $index === (int)$meta['chunkCount'] - 1
+        ? $declaredSize - ($index * $chunkSize)
+        : $chunkSize;
+    $actualSize = (int)@filesize($tmp);
+    if ($expectedSize <= 0 || $actualSize !== $expectedSize) {
+        @unlink($tmp);
+        file_fail('分片大小不符', 400);
+    }
     // 分片哈希校验（客户端上报时校验，未上报则跳过以向后兼容）
     $chunkHash = trim((string)file_input('chunkHash'));
     if ($chunkHash !== '' && !verify_chunk_hash($tmp, $chunkHash)) {
@@ -80,12 +93,16 @@ if ($action === 'uploadChunk') {
     }
     $target = file_dir($bindId, $fileId) . '/chunk-' . $index . '.part';
     if (!move_uploaded_file($tmp, $target)) file_fail('分片保存失败', 500);
-    $meta = load_file_meta($bindId, $fileId);
-    $uploaded = array_map('intval', (array)($meta['uploaded'] ?? []));
-    if (!in_array($index, $uploaded, true)) $uploaded[] = $index;
-    sort($uploaded);
-    $meta['uploaded'] = $uploaded;
-    if (!save_file_meta($bindId, $meta)) file_fail('上传状态保存失败', 500);
+    $uploaded = update_file_meta($bindId, $fileId, function ($current) use ($index) {
+        if (!is_array($current) || !empty($current['complete'])) return ['data' => $current, 'result' => false];
+        $list = array_map('intval', (array)($current['uploaded'] ?? []));
+        if (!in_array($index, $list, true)) $list[] = $index;
+        sort($list);
+        $current['uploaded'] = $list;
+        $current['updatedAt'] = date('c');
+        return ['data' => $current, 'result' => $list];
+    });
+    if (!is_array($uploaded)) file_fail('上传状态保存失败', 500);
     file_reply(['success' => true, 'fileId' => $fileId, 'chunkIndex' => $index, 'uploaded' => $uploaded]);
 }
 

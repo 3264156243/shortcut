@@ -1122,6 +1122,11 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             let name = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
             tokio::task::spawn_blocking(move || transfer::download(&file_id, &name)).await.unwrap_or_else(|e| json!({ "success": false, "message": e.to_string() }))
         }
+        "fileTransferDownloadShared" => {
+            let token = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let name = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            tokio::task::spawn_blocking(move || transfer::download_shared(&token, &name)).await.unwrap_or_else(|e| json!({ "success": false, "message": e.to_string() }))
+        }
         "fileTransferDelete" => {
             let id = args.first().and_then(|v| v.as_str()).unwrap_or("");
             transfer::delete_message(id)
@@ -1131,6 +1136,12 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
             let code = args.get(1).and_then(|v| v.as_str()).unwrap_or("");
             let hours = args.get(2).and_then(|v| v.as_i64()).unwrap_or(24);
             transfer::share_text(text, code, hours)
+        }
+        "fileTransferShareFile" => {
+            let message_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            let code = args.get(1).and_then(|v| v.as_str()).unwrap_or("");
+            let hours = args.get(2).and_then(|v| v.as_i64()).unwrap_or(1);
+            transfer::share_file(message_id, code, hours)
         }
         "fileTransferShareList" => transfer::share_list(),
         "fileTransferShareDelete" => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Clipboard, Copy, Download, FilePlus2, RefreshCw, Send, Share2, Trash2 } from 'lucide-react';
 import { useStore } from '../store';
 
@@ -40,33 +40,47 @@ export default function FileTransferPanel() {
   const [shares, setShares] = useState<TransferShare[]>([]);
   const [sharesOpen, setSharesOpen] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const refreshingRef = useRef(false);
+  const lastRefreshErrorRef = useRef('');
 
-  const refresh = async () => {
-    setLoading(true);
-    const result = await window.electronAPI?.fileTransferGetState?.();
-    setBound(result?.bound === true);
-    setBindCode(result?.binding?.code || '');
-    if (result?.success) setMessages(Array.isArray(result.messages) ? result.messages : []);
-    else if (result?.message) addToast(result.message, 'error');
-    setLoading(false);
-  };
+  const refresh = useCallback(async (showLoading = false) => {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
+    if (showLoading) setLoading(true);
+    try {
+      const result = await window.electronAPI?.fileTransferGetState?.();
+      setBound(result?.bound === true);
+      setBindCode(result?.binding?.code || '');
+      if (result?.success) {
+        setMessages(Array.isArray(result.messages) ? result.messages : []);
+        lastRefreshErrorRef.current = '';
+      } else if (result?.message && result.message !== lastRefreshErrorRef.current) {
+        lastRefreshErrorRef.current = result.message;
+        addToast(result.message, 'error');
+      }
+    } finally {
+      refreshingRef.current = false;
+      setLoading(false);
+    }
+  }, [addToast]);
 
   useEffect(() => {
-    void refresh();
+    void refresh(true);
     const timer = window.setInterval(() => void refresh(), 3000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [refresh]);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages.length]);
 
   const sendText = async () => {
     const value = text.trim();
     if (!value || sending) return;
     setSending(true);
-    const result = await window.electronAPI?.fileTransferSendText?.(value);
-    setSending(false);
-    if (!result?.success) return addToast(result?.message || '发送失败', 'error');
-    setText('');
-    await refresh();
+    try {
+      const result = await window.electronAPI?.fileTransferSendText?.(value);
+      if (!result?.success) return addToast(result?.message || '发送失败', 'error');
+      setText('');
+      await refresh();
+    } finally { setSending(false); }
   };
 
   const deleteMessage = async (id: string) => {
@@ -80,18 +94,19 @@ export default function FileTransferPanel() {
     const filePath = await window.electronAPI?.openFile?.();
     if (!filePath) return;
     setUploading(true);
-    const result = await window.electronAPI?.fileTransferSendFile?.(filePath);
-    setUploading(false);
-    if (!result?.success) return addToast(result?.message || '文件发送失败', 'error');
-    addToast('文件已发送', 'success');
-    await refresh();
+    try {
+      const result = await window.electronAPI?.fileTransferSendFile?.(filePath);
+      if (!result?.success) return addToast(result?.message || '文件发送失败', 'error');
+      addToast('文件已发送', 'success');
+      await refresh();
+    } finally { setUploading(false); }
   };
 
   const downloadFile = async (message: TransferMessage) => {
     if (!message.fileId || !message.name) return;
     const result = await window.electronAPI?.fileTransferDownload?.(message.fileId, message.name);
     if (!result?.success) return addToast(result?.message || '下载失败', 'error');
-    addToast(`已保存到下载目录：${message.name}`, 'success');
+    addToast(`已保存：${result.path || message.name}`, 'success');
   };
 
   const claim = async () => {
@@ -99,8 +114,14 @@ export default function FileTransferPanel() {
     if (code.length !== 6) return addToast('请输入 6 位接收密码', 'info');
     const result = await window.electronAPI?.fileTransferClaim?.(code);
     if (!result?.success) return addToast(result?.message || '领取失败', 'error');
-    const value = result?.message?.text || '';
-    if (value) {
+    const claimed = result?.message || {};
+    const value = claimed.text || '';
+    if ((claimed.type === 'file' || claimed.type === 'image') && claimed.fileId) {
+      if (!result.downloadToken) return addToast('共享下载令牌无效，请重新领取', 'error');
+      const download = await window.electronAPI?.fileTransferDownloadShared?.(result.downloadToken, claimed.name || '共享文件');
+      if (!download?.success) return addToast(download?.message || '共享文件下载失败', 'error');
+      addToast(`共享文件已保存：${download.path || claimed.name}`, 'success');
+    } else if (value) {
       await window.electronAPI?.copyText?.(value);
       addToast('文本已复制到剪贴板', 'success');
     }
@@ -115,6 +136,15 @@ export default function FileTransferPanel() {
     setShareOpen(false);
     setShareCode(result.code || '');
     addToast(`接收密码：${result.code}`, 'success');
+    await loadShares();
+  };
+
+  const createFileShare = async (message: TransferMessage) => {
+    if (!message.id) return;
+    const result = await window.electronAPI?.fileTransferShareFile?.(message.id, shareCode.trim().toUpperCase(), shareHours);
+    if (!result?.success) return addToast(result?.message || '文件共享创建失败', 'error');
+    setShareCode(result.code || '');
+    addToast(`文件接收密码：${result.code}`, 'success');
     await loadShares();
   };
 
@@ -169,11 +199,12 @@ export default function FileTransferPanel() {
               <div key={message.id} className={`group flex ${mine ? 'justify-end' : 'justify-start'}`}>
                 <div className="max-w-[74%]">
                   <div className="rounded-lg px-3 py-2.5 text-sm leading-6" style={{ background: mine ? 'var(--color-accent)' : 'var(--color-bg-card)', color: mine ? 'white' : 'var(--color-text)', border: mine ? '0' : '1px solid var(--color-border)' }}>
-                    {message.type === 'file' ? <button type="button" onClick={() => void downloadFile(message)} className="flex items-center gap-2 text-left"><Download size={16} /><span><b className="block font-medium">{message.name}</b><small className="opacity-70">{formatBytes(message.size || 0)}</small></span></button> : message.text}
+                    {message.type === 'file' || message.type === 'image' ? <button type="button" onClick={() => void downloadFile(message)} className="flex items-center gap-2 text-left"><Download size={16} /><span><b className="block font-medium">{message.name}</b><small className="opacity-70">{formatBytes(message.size || 0)}</small></span></button> : message.text}
                   </div>
                   <div className={`mt-1 flex items-center gap-1 text-[10px] ${mine ? 'justify-end' : ''}`} style={{ color: 'var(--color-text-muted)' }}>
                     <span>{new Date(message.createdAt).toLocaleString('zh-CN', { hour12: false })}</span>
                     {message.type === 'text' && <button type="button" onClick={() => { void window.electronAPI?.copyText?.(message.text || ''); addToast('已复制', 'success'); }} title="复制" className="p-1"><Copy size={11} /></button>}
+                    {(message.type === 'file' || message.type === 'image') && <button type="button" onClick={() => void createFileShare(message)} title="创建文件共享" className="p-1"><Share2 size={11} /></button>}
                     <button type="button" onClick={() => void deleteMessage(message.id)} title="删除" className="p-1"><Trash2 size={11} /></button>
                   </div>
                 </div>

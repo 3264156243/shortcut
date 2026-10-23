@@ -147,13 +147,16 @@
   const $ = (id) => document.getElementById(id);
   let auth = sdk.binding();
   let pollTimer = 0;
+  let pollBusy = false;
+  let renderedOnce = false;
 
   /** 兼容旧调用点：payload 里带 action，其余字段透传；失败时抛出（沿用本页原有语义） */
   function api(payload) {
     const body = Object.assign({}, payload || {});
     const action = body.action;
     delete body.action;
-    return sdk.request(action, body).then((d) => {
+    const request = action === 'transfer.claim' ? sdk.requestPublic(action, body) : sdk.request(action, body);
+    return request.then((d) => {
       if (!d.success) {
         if (d.needBind) { auth = null; goBind(); }
         throw new Error(d.message || '服务暂时不可用');
@@ -175,6 +178,7 @@
   // ===== 消息 =====
   function renderMessages(list) {
     const box = $('messages');
+    const keepBottom = !renderedOnce || box.scrollHeight - box.scrollTop - box.clientHeight < 80;
     box.innerHTML = '';
     (list || []).forEach((item) => {
       const mine = item.sender === 'mobile';
@@ -207,20 +211,25 @@
       meta.appendChild(del);
       wrap.appendChild(bubble); wrap.appendChild(meta); row.appendChild(wrap); box.appendChild(row);
     });
-    box.scrollTop = box.scrollHeight;
+    if (keepBottom) box.scrollTop = box.scrollHeight;
+    renderedOnce = true;
   }
 
   function loadMessages() {
     if (!ensured()) return Promise.resolve();
+    if (pollBusy) return Promise.resolve();
+    pollBusy = true;
     return api({ action: 'transfer.messages', bindId: auth.bindId, side: 'mobile', mobileToken: auth.mobileToken })
       .then((d) => {
         if (!d.success) { if (/失效/.test(d.message || '')) { sdk.clearBinding(); auth = null; goBind(); } throw new Error(d.message || '读取失败'); }
         renderMessages(d.messages);
       })
-      .catch(() => {});
+      .catch((e) => toast('statusLine', e.message || '读取消息失败'))
+      .then(() => { pollBusy = false; });
   }
 
   function sendText() {
+    if (!ensured()) return;
     const v = $('messageInput').value.trim();
     if (!v) return;
     api({ action: 'transfer.sendText', bindId: auth.bindId, side: 'mobile', mobileToken: auth.mobileToken, text: v })
@@ -304,10 +313,11 @@
       .catch((e) => toast('shareMsg', e.message || '删除失败'));
   }
 
-  function openShare() { if (!ensured()) return; $('shareOverlay').classList.remove('hidden'); loadShares(); }
+  function openShare() { $('shareOverlay').classList.remove('hidden'); if (auth && auth.bindId) loadShares(); }
   function closeShare() { $('shareOverlay').classList.add('hidden'); }
 
   function shareText() {
+    if (!ensured()) return;
     const v = $('shareText').value.trim();
     if (!v) return toast('shareMsg', '请输入要共享的文本');
     api({ action: 'transfer.share', bindId: auth.bindId, mobileToken: auth.mobileToken, side: 'mobile', text: v, code: $('shareCode').value.trim().toUpperCase(), hours: $('shareHours').value })
@@ -405,10 +415,18 @@
       loadMessages();
       pollTimer = window.setInterval(() => loadMessages(), 3000);
     } else {
-      goBind();
+      $('boundChip').textContent = '未绑定 · 可领取共享';
+      $('statusLine').textContent = '领取共享无需绑定；发送文件或消息前需要先绑定电脑。';
     }
   })();
-  window.addEventListener('pagehide', () => { if (pollTimer) window.clearInterval(pollTimer); });
+  window.addEventListener('pagehide', () => { if (pollTimer) window.clearInterval(pollTimer); pollTimer = 0; });
+  window.addEventListener('pageshow', () => {
+    auth = sdk.binding();
+    if (auth && auth.bindId && auth.mobileToken && !pollTimer) {
+      loadMessages();
+      pollTimer = window.setInterval(() => loadMessages(), 3000);
+    }
+  });
 })();
 </script>
 </body>

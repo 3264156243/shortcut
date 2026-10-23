@@ -521,8 +521,12 @@ switch ($action) {
         $side = require_transfer_identity($bindId, $input);
         $name = isset($input['name']) ? $input['name'] : '';
         $size = isset($input['size']) ? $input['size'] : 0;
+        $policy = file_transfer_policy();
+        $maxFileBytes = max(1, (int)($policy['maxFileMb'] ?? 1024)) * 1024 * 1024;
+        $quotaBytes = max(1, (int)($policy['cloudQuotaMb'] ?? 2048)) * 1024 * 1024;
         if ((int)$size <= 0) error_msg('文件为空');
-        if ((int)$size > 1024 * 1024 * 1024) error_msg('单个文件不能超过 1 GB');
+        if ((int)$size > $maxFileBytes) error_msg('文件超过当前账户的单文件上限');
+        if (bind_file_storage_bytes($bindId) + (int)$size > $quotaBytes) error_msg('云端文件空间不足，请删除旧文件后重试');
         $meta = create_file_meta($bindId, $name, $size, isset($input['mime']) ? $input['mime'] : '', isset($input['chunkSize']) ? $input['chunkSize'] : 2 * 1024 * 1024, $side);
         if (!$meta) error_msg('文件信息无效');
         respond(['success' => true, 'file' => $meta]);
@@ -531,25 +535,16 @@ switch ($action) {
     case 'transfer.fileComplete':
         $side = require_transfer_identity($bindId, $input);
         $fileId = safe_file_id(isset($input['fileId']) ? $input['fileId'] : '');
-        $meta = $fileId ? load_file_meta($bindId, $fileId) : null;
-        if (!$meta) error_msg('文件上传会话不存在');
-        $uploaded = array_map('intval', (array)($meta['uploaded'] ?? []));
-        sort($uploaded);
-        $expected = range(0, max(0, (int)$meta['chunkCount'] - 1));
-        if ($uploaded !== $expected) error_msg('文件仍有分片未上传');
-        // 计算完整文件 SHA-256（分片已全部就位）
-        $sha256 = compute_file_sha256($bindId, $meta);
-        if ($sha256) $meta['sha256'] = $sha256;
-        $message = file_message($meta, $side);
-        if (!append_message($bindId, $message)) error_msg('文件消息保存失败');
-        $meta['complete'] = true;
-        $meta['messageId'] = $message['id'];
-        save_file_meta($bindId, $meta);
-        respond(['success' => true, 'message' => $message, 'sha256' => $sha256 ? $sha256 : '']);
+        if (!$fileId) error_msg('文件上传会话不存在');
+        $completed = complete_file_upload($bindId, $fileId, $side);
+        if (!is_array($completed) || empty($completed['success'])) error_msg((string)($completed['message'] ?? '文件完成失败'));
+        respond($completed);
         break;
 
     case 'transfer.share':
         require_transfer_identity($bindId, $input);
+        $sharePolicy = file_transfer_policy();
+        if (isset($sharePolicy['shareEnabled']) && !$sharePolicy['shareEnabled']) error_msg('当前账户未开启临时共享');
         // 支持共享文本或文件消息（通过 messageId 引用消息列表中的一条）
         $text = isset($input['text']) ? limited_text($input['text'], 10000) : '';
         $message = null;
@@ -573,7 +568,10 @@ switch ($action) {
             }
         }
         if (!$message) error_msg('请提供要共享的文本或选择一个文件消息');
-        $share = create_share($bindId, $message, isset($input['code']) ? $input['code'] : '', isset($input['hours']) ? $input['hours'] : 1);
+        $requestedHours = isset($input['hours']) ? (float)$input['hours'] : 1;
+        $maxShareHours = max(1, min(24, (int)($sharePolicy['maxShareHours'] ?? 24)));
+        if ($requestedHours > $maxShareHours) error_msg('共享时长超过当前账户上限');
+        $share = create_share($bindId, $message, isset($input['code']) ? $input['code'] : '', $requestedHours);
         if (!$share) error_msg('接收密码已被占用或格式无效');
         respond(['success' => true, 'code' => $share['code'], 'expiresAt' => $share['expires_at']]);
         break;
@@ -594,6 +592,7 @@ switch ($action) {
         break;
 
     case 'transfer.claim':
+        if (!rate_limit_allow('transfer.claim:' . client_ip(), 30, 3600)) error_msg('领取尝试过于频繁，请稍后再试');
         $code = isset($input['code']) ? trim((string)$input['code']) : '';
         if (!preg_match('/^[A-Z0-9]{6}$/i', $code)) error_msg('请输入 6 位接收密码');
         $share = claim_share($code);
@@ -601,7 +600,7 @@ switch ($action) {
         $message = $share['message'];
         $downloadToken = '';
         // 文件共享：签发一次性下载令牌（他人无需绑定即可下载）
-        if ((string)($message['type'] ?? '') === 'file' && !empty($message['fileId'])) {
+        if (in_array((string)($message['type'] ?? ''), ['file', 'image'], true) && !empty($message['fileId'])) {
             $downloadToken = issue_share_download_token((string)($share['id'] ?? ''));
             if ($downloadToken === null) error_msg('共享文件已领取，请让共享者重新共享');
         }

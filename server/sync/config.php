@@ -727,6 +727,13 @@ function file_meta_path($bindId, $fileId) { return file_dir($bindId, $fileId) . 
 
 function save_file_meta($bindId, $meta) { return json_lock_write(file_meta_path($bindId, $meta['id']), $meta); }
 
+/** 原子更新单个上传会话，避免并发分片各自覆盖 uploaded 数组。 */
+function update_file_meta($bindId, $fileId, $fn) {
+    $id = safe_file_id($fileId);
+    if ($id === null) return false;
+    return json_lock_update(file_meta_path($bindId, $id), $fn);
+}
+
 // 分片哈希校验：期望是 64 位 hex（sha256）；分片内容不匹配返回 false
 function verify_chunk_hash($tmpPath, $expectedHash) {
     $expectedHash = strtolower(trim((string)$expectedHash));
@@ -782,7 +789,7 @@ function create_file_meta($bindId, $name, $size, $mime, $chunkSize, $side) {
     $chunkSize = max(256 * 1024, min((int)$chunkSize, 5 * 1024 * 1024));
     $mimeText = trim((string)$mime);
     if (function_exists('mb_substr')) $mimeText = mb_substr($mimeText, 0, 120, 'UTF-8'); else $mimeText = substr($mimeText, 0, 120);
-    $meta = ['id' => 'file_' . bin2hex(random_bytes(12)), 'name' => $safeName, 'size' => $size, 'mime' => $mimeText, 'chunkSize' => $chunkSize, 'chunkCount' => max(1, (int)ceil($size / $chunkSize)), 'uploaded' => [], 'sender' => $side, 'createdAt' => date('c')];
+    $meta = ['id' => 'file_' . bin2hex(random_bytes(12)), 'name' => $safeName, 'size' => $size, 'mime' => $mimeText, 'chunkSize' => $chunkSize, 'chunkCount' => max(1, (int)ceil($size / $chunkSize)), 'uploaded' => [], 'sender' => $side, 'createdAt' => date('c'), 'updatedAt' => date('c'), 'complete' => false];
     return save_file_meta($bindId, $meta) ? $meta : false;
 }
 
@@ -795,6 +802,55 @@ function limited_filename($value) {
 
 function file_message($meta, $side) {
     return ['id' => 'msg_' . bin2hex(random_bytes(12)), 'type' => 'file', 'fileId' => $meta['id'], 'name' => $meta['name'], 'size' => $meta['size'], 'mime' => $meta['mime'], 'sender' => $side, 'favorite' => false, 'createdAt' => date('c')];
+}
+
+/**
+ * 在单文件完成锁内验证全部分片并生成一次消息。重复 complete 返回原消息，不重复追加。
+ */
+function complete_file_upload($bindId, $fileId, $side) {
+    $metaPath = file_meta_path($bindId, $fileId);
+    return with_lock($metaPath . '.complete', function () use ($bindId, $fileId, $side, $metaPath) {
+        $meta = json_lock_read($metaPath);
+        if (!is_array($meta) || empty($meta['id'])) return ['success' => false, 'message' => '文件上传会话不存在'];
+        if (!empty($meta['complete'])) {
+            $messageId = (string)($meta['messageId'] ?? '');
+            foreach ((array)list_messages($bindId) as $item) {
+                if ((string)($item['id'] ?? '') === $messageId) {
+                    return ['success' => true, 'message' => $item, 'sha256' => (string)($meta['sha256'] ?? ''), 'alreadyComplete' => true];
+                }
+            }
+            return ['success' => false, 'message' => '文件状态异常，请重新上传'];
+        }
+        $uploaded = array_values(array_unique(array_map('intval', (array)($meta['uploaded'] ?? []))));
+        sort($uploaded);
+        $expected = range(0, max(0, (int)$meta['chunkCount'] - 1));
+        if ($uploaded !== $expected) return ['success' => false, 'message' => '文件仍有分片未上传'];
+        $total = 0;
+        $dir = file_dir($bindId, $fileId);
+        for ($i = 0; $i < (int)$meta['chunkCount']; $i++) {
+            $part = $dir . '/chunk-' . $i . '.part';
+            if (!is_file($part)) return ['success' => false, 'message' => '文件仍有分片未上传'];
+            $bytes = @filesize($part);
+            if ($bytes === false) return ['success' => false, 'message' => '分片读取失败'];
+            $total += (int)$bytes;
+        }
+        if ($total !== (int)$meta['size']) return ['success' => false, 'message' => '文件大小校验失败'];
+        $sha256 = compute_file_sha256($bindId, $meta);
+        if (!$sha256) return ['success' => false, 'message' => '文件完整性校验失败'];
+        $message = file_message($meta, $side);
+        $meta['sha256'] = $sha256;
+        $meta['complete'] = true;
+        $meta['messageId'] = $message['id'];
+        $meta['updatedAt'] = date('c');
+        if (!save_file_meta($bindId, $meta)) return ['success' => false, 'message' => '文件状态保存失败'];
+        if (!append_message($bindId, $message)) {
+            $meta['complete'] = false;
+            unset($meta['messageId']);
+            save_file_meta($bindId, $meta);
+            return ['success' => false, 'message' => '文件消息保存失败'];
+        }
+        return ['success' => true, 'message' => $message, 'sha256' => $sha256, 'alreadyComplete' => false];
+    });
 }
 
 function create_share($bindId, $message, $customCode, $hours, $allowsFile = true) {
@@ -892,17 +948,23 @@ function claim_share($code) {
     return null;
 }
 
-// 为文件共享签发一次性下载令牌（短时有效，领取后作废）
+// 为每次领取签发独立的一次性下载令牌（短时有效，领取后作废）。
+// 旧 download_token 字段仍由消费端兼容读取，避免部署瞬间让已签发令牌失效。
 function issue_share_download_token($shareId) {
     global $SHARES_FILE;
     $created = false;
     $result = json_lock_update($SHARES_FILE, function ($shares) use ($shareId, &$created) {
         foreach ($shares as &$share) {
-            if ((string)($share['id'] ?? '') === $shareId && (string)($share['message']['type'] ?? '') === 'file') {
-                $share['download_token'] = 'dl_' . bin2hex(random_bytes(24));
-                $share['download_token_expires'] = date('c', time() + 900); // 15 分钟
+            if ((string)($share['id'] ?? '') === $shareId && in_array((string)($share['message']['type'] ?? ''), ['file', 'image'], true)) {
+                $token = 'dl_' . bin2hex(random_bytes(24));
+                if (!isset($share['download_tokens']) || !is_array($share['download_tokens'])) $share['download_tokens'] = [];
+                $now = time();
+                $share['download_tokens'] = array_values(array_filter($share['download_tokens'], function ($entry) use ($now) {
+                    return is_array($entry) && strtotime((string)($entry['expires_at'] ?? '')) > $now;
+                }));
+                $share['download_tokens'][] = ['token' => $token, 'expires_at' => date('c', $now + 900)];
                 $created = true;
-                return ['data' => $shares, 'result' => $share['download_token']];
+                return ['data' => $shares, 'result' => $token];
             }
         }
         return ['data' => $shares, 'result' => null];
@@ -912,6 +974,30 @@ function issue_share_download_token($shareId) {
 }
 
 // 用下载令牌定位文件共享（未领取/未过期），返回 [bindId, fileId, meta name/size/mime]
+function peek_share_download_token($token) {
+    global $SHARES_FILE;
+    $token = trim((string)$token);
+    if (!preg_match('/^dl_[a-f0-9]{48}$/', $token) || !file_exists($SHARES_FILE)) return null;
+    $now = time();
+    foreach ((array)json_lock_read($SHARES_FILE) as $share) {
+        if (strtotime((string)($share['expires_at'] ?? '')) <= $now) continue;
+        $valid = (string)($share['download_token'] ?? '') === $token
+            && strtotime((string)($share['download_token_expires'] ?? '')) > $now;
+        foreach ((array)($share['download_tokens'] ?? []) as $entry) {
+            if (is_array($entry) && hash_equals((string)($entry['token'] ?? ''), $token)
+                && strtotime((string)($entry['expires_at'] ?? '')) > $now) $valid = true;
+        }
+        if ($valid) return [
+            'bindId' => (string)($share['bind_id'] ?? ''),
+            'fileId' => (string)($share['message']['fileId'] ?? ''),
+            'name' => (string)($share['message']['name'] ?? 'file'),
+            'size' => (int)($share['message']['size'] ?? 0),
+            'mime' => (string)($share['message']['mime'] ?? 'application/octet-stream'),
+        ];
+    }
+    return null;
+}
+
 function consume_share_download_token($token) {
     global $SHARES_FILE;
     $token = trim((string)$token);
@@ -922,9 +1008,19 @@ function consume_share_download_token($token) {
     json_lock_update($SHARES_FILE, function ($shares) use ($token, $now, &$found, &$next) {
         foreach ($shares as $share) {
             $t = (string)($share['download_token'] ?? '');
+            $tokens = isset($share['download_tokens']) && is_array($share['download_tokens']) ? $share['download_tokens'] : [];
+            $matchedToken = false;
+            $keptTokens = [];
+            foreach ($tokens as $entry) {
+                if (!is_array($entry) || strtotime((string)($entry['expires_at'] ?? '')) <= $now) continue;
+                if (!$matchedToken && hash_equals((string)($entry['token'] ?? ''), $token)) {
+                    $matchedToken = true;
+                    continue;
+                }
+                $keptTokens[] = $entry;
+            }
             if ((string)($share['id'] ?? '') !== '' && $found === null
-                && $t === $token
-                && strtotime((string)($share['download_token_expires'] ?? '')) > $now
+                && (($t === $token && strtotime((string)($share['download_token_expires'] ?? '')) > $now) || $matchedToken)
                 && strtotime((string)($share['expires_at'] ?? '')) > $now) {
                 $found = [
                     'bindId' => (string)($share['bind_id'] ?? ''),
@@ -937,6 +1033,7 @@ function consume_share_download_token($token) {
                 unset($share['download_token']);
                 unset($share['download_token_expires']);
             }
+            $share['download_tokens'] = $keptTokens;
             $next[] = $share;
         }
         return ['data' => $next];
@@ -1112,6 +1209,30 @@ function sync_module_policy($moduleId) {
     return $policy;
 }
 
+/** 文件快传最终策略：modules.json 默认值 + 激活后台平台策略覆盖。 */
+function file_transfer_policy() {
+    $policy = ['maxFileMb' => 1024, 'cloudQuotaMb' => 2048, 'shareEnabled' => true, 'maxShareHours' => 24, 'retentionHours' => 24];
+    $catalog = sync_modules_catalog();
+    foreach ((array)($catalog['modules'] ?? []) as $module) {
+        if (($module['id'] ?? '') === 'fileTransfer' && isset($module['policy']) && is_array($module['policy'])) {
+            $policy = array_merge($policy, $module['policy']);
+            break;
+        }
+    }
+    return array_merge($policy, sync_module_policy('fileTransfer'));
+}
+
+function bind_file_storage_bytes($bindId) {
+    global $FILE_DIR;
+    $safeBind = preg_replace('/[^a-zA-Z0-9_-]/', '_', $bindId);
+    $root = $FILE_DIR . '/' . $safeBind;
+    if (!is_dir($root)) return 0;
+    $total = 0;
+    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+    foreach ($it as $file) if ($file->isFile() && substr($file->getFilename(), -5) === '.part') $total += $file->getSize();
+    return $total;
+}
+
 /** 对外下发的模块清单（目录 + 生效策略）。不包含任何凭证或绑定私有信息。 */
 function sync_modules_for_client($bindId = '') {
     $catalog = sync_modules_catalog();
@@ -1206,12 +1327,16 @@ function cleanup_expired_files($retentionHours) {
             if ($fileId === '.' || $fileId === '..') continue;
             $fileDir = $bindDir . '/' . $fileId;
             if (!is_dir($fileDir)) continue;
-            $remove = !isset($referenced[$fileId]); // 孤立文件
+            $metaPath = $fileDir . '/meta.json';
+            $meta = file_exists($metaPath) ? json_lock_read($metaPath) : null;
+            $updatedAt = is_array($meta) ? strtotime((string)($meta['updatedAt'] ?? $meta['createdAt'] ?? '')) : 0;
+            // 上传尚未 complete 时没有消息引用。必须给活跃上传会话宽限期，否则恰逢 15 分钟清理就会被删。
+            $uploadGrace = 24 * 3600;
+            $remove = !isset($referenced[$fileId]) && (!$meta || !empty($meta['complete']) || $updatedAt <= 0 || ($now - $updatedAt) > $uploadGrace);
             if (!$remove) {
+                if (is_array($meta) && empty($meta['complete']) && !isset($referenced[$fileId])) continue;
                 // 仍被引用：按保留时长清理（未被收藏）
-                $metaPath = $fileDir . '/meta.json';
                 if (file_exists($metaPath)) {
-                    $meta = json_lock_read($metaPath);
                     $createdAt = isset($meta['createdAt']) ? strtotime((string)$meta['createdAt']) : $now;
                     // 校验消息是否收藏
                     $favorited = false;
@@ -1246,7 +1371,8 @@ function cleanup_expired_messages($retentionHours) {
     if (!$binds) return [];
     foreach ($binds as $bindId) {
         if ($bindId === '.' || $bindId === '..') continue;
-        $path = $MESSAGE_DIR . '/' . $bindId . '.json';
+        // scandir 返回的就是 <bindId>.json；旧代码又拼一次 .json，导致清理永远跳过真实文件。
+        $path = $MESSAGE_DIR . '/' . $bindId;
         if (!file_exists($path)) continue;
         json_lock_update($path, function ($messages) use ($maxAge, $now, &$removedFileIds) {
             $kept = [];

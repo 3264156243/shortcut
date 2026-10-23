@@ -2,6 +2,8 @@
 
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
 
 use crate::config;
 use crate::hub;
@@ -45,12 +47,13 @@ fn upload_chunk(bind_id: &str, desk_token: &str, file_id: &str, index: usize, ch
     add_field("fileId", file_id);
     add_field("chunkIndex", &index.to_string());
     add_field("chunkHash", chunk_hash);
-    body.extend_from_slice(format!("--{}\r\nContent-Disposition: form-data; name=\"chunk\"; filename=\"{}.part\"\r\nContent-Type: application/octet-stream\r\n\r\n", boundary, name).as_bytes());
+    let multipart_name = name.replace(['\r', '\n', '"'], "_");
+    body.extend_from_slice(format!("--{}\r\nContent-Disposition: form-data; name=\"chunk\"; filename=\"{}.part\"\r\nContent-Type: application/octet-stream\r\n\r\n", boundary, multipart_name).as_bytes());
     body.extend_from_slice(chunk);
     body.extend_from_slice(format!("\r\n--{}--\r\n", boundary).as_bytes());
 
     let resp = ureq::post(FILE_URL)
-        .timeout(std::time::Duration::from_millis(30_000))
+        .timeout(std::time::Duration::from_millis(120_000))
         .set("Content-Type", &format!("multipart/form-data; boundary={}", boundary))
         .send(&body[..])
         .map_err(|e| e.to_string())?;
@@ -68,7 +71,10 @@ fn upload_file(file_path: &str) -> Value {
         _ => return json!({ "success": false, "message": "文件不存在" }),
     };
     let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "file".to_string());
-    let size = stat.len() as usize;
+    let size = stat.len();
+    if size == 0 {
+        return json!({ "success": false, "message": "不能发送空文件" });
+    }
     let init = with_binding(
         "transfer.fileInit",
         json!({ "name": name, "size": size, "mime": "application/octet-stream", "chunkSize": CHUNK_SIZE }),
@@ -87,21 +93,25 @@ fn upload_file(file_path: &str) -> Value {
     };
     let desk_token = hub::desk_token();
 
-    let data = match std::fs::read(path) {
-        Ok(d) => d,
+    let mut file = match std::fs::File::open(path) {
+        Ok(f) => f,
         Err(e) => return json!({ "success": false, "message": e.to_string() }),
     };
+    let mut chunk = vec![0u8; CHUNK_SIZE];
     for index in 0..chunk_count {
-        let start = index * CHUNK_SIZE;
-        let end = std::cmp::min(start + CHUNK_SIZE, size);
-        if start >= size {
-            break;
+        let expected = std::cmp::min(CHUNK_SIZE as u64, size.saturating_sub(index as u64 * CHUNK_SIZE as u64)) as usize;
+        let mut read = 0usize;
+        while read < expected {
+            match file.read(&mut chunk[read..expected]) {
+                Ok(0) => return json!({ "success": false, "message": "文件在上传过程中发生变化，请重新发送" }),
+                Ok(n) => read += n,
+                Err(e) => return json!({ "success": false, "message": e.to_string() }),
+            }
         }
-        let chunk = &data[start..end];
         let mut hasher = Sha256::new();
-        hasher.update(chunk);
+        hasher.update(&chunk[..expected]);
         let chunk_hash: String = hasher.finalize().iter().map(|b| format!("{:02x}", b)).collect();
-        let result = match upload_chunk(&bind_id, &desk_token, &file_id, index, &chunk_hash, chunk, &name) {
+        let result = match upload_chunk(&bind_id, &desk_token, &file_id, index, &chunk_hash, &chunk[..expected], &name) {
             Ok(v) => v,
             Err(e) => return json!({ "success": false, "message": e }),
         };
@@ -109,23 +119,61 @@ fn upload_file(file_path: &str) -> Value {
             return result;
         }
     }
+    let mut extra = [0u8; 1];
+    if file.read(&mut extra).unwrap_or(1) != 0 {
+        return json!({ "success": false, "message": "文件在上传过程中发生变化，请重新发送" });
+    }
     with_binding("transfer.fileComplete", json!({ "fileId": file_id }))
 }
 
-fn download_file(file_id: &str, name: &str) -> Value {
-    // file.php 不是 api.php：HTTP 方式（GET + 查询串）保持原样，只把"从哪拿身份"换成 hub
-    let Some(bind_id) = hub::bind_id() else {
-        return json!({ "success": false, "message": "联动绑定尚未建立" });
-    };
-    // 查询串参数一律 percent-encode（bindId/fileId/deskToken 都不允许裸拼）
-    let url = format!(
-        "{}?action=download&bindId={}&side=desktop&fileId={}&deskToken={}",
-        FILE_URL,
-        percent_encode(&bind_id),
-        percent_encode(file_id),
-        percent_encode(&hub::desk_token())
-    );
-    let resp = match ureq::get(&url).timeout(std::time::Duration::from_millis(60_000)).call() {
+fn configured_download_dir() -> PathBuf {
+    if let Some(cfg) = config::read_config_value()
+        && let Some(value) = cfg.get("fileTransfer").and_then(|v| v.get("downloadDirectory")).and_then(|v| v.as_str())
+        && !value.trim().is_empty()
+    {
+        return PathBuf::from(value.trim());
+    }
+    std::env::var("USERPROFILE")
+        .map(|home| PathBuf::from(home).join("Downloads").join("ShortCut 快传"))
+        .unwrap_or_else(|_| std::env::temp_dir().join("ShortCut 快传"))
+}
+
+fn safe_download_name(name: &str, fallback: &str) -> String {
+    let source = if name.trim().is_empty() { fallback } else { name };
+    let mut value: String = source
+        .chars()
+        .map(|c| if c.is_control() || matches!(c, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*') { '_' } else { c })
+        .collect();
+    value = value.trim().trim_end_matches(['.', ' ']).to_string();
+    if value.is_empty() {
+        return "download".to_string();
+    }
+    let stem = Path::new(&value).file_stem().and_then(|part| part.to_str()).unwrap_or("").to_ascii_uppercase();
+    let reserved = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || stem.strip_prefix("COM").is_some_and(|n| matches!(n.parse::<u8>(), Ok(1..=9)))
+        || stem.strip_prefix("LPT").is_some_and(|n| matches!(n.parse::<u8>(), Ok(1..=9)));
+    if reserved { value.insert(0, '_'); }
+    value
+}
+
+fn available_target(dir: &Path, name: &str) -> PathBuf {
+    let first = dir.join(name);
+    if !first.exists() { return first; }
+    let path = Path::new(name);
+    let stem = path.file_stem().and_then(|v| v.to_str()).unwrap_or("download");
+    let ext = path.extension().and_then(|v| v.to_str());
+    for index in 1..10_000 {
+        let candidate = match ext {
+            Some(ext) if !ext.is_empty() => dir.join(format!("{} ({index}).{}", stem, ext)),
+            _ => dir.join(format!("{} ({index})", stem)),
+        };
+        if !candidate.exists() { return candidate; }
+    }
+    dir.join(format!("{}-{}", name, chrono::Local::now().timestamp_millis()))
+}
+
+fn download_from_url(url: &str, name: &str, fallback: &str) -> Value {
+    let resp = match ureq::get(url).timeout(std::time::Duration::from_millis(300_000)).call() {
         Ok(r) => r,
         Err(e) => return json!({ "success": false, "message": e.to_string() }),
     };
@@ -133,36 +181,35 @@ fn download_file(file_id: &str, name: &str) -> Value {
         .header("Content-Length")
         .and_then(|h| h.parse().ok())
         .unwrap_or(0);
-    // 目标文件名安全化
-    let base_name = if !name.is_empty() { name } else if !file_id.is_empty() { file_id } else { "download" };
-    let safe_name: String = base_name
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | ' ' | '(' | ')') { c } else { '_' })
-        .collect::<String>()
-        .trim()
-        .to_string();
-    let safe_name = if safe_name.is_empty() { "download".to_string() } else { safe_name };
-    let downloads = std::env::var("USERPROFILE").map(|h| std::path::PathBuf::from(h).join("Downloads")).unwrap_or_else(|_| std::env::temp_dir());
-    let target = downloads.join(&safe_name);
-    let tmp = std::env::temp_dir().join(format!("download-{}-sc.part", chrono::Local::now().timestamp_millis()));
+    let expected_hash = resp.header("X-Checksum-Sha256").unwrap_or("").trim().to_ascii_lowercase();
+    if expected_hash.len() != 64 || !expected_hash.chars().all(|c| c.is_ascii_hexdigit()) {
+        return json!({ "success": false, "message": "服务端未提供有效的文件校验值" });
+    }
+    let downloads = configured_download_dir();
+    if let Err(e) = std::fs::create_dir_all(&downloads) {
+        return json!({ "success": false, "message": format!("无法创建下载目录: {e}") });
+    }
+    let safe_name = safe_download_name(name, fallback);
+    let target = available_target(&downloads, &safe_name);
+    let tmp = downloads.join(format!(".shortcut-{}.part", chrono::Local::now().timestamp_millis()));
 
     let mut reader = resp.into_reader();
     let mut file = match std::fs::File::create(&tmp) {
         Ok(f) => f,
         Err(e) => return json!({ "success": false, "message": e.to_string() }),
     };
-    use std::io::Read as _;
     let mut received = 0usize;
+    let mut hasher = Sha256::new();
     let mut buf = [0u8; 65536];
     loop {
         match reader.read(&mut buf) {
             Ok(0) => break,
             Ok(n) => {
-                use std::io::Write as _;
                 if file.write_all(&buf[..n]).is_err() {
                     let _ = std::fs::remove_file(&tmp);
                     return json!({ "success": false, "message": "文件保存失败" });
                 }
+                hasher.update(&buf[..n]);
                 received += n;
             }
             Err(e) => {
@@ -171,16 +218,37 @@ fn download_file(file_id: &str, name: &str) -> Value {
             }
         }
     }
+    if let Err(e) = file.flush() {
+        drop(file);
+        let _ = std::fs::remove_file(&tmp);
+        return json!({ "success": false, "message": format!("文件保存失败: {e}") });
+    }
     drop(file);
     if total > 0 && received != total {
         let _ = std::fs::remove_file(&tmp);
         return json!({ "success": false, "message": "文件下载不完整" });
     }
+    let actual_hash: String = hasher.finalize().iter().map(|b| format!("{:02x}", b)).collect();
+    if !expected_hash.is_empty() && expected_hash != actual_hash {
+        let _ = std::fs::remove_file(&tmp);
+        return json!({ "success": false, "message": "文件完整性校验失败" });
+    }
     if std::fs::rename(&tmp, &target).is_err() {
         let _ = std::fs::remove_file(&tmp);
         return json!({ "success": false, "message": "文件保存失败" });
     }
-    json!({ "success": true, "path": target.to_string_lossy(), "size": received })
+    json!({ "success": true, "path": target.to_string_lossy(), "name": target.file_name().unwrap_or_default().to_string_lossy(), "size": received, "sha256": actual_hash })
+}
+
+fn download_file(file_id: &str, name: &str) -> Value {
+    let Some(bind_id) = hub::bind_id() else {
+        return json!({ "success": false, "message": "联动绑定尚未建立" });
+    };
+    let url = format!(
+        "{}?action=download&bindId={}&side=desktop&fileId={}&deskToken={}",
+        FILE_URL, percent_encode(&bind_id), percent_encode(file_id), percent_encode(&hub::desk_token())
+    );
+    download_from_url(&url, name, file_id)
 }
 
 // ---------- 命令入口 ----------
@@ -211,12 +279,24 @@ pub fn download(file_id: &str, name: &str) -> Value {
     download_file(file_id, name)
 }
 
+pub fn download_shared(token: &str, name: &str) -> Value {
+    if !token.starts_with("dl_") || token.len() != 51 {
+        return json!({ "success": false, "message": "共享下载令牌无效" });
+    }
+    let url = format!("{}?action=download&token={}", FILE_URL, percent_encode(token));
+    download_from_url(&url, name, "shared-file")
+}
+
 pub fn delete_message(message_id: &str) -> Value {
     with_binding("transfer.delete", json!({ "messageId": message_id }))
 }
 
 pub fn share_text(text: &str, code: &str, hours: i64) -> Value {
     with_binding("transfer.share", json!({ "text": text, "code": code, "hours": hours }))
+}
+
+pub fn share_file(message_id: &str, code: &str, hours: i64) -> Value {
+    with_binding("transfer.share", json!({ "messageId": message_id.trim_start_matches("msg_"), "code": code, "hours": hours }))
 }
 
 pub fn share_list() -> Value {
@@ -237,5 +317,5 @@ pub fn claim(code: &str) -> Value {
 
 // 供 lib.rs 判断下载目录
 pub fn downloads_dir() -> std::path::PathBuf {
-    config::user_data_dir()
+    configured_download_dir()
 }
