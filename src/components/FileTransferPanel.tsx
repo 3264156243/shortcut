@@ -5,10 +5,11 @@ import {
   Share2, Star, Trash2, X,
 } from 'lucide-react';
 import { useStore } from '../store';
+import { tryRtcSendPath } from '../fileTransferRtc';
 
 interface TransferMessage {
   id: string;
-  type: 'text' | 'file' | 'image';
+  type: 'text' | 'file' | 'image' | 'direct';
   text?: string;
   fileId?: string;
   name?: string;
@@ -171,11 +172,15 @@ export default function FileTransferPanel() {
         const item = queueRef.current.shift()!;
         currentTaskIdRef.current = item.taskId;
         const name = item.kind === 'path' ? fileName(item.path) : item.name;
-        setTasks((current) => ({ ...current, [item.taskId]: { taskId: item.taskId, direction: 'upload', name, total: 0, transferred: 0, progress: 0, speed: 0, eta: 0, status: 'preparing', channel: 'cloud' } }));
+        setTasks((current) => ({ ...current, [item.taskId]: { taskId: item.taskId, direction: 'upload', name, total: 0, transferred: 0, progress: 0, speed: 0, eta: 0, status: 'preparing', channel: item.kind === 'path' ? 'auto' : 'cloud' } }));
         try {
-          const result = item.kind === 'path'
-            ? await window.electronAPI?.fileTransferSendFile?.(item.taskId, item.path)
-            : await window.electronAPI?.fileTransferSendBytes?.(item.taskId, item.name, item.base64);
+          let result;
+          if (item.kind === 'path') {
+            const direct = await tryRtcSendPath(item.taskId, item.path);
+            result = direct.success || direct.cancelled ? direct : await window.electronAPI?.fileTransferSendFile?.(item.taskId, item.path);
+          } else {
+            result = await window.electronAPI?.fileTransferSendBytes?.(item.taskId, item.name, item.base64);
+          }
           if (!result?.success && !result?.cancelled) addToast(result?.message || `${name} 发送失败`, 'error');
           if (result?.success) addToast(`${name} 已发送`, 'success');
           await refresh();
@@ -198,7 +203,7 @@ export default function FileTransferPanel() {
     unique.forEach((path) => {
       const taskId = newTaskId('upload');
       queueRef.current.push({ kind: 'path', path, taskId });
-      setTasks((current) => ({ ...current, [taskId]: { taskId, direction: 'upload', name: fileName(path), total: 0, transferred: 0, progress: 0, speed: 0, eta: 0, status: 'queued', channel: 'cloud' } }));
+      setTasks((current) => ({ ...current, [taskId]: { taskId, direction: 'upload', name: fileName(path), total: 0, transferred: 0, progress: 0, speed: 0, eta: 0, status: 'queued', channel: 'auto' } }));
     });
     if (unique.length) void drainQueue();
   }, [drainQueue]);
@@ -420,7 +425,7 @@ function TaskStrip({ tasks, onCancel }: { tasks: TransferTask[]; onCancel: (id: 
 
 function MessageBubble({ message, previewUrl, onDownload, onFavorite, onShare, onDelete, addToast }: { message: TransferMessage; previewUrl: string; onDownload: (m: TransferMessage) => void; onFavorite: (m: TransferMessage) => void; onShare: (m: TransferMessage) => void; onDelete: (id: string) => void; addToast: (message: string, type?: 'success' | 'error' | 'info') => void }) {
   const mine = message.sender === 'desktop';
-  return <div className={`group flex ${mine ? 'justify-end' : 'justify-start'}`}><div className="max-w-[74%]"><div className="overflow-hidden rounded-lg text-sm leading-6" style={{ background: mine ? 'var(--color-accent)' : 'var(--color-bg-card)', color: mine ? 'white' : 'var(--color-text)', border: mine ? '0' : '1px solid var(--color-border)' }}>{message.type === 'image' ? <button type="button" onClick={() => void onDownload(message)} className="block max-w-sm text-left">{previewUrl ? <img src={previewUrl} alt={message.name || '图片'} className="max-h-64 w-full object-contain" /> : <div className="flex h-32 items-center justify-center px-10"><ImageIcon size={28} /></div>}<span className="flex items-center justify-between gap-3 px-3 py-2"><b className="truncate font-medium">{message.name || '图片'}</b><small className="shrink-0 opacity-70">{formatBytes(message.size || 0)}</small></span></button> : message.type === 'file' ? <button type="button" onClick={() => void onDownload(message)} className="flex items-center gap-2 px-3 py-2.5 text-left"><Download size={16} /><span><b className="block font-medium">{message.name}</b><small className="opacity-70">{formatBytes(message.size || 0)}</small></span></button> : <div className="whitespace-pre-wrap break-words px-3 py-2.5">{message.text}</div>}</div><div className={`mt-1 flex items-center gap-1 text-[10px] ${mine ? 'justify-end' : ''}`} style={{ color: 'var(--color-text-muted)' }}><span>{new Date(message.createdAt).toLocaleString('zh-CN', { hour12: false })}</span>{message.type === 'text' && <button type="button" onClick={() => { void window.electronAPI?.copyText?.(message.text || ''); addToast('已复制', 'success'); }} title="复制" className="p-1"><Copy size={11} /></button>}<button type="button" onClick={() => void onFavorite(message)} title={message.favorite ? '取消收藏' : '收藏'} className="p-1"><Star size={11} fill={message.favorite ? 'currentColor' : 'none'} /></button>{message.type !== 'text' && <button type="button" onClick={() => void onShare(message)} title="创建文件共享" className="p-1"><Share2 size={11} /></button>}<button type="button" onClick={() => void onDelete(message.id)} title="删除" className="p-1"><Trash2 size={11} /></button></div></div></div>;
+  return <div className={`group flex ${mine ? 'justify-end' : 'justify-start'}`}><div className="max-w-[74%]"><div className="overflow-hidden rounded-lg text-sm leading-6" style={{ background: mine ? 'var(--color-accent)' : 'var(--color-bg-card)', color: mine ? 'white' : 'var(--color-text)', border: mine ? '0' : '1px solid var(--color-border)' }}>{message.type === 'image' ? <button type="button" onClick={() => void onDownload(message)} className="block max-w-sm text-left">{previewUrl ? <img src={previewUrl} alt={message.name || '图片'} className="max-h-64 w-full object-contain" /> : <div className="flex h-32 items-center justify-center px-10"><ImageIcon size={28} /></div>}<span className="flex items-center justify-between gap-3 px-3 py-2"><b className="truncate font-medium">{message.name || '图片'}</b><small className="shrink-0 opacity-70">{formatBytes(message.size || 0)}</small></span></button> : message.type === 'file' ? <button type="button" onClick={() => void onDownload(message)} className="flex items-center gap-2 px-3 py-2.5 text-left"><Download size={16} /><span><b className="block font-medium">{message.name}</b><small className="opacity-70">{formatBytes(message.size || 0)}</small></span></button> : message.type === 'direct' ? <div className="flex items-center gap-2 px-3 py-2.5"><CheckCircle2 size={16} /><span><b className="block font-medium">{message.name}</b><small className="opacity-70">{formatBytes(message.size || 0)} · 已通过局域网直传</small></span></div> : <div className="whitespace-pre-wrap break-words px-3 py-2.5">{message.text}</div>}</div><div className={`mt-1 flex items-center gap-1 text-[10px] ${mine ? 'justify-end' : ''}`} style={{ color: 'var(--color-text-muted)' }}><span>{new Date(message.createdAt).toLocaleString('zh-CN', { hour12: false })}</span>{message.type === 'text' && <button type="button" onClick={() => { void window.electronAPI?.copyText?.(message.text || ''); addToast('已复制', 'success'); }} title="复制" className="p-1"><Copy size={11} /></button>}<button type="button" onClick={() => void onFavorite(message)} title={message.favorite ? '取消收藏' : '收藏'} className="p-1"><Star size={11} fill={message.favorite ? 'currentColor' : 'none'} /></button>{(message.type === 'file' || message.type === 'image') && <button type="button" onClick={() => void onShare(message)} title="创建文件共享" className="p-1"><Share2 size={11} /></button>}<button type="button" onClick={() => void onDelete(message.id)} title="删除" className="p-1"><Trash2 size={11} /></button></div></div></div>;
 }
 
 function ShareList({ shares, onDelete }: { shares: TransferShare[]; onDelete: (id: string) => void }) {

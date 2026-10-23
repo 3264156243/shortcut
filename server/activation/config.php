@@ -155,6 +155,7 @@ function normalize_client_info($clientInfo) {
         'appVersion' => trim(strval($clientInfo['appVersion'] ?? '')),
         'platform' => trim(strval($clientInfo['platform'] ?? '')),
         'machineSource' => trim(strval($clientInfo['machineSource'] ?? 'hardware')),
+        'bindId' => preg_match('/^[a-zA-Z0-9_-]{8,128}$/', trim(strval($clientInfo['bindId'] ?? ''))) ? trim(strval($clientInfo['bindId'])) : '',
         'lanIps' => $lanIps,
         'macs' => $macs,
     ];
@@ -191,6 +192,9 @@ function upsert_device($machine, $clientInfo, $code = '', $remoteIp = '') {
     if (count($info['macs']) > 0) {
         $record['macs'] = $info['macs'];
     }
+    if ($info['bindId'] !== '') {
+        $record['bind_id'] = $info['bindId'];
+    }
     if ($code !== '') {
         $record['code'] = $code;
     }
@@ -201,6 +205,36 @@ function upsert_device($machine, $clientInfo, $code = '', $remoteIp = '') {
     $record['check_count'] = 1 + intval($record['check_count'] ?? 0);
     $devices[$machine] = $record;
     return save_devices($devices);
+}
+
+function file_transfer_usage_for_bind($bindId) {
+    $bindId = trim(strval($bindId));
+    if (!preg_match('/^[a-zA-Z0-9_-]{8,128}$/', $bindId)) {
+        return ['bytes' => 0, 'files' => 0, 'messages' => 0, 'favorites' => 0];
+    }
+    $syncData = dirname(__DIR__) . '/sync/data';
+    $root = $syncData . '/files/' . $bindId;
+    $bytes = 0; $files = 0;
+    if (is_dir($root)) {
+        try {
+            $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+            foreach ($it as $file) {
+                if ($file->isFile() && substr($file->getFilename(), -5) === '.part') {
+                    $bytes += $file->getSize(); $files++;
+                }
+            }
+        } catch (Throwable $e) {}
+    }
+    $messages = 0; $favorites = 0;
+    $messagePath = $syncData . '/messages/' . $bindId . '.json';
+    if (is_readable($messagePath)) {
+        $items = json_decode(strval(@file_get_contents($messagePath)), true);
+        if (is_array($items)) {
+            $messages = count($items);
+            foreach ($items as $item) if (is_array($item) && !empty($item['favorite'])) $favorites++;
+        }
+    }
+    return ['bytes' => $bytes, 'files' => $files, 'messages' => $messages, 'favorites' => $favorites];
 }
 
 function generate_code() {

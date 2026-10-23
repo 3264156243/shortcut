@@ -508,6 +508,52 @@ switch ($action) {
         respond(['success' => true, 'message' => $message]);
         break;
 
+    // WebRTC 只借服务端交换会话描述，文件内容不会经过云端。
+    case 'transfer.rtc.poll':
+        if (!rate_limit_allow('transfer.rtc.poll:' . client_ip(), 600, 60)) error_msg('连接检查过于频繁');
+        $side = require_transfer_identity($bindId, $input);
+        rtc_touch($bindId, $side);
+        respond([
+            'success' => true,
+            'side' => $side,
+            'online' => rtc_online_state($bindId),
+            'signals' => rtc_take_signals($bindId, $side),
+        ]);
+        break;
+
+    case 'transfer.rtc.signal':
+        if (!rate_limit_allow('transfer.rtc.signal:' . client_ip(), 240, 60)) error_msg('连接信令过于频繁');
+        $side = require_transfer_identity($bindId, $input);
+        $to = isset($input['to']) && $input['to'] === 'desktop' ? 'desktop' : 'mobile';
+        if ($to === $side) error_msg('信令目标无效');
+        $sessionId = limited_text(isset($input['sessionId']) ? $input['sessionId'] : '', 80);
+        $type = limited_text(isset($input['type']) ? $input['type'] : '', 16);
+        $payload = isset($input['payload']) && is_array($input['payload']) ? $input['payload'] : [];
+        if ($sessionId === '' || !in_array($type, ['offer', 'answer', 'candidate', 'cancel'], true)) error_msg('信令内容无效');
+        if (!rtc_push_signal($bindId, $side, $to, $sessionId, $type, $payload)) error_msg('信令发送失败');
+        rtc_touch($bindId, $side);
+        respond(['success' => true, 'online' => rtc_online_state($bindId)]);
+        break;
+
+    // 直传完成后仅保存一条可见记录，便于两端确认交付；记录不冒充云端可下载文件。
+    case 'transfer.directRecord':
+        if (!rate_limit_allow('transfer.directRecord:' . client_ip(), 120, 60)) error_msg('记录提交过于频繁');
+        $side = require_transfer_identity($bindId, $input);
+        $name = limited_text(isset($input['name']) ? $input['name'] : '', 240);
+        $size = isset($input['size']) ? (int)$input['size'] : 0;
+        $mime = limited_text(isset($input['mime']) ? $input['mime'] : 'application/octet-stream', 120);
+        $maxDirectBytes = max(1, (int)(file_transfer_policy()['maxFileMb'] ?? 1024)) * 1024 * 1024;
+        if ($name === '' || $size <= 0 || $size > $maxDirectBytes) error_msg('直传文件信息无效');
+        $message = [
+            'id' => 'msg_' . bin2hex(random_bytes(12)), 'type' => 'direct', 'name' => $name,
+            'size' => $size, 'mime' => $mime, 'sender' => $side, 'delivery' => 'webrtc',
+            'favorite' => false, 'createdAt' => date('c'),
+            'expiresAt' => date('c', time() + sync_retention_hours($bindId) * 3600),
+        ];
+        if (!append_message($bindId, $message)) error_msg('直传记录保存失败');
+        respond(['success' => true, 'message' => $message]);
+        break;
+
     case 'transfer.delete':
         require_transfer_identity($bindId, $input);
         $messageId = isset($input['messageId']) ? trim((string)$input['messageId']) : '';

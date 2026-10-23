@@ -178,6 +178,10 @@
   const transferTasks = new Map();
   const uploadQueue = [];
   let uploadBusy = false;
+  let rtcTimer = 0;
+  let rtcBusy = false;
+  let desktopOnline = false;
+  const rtcPeers = new Map();
 
   /** 兼容旧调用点：payload 里带 action，其余字段透传；失败时抛出（沿用本页原有语义） */
   function api(payload) {
@@ -209,11 +213,146 @@
     return 'mobile_' + (a >>> 0).toString(16).padStart(8, '0') + (b >>> 0).toString(16).padStart(8, '0') + '_' + file.size.toString(36);
   }
 
+  // ===== 局域网直传（服务端仅交换 WebRTC 会话描述） =====
+  const rtcDelay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  function rtcId() { return 'rtc_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 12); }
+  function waitIce(peer, timeout) {
+    if (peer.iceGatheringState === 'complete') return Promise.resolve();
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = () => { if (done) return; done = true; peer.removeEventListener('icegatheringstatechange', change); resolve(); };
+      const change = () => { if (peer.iceGatheringState === 'complete') finish(); };
+      peer.addEventListener('icegatheringstatechange', change); setTimeout(finish, timeout || 2200);
+    });
+  }
+  function waitOpen(channel, timeout) {
+    if (channel.readyState === 'open') return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('局域网连接超时')), timeout || 4500);
+      channel.addEventListener('open', () => { clearTimeout(timer); resolve(); }, { once:true });
+      channel.addEventListener('error', () => { clearTimeout(timer); reject(new Error('局域网连接失败')); }, { once:true });
+    });
+  }
+  function waitControl(channel, accepted, timeout) {
+    return new Promise((resolve, reject) => {
+      const finish = (value, error) => { clearTimeout(timer); channel.removeEventListener('message', onMessage); error ? reject(error) : resolve(value); };
+      const onMessage = (event) => {
+        if (typeof event.data !== 'string') return;
+        try { const value = JSON.parse(event.data); if (value.t === 'error') finish(null, new Error(value.message || '直传失败')); else if (accepted.indexOf(value.t) >= 0) finish(value); } catch (_) {}
+      };
+      const timer = setTimeout(() => finish(null, new Error('等待接收端响应超时')), timeout || 8000);
+      channel.addEventListener('message', onMessage);
+    });
+  }
+  function signalRtc(to, id, type, payload) {
+    return api({ action:'transfer.rtc.signal', bindId:auth.bindId, side:'mobile', mobileToken:auth.mobileToken, to, sessionId:id, type, payload:payload || {} });
+  }
+  async function makeMobileSink(taskId, name, size) {
+    const safe = String(name || 'file').replace(/[\\/:*?"<>|\x00-\x1f]/g, '_');
+    if (navigator.storage && navigator.storage.getDirectory) {
+      const root = await navigator.storage.getDirectory();
+      const tempName = '.shortcut-' + taskId.replace(/[^a-z0-9_-]/gi, '_') + '.part';
+      const handle = await root.getFileHandle(tempName, { create:true });
+      let current = await handle.getFile();
+      if (current.size > size) { await root.removeEntry(tempName); return makeMobileSink(taskId, name, size); }
+      const writer = await handle.createWritable({ keepExistingData:true });
+      await writer.seek(current.size);
+      return {
+        offset: current.size,
+        write: (offset, bytes) => writer.write({ type:'write', position:offset, data:bytes }),
+        finish: async () => {
+          await writer.close();
+          const file = await handle.getFile();
+          const url = URL.createObjectURL(file); const a = document.createElement('a'); a.href = url; a.download = safe; document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => { URL.revokeObjectURL(url); root.removeEntry(tempName).catch(() => {}); }, 60000);
+        }
+      };
+    }
+    if (size > 128 * 1024 * 1024) throw new Error('当前浏览器无法直收大文件，将改用云端传输');
+    const chunks = [];
+    return { offset:0, write: async (_, bytes) => chunks.push(bytes.slice(0)), finish: async () => { const url = URL.createObjectURL(new Blob(chunks)); const a = document.createElement('a'); a.href=url; a.download=safe; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000); } };
+  }
+  function receiveRtcChannel(id, peer, channel) {
+    channel.binaryType = 'arraybuffer';
+    let sink = null, taskId = '', name = 'file', size = 0, offset = 0, chain = Promise.resolve();
+    const fail = (error) => { if (channel.readyState === 'open') channel.send(JSON.stringify({ t:'error', message:error.message || '接收失败' })); peer.close(); rtcPeers.delete(id); };
+    channel.onmessage = (event) => {
+      chain = chain.then(async () => {
+        if (typeof event.data === 'string') {
+          const message = JSON.parse(event.data);
+          if (message.t === 'meta') {
+            taskId = String(message.taskId || id); name = String(message.name || 'file'); size = Number(message.size || 0);
+            sink = await makeMobileSink(taskId, name, size); offset = sink.offset;
+            channel.send(JSON.stringify({ t:'ready', offset }));
+          } else if (message.t === 'eof') {
+            if (!sink || offset !== size) throw new Error('文件接收不完整');
+            await sink.finish();
+            channel.send(JSON.stringify({ t:'complete' }));
+            saveHistory({ id:taskId, file:{ name, size }, status:'completed', channel:'webrtc' });
+            toast('statusLine', '已接收：' + name, true); setTimeout(() => { peer.close(); rtcPeers.delete(id); }, 250);
+          }
+          return;
+        }
+        const bytes = new Uint8Array(event.data); await sink.write(offset, bytes); offset += bytes.byteLength;
+        channel.send(JSON.stringify({ t:'ack', offset }));
+      }).catch(fail);
+    };
+  }
+  async function acceptRtcOffer(signal) {
+    if (!window.RTCPeerConnection || rtcPeers.has(signal.sessionId)) return;
+    const peer = new RTCPeerConnection({ iceServers:[] }); rtcPeers.set(signal.sessionId, peer);
+    peer.ondatachannel = (event) => receiveRtcChannel(signal.sessionId, peer, event.channel);
+    try {
+      await peer.setRemoteDescription(signal.payload); await peer.setLocalDescription(await peer.createAnswer()); await waitIce(peer);
+      await signalRtc('desktop', signal.sessionId, 'answer', peer.localDescription.toJSON());
+    } catch (_) { peer.close(); rtcPeers.delete(signal.sessionId); }
+  }
+  async function pollRtc() {
+    if (!auth || !window.RTCPeerConnection || rtcBusy) return;
+    rtcBusy = true;
+    try {
+      const data = await api({ action:'transfer.rtc.poll', bindId:auth.bindId, side:'mobile', mobileToken:auth.mobileToken });
+      desktopOnline = !!(data.online && data.online.desktop);
+      for (const signal of data.signals || []) {
+        if (signal.type === 'offer') await acceptRtcOffer(signal);
+        else if (signal.type === 'answer') { const peer = rtcPeers.get(signal.sessionId); if (peer && !peer.remoteDescription) await peer.setRemoteDescription(signal.payload); }
+        else if (signal.type === 'cancel') { const peer = rtcPeers.get(signal.sessionId); if (peer) peer.close(); rtcPeers.delete(signal.sessionId); }
+      }
+    } catch (_) { desktopOnline = false; }
+    rtcBusy = false;
+  }
+  async function tryRtcSend(task, file) {
+    if (!window.RTCPeerConnection) return false;
+    await pollRtc(); if (!desktopOnline) return false;
+    const id = rtcId(), peer = new RTCPeerConnection({ iceServers:[] }), channel = peer.createDataChannel('shortcut-file', { ordered:true });
+    channel.binaryType = 'arraybuffer'; rtcPeers.set(id, peer);
+    try {
+      await peer.setLocalDescription(await peer.createOffer()); await waitIce(peer); await signalRtc('desktop', id, 'offer', peer.localDescription.toJSON()); await waitOpen(channel);
+      channel.send(JSON.stringify({ t:'meta', taskId:task.id, name:file.name, size:file.size, mime:file.type || 'application/octet-stream' }));
+      const ready = await waitControl(channel, ['ready']); let offset = Math.max(0, Math.min(file.size, Number(ready.offset || 0))); const started = performance.now();
+      task.channel = 'webrtc'; task.transferred = offset; task.progress = file.size ? offset / file.size * 100 : 0; renderTasks();
+      while (offset < file.size) {
+        if (task.cancelled) throw Object.assign(new Error('已取消'), { cancelled:true });
+        while (channel.bufferedAmount > 1024 * 1024) await rtcDelay(20);
+        const bytes = await file.slice(offset, Math.min(file.size, offset + 32 * 1024)).arrayBuffer(); const ack = waitControl(channel, ['ack']); channel.send(bytes); const result = await ack;
+        const next = Number(result.offset || 0); if (next <= offset || next > file.size) throw new Error('接收端进度异常'); offset = next;
+        const elapsed = Math.max(.1, (performance.now() - started) / 1000); task.transferred = offset; task.progress = offset / file.size * 100; task.speed = offset / elapsed; task.eta = task.speed ? (file.size - offset) / task.speed : 0; renderTasks();
+      }
+      const completed = waitControl(channel, ['complete'], 15000); channel.send(JSON.stringify({ t:'eof' })); await completed;
+      await api({ action:'transfer.directRecord', bindId:auth.bindId, side:'mobile', mobileToken:auth.mobileToken, name:file.name, size:file.size, mime:file.type || 'application/octet-stream' }).catch(() => {});
+      task.status = 'completed'; task.progress = 100; task.transferred = file.size; task.finishedAt = Date.now(); saveHistory(task); renderTasks(); return true;
+    } catch (error) {
+      signalRtc('desktop', id, 'cancel', {}).catch(() => {});
+      if (error && error.cancelled) throw error;
+      return false;
+    } finally { channel.close(); peer.close(); rtcPeers.delete(id); }
+  }
+
   function saveHistory(task) {
     try {
       const key = 'shortcut.transfer.history';
       const list = JSON.parse(localStorage.getItem(key) || '[]').filter((x) => x.id !== task.id);
-      list.unshift({ id: task.id, name: task.file.name, size: task.file.size, status: task.status, time: new Date().toISOString(), channel: 'cloud' });
+      list.unshift({ id: task.id, name: task.file.name, size: task.file.size, status: task.status, time: new Date().toISOString(), channel: task.channel || 'cloud' });
       localStorage.setItem(key, JSON.stringify(list.slice(0, 100)));
       if (!$('historyOverlay').classList.contains('hidden')) renderHistory();
     } catch (_) {}
@@ -239,7 +378,7 @@
     visible.forEach((task) => {
       const el = document.createElement('div'); el.className = 'task ' + (task.status === 'completed' ? 'done' : task.status === 'failed' ? 'failed' : '');
       const pct = Math.max(0, Math.min(100, Math.round(task.progress || 0)));
-      el.innerHTML = '<div class="task-head"><b>' + esc(task.file.name) + '</b><button type="button">' + (task.status === 'failed' ? '重试' : task.status === 'completed' ? '完成' : '取消') + '</button></div><div class="task-track"><div class="task-fill" style="width:' + pct + '%"></div></div><div class="task-foot"><span>' + (task.status === 'queued' ? '等待中' : pct + '% · ' + fmtByte(task.transferred || 0) + '/' + fmtByte(task.file.size)) + '</span><span>' + (task.speed ? fmtByte(task.speed) + '/s · ' + fmtTime(task.eta) : '云端') + '</span></div>';
+      el.innerHTML = '<div class="task-head"><b>' + esc(task.file.name) + '</b><button type="button">' + (task.status === 'failed' ? '重试' : task.status === 'completed' ? '完成' : '取消') + '</button></div><div class="task-track"><div class="task-fill" style="width:' + pct + '%"></div></div><div class="task-foot"><span>' + (task.status === 'queued' ? '等待中' : pct + '% · ' + fmtByte(task.transferred || 0) + '/' + fmtByte(task.file.size)) + '</span><span>' + (task.speed ? fmtByte(task.speed) + '/s · ' + fmtTime(task.eta) : task.channel === 'webrtc' ? '局域网直传' : task.channel === 'auto' ? '自动选择' : '云端') + '</span></div>';
       const button = el.querySelector('button');
       if (task.status === 'failed') button.onclick = () => { task.status = 'queued'; task.progress = 0; uploadQueue.push(task); renderTasks(); drainUploads(); };
       else if (task.status !== 'completed') button.onclick = () => cancelUpload(task);
@@ -274,6 +413,9 @@
         bubble.innerHTML = '<span class="file-icon">▣</span><span class="f-info"><b>' + esc(item.name || '文件') + '</b><small>' + fmtByte(item.size || 0) + '</small></span>';
         const dl = document.createElement('button'); dl.textContent = '下载';
         dl.onclick = () => downloadFile(item); bubble.appendChild(dl);
+      } else if (item.type === 'direct') {
+        bubble.classList.add('file-bubble');
+        bubble.innerHTML = '<span class="file-icon">✓</span><span class="f-info"><b>' + esc(item.name || '文件') + '</b><small>' + fmtByte(item.size || 0) + ' · 已通过局域网直传</small></span>';
       } else {
         bubble.textContent = item.text || '';
       }
@@ -340,7 +482,7 @@
     document.body.appendChild(a); a.click(); a.remove();
   }
 
-  async function uploadFileToMessages(file, existingTask) {
+  async function uploadFileToMessages(file, existingTask, forceCloud) {
     const task = existingTask || { id: 'up_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), file, status: 'running', progress: 0, transferred: 0, speed: 0, eta: 0 };
     transferTasks.set(task.id, task); renderTasks();
     function chunkHash(buf) {
@@ -370,6 +512,8 @@
     const started = performance.now();
     try {
       task.status = 'running'; task.cancelled = false; renderTasks();
+      if (!forceCloud && await tryRtcSend(task, file)) return { type:'direct', name:file.name, size:file.size };
+      task.channel = 'cloud'; task.progress = 0; task.transferred = 0; task.speed = 0; task.eta = 0; renderTasks();
       const init = await api({ action: 'transfer.fileInit', bindId: auth.bindId, side: 'mobile', mobileToken: auth.mobileToken, name: file.name, size: file.size, mime: file.type || 'application/octet-stream', chunkSize: 2 * 1024 * 1024, resumeKey: resumeKey(file) });
       task.fileId = init.file.id;
       const uploaded = new Set((init.file.uploaded || []).map(Number));
@@ -400,7 +544,7 @@
 
   function enqueueFiles(files) {
     Array.from(files || []).forEach((file) => {
-      const task = { id: 'up_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), file, status: 'queued', progress: 0, transferred: 0, speed: 0, eta: 0 };
+      const task = { id: 'up_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), file, status: 'queued', progress: 0, transferred: 0, speed: 0, eta: 0, channel:'auto' };
       transferTasks.set(task.id, task); uploadQueue.push(task);
     });
     renderTasks(); drainUploads();
@@ -479,7 +623,7 @@
   function shareFile(file) {
     if (!file) return;
     toast('shareMsg', '正在上传文件…');
-    uploadFileToMessages(file)
+    uploadFileToMessages(file, null, true)
       .then((msg) => {
         const messageId = (msg.id || '').replace(/^msg_/, '');
         if (!messageId) throw new Error('文件上传后未取得标识');
@@ -569,17 +713,21 @@
       $('boundChip').classList.add('colored');
       loadMessages();
       pollTimer = window.setInterval(() => loadMessages(), 3000);
+      pollRtc();
+      rtcTimer = window.setInterval(() => pollRtc(), 1200);
     } else {
       $('boundChip').textContent = '未绑定 · 可领取共享';
       $('statusLine').textContent = '领取共享无需绑定；发送文件或消息前需要先绑定电脑。';
     }
   })();
-  window.addEventListener('pagehide', () => { if (pollTimer) window.clearInterval(pollTimer); pollTimer = 0; });
+  window.addEventListener('pagehide', () => { if (pollTimer) window.clearInterval(pollTimer); if (rtcTimer) window.clearInterval(rtcTimer); pollTimer = 0; rtcTimer = 0; rtcPeers.forEach((peer) => peer.close()); rtcPeers.clear(); });
   window.addEventListener('pageshow', () => {
     auth = sdk.binding();
     if (auth && auth.bindId && auth.mobileToken && !pollTimer) {
       loadMessages();
       pollTimer = window.setInterval(() => loadMessages(), 3000);
+      pollRtc();
+      rtcTimer = window.setInterval(() => pollRtc(), 1200);
     }
   });
 })();

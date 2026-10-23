@@ -236,6 +236,16 @@ declare global {
       fileTransferActiveTasks: () => Promise<any>;
       fileTransferHistory: () => Promise<any>;
       fileTransferHistoryRemove: (id: string) => Promise<any>;
+      fileTransferRtcPoll: () => Promise<any>;
+      fileTransferRtcSignal: (to: 'mobile' | 'desktop', sessionId: string, type: string, payload: any) => Promise<any>;
+      fileTransferRtcFileInfo: (path: string) => Promise<any>;
+      fileTransferRtcReadChunk: (path: string, offset: number, length: number) => Promise<any>;
+      fileTransferRtcProgress: (taskId: string, direction: 'upload' | 'download', name: string, total: number, transferred: number, status: string) => Promise<any>;
+      fileTransferRtcReceiveInit: (taskId: string, name: string, size: number) => Promise<any>;
+      fileTransferRtcReceiveChunk: (taskId: string, offset: number, base64: string) => Promise<any>;
+      fileTransferRtcReceiveComplete: (taskId: string, sha256: string) => Promise<any>;
+      fileTransferRtcSent: (taskId: string, path: string) => Promise<any>;
+      fileTransferDirectRecord: (name: string, size: number, mime: string) => Promise<any>;
       onFileTransferProgress: (callback: (data: any) => void) => () => void;
       onFileTransferDrop: (callback: (data: { paths?: string[] }) => void) => () => void;
       onFileTransferDragover: (callback: (data: { active?: boolean }) => void) => () => void;

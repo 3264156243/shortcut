@@ -223,6 +223,7 @@ pub fn client_info(app: &tauri::AppHandle) -> Value {
         "lanIps": profile.lan_ips,
         "macs": profile.macs,
         "machineSource": profile.source,
+        "bindId": crate::sync::get_stored_bind_id().unwrap_or_default(),
         "modules": modules_list(),
     })
 }

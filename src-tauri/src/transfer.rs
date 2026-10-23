@@ -23,6 +23,16 @@ const HISTORY_LIMIT: usize = 300;
 static CANCELLED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 static ACTIVE_TASKS: OnceLock<Mutex<HashMap<String, Value>>> = OnceLock::new();
 static HISTORY_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+static RTC_RECEIVES: OnceLock<Mutex<HashMap<String, RtcReceive>>> = OnceLock::new();
+static RTC_SEND_STARTS: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
+
+#[derive(Clone)]
+struct RtcReceive {
+    name: String,
+    size: u64,
+    temp_path: PathBuf,
+    started: Instant,
+}
 
 fn cancelled() -> &'static Mutex<HashSet<String>> {
     CANCELLED.get_or_init(|| Mutex::new(HashSet::new()))
@@ -32,6 +42,12 @@ fn active_tasks_store() -> &'static Mutex<HashMap<String, Value>> {
 }
 fn history_lock() -> &'static Mutex<()> {
     HISTORY_LOCK.get_or_init(|| Mutex::new(()))
+}
+fn rtc_receives() -> &'static Mutex<HashMap<String, RtcReceive>> {
+    RTC_RECEIVES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+fn rtc_send_starts() -> &'static Mutex<HashMap<String, Instant>> {
+    RTC_SEND_STARTS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -195,6 +211,36 @@ fn finish_history(
     note: &str,
     started: Instant,
 ) {
+    finish_history_channel(
+        app,
+        task_id,
+        direction,
+        name,
+        size,
+        status,
+        local_path,
+        source_path,
+        file_id,
+        note,
+        started,
+        "cloud",
+    );
+}
+
+fn finish_history_channel(
+    app: &AppHandle,
+    task_id: &str,
+    direction: &str,
+    name: &str,
+    size: u64,
+    status: &str,
+    local_path: &str,
+    source_path: &str,
+    file_id: &str,
+    note: &str,
+    started: Instant,
+    channel: &str,
+) {
     emit_progress(
         app,
         task_id,
@@ -204,7 +250,7 @@ fn finish_history(
         if status == "completed" { size } else { 0 },
         started,
         status,
-        "cloud",
+        channel,
         file_id,
     );
     push_history(TransferHistoryItem {
@@ -214,7 +260,7 @@ fn finish_history(
         name: name.to_string(),
         size,
         status: status.to_string(),
-        channel: "cloud".to_string(),
+        channel: channel.to_string(),
         local_path: local_path.to_string(),
         source_path: source_path.to_string(),
         file_id: file_id.to_string(),
@@ -292,6 +338,9 @@ fn upload_chunk(
 
 fn upload_file(app: &AppHandle, task_id: &str, file_path: &str) -> Value {
     clear_cancel(task_id);
+    if let Ok(mut starts) = rtc_send_starts().lock() {
+        starts.remove(task_id);
+    }
     let started = Instant::now();
     // 身份统一从 hub 取（bind_id 内部有 60 秒缓存，不再每次重新解析绑定）
     let Some(bind_id) = hub::bind_id() else {
@@ -1100,6 +1149,300 @@ pub fn claim(code: &str) -> Value {
         Ok(v) => v,
         Err(e) => hub::err_result(e),
     }
+}
+
+// ---------- WebRTC 数据通道桥接 ----------
+// WebView 负责协商/DataChannel，Rust 只做受控的本地文件读写、校验、历史与进度事件。
+
+pub fn rtc_poll() -> Value {
+    with_binding("transfer.rtc.poll", json!({}))
+}
+
+pub fn rtc_signal(to: &str, session_id: &str, signal_type: &str, payload: Value) -> Value {
+    with_binding(
+        "transfer.rtc.signal",
+        json!({ "to": to, "sessionId": session_id, "type": signal_type, "payload": payload }),
+    )
+}
+
+pub fn rtc_file_info(file_path: &str) -> Value {
+    let path = Path::new(file_path);
+    let Ok(meta) = std::fs::metadata(path) else {
+        return json!({ "success": false, "message": "文件不存在" });
+    };
+    if !meta.is_file() || meta.len() == 0 {
+        return json!({ "success": false, "message": "文件为空或不可读取" });
+    }
+    json!({
+        "success": true,
+        "name": path.file_name().map(|v| v.to_string_lossy().to_string()).unwrap_or_else(|| "file".into()),
+        "size": meta.len(),
+        "mime": mime_for_path(path),
+    })
+}
+
+pub fn rtc_read_chunk(file_path: &str, offset: u64, length: usize) -> Value {
+    let length = length.clamp(1, 256 * 1024);
+    let Ok(mut file) = std::fs::File::open(file_path) else {
+        return json!({ "success": false, "message": "文件不可读取" });
+    };
+    let Ok(meta) = file.metadata() else {
+        return json!({ "success": false, "message": "文件状态读取失败" });
+    };
+    if offset > meta.len() || file.seek(std::io::SeekFrom::Start(offset)).is_err() {
+        return json!({ "success": false, "message": "文件读取位置无效" });
+    }
+    let mut bytes =
+        vec![0u8; std::cmp::min(length as u64, meta.len().saturating_sub(offset)) as usize];
+    if !bytes.is_empty() && file.read_exact(&mut bytes).is_err() {
+        return json!({ "success": false, "message": "文件读取失败" });
+    }
+    json!({
+        "success": true,
+        "data": base64::engine::general_purpose::STANDARD.encode(&bytes),
+        "offset": offset,
+        "nextOffset": offset + bytes.len() as u64,
+        "eof": offset + bytes.len() as u64 >= meta.len(),
+    })
+}
+
+pub fn rtc_progress(
+    app: &AppHandle,
+    task_id: &str,
+    direction: &str,
+    name: &str,
+    total: u64,
+    transferred: u64,
+    status: &str,
+) -> Value {
+    let started = rtc_send_starts()
+        .lock()
+        .map(|mut starts| {
+            *starts
+                .entry(task_id.to_string())
+                .or_insert_with(Instant::now)
+        })
+        .unwrap_or_else(|_| Instant::now());
+    if is_cancelled(task_id) {
+        clear_cancel(task_id);
+        if let Ok(mut starts) = rtc_send_starts().lock() {
+            starts.remove(task_id);
+        }
+        emit_progress(
+            app,
+            task_id,
+            direction,
+            name,
+            total,
+            transferred,
+            started,
+            "cancelled",
+            "webrtc",
+            "",
+        );
+        return json!({ "success": false, "cancelled": true, "message": "传输已取消" });
+    }
+    emit_progress(
+        app,
+        task_id,
+        direction,
+        name,
+        total,
+        transferred,
+        started,
+        status,
+        "webrtc",
+        "",
+    );
+    json!({ "success": true })
+}
+
+pub fn rtc_receive_init(app: &AppHandle, task_id: &str, name: &str, size: u64) -> Value {
+    if task_id.trim().is_empty() || size == 0 {
+        return json!({ "success": false, "message": "直传任务信息无效" });
+    }
+    let dir = configured_download_dir();
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        return json!({ "success": false, "message": format!("无法创建下载目录: {e}") });
+    }
+    let safe_name = safe_download_name(name, "direct-file");
+    let safe_task = safe_download_name(task_id, "rtc");
+    let temp_path = dir.join(format!(".shortcut-rtc-{safe_task}.part"));
+    let mut offset = std::fs::metadata(&temp_path).map(|v| v.len()).unwrap_or(0);
+    if offset > size {
+        let _ = std::fs::remove_file(&temp_path);
+        offset = 0;
+    }
+    let state = RtcReceive {
+        name: safe_name.clone(),
+        size,
+        temp_path,
+        started: Instant::now(),
+    };
+    if let Ok(mut receives) = rtc_receives().lock() {
+        receives.insert(task_id.to_string(), state.clone());
+    }
+    emit_progress(
+        app,
+        task_id,
+        "download",
+        &safe_name,
+        size,
+        offset,
+        state.started,
+        "running",
+        "webrtc",
+        "",
+    );
+    json!({ "success": true, "offset": offset, "name": safe_name })
+}
+
+pub fn rtc_receive_chunk(app: &AppHandle, task_id: &str, offset: u64, encoded: &str) -> Value {
+    let state = rtc_receives()
+        .lock()
+        .ok()
+        .and_then(|items| items.get(task_id).cloned());
+    let Some(state) = state else {
+        return json!({ "success": false, "message": "直传接收任务不存在" });
+    };
+    if is_cancelled(task_id) {
+        clear_cancel(task_id);
+        return json!({ "success": false, "cancelled": true, "message": "传输已取消" });
+    }
+    let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(encoded) else {
+        return json!({ "success": false, "message": "直传分片无效" });
+    };
+    if bytes.is_empty() || bytes.len() > 256 * 1024 || offset + bytes.len() as u64 > state.size {
+        return json!({ "success": false, "message": "直传分片大小无效" });
+    }
+    let current = std::fs::metadata(&state.temp_path)
+        .map(|v| v.len())
+        .unwrap_or(0);
+    if current != offset {
+        return json!({ "success": false, "message": "直传分片顺序不一致", "expectedOffset": current });
+    }
+    let result = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&state.temp_path)
+        .and_then(|mut file| {
+            file.write_all(&bytes)?;
+            file.flush()
+        });
+    if let Err(e) = result {
+        return json!({ "success": false, "message": e.to_string() });
+    }
+    let next = offset + bytes.len() as u64;
+    emit_progress(
+        app,
+        task_id,
+        "download",
+        &state.name,
+        state.size,
+        next,
+        state.started,
+        "running",
+        "webrtc",
+        "",
+    );
+    json!({ "success": true, "offset": next })
+}
+
+pub fn rtc_receive_complete(app: &AppHandle, task_id: &str, expected_hash: &str) -> Value {
+    let state = rtc_receives()
+        .lock()
+        .ok()
+        .and_then(|mut items| items.remove(task_id));
+    let Some(state) = state else {
+        return json!({ "success": false, "message": "直传接收任务不存在" });
+    };
+    if std::fs::metadata(&state.temp_path)
+        .map(|v| v.len())
+        .unwrap_or(0)
+        != state.size
+    {
+        return json!({ "success": false, "resumable": true, "message": "文件接收不完整" });
+    }
+    let Ok(mut file) = std::fs::File::open(&state.temp_path) else {
+        return json!({ "success": false, "message": "接收文件不可读取" });
+    };
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 65536];
+    loop {
+        match file.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => hasher.update(&buf[..n]),
+            Err(e) => return json!({ "success": false, "message": e.to_string() }),
+        }
+    }
+    let actual_hash = hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
+    if !expected_hash.is_empty() && !actual_hash.eq_ignore_ascii_case(expected_hash) {
+        let _ = std::fs::remove_file(&state.temp_path);
+        return json!({ "success": false, "message": "文件完整性校验失败" });
+    }
+    let target = available_target(&configured_download_dir(), &state.name);
+    if let Err(e) = std::fs::rename(&state.temp_path, &target) {
+        return json!({ "success": false, "message": format!("文件保存失败: {e}") });
+    }
+    finish_history_channel(
+        app,
+        task_id,
+        "download",
+        &state.name,
+        state.size,
+        "completed",
+        &target.to_string_lossy(),
+        "",
+        "",
+        "局域网直传",
+        state.started,
+        "webrtc",
+    );
+    json!({ "success": true, "path": target.to_string_lossy(), "name": state.name, "size": state.size, "sha256": actual_hash })
+}
+
+pub fn rtc_sent(app: &AppHandle, task_id: &str, file_path: &str) -> Value {
+    let info = rtc_file_info(file_path);
+    if !info
+        .get("success")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        return info;
+    }
+    let name = info.get("name").and_then(|v| v.as_str()).unwrap_or("file");
+    let size = info.get("size").and_then(|v| v.as_u64()).unwrap_or(0);
+    let started = rtc_send_starts()
+        .lock()
+        .ok()
+        .and_then(|mut starts| starts.remove(task_id))
+        .unwrap_or_else(Instant::now);
+    finish_history_channel(
+        app,
+        task_id,
+        "upload",
+        name,
+        size,
+        "completed",
+        "",
+        file_path,
+        "",
+        "局域网直传",
+        started,
+        "webrtc",
+    );
+    json!({ "success": true })
+}
+
+pub fn direct_record(name: &str, size: u64, mime: &str) -> Value {
+    with_binding(
+        "transfer.directRecord",
+        json!({ "name": name, "size": size, "mime": mime }),
+    )
 }
 
 // 供 lib.rs 判断下载目录

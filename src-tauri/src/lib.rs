@@ -1164,6 +1164,58 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
         "fileTransferActiveTasks" => transfer::active_tasks(),
         "fileTransferHistory" => transfer::history(),
         "fileTransferHistoryRemove" => transfer::history_remove(args.first().and_then(|v| v.as_str()).unwrap_or("")),
+        "fileTransferRtcPoll" => transfer::rtc_poll(),
+        "fileTransferRtcSignal" => {
+            let to = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            let session_id = args.get(1).and_then(|v| v.as_str()).unwrap_or("");
+            let signal_type = args.get(2).and_then(|v| v.as_str()).unwrap_or("");
+            let payload = args.get(3).cloned().unwrap_or_else(|| json!({}));
+            transfer::rtc_signal(to, session_id, signal_type, payload)
+        }
+        "fileTransferRtcFileInfo" => transfer::rtc_file_info(args.first().and_then(|v| v.as_str()).unwrap_or("")),
+        "fileTransferRtcReadChunk" => {
+            let path = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            let offset = args.get(1).and_then(|v| v.as_u64()).unwrap_or(0);
+            let length = args.get(2).and_then(|v| v.as_u64()).unwrap_or(65536) as usize;
+            transfer::rtc_read_chunk(path, offset, length)
+        }
+        "fileTransferRtcProgress" => {
+            let task_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            let direction = args.get(1).and_then(|v| v.as_str()).unwrap_or("upload");
+            let name = args.get(2).and_then(|v| v.as_str()).unwrap_or("file");
+            let total = args.get(3).and_then(|v| v.as_u64()).unwrap_or(0);
+            let transferred = args.get(4).and_then(|v| v.as_u64()).unwrap_or(0);
+            let status = args.get(5).and_then(|v| v.as_str()).unwrap_or("running");
+            transfer::rtc_progress(&app, task_id, direction, name, total, transferred, status)
+        }
+        "fileTransferRtcReceiveInit" => {
+            let task_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            let name = args.get(1).and_then(|v| v.as_str()).unwrap_or("file");
+            let size = args.get(2).and_then(|v| v.as_u64()).unwrap_or(0);
+            transfer::rtc_receive_init(&app, task_id, name, size)
+        }
+        "fileTransferRtcReceiveChunk" => {
+            let task_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            let offset = args.get(1).and_then(|v| v.as_u64()).unwrap_or(0);
+            let encoded = args.get(2).and_then(|v| v.as_str()).unwrap_or("");
+            transfer::rtc_receive_chunk(&app, task_id, offset, encoded)
+        }
+        "fileTransferRtcReceiveComplete" => {
+            let task_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            let hash = args.get(1).and_then(|v| v.as_str()).unwrap_or("");
+            transfer::rtc_receive_complete(&app, task_id, hash)
+        }
+        "fileTransferRtcSent" => {
+            let task_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            let path = args.get(1).and_then(|v| v.as_str()).unwrap_or("");
+            transfer::rtc_sent(&app, task_id, path)
+        }
+        "fileTransferDirectRecord" => {
+            let name = args.first().and_then(|v| v.as_str()).unwrap_or("file");
+            let size = args.get(1).and_then(|v| v.as_u64()).unwrap_or(0);
+            let mime = args.get(2).and_then(|v| v.as_str()).unwrap_or("application/octet-stream");
+            transfer::direct_record(name, size, mime)
+        }
         "fileTransferShareText" => {
             let text = args.first().and_then(|v| v.as_str()).unwrap_or("");
             let code = args.get(1).and_then(|v| v.as_str()).unwrap_or("");

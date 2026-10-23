@@ -29,6 +29,7 @@ import { ModuleId, PanelAnimation, UpdateState } from './types';
 import { useTranslation } from './hooks/useTranslation';
 import { getAvailableModuleIds } from './moduleRegistry';
 import appIcon from './assets/app-icon.png';
+import { startFileTransferRtc } from './fileTransferRtc';
 
 // Animation variants based on direction
 const getAnimationVariants = (direction: PanelAnimation) => {
@@ -363,13 +364,14 @@ export default function App() {
   }, [api, activeModule]);
   useEffect(() => {
     const enabled = config.modules.find((item) => item.id === 'fileTransfer')?.enabled !== false;
-    if (enabled) return;
+    if (enabled) return startFileTransferRtc();
     void api?.fileTransferActiveTasks?.().then((result) => {
       if (!result?.success || !Array.isArray(result.tasks)) return;
       result.tasks.forEach((task: { taskId?: string }) => {
         if (task.taskId) void api?.fileTransferCancel?.(task.taskId);
       });
     });
+    return undefined;
   }, [api, config.modules]);
   useEffect(() => {
     if (!api?.onConfigChanged) return;

@@ -755,6 +755,7 @@ $loggedIn = !empty($_SESSION['admin']);
                   <th>首次在线</th>
                   <th>最后在线</th>
                   <th>检查次数</th>
+                  <th>快传云空间</th>
                   <th>操作</th>
                 </tr>
               </thead>
@@ -1376,11 +1377,21 @@ $loggedIn = !empty($_SESSION['admin']);
       checksToday: '今日检查',
       checksWeek: '近7天检查',
       checksTotal: '累计检查',
+      transferBytes: '快传云空间',
+      transferFiles: '云端分片数',
     };
 
     function shortMachine(machine) {
       const value = String(machine || '');
       return value.length > 12 ? value.slice(0, 8) + '…' + value.slice(-4) : value;
+    }
+
+    function formatDashboardBytes(bytes) {
+      const value = Number(bytes) || 0;
+      if (value < 1024) return value + ' B';
+      if (value < 1024 * 1024) return (value / 1024).toFixed(1) + ' KB';
+      if (value < 1024 * 1024 * 1024) return (value / 1024 / 1024).toFixed(1) + ' MB';
+      return (value / 1024 / 1024 / 1024).toFixed(2) + ' GB';
     }
 
     function machineIpText(item) {
@@ -1394,11 +1405,11 @@ $loggedIn = !empty($_SESSION['admin']);
       const stats = state.dashboard.stats || {};
       const statGrid = document.getElementById('statGrid');
       statGrid.innerHTML = '';
-      for (const key of ['devices', 'bindings', 'codes', 'activeCodes', 'checksToday', 'checksWeek', 'checksTotal']) {
+      for (const key of ['devices', 'bindings', 'codes', 'activeCodes', 'checksToday', 'checksWeek', 'checksTotal', 'transferBytes', 'transferFiles']) {
         const card = document.createElement('div');
         card.className = 'stat-card';
         const value = document.createElement('strong');
-        value.textContent = String(stats[key] ?? 0);
+        value.textContent = key === 'transferBytes' ? formatDashboardBytes(stats[key] || 0) : String(stats[key] ?? 0);
         const label = document.createElement('span');
         label.textContent = DASHBOARD_STAT_LABELS[key] || key;
         card.appendChild(value);
@@ -1416,6 +1427,8 @@ $loggedIn = !empty($_SESSION['admin']);
         const unbindAction = item.code
           ? '<button class="btn small" onclick="unbindCode(\'' + escapeJs(item.code) + '\')">解绑</button>'
           : '';
+        const transferUsage = item.file_transfer_usage || {};
+        const transferText = formatDashboardBytes(transferUsage.bytes || 0) + (item.file_transfer_quota_mb ? ' / ' + item.file_transfer_quota_mb + ' MB' : '') + ' · ' + (transferUsage.messages || 0) + ' 条';
         tr.innerHTML =
           '<td class="truncate-cell" title="' + escapeHtml(machine) + '">' + escapeHtml(shortMachine(machine)) + '</td>' +
           '<td class="code-text">' + escapeHtml(item.code) + '</td>' +
@@ -1426,6 +1439,7 @@ $loggedIn = !empty($_SESSION['admin']);
           '<td>' + escapeHtml(firstSeen) + '</td>' +
           '<td>' + escapeHtml(lastSeen) + '</td>' +
           '<td>' + escapeHtml(String(item.check_count || 0)) + '</td>' +
+          '<td class="truncate-cell" title="绑定 ' + escapeHtml(item.bind_id || '未上报') + '；收藏 ' + escapeHtml(String(transferUsage.favorites || 0)) + ' 条">' + escapeHtml(transferText) + '</td>' +
           '<td><div class="actions">' +
           '<button class="btn small" onclick="viewDevice(\'' + escapeJs(machine) + '\')">查看</button>' +
           unbindAction +
@@ -1433,7 +1447,7 @@ $loggedIn = !empty($_SESSION['admin']);
         devicesBody.appendChild(tr);
       }
       if (state.dashboard.devices.length === 0) {
-        devicesBody.innerHTML = '<tr><td colspan="10" class="muted">暂无绑定设备</td></tr>';
+        devicesBody.innerHTML = '<tr><td colspan="11" class="muted">暂无绑定设备</td></tr>';
       }
 
       const logsBody = document.getElementById('logsBody');

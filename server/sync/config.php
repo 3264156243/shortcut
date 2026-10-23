@@ -10,6 +10,7 @@ $RATE_LIMIT_FILE = $DATA_DIR . '/rate-limits.json';
 $MESSAGE_DIR = $DATA_DIR . '/messages';
 $SHARES_FILE = $DATA_DIR . '/shares.json';
 $FILE_DIR = $DATA_DIR . '/files';
+$RTC_DIR = $DATA_DIR . '/rtc';
 // 模块清单（服务端权威，与代码同目录，便于部署时一起更新）
 $MODULES_FILE = __DIR__ . '/modules.json';
 $MAX_QUEUE_ITEMS = 500;
@@ -1243,6 +1244,60 @@ function sync_module_policy($moduleId) {
         }
     }
     return $policy;
+}
+
+// ===== 文件快传 WebRTC 轻量信令 =====
+function rtc_presence_path($bindId) {
+    global $RTC_DIR;
+    $safe = preg_replace('/[^a-zA-Z0-9_-]/', '_', (string)$bindId);
+    return $RTC_DIR . '/' . $safe . '-presence.json';
+}
+
+function rtc_signal_path($bindId, $side) {
+    global $RTC_DIR;
+    $safe = preg_replace('/[^a-zA-Z0-9_-]/', '_', (string)$bindId);
+    $target = $side === 'desktop' ? 'desktop' : 'mobile';
+    return $RTC_DIR . '/' . $safe . '-' . $target . '.json';
+}
+
+function rtc_touch($bindId, $side) {
+    $side = $side === 'desktop' ? 'desktop' : 'mobile';
+    return json_lock_update(rtc_presence_path($bindId), function ($state) use ($side) {
+        $state[$side] = time();
+        return ['data' => $state, 'result' => true];
+    });
+}
+
+function rtc_online_state($bindId) {
+    $state = json_lock_read(rtc_presence_path($bindId));
+    $now = time();
+    return [
+        'desktop' => is_array($state) && $now - (int)($state['desktop'] ?? 0) <= 12,
+        'mobile' => is_array($state) && $now - (int)($state['mobile'] ?? 0) <= 12,
+    ];
+}
+
+function rtc_push_signal($bindId, $from, $to, $sessionId, $type, $payload) {
+    if (!preg_match('/^[a-zA-Z0-9_-]{8,80}$/', (string)$sessionId)) return false;
+    if (!in_array($type, ['offer', 'answer', 'candidate', 'cancel'], true)) return false;
+    $encoded = json_encode($payload, JSON_UNESCAPED_UNICODE);
+    if ($encoded === false || strlen($encoded) > 180000) return false;
+    $item = ['id' => bin2hex(random_bytes(12)), 'sessionId' => $sessionId, 'from' => $from, 'type' => $type, 'payload' => $payload, 'createdAt' => date('c')];
+    return json_lock_update(rtc_signal_path($bindId, $to), function ($items) use ($item) {
+        $cutoff = time() - 60;
+        $items = array_values(array_filter((array)$items, function ($row) use ($cutoff) { return is_array($row) && strtotime((string)($row['createdAt'] ?? '')) >= $cutoff; }));
+        $items[] = $item;
+        if (count($items) > 100) $items = array_slice($items, -100);
+        return ['data' => $items, 'result' => $item];
+    });
+}
+
+function rtc_take_signals($bindId, $side) {
+    return json_lock_update(rtc_signal_path($bindId, $side), function ($items) {
+        $cutoff = time() - 60;
+        $out = array_values(array_filter((array)$items, function ($row) use ($cutoff) { return is_array($row) && strtotime((string)($row['createdAt'] ?? '')) >= $cutoff; }));
+        return ['data' => [], 'result' => $out];
+    });
 }
 
 /** 文件快传最终策略：modules.json 默认值 + 激活后台平台策略覆盖。 */

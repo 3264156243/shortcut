@@ -645,6 +645,8 @@ switch ($action) {
             }
         }
         $devices = [];
+        $transferBytes = 0;
+        $transferFiles = 0;
         foreach ($devicesByMachine as $machine => $device) {
             $device['machine'] = $machine;
             $groupId = isset($device['group_id']) && $device['group_id'] !== ''
@@ -654,6 +656,11 @@ switch ($action) {
             $device['group_name'] = $group ? $group['name'] : ($device['group_name'] ?? '未指定');
             $device['tier'] = $group ? $group['name'] : ($device['tier'] ?? '未指定');
             $device['code'] = $device['code'] ?? '';
+            $usage = file_transfer_usage_for_bind($device['bind_id'] ?? '');
+            $device['file_transfer_usage'] = $usage;
+            $device['file_transfer_quota_mb'] = is_array($group) ? intval($group['fileTransferPolicy']['cloudQuotaMb'] ?? 0) : 0;
+            $transferBytes += intval($usage['bytes'] ?? 0);
+            $transferFiles += intval($usage['files'] ?? 0);
             $devices[] = $device;
         }
         usort($devices, function ($a, $b) {
@@ -671,6 +678,8 @@ switch ($action) {
                 'checksToday' => $checksToday,
                 'checksWeek' => $checksWeek,
                 'checksTotal' => count($logs),
+                'transferBytes' => $transferBytes,
+                'transferFiles' => $transferFiles,
             ],
         ]);
         break;
