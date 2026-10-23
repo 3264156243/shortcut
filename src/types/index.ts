@@ -314,6 +314,7 @@ export interface AppConfig {
   };
   fileTransfer?: {
     downloadDirectory?: string;
+    downloadDirectoryAsked?: boolean;
     autoCopyText?: boolean;
     islandNotify?: boolean;
     islandProgress?: boolean;

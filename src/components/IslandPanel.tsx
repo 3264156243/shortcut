@@ -51,6 +51,12 @@ export default function IslandPanel() {
   }, [island.opencodeApiKey]);
 
   const balanceProvider = (island.balanceProvider || (island.deepseekEnabled === true ? 'deepseek' : 'none')) as BalanceProvider;
+  const transfer = config.fileTransfer || {};
+
+  const updateTransfer = (updates: Partial<typeof transfer>) => {
+    useStore.setState((state) => ({ config: { ...state.config, fileTransfer: { ...(state.config.fileTransfer || {}), ...updates } } }));
+    void useStore.getState().saveConfig();
+  };
 
   const updateIsland = async (updates: Partial<typeof island>) => {
     const next = { ...island, ...updates };
@@ -169,6 +175,19 @@ export default function IslandPanel() {
                 : '已关闭：鼠标移到球上就能点（可按住拖动移动位置、可展开/菜单），移开后球周围不挡桌面点击。'}
               <br />
               展开状态下球始终可交互；拖文件到球上时会自动临时解除穿透（仅用于接收文件，不会让球变成可拖动）。快捷键 {ballShortcut}（可切换）。
+            </p>
+          </div>
+        </div>
+
+        {/* 文件快传设置 */}
+        <div style={sectionStyle}>
+          <div style={titleStyle}>文件快传</div>
+          <div className="flex flex-col gap-3">
+            {toggleRow('收到新文本或文件时短暂提醒', transfer.islandNotify !== false, (v) => updateTransfer({ islandNotify: v }))}
+            {toggleRow('上传和下载时显示传输进度', transfer.islandProgress !== false, (v) => updateTransfer({ islandProgress: v }))}
+            {toggleRow('文件拖到 SC 球后允许直接发送', transfer.islandDropSend === true, (v) => updateTransfer({ islandDropSend: v }))}
+            <p className="text-[11px] leading-5" style={{ color: 'var(--color-text-muted)' }}>
+              拖入文件后仍会显示操作菜单，由你选择“发送到手机”或转换格式；未绑定时会明确提示。
             </p>
           </div>
         </div>

@@ -39,6 +39,21 @@
     .bar-btn.accent { color: #fff; background: #9f493a; border-color: transparent; }
     .status-line { padding: 4px 14px 6px; min-height: 20px; font-size: 12px; }
     .status-line.error { color: #e5a19a; } .status-line.ok { color: #8ac49f; }
+    .tasks { display:none; flex:0 0 auto; gap:8px; overflow-x:auto; padding:8px 14px; background:#292622; border-bottom:1px solid rgba(255,255,255,.08); }
+    .tasks.show { display:flex; }
+    .task { flex:0 0 250px; padding:9px 10px; border:1px solid rgba(255,255,255,.09); border-radius:9px; background:#35312d; }
+    .task-head,.task-foot { display:flex; align-items:center; gap:8px; font-size:11px; }
+    .task-head b { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .task-head button { border:0; color:#e5a19a; background:transparent; }
+    .task-track { height:5px; margin:7px 0 5px; overflow:hidden; border-radius:999px; background:#24211e; }
+    .task-fill { height:100%; width:0; border-radius:inherit; background:#c56d55; transition:width .15s linear; }
+    .task-foot { justify-content:space-between; color:#9e958b; font-size:10px; }
+    .task.failed .task-fill { background:#bd6259; } .task.done .task-fill { background:#65a77b; }
+    .image-bubble { padding:0; overflow:hidden; }
+    .image-bubble img { display:block; width:min(100%,360px); max-height:300px; object-fit:contain; background:#211f1c; }
+    .image-caption { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 10px; font-size:11px; }
+    .favorite { color:#d8b46a!important; }
+    .drop-active:after { content:'松开发送文件'; position:fixed; inset:12px; z-index:30; display:grid; place-items:center; border:2px dashed #c56d55; border-radius:18px; color:#f3d1c7; background:rgba(36,34,31,.92); font-weight:700; }
     /* ===== 共享弹窗（overlay）===== */
     .overlay { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.55); }
     .overlay.hidden { display: none; }
@@ -77,6 +92,7 @@
     <button id="backBtn" class="icon-btn" title="返回">‹</button>
     <span class="title">文件共享</span>
     <span id="boundChip" class="chip">未绑定</span>
+    <button id="historyBtn" class="icon-btn" title="传输历史">↺</button>
   </div>
 
   <div class="composer">
@@ -86,6 +102,8 @@
     <button id="sendBtn" class="round-btn primary" title="发送">↑</button>
   </div>
 
+  <div id="tasks" class="tasks"></div>
+
   <div id="messages" class="messages"></div>
 
   <div class="toolsbar">
@@ -93,6 +111,14 @@
     <button id="shareBtn" class="bar-btn accent" type="button">共享内容</button>
   </div>
   <div id="statusLine" class="status-line"></div>
+</div>
+
+<div id="historyOverlay" class="overlay hidden">
+  <div class="sheet">
+    <div class="sheet-head"><h2>本机传输历史</h2><button id="historyClose" class="sheet-close" type="button">×</button></div>
+    <div id="historyList" class="share-list"></div>
+    <button id="historyClear" class="btn danger" type="button" style="width:100%;margin-top:14px">清空历史</button>
+  </div>
 </div>
 
 <!-- ===== 共享弹窗 ===== -->
@@ -149,6 +175,9 @@
   let pollTimer = 0;
   let pollBusy = false;
   let renderedOnce = false;
+  const transferTasks = new Map();
+  const uploadQueue = [];
+  let uploadBusy = false;
 
   /** 兼容旧调用点：payload 里带 action，其余字段透传；失败时抛出（沿用本页原有语义） */
   function api(payload) {
@@ -171,6 +200,53 @@
   function goBind() { location.href = '/bind/?next=' + encodeURIComponent(location.pathname); }
   function esc(s) { return String(s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
   function fmtByte(n) { if (n < 1024) return n + ' B'; if (n < 1048576) return (n / 1024).toFixed(1) + ' KB'; return (n / 1048576).toFixed(1) + ' MB'; }
+  function fmtTime(seconds) { if (!seconds || !isFinite(seconds)) return '计算中'; return seconds < 60 ? Math.ceil(seconds) + ' 秒' : Math.ceil(seconds / 60) + ' 分钟'; }
+  function downloadUrl(fileId, preview) { return '/sync/file.php?' + new URLSearchParams({ action: preview ? 'preview' : 'download', bindId: auth.bindId, side: 'mobile', mobileToken: auth.mobileToken, fileId }); }
+  function resumeKey(file) {
+    const source = [file.name, file.size, file.lastModified].join('|');
+    let a = 2166136261, b = 2246822519;
+    for (let i = 0; i < source.length; i++) { a = Math.imul(a ^ source.charCodeAt(i), 16777619); b = Math.imul(b ^ source.charCodeAt(i), 3266489917); }
+    return 'mobile_' + (a >>> 0).toString(16).padStart(8, '0') + (b >>> 0).toString(16).padStart(8, '0') + '_' + file.size.toString(36);
+  }
+
+  function saveHistory(task) {
+    try {
+      const key = 'shortcut.transfer.history';
+      const list = JSON.parse(localStorage.getItem(key) || '[]').filter((x) => x.id !== task.id);
+      list.unshift({ id: task.id, name: task.file.name, size: task.file.size, status: task.status, time: new Date().toISOString(), channel: 'cloud' });
+      localStorage.setItem(key, JSON.stringify(list.slice(0, 100)));
+      if (!$('historyOverlay').classList.contains('hidden')) renderHistory();
+    } catch (_) {}
+  }
+
+  function historyItems() { try { return JSON.parse(localStorage.getItem('shortcut.transfer.history') || '[]'); } catch (_) { return []; } }
+  function renderHistory() {
+    const box = $('historyList'); const list = historyItems(); box.innerHTML = '';
+    if (!list.length) { box.innerHTML = '<div class="empty">暂无传输历史</div>'; return; }
+    list.forEach((item) => {
+      const row = document.createElement('div'); row.className = 'share-item';
+      row.innerHTML = '<span class="share-tag ' + (item.status === 'completed' ? 'file' : '') + '">' + (item.status === 'completed' ? '完成' : item.status === 'cancelled' ? '取消' : '失败') + '</span><span class="share-meta"><b>' + esc(item.name) + '</b><span>' + fmtByte(item.size || 0) + ' · ' + new Date(item.time).toLocaleString('zh-CN', { hour12:false }) + ' · ' + esc(item.channel || 'cloud') + '</span></span>';
+      const del = document.createElement('button'); del.className = 'btn secondary sm'; del.textContent = '删除'; del.onclick = () => { localStorage.setItem('shortcut.transfer.history', JSON.stringify(historyItems().filter((x) => x.id !== item.id))); renderHistory(); };
+      row.appendChild(del); box.appendChild(row);
+    });
+  }
+
+  function renderTasks() {
+    const box = $('tasks');
+    const visible = Array.from(transferTasks.values()).filter((task) => task.status === 'failed' || task.status === 'queued' || task.status === 'running' || Date.now() - (task.finishedAt || Date.now()) < 5000);
+    box.classList.toggle('show', visible.length > 0);
+    box.innerHTML = '';
+    visible.forEach((task) => {
+      const el = document.createElement('div'); el.className = 'task ' + (task.status === 'completed' ? 'done' : task.status === 'failed' ? 'failed' : '');
+      const pct = Math.max(0, Math.min(100, Math.round(task.progress || 0)));
+      el.innerHTML = '<div class="task-head"><b>' + esc(task.file.name) + '</b><button type="button">' + (task.status === 'failed' ? '重试' : task.status === 'completed' ? '完成' : '取消') + '</button></div><div class="task-track"><div class="task-fill" style="width:' + pct + '%"></div></div><div class="task-foot"><span>' + (task.status === 'queued' ? '等待中' : pct + '% · ' + fmtByte(task.transferred || 0) + '/' + fmtByte(task.file.size)) + '</span><span>' + (task.speed ? fmtByte(task.speed) + '/s · ' + fmtTime(task.eta) : '云端') + '</span></div>';
+      const button = el.querySelector('button');
+      if (task.status === 'failed') button.onclick = () => { task.status = 'queued'; task.progress = 0; uploadQueue.push(task); renderTasks(); drainUploads(); };
+      else if (task.status !== 'completed') button.onclick = () => cancelUpload(task);
+      else button.disabled = true;
+      box.appendChild(el);
+    });
+  }
 
   // ===== 认证 =====
   function ensured() { if (!auth || !auth.bindId || !auth.mobileToken) { goBind(); return false; } return true; }
@@ -188,7 +264,12 @@
       wrap.className = 'wrap';
       const bubble = document.createElement('div');
       bubble.className = 'bubble';
-      if (item.type === 'file') {
+      if (item.type === 'image') {
+        bubble.classList.add('image-bubble');
+        const image = document.createElement('img'); image.src = downloadUrl(item.fileId, true); image.alt = item.name || '图片'; image.loading = 'lazy';
+        const caption = document.createElement('div'); caption.className = 'image-caption'; caption.innerHTML = '<b>' + esc(item.name || '图片') + '</b><span>' + fmtByte(item.size || 0) + '</span>';
+        bubble.appendChild(image); bubble.appendChild(caption); bubble.onclick = () => downloadFile(item);
+      } else if (item.type === 'file') {
         bubble.classList.add('file-bubble');
         bubble.innerHTML = '<span class="file-icon">▣</span><span class="f-info"><b>' + esc(item.name || '文件') + '</b><small>' + fmtByte(item.size || 0) + '</small></span>';
         const dl = document.createElement('button'); dl.textContent = '下载';
@@ -206,6 +287,8 @@
         cp.onclick = async () => { try { await navigator.clipboard.writeText(item.text || ''); cp.textContent = '已复制'; setTimeout(() => cp.textContent = '复制', 1200); } catch (e) {} };
         meta.appendChild(cp);
       }
+      const fav = document.createElement('button'); fav.textContent = item.favorite ? '已收藏' : '收藏'; fav.className = item.favorite ? 'favorite' : '';
+      fav.onclick = () => favoriteMsg(item); meta.appendChild(fav);
       const del = document.createElement('button'); del.textContent = '删除';
       del.onclick = () => deleteMsg(item);
       meta.appendChild(del);
@@ -244,40 +327,103 @@
       .catch((e) => toast('statusLine', e.message || '删除失败'));
   }
 
+  function favoriteMsg(item) {
+    api({ action: 'transfer.favorite', bindId: auth.bindId, mobileToken: auth.mobileToken, side: 'mobile', messageId: item.id, favorite: !item.favorite })
+      .then(() => loadMessages())
+      .catch((e) => toast('statusLine', e.message || '收藏失败'));
+  }
+
   function downloadFile(item) {
-    const q = new URLSearchParams({ action: 'download', bindId: auth.bindId, side: 'mobile', mobileToken: auth.mobileToken, fileId: item.fileId });
     const a = document.createElement('a');
-    a.href = '/sync/file.php?' + q.toString();
+    a.href = downloadUrl(item.fileId);
     a.download = item.name || 'file';
     document.body.appendChild(a); a.click(); a.remove();
   }
 
-  function uploadFileToMessages(file) {
+  async function uploadFileToMessages(file, existingTask) {
+    const task = existingTask || { id: 'up_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), file, status: 'running', progress: 0, transferred: 0, speed: 0, eta: 0 };
+    transferTasks.set(task.id, task); renderTasks();
     function chunkHash(buf) {
       return crypto.subtle.digest('SHA-256', buf).then((digest) => {
         return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
       });
     }
-    return api({ action: 'transfer.fileInit', bindId: auth.bindId, side: 'mobile', mobileToken: auth.mobileToken, name: file.name, size: file.size, mime: file.type, chunkSize: 2 * 1024 * 1024 })
-      .then(async (init) => {
-        if (!init.success) throw new Error(init.message || '创建上传失败');
-        for (let i = 0; i < init.file.chunkCount; i++) {
-          const slice = file.slice(i * 2 * 1024 * 1024, Math.min(file.size, (i + 1) * 2 * 1024 * 1024));
-          let hash = '';
-          try { hash = await chunkHash(await slice.arrayBuffer()); } catch (e) {}
-          const fd = new FormData();
-          fd.append('action', 'uploadChunk'); fd.append('bindId', auth.bindId); fd.append('side', 'mobile'); fd.append('mobileToken', auth.mobileToken);
-          fd.append('fileId', init.file.id); fd.append('chunkIndex', String(i));
-          if (hash) fd.append('chunkHash', hash);
-          fd.append('chunk', slice, file.name + '.part');
-          const r = await fetch('/sync/file.php', { method: 'POST', body: fd });
-          const d = await r.json();
-          if (!r.ok || !d.success) throw new Error(d.message || '分片上传失败');
-        }
-        const done = await api({ action: 'transfer.fileComplete', bindId: auth.bindId, side: 'mobile', mobileToken: auth.mobileToken, fileId: init.file.id });
-        if (!done.success) throw new Error(done.message || '文件发送失败');
-        return done.message || {};
+    function postChunk(fd, baseTransferred, started) {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest(); task.xhr = xhr;
+        xhr.open('POST', '/sync/file.php');
+        xhr.upload.onprogress = (event) => {
+          const transferred = Math.min(file.size, baseTransferred + (event.loaded || 0));
+          const elapsed = Math.max(.1, (performance.now() - started) / 1000);
+          task.transferred = transferred; task.progress = file.size ? transferred / file.size * 100 : 0; task.speed = transferred / elapsed; task.eta = task.speed ? (file.size - transferred) / task.speed : 0;
+          renderTasks();
+        };
+        xhr.onerror = () => reject(new Error('网络中断，可点击重试续传'));
+        xhr.onabort = () => reject(Object.assign(new Error('已取消'), { cancelled: true }));
+        xhr.onload = () => {
+          let data = {}; try { data = JSON.parse(xhr.responseText || '{}'); } catch (_) {}
+          if (xhr.status < 200 || xhr.status >= 300 || !data.success) reject(new Error(data.message || '分片上传失败')); else resolve(data);
+        };
+        xhr.send(fd);
       });
+    }
+    const started = performance.now();
+    try {
+      task.status = 'running'; task.cancelled = false; renderTasks();
+      const init = await api({ action: 'transfer.fileInit', bindId: auth.bindId, side: 'mobile', mobileToken: auth.mobileToken, name: file.name, size: file.size, mime: file.type || 'application/octet-stream', chunkSize: 2 * 1024 * 1024, resumeKey: resumeKey(file) });
+      task.fileId = init.file.id;
+      const uploaded = new Set((init.file.uploaded || []).map(Number));
+      task.transferred = Array.from(uploaded).reduce((sum, index) => sum + Math.min(2 * 1024 * 1024, file.size - index * 2 * 1024 * 1024), 0);
+      for (let i = 0; i < init.file.chunkCount; i++) {
+        if (task.cancelled) throw Object.assign(new Error('已取消'), { cancelled: true });
+        if (uploaded.has(i)) continue;
+        const slice = file.slice(i * 2 * 1024 * 1024, Math.min(file.size, (i + 1) * 2 * 1024 * 1024));
+        let hash = '';
+        try { hash = await chunkHash(await slice.arrayBuffer()); } catch (_) {}
+        const fd = new FormData();
+        fd.append('action', 'uploadChunk'); fd.append('bindId', auth.bindId); fd.append('side', 'mobile'); fd.append('mobileToken', auth.mobileToken);
+        fd.append('fileId', init.file.id); fd.append('chunkIndex', String(i));
+        if (hash) fd.append('chunkHash', hash);
+        fd.append('chunk', slice, file.name + '.part');
+        const beforeChunk = task.transferred;
+        await postChunk(fd, beforeChunk, started);
+        task.transferred = beforeChunk + slice.size; task.progress = task.transferred / file.size * 100; renderTasks();
+      }
+      const done = await api({ action: 'transfer.fileComplete', bindId: auth.bindId, side: 'mobile', mobileToken: auth.mobileToken, fileId: init.file.id });
+      task.status = 'completed'; task.progress = 100; task.transferred = file.size; task.finishedAt = Date.now(); saveHistory(task); renderTasks();
+      return done.message || {};
+    } catch (error) {
+      task.status = error && error.cancelled ? 'cancelled' : 'failed'; task.finishedAt = task.status === 'cancelled' ? Date.now() : 0; task.error = error.message || '上传失败'; saveHistory(task); renderTasks();
+      throw error;
+    } finally { task.xhr = null; }
+  }
+
+  function enqueueFiles(files) {
+    Array.from(files || []).forEach((file) => {
+      const task = { id: 'up_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), file, status: 'queued', progress: 0, transferred: 0, speed: 0, eta: 0 };
+      transferTasks.set(task.id, task); uploadQueue.push(task);
+    });
+    renderTasks(); drainUploads();
+  }
+
+  async function drainUploads() {
+    if (uploadBusy) return;
+    uploadBusy = true;
+    while (uploadQueue.length) {
+      const task = uploadQueue.shift();
+      if (task.cancelled) continue;
+      try { await uploadFileToMessages(task.file, task); await loadMessages(); }
+      catch (error) { if (!error.cancelled) toast('statusLine', error.message || '文件发送失败'); }
+    }
+    uploadBusy = false;
+  }
+
+  function cancelUpload(task) {
+    task.cancelled = true; task.xhr && task.xhr.abort();
+    const index = uploadQueue.indexOf(task); if (index >= 0) uploadQueue.splice(index, 1);
+    task.status = 'cancelled'; task.finishedAt = Date.now();
+    if (task.fileId) api({ action: 'transfer.fileCancel', bindId: auth.bindId, side: 'mobile', mobileToken: auth.mobileToken, fileId: task.fileId }).catch(() => {});
+    saveHistory(task); renderTasks();
   }
 
   // ===== 共享 =====
@@ -292,7 +438,7 @@
         if (!list.length) { box.innerHTML = '<div class="empty">暂无共享</div>'; return; }
         list.forEach((sh) => {
           const it = document.createElement('div'); it.className = 'share-item';
-          const tag = document.createElement('span'); tag.className = 'share-tag' + (sh.type === 'file' ? ' file' : ''); tag.textContent = sh.type === 'file' ? '文件' : '文本';
+          const tag = document.createElement('span'); tag.className = 'share-tag' + (sh.type !== 'text' ? ' file' : ''); tag.textContent = sh.type === 'image' ? '图片' : sh.type === 'file' ? '文件' : '文本';
           const meta = document.createElement('span'); meta.className = 'share-meta';
           const nm = document.createElement('b'); nm.textContent = sh.name || sh.text || (sh.type === 'file' ? '文件' : '文本');
           const sub = document.createElement('span'); sub.textContent = '密码 ' + sh.code + ' · 至 ' + new Date(sh.expiresAt).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit' });
@@ -357,7 +503,7 @@
       .then((d) => {
         if (!d.success) throw new Error(d.message || '领取失败');
         const m = d.message || {};
-        if (m.type === 'file' && m.fileId) {
+        if ((m.type === 'file' || m.type === 'image') && m.fileId) {
           if (d.downloadToken) {
             const q = new URLSearchParams({ action: 'download', token: d.downloadToken });
             const a = document.createElement('a');
@@ -380,16 +526,25 @@
 
   // ===== 事件绑定 =====
   $('backBtn').addEventListener('click', () => { location.href = '/mobile/'; });
+  $('historyBtn').addEventListener('click', () => { renderHistory(); $('historyOverlay').classList.remove('hidden'); });
+  $('historyClose').addEventListener('click', () => $('historyOverlay').classList.add('hidden'));
+  $('historyOverlay').addEventListener('click', (e) => { if (e.target === $('historyOverlay')) $('historyOverlay').classList.add('hidden'); });
+  $('historyClear').addEventListener('click', () => { if (window.confirm('清空本机传输历史？')) { localStorage.removeItem('shortcut.transfer.history'); renderHistory(); } });
   $('addFileBtn').addEventListener('click', () => { if (ensured()) $('fileInput').click(); });
   $('fileInput').addEventListener('change', (e) => {
     if (!auth || !e.target.files || !e.target.files.length) return;
-    const files = Array.from(e.target.files || []);
-    const run = files.reduce((p, f) => p.then(() => uploadFileToMessages(f)), Promise.resolve());
-    run.then(() => loadMessages()).then(() => toast('statusLine', '文件发送完成', true)).catch((x) => toast('statusLine', x.message || '文件发送失败'));
+    enqueueFiles(e.target.files);
     e.target.value = '';
   });
   $('sendBtn').addEventListener('click', sendText);
   $('messageInput').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(); } });
+  $('messageInput').addEventListener('paste', (e) => {
+    const files = Array.from((e.clipboardData && e.clipboardData.items) || []).filter((item) => item.kind === 'file' && /^image\//.test(item.type)).map((item) => item.getAsFile()).filter(Boolean);
+    if (files.length) { e.preventDefault(); enqueueFiles(files); }
+  });
+  document.addEventListener('dragover', (e) => { e.preventDefault(); document.body.classList.add('drop-active'); });
+  document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) document.body.classList.remove('drop-active'); });
+  document.addEventListener('drop', (e) => { e.preventDefault(); document.body.classList.remove('drop-active'); if (ensured() && e.dataTransfer && e.dataTransfer.files.length) enqueueFiles(e.dataTransfer.files); });
   $('shareBtn').addEventListener('click', openShare);
   $('shareClose').addEventListener('click', closeShare);
   $('shareOverlay').addEventListener('click', (e) => { if (e.target === $('shareOverlay')) closeShare(); });

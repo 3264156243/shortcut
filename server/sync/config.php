@@ -734,6 +734,24 @@ function update_file_meta($bindId, $fileId, $fn) {
     return json_lock_update(file_meta_path($bindId, $id), $fn);
 }
 
+function set_message_favorite($bindId, $messageId, $favorite) {
+    $path = message_path($bindId);
+    $retentionHours = sync_retention_hours($bindId);
+    return json_lock_update($path, function ($messages) use ($messageId, $favorite, $retentionHours) {
+        $updated = null;
+        foreach ($messages as &$item) {
+            if ((string)($item['id'] ?? '') !== $messageId) continue;
+            $item['favorite'] = (bool)$favorite;
+            if ($favorite) unset($item['expiresAt']);
+            else $item['expiresAt'] = date('c', time() + $retentionHours * 3600);
+            $updated = $item;
+            break;
+        }
+        unset($item);
+        return ['data' => $messages, 'result' => $updated];
+    });
+}
+
 // 分片哈希校验：期望是 64 位 hex（sha256）；分片内容不匹配返回 false
 function verify_chunk_hash($tmpPath, $expectedHash) {
     $expectedHash = strtolower(trim((string)$expectedHash));
@@ -782,14 +800,30 @@ function remove_file_storage($bindId, $fileId) {
     return true;
 }
 
-function create_file_meta($bindId, $name, $size, $mime, $chunkSize, $side) {
+function find_resumable_file($bindId, $resumeKey, $side, $name, $size) {
+    if (!preg_match('/^[a-zA-Z0-9_-]{16,80}$/', (string)$resumeKey)) return null;
+    $root = file_dir($bindId);
+    foreach ((array)@scandir($root) as $entry) {
+        if (!safe_file_id($entry)) continue;
+        $meta = load_file_meta($bindId, $entry);
+        if (!is_array($meta) || !empty($meta['complete'])) continue;
+        if (hash_equals((string)($meta['resumeKey'] ?? ''), (string)$resumeKey)
+            && (string)($meta['sender'] ?? '') === $side
+            && (string)($meta['name'] ?? '') === limited_filename($name)
+            && (int)($meta['size'] ?? 0) === (int)$size) return $meta;
+    }
+    return null;
+}
+
+function create_file_meta($bindId, $name, $size, $mime, $chunkSize, $side, $resumeKey = '') {
     $safeName = limited_filename($name);
     if ($safeName === '') return false;
-    $size = max(0, min((int)$size, 1024 * 1024 * 1024));
+    $size = max(0, min((int)$size, 10 * 1024 * 1024 * 1024));
     $chunkSize = max(256 * 1024, min((int)$chunkSize, 5 * 1024 * 1024));
     $mimeText = trim((string)$mime);
     if (function_exists('mb_substr')) $mimeText = mb_substr($mimeText, 0, 120, 'UTF-8'); else $mimeText = substr($mimeText, 0, 120);
-    $meta = ['id' => 'file_' . bin2hex(random_bytes(12)), 'name' => $safeName, 'size' => $size, 'mime' => $mimeText, 'chunkSize' => $chunkSize, 'chunkCount' => max(1, (int)ceil($size / $chunkSize)), 'uploaded' => [], 'sender' => $side, 'createdAt' => date('c'), 'updatedAt' => date('c'), 'complete' => false];
+    $safeResumeKey = preg_match('/^[a-zA-Z0-9_-]{16,80}$/', (string)$resumeKey) ? (string)$resumeKey : '';
+    $meta = ['id' => 'file_' . bin2hex(random_bytes(12)), 'name' => $safeName, 'size' => $size, 'mime' => $mimeText, 'chunkSize' => $chunkSize, 'chunkCount' => max(1, (int)ceil($size / $chunkSize)), 'uploaded' => [], 'sender' => $side, 'resumeKey' => $safeResumeKey, 'createdAt' => date('c'), 'updatedAt' => date('c'), 'complete' => false];
     return save_file_meta($bindId, $meta) ? $meta : false;
 }
 
@@ -800,8 +834,10 @@ function limited_filename($value) {
     return $name;
 }
 
-function file_message($meta, $side) {
-    return ['id' => 'msg_' . bin2hex(random_bytes(12)), 'type' => 'file', 'fileId' => $meta['id'], 'name' => $meta['name'], 'size' => $meta['size'], 'mime' => $meta['mime'], 'sender' => $side, 'favorite' => false, 'createdAt' => date('c')];
+function file_message($meta, $side, $bindId = '') {
+    $createdAt = date('c');
+    $type = strpos(strtolower((string)($meta['mime'] ?? '')), 'image/') === 0 ? 'image' : 'file';
+    return ['id' => 'msg_' . bin2hex(random_bytes(12)), 'type' => $type, 'fileId' => $meta['id'], 'name' => $meta['name'], 'size' => $meta['size'], 'mime' => $meta['mime'], 'sender' => $side, 'favorite' => false, 'createdAt' => $createdAt, 'expiresAt' => date('c', time() + sync_retention_hours($bindId) * 3600)];
 }
 
 /**
@@ -837,7 +873,7 @@ function complete_file_upload($bindId, $fileId, $side) {
         if ($total !== (int)$meta['size']) return ['success' => false, 'message' => '文件大小校验失败'];
         $sha256 = compute_file_sha256($bindId, $meta);
         if (!$sha256) return ['success' => false, 'message' => '文件完整性校验失败'];
-        $message = file_message($meta, $side);
+        $message = file_message($meta, $side, $bindId);
         $meta['sha256'] = $sha256;
         $meta['complete'] = true;
         $meta['messageId'] = $message['id'];
@@ -1220,6 +1256,18 @@ function file_transfer_policy() {
         }
     }
     return array_merge($policy, sync_module_policy('fileTransfer'));
+}
+
+/** 服务端模块总开关。关闭后 API 与文件端点都拒绝新请求。 */
+function sync_module_enabled($moduleId) {
+    $catalog = sync_modules_catalog();
+    foreach ((array)($catalog['modules'] ?? []) as $module) {
+        if (!is_array($module) || (string)($module['id'] ?? '') !== (string)$moduleId) continue;
+        if (isset($module['defaultEnabled']) && !$module['defaultEnabled']) return false;
+        $policy = array_merge((array)($module['policy'] ?? []), sync_module_policy($moduleId));
+        return !isset($policy['enabled']) || (bool)$policy['enabled'];
+    }
+    return false;
 }
 
 function bind_file_storage_bytes($bindId) {

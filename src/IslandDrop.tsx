@@ -88,7 +88,9 @@ export function useIslandDrop(): IslandDropApi {
   const [imageFmt, setImageFmt] = useState('png');
   const [audioFmt, setAudioFmt] = useState('wav');
   const [autoReveal, setAutoReveal] = useState(true);
+  const [transferDropSend, setTransferDropSend] = useState(false);
   const jobId = useRef('');
+  const transferTaskId = useRef('');
   const phaseRef = useRef<DropPhase>('idle');
   phaseRef.current = phase;
   const resetTimer = useRef<number | null>(null);
@@ -112,10 +114,12 @@ export function useIslandDrop(): IslandDropApi {
       if (!raw) return;
       try {
         const conv = JSON.parse(raw)?.converter || {};
+        const transfer = JSON.parse(raw)?.fileTransfer || {};
         if (conv.defaultCompress) setCompressFmt(String(conv.defaultCompress));
         if (conv.defaultImage) setImageFmt(String(conv.defaultImage));
         if (conv.defaultAudio) setAudioFmt(String(conv.defaultAudio));
         setAutoReveal(conv.autoReveal !== false);
+        setTransferDropSend(transfer.islandDropSend === true);
       } catch {}
     });
   }, []);
@@ -127,6 +131,7 @@ export function useIslandDrop(): IslandDropApi {
     if (hoverTimer.current) { window.clearTimeout(hoverTimer.current); hoverTimer.current = null; }
     droppedRef.current = false;
     jobId.current = '';
+    transferTaskId.current = '';
     setFiles([]);
     setStatus('');
     setNote('');
@@ -265,12 +270,36 @@ export function useIslandDrop(): IslandDropApi {
       applyErr(payload);
     });
 
+    const offTransfer = window.electronAPI?.onFileTransferProgress?.((payload) => {
+      if (!transferTaskId.current || payload?.taskId !== transferTaskId.current) return;
+      setHasRealProgress(true);
+      setPct(Math.max(0, Math.min(100, Math.round((Number(payload.progress) || 0) * 100))));
+      const speed = Number(payload.speed) || 0;
+      setNote(speed > 0 ? `${formatTransferSpeed(speed)}/s` : '正在发送');
+      if (payload.status === 'completed') {
+        transferTaskId.current = '';
+        setPct(100);
+        setNote('');
+        setStatus('发送完成');
+        setPhase('done');
+        resetTimer.current = window.setTimeout(() => reset(), 1000);
+      } else if (payload.status === 'failed' || payload.status === 'cancelled') {
+        transferTaskId.current = '';
+        setPct(0);
+        setHasRealProgress(false);
+        setNote('');
+        setStatus(payload.status === 'cancelled' ? '发送已取消' : '发送失败，请重试');
+        setPhase('recognized');
+      }
+    });
+
     return () => {
       offOver?.();
       offDrop?.();
       offProgress?.();
       offDone?.();
       offErr?.();
+      offTransfer?.();
       if (resetTimer.current) window.clearTimeout(resetTimer.current);
       if (leaveTimer.current) window.clearTimeout(leaveTimer.current);
     };
@@ -333,11 +362,49 @@ export function useIslandDrop(): IslandDropApi {
     })();
   };
 
+  const doSend = () => {
+    if (!files.length) return;
+    beginWork();
+    void (async () => {
+      const state = await window.electronAPI?.fileTransferGetState?.();
+      if (!state?.bound) {
+        setStatus('请先在文件快传中绑定手机');
+        setPhase('recognized');
+        return;
+      }
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index];
+        const taskId = `island_${Date.now().toString(36)}_${index}_${Math.random().toString(36).slice(2, 7)}`;
+        transferTaskId.current = taskId;
+        setNote(files.length > 1 ? `正在发送 ${index + 1}/${files.length}` : '正在发送');
+        const result = await window.electronAPI?.fileTransferSendFile?.(taskId, file.path);
+        if (!result?.success) {
+          transferTaskId.current = '';
+          setPct(0);
+          setHasRealProgress(false);
+          setNote('');
+          setStatus(result?.cancelled ? '发送已取消' : `发送失败：${result?.message || '未知错误'}`);
+          setPhase('recognized');
+          return;
+        }
+      }
+      transferTaskId.current = '';
+      setPct(100);
+      setNote('');
+      setStatus(files.length > 1 ? `${files.length} 个文件已发送` : '发送完成');
+      setPhase('done');
+      resetTimer.current = window.setTimeout(() => reset(), 1000);
+    })();
+  };
+
   // ── 按文件类型组装椭圆按钮（需求 §2.3；数据驱动，类型变多只改这里）──
   const buildItems = (): PillItem[] => {
     const cancel: PillItem = { key: 'cancel', label: '取消', tone: 'ghost', disabled: busy, onClick: reset };
+    const send: PillItem[] = transferDropSend
+      ? [{ key: 'send-mobile', label: '发送到手机', tone: 'primary', disabled: busy, onClick: doSend }]
+      : [];
     if (kind === 'archive') {
-      return [{ key: 'extract', label: '解压', tone: 'primary', disabled: busy, onClick: doExtract }, cancel];
+      return [...send, { key: 'extract', label: '解压', tone: transferDropSend ? undefined : 'primary', disabled: busy, onClick: doExtract }, cancel];
     }
     if (kind === 'image' || kind === 'audio') {
       const isImage = kind === 'image';
@@ -346,6 +413,7 @@ export function useIslandDrop(): IslandDropApi {
         .map((t) => ({ value: t, label: t.toUpperCase() }));
       if (!opts.some((o) => o.value === fmt)) opts.unshift({ value: fmt, label: fmt.toUpperCase() });
       return [
+        ...send,
         { key: 'compress', label: `压缩 ${compressFmt.toUpperCase()}`, disabled: busy, onClick: doCompress },
         {
           key: 'convert',
@@ -364,6 +432,7 @@ export function useIslandDrop(): IslandDropApi {
       ];
     }
     return [
+      ...send,
       { key: 'panel', label: '打开转换面板', disabled: busy, onClick: () => void window.electronAPI?.ballOpenInPanel?.(files.map((f) => f.path)) },
       cancel,
     ];
@@ -382,6 +451,12 @@ export function useIslandDrop(): IslandDropApi {
     items: phase === 'recognized' ? buildItems() : [],
     reset,
   };
+}
+
+function formatTransferSpeed(bytesPerSecond: number) {
+  if (bytesPerSecond < 1024) return `${Math.round(bytesPerSecond)} B`;
+  if (bytesPerSecond < 1024 * 1024) return `${(bytesPerSecond / 1024).toFixed(1)} KB`;
+  return `${(bytesPerSecond / 1024 / 1024).toFixed(1)} MB`;
 }
 
 /**

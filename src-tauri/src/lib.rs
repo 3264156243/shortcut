@@ -125,6 +125,10 @@ pub(crate) const SHIM_JS: &str = r#"
       onConverterProgress: 'converter:progress',
       onConverterDone: 'converter:done',
       onConverterError: 'converter:error',
+      onFileTransferProgress: 'file-transfer:progress',
+      onFileTransferDrop: 'file-transfer:drop',
+      onFileTransferDragover: 'file-transfer:dragover',
+      onFileTransferMessage: 'file-transfer:message',
     };
     const api = new Proxy({}, {
       get(_t, prop) {
@@ -1109,28 +1113,57 @@ async fn electron_api(app: tauri::AppHandle, window: tauri::WebviewWindow, metho
 
         // ---- M5：文件快传（fileTransfer:* 对齐 file-transfer.ts）----
         "fileTransferGetState" => transfer::get_state(),
+        "fileTransferPickFiles" => {
+            let app2 = app.clone();
+            let files = tauri::async_runtime::spawn_blocking(move || app2.dialog().file().blocking_pick_files()).await.unwrap_or(None);
+            json!(files.map(|list| list.iter().map(|f| f.to_string()).collect::<Vec<_>>()))
+        }
         "fileTransferSendText" => {
             let text = args.first().and_then(|v| v.as_str()).unwrap_or("");
             transfer::send_text(text)
         }
         "fileTransferSendFile" => {
-            let path = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
-            tokio::task::spawn_blocking(move || transfer::send_file(&path)).await.unwrap_or_else(|e| json!({ "success": false, "message": e.to_string() }))
+            let task_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let path = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let app2 = app.clone();
+            tokio::task::spawn_blocking(move || transfer::send_file(&app2, &task_id, &path)).await.unwrap_or_else(|e| json!({ "success": false, "message": e.to_string() }))
+        }
+        "fileTransferSendBytes" => {
+            let task_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let name = args.get(1).and_then(|v| v.as_str()).unwrap_or("粘贴图片.png").to_string();
+            let encoded = args.get(2).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let app2 = app.clone();
+            tokio::task::spawn_blocking(move || transfer::send_bytes(&app2, &task_id, &name, &encoded)).await.unwrap_or_else(|e| json!({ "success": false, "message": e.to_string() }))
         }
         "fileTransferDownload" => {
-            let file_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let name = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
-            tokio::task::spawn_blocking(move || transfer::download(&file_id, &name)).await.unwrap_or_else(|e| json!({ "success": false, "message": e.to_string() }))
+            let task_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let file_id = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let name = args.get(2).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let app2 = app.clone();
+            tokio::task::spawn_blocking(move || transfer::download(&app2, &task_id, &file_id, &name)).await.unwrap_or_else(|e| json!({ "success": false, "message": e.to_string() }))
         }
+        "fileTransferPreviewUrl" => transfer::preview_url(args.first().and_then(|v| v.as_str()).unwrap_or("")),
         "fileTransferDownloadShared" => {
-            let token = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let name = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
-            tokio::task::spawn_blocking(move || transfer::download_shared(&token, &name)).await.unwrap_or_else(|e| json!({ "success": false, "message": e.to_string() }))
+            let task_id = args.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let token = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let file_id = args.get(2).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let name = args.get(3).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let app2 = app.clone();
+            tokio::task::spawn_blocking(move || transfer::download_shared(&app2, &task_id, &token, &file_id, &name)).await.unwrap_or_else(|e| json!({ "success": false, "message": e.to_string() }))
         }
         "fileTransferDelete" => {
             let id = args.first().and_then(|v| v.as_str()).unwrap_or("");
             transfer::delete_message(id)
         }
+        "fileTransferFavorite" => {
+            let id = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            let favorite = args.get(1).and_then(|v| v.as_bool()).unwrap_or(false);
+            transfer::favorite(id, favorite)
+        }
+        "fileTransferCancel" => transfer::cancel(args.first().and_then(|v| v.as_str()).unwrap_or("")),
+        "fileTransferActiveTasks" => transfer::active_tasks(),
+        "fileTransferHistory" => transfer::history(),
+        "fileTransferHistoryRemove" => transfer::history_remove(args.first().and_then(|v| v.as_str()).unwrap_or("")),
         "fileTransferShareText" => {
             let text = args.first().and_then(|v| v.as_str()).unwrap_or("");
             let code = args.get(1).and_then(|v| v.as_str()).unwrap_or("");
@@ -3341,6 +3374,7 @@ pub fn run() {
                                 DRAG_ACTIVE.store(true, std::sync::atomic::Ordering::Relaxed);
                                 log::info!("[drop] 拖放进入窗口");
                                 let _ = app2.emit("converter:dragover", serde_json::json!({ "active": true }));
+                                let _ = app2.emit("file-transfer:dragover", serde_json::json!({ "active": true }));
                             }
                             tauri::DragDropEvent::Drop { paths, .. } => {
                                 DRAG_ACTIVE.store(false, std::sync::atomic::Ordering::Relaxed);
@@ -3349,15 +3383,19 @@ pub fn run() {
                                     .map(|p| p.to_string_lossy().into_owned())
                                     .collect();
                                 log::info!("[drop] 窗口内松手，文件数={}", list.len());
-                                let _ = app2.emit(
-                                    "converter:drop",
-                                    serde_json::json!({ "paths": list, "action": "convert" }),
-                                );
+                                let active = config::read_config_value().and_then(|value| value.get("activeModule").and_then(|v| v.as_str()).map(str::to_string)).unwrap_or_default();
+                                if active == "fileTransfer" {
+                                    let _ = app2.emit("file-transfer:drop", serde_json::json!({ "paths": list }));
+                                } else {
+                                    let _ = app2.emit("converter:drop", serde_json::json!({ "paths": list, "action": "convert" }));
+                                }
                                 let _ = app2.emit("converter:dragover", serde_json::json!({ "active": false }));
+                                let _ = app2.emit("file-transfer:dragover", serde_json::json!({ "active": false }));
                             }
                             tauri::DragDropEvent::Leave { .. } => {
                                 DRAG_ACTIVE.store(false, std::sync::atomic::Ordering::Relaxed);
                                 let _ = app2.emit("converter:dragover", serde_json::json!({ "active": false }));
+                                let _ = app2.emit("file-transfer:dragover", serde_json::json!({ "active": false }));
                             }
                             _ => {}
                         },

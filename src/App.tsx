@@ -359,8 +359,18 @@ export default function App() {
 
   // 转换板块：失焦不自动隐藏（拖文件时焦点在资源管理器，隐藏了就再也接不到 drop）
   useEffect(() => {
-    void api?.setBlurGuard?.(activeModule === 'converter');
+    void api?.setBlurGuard?.(activeModule === 'converter' || activeModule === 'fileTransfer');
   }, [api, activeModule]);
+  useEffect(() => {
+    const enabled = config.modules.find((item) => item.id === 'fileTransfer')?.enabled !== false;
+    if (enabled) return;
+    void api?.fileTransferActiveTasks?.().then((result) => {
+      if (!result?.success || !Array.isArray(result.tasks)) return;
+      result.tasks.forEach((task: { taskId?: string }) => {
+        if (task.taskId) void api?.fileTransferCancel?.(task.taskId);
+      });
+    });
+  }, [api, config.modules]);
   useEffect(() => {
     if (!api?.onConfigChanged) return;
     const unsubscribe = api.onConfigChanged(() => {

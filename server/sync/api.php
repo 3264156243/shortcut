@@ -162,6 +162,10 @@ function notify_relay_wake($bindId, $board, $count = 1) {
     ];
 }
 
+if (strpos($action, 'transfer.') === 0 && !sync_module_enabled('fileTransfer')) {
+    error_msg('文件快传服务当前已停用');
+}
+
 switch ($action) {
 
     // ===== 模块契约：下发模块清单（移动端/桌面端据此渲染入口，不再各自硬编码）=====
@@ -498,7 +502,8 @@ switch ($action) {
         $side = require_transfer_identity($bindId, $input);
         $text = isset($input['text']) ? limited_text($input['text'], 10000) : '';
         if ($text === '') error_msg('文本内容为空');
-        $message = ['id' => 'msg_' . bin2hex(random_bytes(12)), 'type' => 'text', 'text' => $text, 'sender' => $side, 'favorite' => false, 'createdAt' => date('c')];
+        $createdAt = date('c');
+        $message = ['id' => 'msg_' . bin2hex(random_bytes(12)), 'type' => 'text', 'text' => $text, 'sender' => $side, 'favorite' => false, 'createdAt' => $createdAt, 'expiresAt' => date('c', time() + sync_retention_hours($bindId) * 3600)];
         if (!append_message($bindId, $message)) error_msg('消息保存失败');
         respond(['success' => true, 'message' => $message]);
         break;
@@ -517,17 +522,29 @@ switch ($action) {
         respond(['success' => true, 'deleted' => $deleted]);
         break;
 
+    case 'transfer.favorite':
+        require_transfer_identity($bindId, $input);
+        $messageId = isset($input['messageId']) ? trim((string)$input['messageId']) : '';
+        if (!preg_match('/^msg_[a-f0-9]{24}$/', $messageId)) error_msg('消息标识无效');
+        $updated = set_message_favorite($bindId, $messageId, !empty($input['favorite']));
+        if (!is_array($updated)) error_msg('消息不存在');
+        respond(['success' => true, 'message' => $updated]);
+        break;
+
     case 'transfer.fileInit':
         $side = require_transfer_identity($bindId, $input);
         $name = isset($input['name']) ? $input['name'] : '';
         $size = isset($input['size']) ? $input['size'] : 0;
+        $resumeKey = isset($input['resumeKey']) ? trim((string)$input['resumeKey']) : '';
         $policy = file_transfer_policy();
         $maxFileBytes = max(1, (int)($policy['maxFileMb'] ?? 1024)) * 1024 * 1024;
         $quotaBytes = max(1, (int)($policy['cloudQuotaMb'] ?? 2048)) * 1024 * 1024;
         if ((int)$size <= 0) error_msg('文件为空');
         if ((int)$size > $maxFileBytes) error_msg('文件超过当前账户的单文件上限');
+        $existing = find_resumable_file($bindId, $resumeKey, $side, $name, $size);
+        if ($existing) respond(['success' => true, 'file' => $existing, 'resumed' => true]);
         if (bind_file_storage_bytes($bindId) + (int)$size > $quotaBytes) error_msg('云端文件空间不足，请删除旧文件后重试');
-        $meta = create_file_meta($bindId, $name, $size, isset($input['mime']) ? $input['mime'] : '', isset($input['chunkSize']) ? $input['chunkSize'] : 2 * 1024 * 1024, $side);
+        $meta = create_file_meta($bindId, $name, $size, isset($input['mime']) ? $input['mime'] : '', isset($input['chunkSize']) ? $input['chunkSize'] : 2 * 1024 * 1024, $side, $resumeKey);
         if (!$meta) error_msg('文件信息无效');
         respond(['success' => true, 'file' => $meta]);
         break;
@@ -539,6 +556,17 @@ switch ($action) {
         $completed = complete_file_upload($bindId, $fileId, $side);
         if (!is_array($completed) || empty($completed['success'])) error_msg((string)($completed['message'] ?? '文件完成失败'));
         respond($completed);
+        break;
+
+    case 'transfer.fileCancel':
+        require_transfer_identity($bindId, $input);
+        $fileId = safe_file_id(isset($input['fileId']) ? $input['fileId'] : '');
+        if (!$fileId) error_msg('文件上传会话不存在');
+        $meta = load_file_meta($bindId, $fileId);
+        if (!$meta) respond(['success' => true, 'cancelled' => true]);
+        if (!empty($meta['complete'])) error_msg('已完成文件不能取消，请删除对应消息');
+        remove_file_storage($bindId, $fileId);
+        respond(['success' => true, 'cancelled' => true]);
         break;
 
     case 'transfer.share':

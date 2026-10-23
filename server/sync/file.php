@@ -21,6 +21,59 @@ function file_input($key, $default = '') {
     if (isset($_GET[$key])) return $_GET[$key];
     return $default;
 }
+
+function serve_stored_file($bindId, $meta, $name, $mime, $inline = false) {
+    $total = (int)($meta['size'] ?? 0);
+    $start = 0;
+    $end = max(0, $total - 1);
+    $partial = false;
+    $range = isset($_SERVER['HTTP_RANGE']) ? trim((string)$_SERVER['HTTP_RANGE']) : '';
+    if ($range !== '') {
+        if (!preg_match('/^bytes=(\d+)-(\d*)$/', $range, $match)) {
+            header('Content-Range: bytes */' . $total);
+            http_response_code(416);
+            return ['ok' => false, 'partial' => true];
+        }
+        $start = (int)$match[1];
+        $end = $match[2] === '' ? $end : min($end, (int)$match[2]);
+        if ($start < 0 || $start >= $total || $end < $start) {
+            header('Content-Range: bytes */' . $total);
+            http_response_code(416);
+            return ['ok' => false, 'partial' => true];
+        }
+        $partial = true;
+        http_response_code(206);
+        header('Content-Range: bytes ' . $start . '-' . $end . '/' . $total);
+    }
+    $length = $end - $start + 1;
+    header('Content-Type: ' . ($mime ?: 'application/octet-stream'));
+    header('Content-Disposition: ' . ($inline ? 'inline' : 'attachment') . '; filename="download"; filename*=UTF-8\'\'' . rawurlencode($name));
+    header('Content-Length: ' . $length);
+    header('Accept-Ranges: bytes');
+    header('X-Content-Type-Options: nosniff');
+    header('X-Checksum-Sha256: ' . compute_file_sha256($bindId, $meta));
+    $dir = file_dir($bindId, $meta['id']);
+    $chunkSize = max(1, (int)($meta['chunkSize'] ?? 1));
+    $first = (int)floor($start / $chunkSize);
+    $last = (int)floor($end / $chunkSize);
+    $remaining = $length;
+    for ($index = $first; $index <= $last && $remaining > 0; $index++) {
+        $part = $dir . '/chunk-' . $index . '.part';
+        $handle = @fopen($part, 'rb');
+        if (!$handle) { http_response_code(500); return ['ok' => false, 'partial' => $partial]; }
+        $offset = $index === $first ? $start - ($index * $chunkSize) : 0;
+        if ($offset > 0) fseek($handle, $offset);
+        while ($remaining > 0 && !feof($handle)) {
+            $buf = fread($handle, min(1024 * 1024, $remaining));
+            if ($buf === false || $buf === '') break;
+            echo $buf;
+            $remaining -= strlen($buf);
+            if (connection_aborted()) { fclose($handle); return ['ok' => false, 'partial' => $partial]; }
+        }
+        fclose($handle);
+    }
+    return ['ok' => $remaining === 0, 'partial' => $partial];
+}
 // 旧版逐端点鉴权已删除：改用 config.php 的统一 resolve_identity()
 // （原来 file.php 自己写了一套"side 自报即通过"的判定，与 api.php 不一致，也无法收敛到一处）
 
@@ -30,6 +83,8 @@ function file_input($key, $default = '') {
 $action = trim((string)file_input('action'));
 $bindId = trim((string)file_input('bindId'));
 $fileId = safe_file_id(file_input('fileId'));
+
+if (!sync_module_enabled('fileTransfer')) file_fail('文件快传服务当前已停用', 403);
 
 // ===== 下载（支持两种方式）=====
 // 1) token 方式：他人通过共享领取的一次性下载令牌，无需绑定身份
@@ -42,21 +97,9 @@ if ($action === 'download' && trim((string)file_input('token')) !== '') {
     $fileId = $shared['fileId'];
     $meta = load_file_meta($bindId, $fileId);
     if (!$meta || empty($meta['complete'])) file_fail('文件尚未准备好', 404);
-    $dir = file_dir($bindId, $fileId);
     $name = $shared['name'] ?: $meta['name'];
-    $encoded = rawurlencode($name);
-    header('Content-Type: ' . ($shared['mime'] ?: $meta['mime'] ?: 'application/octet-stream'));
-    header('Content-Disposition: attachment; filename="download"; filename*=UTF-8\'\'' . $encoded);
-    header('Content-Length: ' . (int)($shared['size'] ?: $meta['size']));
-    header('X-Content-Type-Options: nosniff');
-    header('X-Checksum-Sha256: ' . compute_file_sha256($bindId, $meta));
-    for ($i = 0; $i < (int)$meta['chunkCount']; $i++) {
-        $part = $dir . '/chunk-' . $i . '.part';
-        if (!is_file($part)) { http_response_code(500); exit; }
-        readfile($part);
-        if (connection_aborted()) exit;
-    }
-    consume_share_download_token($token);
+    $served = serve_stored_file($bindId, $meta, $name, $shared['mime'] ?: $meta['mime']);
+    if (!empty($served['ok']) && empty($served['partial'])) consume_share_download_token($token);
     exit;
 }
 
@@ -106,23 +149,13 @@ if ($action === 'uploadChunk') {
     file_reply(['success' => true, 'fileId' => $fileId, 'chunkIndex' => $index, 'uploaded' => $uploaded]);
 }
 
-if ($action === 'download') {
+if ($action === 'download' || $action === 'preview') {
     if (!$fileId) file_fail('文件标识无效');
     $meta = load_file_meta($bindId, $fileId);
     if (!$meta || empty($meta['complete'])) file_fail('文件尚未准备好', 404);
-    $dir = file_dir($bindId, $fileId);
+    if ($action === 'preview' && strpos(strtolower((string)($meta['mime'] ?? '')), 'image/') !== 0) file_fail('该文件不支持预览', 415);
     $name = $meta['name'];
-    $encoded = rawurlencode($name);
-    header('Content-Type: ' . ($meta['mime'] ?: 'application/octet-stream'));
-    header('Content-Disposition: attachment; filename="download"; filename*=UTF-8\'\'' . $encoded);
-    header('Content-Length: ' . (int)$meta['size']);
-    header('X-Content-Type-Options: nosniff');
-    header('X-Checksum-Sha256: ' . compute_file_sha256($bindId, $meta));
-    for ($i = 0; $i < (int)$meta['chunkCount']; $i++) {
-        $part = $dir . '/chunk-' . $i . '.part';
-        if (!is_file($part)) { http_response_code(500); exit; }
-        readfile($part);
-    }
+    serve_stored_file($bindId, $meta, $name, $meta['mime'], $action === 'preview');
     exit;
 }
 file_fail('未知文件操作');

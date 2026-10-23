@@ -29,6 +29,13 @@ interface LyricLine {
   text: string;
 }
 
+interface TransferNotice {
+  kind: 'message' | 'progress';
+  title: string;
+  detail: string;
+  progress?: number;
+}
+
 const DEFAULT_STATE: IslandState = {
   enabled: true,
   style: 'capsule',
@@ -136,6 +143,10 @@ function IslandApp() {
   const [balance, setBalance] = useState<BalanceData | null>(null);
   const [seekPreview, setSeekPreview] = useState<number | null>(null);
   const [arrival, setArrival] = useState(false);
+  const [transferNotice, setTransferNotice] = useState<TransferNotice | null>(null);
+  const transferPrefsRef = useRef({ notify: true, progress: true, enabled: true });
+  const seenTransferRef = useRef<Set<string> | null>(null);
+  const transferTimerRef = useRef<number | null>(null);
   /** 鼠标穿透开关（用户设置）。true 时球不接收鼠标 → 也不允许按住拖动移动位置。 */
   const [ballThrough, setBallThrough] = useState(false);
   const positionAnchorRef = useRef<{ positionMs: number; at: number } | null>(null);
@@ -146,6 +157,49 @@ function IslandApp() {
   useEffect(() => {
     const timer = window.setInterval(() => setTime(nowText()), 250);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const clearLater = () => {
+      if (transferTimerRef.current) window.clearTimeout(transferTimerRef.current);
+      transferTimerRef.current = window.setTimeout(() => setTransferNotice(null), 2600);
+    };
+    const offProgress = window.electronAPI?.onFileTransferProgress?.((task) => {
+      if (!transferPrefsRef.current.enabled || !transferPrefsRef.current.progress || !task?.taskId) return;
+      const status = String(task.status || '');
+      setTransferNotice({
+        kind: 'progress',
+        title: task.direction === 'download' ? '正在接收文件' : '正在发送文件',
+        detail: String(task.name || '文件'),
+        progress: Math.max(0, Math.min(100, Math.round((Number(task.progress) || 0) * 100))),
+      });
+      if (status === 'completed' || status === 'failed' || status === 'cancelled') clearLater();
+    });
+    const poll = async () => {
+      try {
+        const raw = await window.electronAPI?.readConfig?.();
+        const parsed = raw ? JSON.parse(raw) : {};
+        const prefs = parsed?.fileTransfer || {};
+        const module = (parsed?.modules || []).find((item: { id?: string }) => item.id === 'fileTransfer');
+        transferPrefsRef.current = { notify: prefs.islandNotify !== false, progress: prefs.islandProgress !== false, enabled: module?.enabled !== false };
+        if (!transferPrefsRef.current.enabled || !transferPrefsRef.current.notify) return;
+        const result = await window.electronAPI?.fileTransferGetState?.();
+        if (!result?.success || !Array.isArray(result.messages)) return;
+        const ids = new Set<string>(result.messages.map((item: { id?: string }) => String(item.id || '')).filter(Boolean));
+        if (seenTransferRef.current) {
+          const incoming = result.messages.filter((item: { id?: string; sender?: string }) => item.sender === 'mobile' && item.id && !seenTransferRef.current!.has(item.id));
+          const latest = incoming[incoming.length - 1] as { type?: string; name?: string; text?: string } | undefined;
+          if (latest) {
+            setTransferNotice({ kind: 'message', title: latest.type === 'text' ? '手机发来文本' : '手机发来文件', detail: latest.name || latest.text || '点击文件快传查看' });
+            clearLater();
+          }
+        }
+        seenTransferRef.current = ids;
+      } catch {}
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 4000);
+    return () => { offProgress?.(); window.clearInterval(timer); if (transferTimerRef.current) window.clearTimeout(transferTimerRef.current); };
   }, []);
 
   /**
@@ -412,6 +466,7 @@ function IslandApp() {
   }, [showMusic, state.balanceProvider]);
   // 文件拖放：状态机在岛内自己渲染（岛身变形），不是盖在岛上的浮层
   const drop = useIslandDrop();
+  const showTransfer = !!transferNotice && !showMusic && drop.phase === 'idle';
   const rootClass = [
     'island-root',
     state.style,
@@ -530,6 +585,10 @@ function IslandApp() {
                 <div className="island-bar" />
               </div>
             </>
+        ) : showTransfer ? (
+          <div className="island-transfer-mini">
+            <span>⇄</span><span>{transferNotice?.title}</span><b>{transferNotice?.progress == null ? '' : `${transferNotice.progress}%`}</b>
+          </div>
         ) : showCockpit ? (
           <div className="island-cockpit-mini">
             <span>CPU {formatMetric(cockpit.cpu?.usage)} {formatMetric(cockpit.cpu?.temperature, '°C')}</span>
@@ -616,6 +675,12 @@ function IslandApp() {
               </button>
             </div>
           </>
+        ) : showTransfer ? (
+          <div className="island-transfer-panel">
+            <div className="island-panel-title">{transferNotice?.title}</div>
+            <div className="island-transfer-name">{transferNotice?.detail}</div>
+            {transferNotice?.progress != null ? <div className="island-progress-track"><div className="island-progress-fill" style={{ width: `${transferNotice.progress}%` }} /></div> : null}
+          </div>
         ) : showCockpit ? (
           <div className="island-cockpit-panel">
             <div className="island-panel-title">驾驶舱数据</div>

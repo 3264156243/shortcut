@@ -30,6 +30,13 @@ body { font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
     box-shadow .5s cubic-bezier(.22,1,.36,1);
   will-change: height, padding, border-radius;
 }
+
+/* 文件快传短暂提醒：音乐存在时由组件优先展示音乐，本样式仅用于空闲态。 */
+.island-transfer-mini { width:100%; display:flex; align-items:center; gap:8px; padding:0 12px; font-size:12px; color:rgba(255,255,255,.92); }
+.island-transfer-mini span:nth-child(2) { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.island-transfer-mini b { color:#8ee0bd; font-size:11px; }
+.island-transfer-panel { width:100%; padding:14px 16px; }
+.island-transfer-name { margin:18px 0 12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; color:rgba(255,255,255,.86); }
 /* 只有"当前不可穿透"时外壳才是拖窗区域（按住球移动位置）。
    穿透开启 → 球不接收鼠标，自然也不能被拖走；由 island.tsx 按开关状态加/去这个类。 */
 .island-shell.grabbable { -webkit-app-region: drag; }
